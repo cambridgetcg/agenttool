@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — AgentTool</title>
+  <meta name="description" content="AgentTool developer dashboard — preview" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0f; --surface: #12121a; --surface2: #1a1a26; --surface3: #1e1e2e;
+      --border: #1e1e2e; --accent: #7c3aed; --accent-soft: #a78bfa;
+      --text: #e2e8f0; --muted: #64748b; --green: #10b981; --yellow: #f59e0b;
+      --red: #f87171; --blue: #60a5fa; --sidebar-w: 220px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+
+    /* Layout */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0;
+      background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column;
+    }
+    .main { margin-left: var(--sidebar-w); flex: 1; padding: 0; }
+
+    /* Sidebar */
+    .sidebar-top { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
+    .logo { font-weight: 700; font-size: 1rem; }
+    .logo span { color: var(--accent-soft); }
+    .project-pill {
+      margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer;
+    }
+    .project-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+    .nav-section { padding: 1rem 1.5rem 0.25rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+    .sidebar nav a {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 1.5rem;
+      font-size: 0.85rem; color: var(--muted); text-decoration: none; transition: all 0.15s;
+    }
+    .sidebar nav a:hover { color: var(--text); background: rgba(124,58,237,0.06); }
+    .sidebar nav a.active { color: var(--accent-soft); background: rgba(124,58,237,0.12); border-right: 2px solid var(--accent); }
+    .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .sidebar-bottom { margin-top: auto; padding: 1rem 1.5rem; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--muted); }
+    .credits-bar { height: 4px; background: var(--surface3); border-radius: 2px; margin-top: 0.5rem; overflow: hidden; }
+    .credits-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-soft)); width: 42%; border-radius: 2px; }
+
+    /* Top bar */
+    .topbar {
+      height: 56px; border-bottom: 1px solid var(--border); background: var(--surface);
+      display: flex; align-items: center; padding: 0 2rem; gap: 1rem; position: sticky; top: 0; z-index: 10;
+    }
+    .topbar h1 { font-size: 1rem; font-weight: 600; flex: 1; }
+    .topbar-actions { display: flex; gap: 0.75rem; align-items: center; }
+    .btn { padding: 0.45rem 1rem; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: none; transition: opacity 0.15s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--accent-soft); }
+
+    /* Content */
+    .content { padding: 2rem; }
+
+    /* Stat cards */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1.25rem 1.5rem; position: relative; overflow: hidden;
+    }
+    .stat::after {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    }
+    .stat.green::after { background: var(--green); }
+    .stat.purple::after { background: var(--accent); }
+    .stat.blue::after { background: var(--blue); }
+    .stat.yellow::after { background: var(--yellow); }
+    .stat-label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+    .stat-value { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; }
+    .stat-sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+    .stat-delta { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; font-weight: 600; }
+    .delta-up { color: var(--green); }
+    .delta-down { color: var(--red); }
+
+    /* Charts */
+    .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+    .card-title { font-size: 0.9rem; font-weight: 700; }
+    .card-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+
+    /* Mini bar chart */
+    .bar-chart { display: flex; align-items: flex-end; gap: 4px; height: 80px; }
+    .bar { flex: 1; border-radius: 3px 3px 0 0; transition: opacity 0.15s; cursor: default; }
+    .bar:hover { opacity: 0.7; }
+    .chart-labels { display: flex; gap: 4px; margin-top: 0.5rem; }
+    .chart-label { flex: 1; font-size: 0.65rem; color: var(--muted); text-align: center; }
+
+    /* Tool usage breakdown */
+    .tool-rows { display: flex; flex-direction: column; gap: 0.75rem; }
+    .tool-row { display: flex; align-items: center; gap: 0.75rem; }
+    .tool-name { font-size: 0.85rem; width: 80px; flex-shrink: 0; }
+    .tool-bar-wrap { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .tool-bar { height: 100%; border-radius: 3px; }
+    .tool-count { font-size: 0.78rem; color: var(--muted); width: 48px; text-align: right; }
+
+    /* API keys table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+    td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); color: #94a3b8; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .key-prefix { font-family: 'SF Mono', monospace; color: var(--accent-soft); background: rgba(124,58,237,0.1); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.8rem; }
+    .badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; }
+    .badge-active { background: rgba(16,185,129,0.15); color: var(--green); }
+    .badge-inactive { background: rgba(100,116,139,0.15); color: var(--muted); }
+
+    /* Recent calls */
+    .call-list { display: flex; flex-direction: column; gap: 0; }
+    .call-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+    .call-row:last-child { border-bottom: none; }
+    .call-method { font-family: monospace; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.4rem; border-radius: 3px; flex-shrink: 0; }
+    .post { background: rgba(124,58,237,0.15); color: var(--accent-soft); }
+    .get { background: rgba(96,165,250,0.15); color: var(--blue); }
+    .call-path { flex: 1; color: var(--muted); font-family: monospace; font-size: 0.78rem; }
+    .call-time { color: var(--muted); font-size: 0.75rem; width: 60px; text-align: right; }
+    .call-ms { color: var(--green); font-size: 0.75rem; width: 55px; text-align: right; }
+    .status-ok { color: var(--green); font-size: 0.75rem; width: 30px; text-align: right; }
+
+    /* Plan badge */
+    .plan-chip { display: inline-flex; align-items: center; gap: 0.35rem; background: rgba(124,58,237,0.15); color: var(--accent-soft); border: 1px solid rgba(124,58,237,0.3); border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.75rem; font-weight: 700; }
+
+    /* Demo banner */
+    .demo-banner {
+      background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 8px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem;
+      display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; color: #fbbf24;
+    }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="logo">agent<span>tool</span>.dev</div>
+      <div class="project-pill">
+        <span class="project-dot"></span>
+        <span style="flex:1;font-weight:600;color:var(--text)">my-first-agent</span>
+        <span style="color:var(--muted)">▾</span>
+      </div>
+    </div>
+
+    <nav>
+      <div class="nav-section">Overview</div>
+      <a href="#" class="active"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="#"><span class="nav-icon">🔑</span> API Keys</a>
+      <a href="#"><span class="nav-icon">📈</span> Usage</a>
+      <a href="#"><span class="nav-icon">💳</span> Billing</a>
+
+      <div class="nav-section">Products</div>
+      <a href="#"><span class="nav-icon">🧠</span> agent-memory</a>
+      <a href="#"><span class="nav-icon">🛠️</span> agent-tools</a>
+      <a href="#"><span class="nav-icon">✅</span> agent-verify</a>
+      <a href="#"><span class="nav-icon">💰</span> agent-economy</a>
+
+      <div class="nav-section">Settings</div>
+      <a href="#"><span class="nav-icon">⚙️</span> Project</a>
+      <a href="#"><span class="nav-icon">🔔</span> Alerts</a>
+      <a href="/docs.html"><span class="nav-icon">📖</span> Docs</a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span>Credits remaining</span>
+        <span style="color:var(--text);font-weight:700">2,103</span>
+      </div>
+      <div class="credits-bar"><div class="credits-fill"></div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.75rem">
+        <span style="font-size:0.72rem">Builder plan</span>
+        <span class="plan-chip">Builder</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h1>Dashboard</h1>
+      <div class="topbar-actions">
+        <span style="font-size:0.8rem;color:var(--muted)">Last 7 days</span>
+        <button class="btn btn-ghost">Export</button>
+        <button class="btn btn-primary">+ New Key</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="demo-banner">
+        
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats">
+        <div class="stat green">
+          <div class="stat-label">API Calls (7d)</div>
+          <div class="stat-value">12,847</div>
+          <div class="stat-sub"><span class="stat-delta delta-up">↑ 23%</span> vs prev week</div>
+        </div>
+        <div class="stat purple">
+          <div class="stat-label">Credits Used</div>
+          <div class="stat-value">2,897</div>
+          <div class="stat-sub">5,000 total · <span style="color:var(--accent-soft)">42% remaining</span></div>
+        </div>
+        <div class="stat blue">
+          <div class="stat-label">Avg Latency</div>
+          <div class="stat-value">342<span style="font-size:1rem;font-weight:400">ms</span></div>
+          <div class="stat-sub"><span class="stat-delta delta-up">↓ 12%</span> faster</div>
+        </div>
+        <div class="stat yellow">
+          <div class="stat-label">Error Rate</div>
+          <div class="stat-value">0.4<span style="font-size:1rem;font-weight:400">%</span></div>
+          <div class="stat-sub"><span class="stat-delta delta-up">↓ 0.2%</span> vs prev week</div>
+        </div>
+      </div>
+
+      <!-- Chart + breakdown -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">API calls over time</div>
+              <div class="card-sub">Requests per day</div>
+            </div>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-ghost" style="padding:0.3rem 0.6rem;font-size:0.75rem">7d</button>
+              <button class="btn btn-ghost" style="padding:0.3rem 0.6rem;font-size:0.75rem;color:var(--muted)">30d</button>
+            </div>
+          </div>
+          <div class="bar-chart" id="callChart"></div>
+          <div class="chart-labels" id="chartLabels"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Tool breakdown</div>
+              <div class="card-sub">Credits this week</div>
+            </div>
+          </div>
+          <div class="tool-rows">
+            <div class="tool-row">
+              <span class="tool-name">Search</span>
+              <div class="tool-bar-wrap"><div class="tool-bar" style="width:72%;background:var(--accent)"></div></div>
+              <span class="tool-count">1,247</span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-name">Memory</span>
+              <div class="tool-bar-wrap"><div class="tool-bar" style="width:55%;background:var(--blue)"></div></div>
+              <span class="tool-count">823</span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-name">Scrape</span>
+              <div class="tool-bar-wrap"><div class="tool-bar" style="width:38%;background:var(--green)"></div></div>
+              <span class="tool-count">412</span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-name">Execute</span>
+              <div class="tool-bar-wrap"><div class="tool-bar" style="width:22%;background:var(--yellow)"></div></div>
+              <span class="tool-count">287</span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-name">Browse</span>
+              <div class="tool-bar-wrap"><div class="tool-bar" style="width:9%;background:var(--red)"></div></div>
+              <span class="tool-count">128</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Keys + Recent calls -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Recent API calls</div>
+              <div class="card-sub">Last 10 requests</div>
+            </div>
+            <a href="#" style="font-size:0.8rem;color:var(--accent-soft);text-decoration:none">View all →</a>
+          </div>
+          <div class="call-list">
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/search</span><span class="call-ms">187ms</span><span class="status-ok">200</span><span class="call-time">2s ago</span></div>
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/memories/recall</span><span class="call-ms">92ms</span><span class="status-ok">200</span><span class="call-time">8s ago</span></div>
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/memories</span><span class="call-ms">45ms</span><span class="status-ok">201</span><span class="call-time">12s ago</span></div>
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/scrape</span><span class="call-ms">1,240ms</span><span class="status-ok">200</span><span class="call-time">31s ago</span></div>
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/execute</span><span class="call-ms">324ms</span><span class="status-ok">200</span><span class="call-time">1m ago</span></div>
+            <div class="call-row"><span class="call-method get">GET</span><span class="call-path">/v1/memories/agent-42/prefs</span><span class="call-ms">28ms</span><span class="status-ok">200</span><span class="call-time">2m ago</span></div>
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/search</span><span class="call-ms">203ms</span><span class="status-ok">200</span><span class="call-time">3m ago</span></div>
+            <div class="call-row"><span class="call-method post">POST</span><span class="call-path">/v1/verify</span><span class="call-ms">892ms</span><span class="status-ok">200</span><span class="call-time">5m ago</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">API Keys</div>
+              <div class="card-sub">2 active keys</div>
+            </div>
+            <button class="btn btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem">+ New</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Key</th><th>Last used</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="key-prefix">at_prod_k9x2</span></td>
+                <td>2s ago</td>
+                <td><span class="badge badge-active">Active</span></td>
+              </tr>
+              <tr>
+                <td><span class="key-prefix">at_dev_m3p7</span></td>
+                <td>3 days ago</td>
+                <td><span class="badge badge-active">Active</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="margin-top:1.5rem">
+            <div class="card-title" style="margin-bottom:0.75rem">Alerts</div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.82rem">
+              <label style="display:flex;align-items:center;gap:0.5rem;color:var(--muted);cursor:pointer">
+                <input type="checkbox" checked style="accent-color:var(--accent)"> Credit balance below 20%
+              </label>
+              <label style="display:flex;align-items:center;gap:0.5rem;color:var(--muted);cursor:pointer">
+                <input type="checkbox" checked style="accent-color:var(--accent)"> Error rate above 5%
+              </label>
+              <label style="display:flex;align-items:center;gap:0.5rem;color:var(--muted);cursor:pointer">
+                <input type="checkbox" style="accent-color:var(--accent)"> Daily usage summary
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // Generate bar chart
+  const data = [1420, 1680, 1520, 1890, 2100, 1750, 2487];
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const max = Math.max(...data);
+  const chart = document.getElementById('callChart');
+  const labels = document.getElementById('chartLabels');
+  const colors = ['#7c3aed','#7c3aed','#7c3aed','#7c3aed','#7c3aed','#7c3aed','#a78bfa'];
+
+  data.forEach((v, i) => {
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.style.cssText = `height:${(v/max)*100}%;background:${colors[i]};opacity:${i===6?1:0.5}`;
+    bar.title = `${days[i]}: ${v.toLocaleString()} calls`;
+    chart.appendChild(bar);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'chart-label';
+    lbl.textContent = days[i];
+    labels.appendChild(lbl);
+  });
+</script>
+</body>
+</html>

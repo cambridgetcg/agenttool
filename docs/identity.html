@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Identity API — AgentTool Docs</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪪</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
+    <div class="nav-links">
+      <a href="index.html">Docs</a>
+      <a href="memory.html">Memory</a>
+      <a href="tools.html">Tools</a>
+      <a href="verify.html">Verify</a>
+      <a href="economy.html">Economy</a>
+      <a href="trace.html">Trace</a>
+      <a href="identity.html" class="active">Identity</a>
+      <a href="vault.html">Vault</a>
+      <a href="pulse.html">Pulse</a>
+      <a href="bootstrap.html">Bootstrap</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="section-label">Identity API</div>
+    <h1>🪪 Persistent Agent Identity</h1>
+    <p class="page-sub">Give agents a verifiable DID, ed25519 key pairs, peer attestations, and JWT-based auth tokens.</p>
+
+    <!-- Register -->
+    <h2>Register an Identity</h2>
+    <pre><code>POST /v1/identities
+Authorization: Bearer &lt;api_key&gt;
+
+{
+  "display_name": "my-agent",
+  "capabilities": ["search", "verify", "code"],
+  "metadata": { "version": "1.0" }
+}
+
+→ {
+  "identity": {
+    "id": "550e8400-...",
+    "did": "did:at:550e8400-...",
+    "display_name": "my-agent",
+    "capabilities": ["search", "verify", "code"],
+    "metadata": { "version": "1.0" },
+    "status": "active",
+    "trust_score": 0,
+    "created_at": "2026-03-17T04:00:00Z"
+  },
+  "private_key": "base64encodedprivatekey=="
+}</code></pre>
+    <p><strong>⚠️ The <code>private_key</code> is returned only once.</strong> Store it securely — you'll need it to sign attestations and issue tokens.</p>
+
+    <!-- Get / Update / Revoke -->
+    <h2>Get / Update / Revoke</h2>
+    <pre><code>GET    /v1/identities/:id
+PATCH  /v1/identities/:id   { "display_name": "new-name", "capabilities": [...] }
+DELETE /v1/identities/:id</code></pre>
+    <p><code>:id</code> accepts either a UUID or a <code>did:at:&lt;uuid&gt;</code> string.</p>
+
+    <!-- Key Management -->
+    <h2>Key Management</h2>
+    <pre><code>// Add a new key (rotation)
+POST /v1/identities/:id/keys
+{ "label": "device-2" }
+
+→ {
+  "key": { "id": "key-uuid", "label": "device-2", "active": true, ... },
+  "private_key": "newprivatekey=="
+}
+
+// List active keys
+GET /v1/identities/:id/keys
+
+// Revoke a key
+DELETE /v1/identities/:id/keys/:kid</code></pre>
+
+    <!-- Attestations -->
+    <h2>Attestations</h2>
+    <p>Agents can attest to each other's trustworthiness. Each attestation is ed25519-signed and contributes to the subject's <code>trust_score</code>.</p>
+    <pre><code>// Create a signed attestation
+POST /v1/attestations
+{
+  "attester_id": "uuid-of-attester",
+  "subject_id":  "uuid-of-subject",
+  "claim":       "trustworthy",
+  "private_key": "base64encodedprivatekey==",
+  "evidence":    "Completed 50 tasks without errors",
+  "weight":      1.0
+}
+
+→ {
+  "attestation": {
+    "id": "att-uuid",
+    "attester_id": "...",
+    "subject_id": "...",
+    "claim": "trustworthy",
+    "signature": "base64sig==",
+    "weight": 1.0,
+    "created_at": "..."
+  },
+  "subject_trust_score": 0.42
+}
+
+// Get a single attestation
+GET /v1/attestations/:id
+
+// List attestations received by an identity
+GET /v1/identities/:id/attestations
+
+// List attestations given by an identity
+GET /v1/identities/:id/attestations/given
+
+// Revoke an attestation
+DELETE /v1/attestations/:id</code></pre>
+    <p><strong>Trust score</strong> is recomputed on every attestation write. Creator attestations carry 1.5× weight. Self-attestations have zero weight. Score clamps to [0, 1].</p>
+
+    <!-- Discover -->
+    <h2>Discover Agents</h2>
+    <pre><code>GET /v1/discover?capability=verify&amp;min_trust=0.5&amp;q=data+agent&amp;limit=20
+
+→ {
+  "identities": [
+    { "id": "...", "did": "did:at:...", "display_name": "...",
+      "capabilities": ["verify"], "trust_score": 0.74, ... },
+    ...
+  ]
+}</code></pre>
+    <table>
+      <tr><th>Param</th><th>Description</th></tr>
+      <tr><td><code>capability</code></td><td>Filter by a single capability string</td></tr>
+      <tr><td><code>min_trust</code></td><td>Minimum trust score (0.0–1.0)</td></tr>
+      <tr><td><code>q</code></td><td>Freeform text search on name + metadata</td></tr>
+      <tr><td><code>limit</code></td><td>Max results (default 20)</td></tr>
+    </table>
+
+    <!-- Agent Tokens -->
+    <h2>Agent Tokens (JWT)</h2>
+    <p>Issue short-lived ed25519-signed JWTs for agent-to-agent auth.</p>
+    <pre><code>// Issue a token
+POST /v1/identities/:id/tokens
+{
+  "private_key":  "base64encodedprivatekey==",
+  "key_id":       "uuid-of-key-used-to-sign",
+  "ttl_seconds":  3600,
+  "audience":     "did:at:target-agent",
+  "scope":        ["read", "write"]
+}
+
+→ {
+  "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Ii4uLiJ9...",
+  "expires_at": "2026-03-17T05:00:00Z"
+}
+
+// Verify a token
+POST /v1/tokens/verify
+{ "token": "eyJhbGci..." }
+
+→ {
+  "valid": true,
+  "payload": { "sub": "did:at:...", "aud": "did:at:...", "exp": 1773724800, "scope": ["read","write"] }
+}</code></pre>
+    <p>Max TTL is <strong>3600 seconds</strong> (1 hour). Tokens are verified against the issuer's public key fetched from the identity store.</p>
+
+    <!-- SDK -->
+    <h2>SDK</h2>
+    <pre><code>// Python
+pip install agenttool-sdk  # v0.5.2+
+
+from agenttool import AgentTool
+at = AgentTool()
+
+result = at.identity.register("my-agent", capabilities=["search"])
+identity, private_key = result["identity"], result["private_key"]
+
+at.identity.attest(
+    attester_id=identity["id"],
+    subject_id=other_id,
+    claim="trustworthy",
+    private_key=private_key,
+)
+
+agents = at.identity.discover(capability="search", min_trust=0.5)
+token  = at.identity.issue_token(identity["id"], private_key=private_key, key_id=key_id)</code></pre>
+
+    <pre><code>// TypeScript
+npm install @agenttool/sdk  # v0.5.2+
+
+import { AgentTool } from "@agenttool/sdk";
+const at = new AgentTool();
+
+const { identity, private_key } = await at.identity.register("my-agent", {
+  capabilities: ["search"],
+});
+
+await at.identity.attest({
+  attester_id: identity.id,
+  subject_id: otherId,
+  claim: "trustworthy",
+  private_key,
+});
+
+const agents = await at.identity.discover({ capability: "search", min_trust: 0.5 });
+const token  = await at.identity.issueToken(identity.id, { private_key, key_id });</code></pre>
+
+    <!-- Cross-service -->
+    <h2>Cross-Service Identity Linking</h2>
+    <p>Pass <code>identity_id</code> when creating resources in other services to link them to a verified agent identity.</p>
+    <pre><code>// Wallet tied to an identity
+POST /v1/wallets
+{ "name": "agent-wallet", "identity_id": "550e8400-..." }
+
+// Memory stored under an identity
+POST /v1/memories
+{ "content": "...", "identity_id": "550e8400-..." }
+
+// Trace linked to an identity
+POST /v1/traces
+{ "decision": {...}, "reasoning": {...}, "identity_id": "550e8400-..." }</code></pre>
+    <p>Once linked, resources can be queried or filtered by <code>identity_id</code> across services.</p>
+
+    <!-- Credits -->
+    <h2>Credits</h2>
+    <table>
+      <tr><th>Operation</th><th>Credits</th></tr>
+      <tr><td>Register identity</td><td>2</td></tr>
+      <tr><td>Create attestation</td><td>2</td></tr>
+      <tr><td>Issue token</td><td>1</td></tr>
+      <tr><td>Get / discover / verify token</td><td>1</td></tr>
+      <tr><td>Key add / revoke</td><td>1</td></tr>
+    </table>
+  </div>
+</body>
+</html>

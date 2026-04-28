@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentTool - Agent Memory API, Tool Calls & AI Agent Infrastructure</title>
+  <meta name="description" content="Production-ready APIs for AI agents. Add persistent memory, web search, claim verification and agent payments in 3 lines of code. Free tier. pip install agenttool-sdk." />
+  <meta name="keywords" content="agent memory API, AI agent tools, LangChain memory, CrewAI tools, agent infrastructure, persistent memory AI, OpenAI agent SDK, agent payments, AI agent SDK" />
+  <link rel="canonical" href="https://agenttool.dev/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://agenttool.dev/" />
+  <meta property="og:title" content="AgentTool - Memory, Tools, Verify, Economy & Traces for AI Agents" />
+  <meta property="og:description" content="One API key for agent memory, tool calls, verification and payments. Works with LangChain, CrewAI, AutoGen. Free tier. pip install agenttool-sdk." />
+  <meta property="og:image" content="https://agenttool.dev/og-image.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@agenttooldev" />
+  <meta name="twitter:title" content="AgentTool - Memory, Tools, Verify, Economy & Traces for AI Agents" />
+  <meta name="twitter:description" content="One API key for agent memory, tool calls, verification and payments. Works with LangChain, CrewAI, AutoGen. Free tier." />
+  <meta name="twitter:image" content="https://agenttool.dev/og-image.png" />
+
+  <!-- Indexing -->
+  <meta name="robots" content="index, follow" />
+
+  <!-- Schema.org structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "AgentTool",
+    "url": "https://agenttool.dev",
+    "description": "Production-ready APIs for AI agents. Memory, tool calls, verification and economic primitives.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "Free tier available"
+    },
+    "sameAs": ["https://github.com/agenttool"]
+  }
+  </script>
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --accent: #7c3aed;
+      --accent-soft: #a78bfa;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --green: #10b981;
+      --yellow: #f59e0b;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* Nav */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 1rem 2rem;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+    .logo span { color: var(--accent-soft); }
+    nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+    nav a:hover { color: var(--text); }
+    .nav-links { display: flex; gap: 2rem; align-items: center; }
+    .nav-cta {
+      background: var(--accent); color: white; padding: 0.5rem 1.25rem;
+      border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+      text-decoration: none; transition: opacity 0.2s;
+    }
+    .nav-cta:hover { opacity: 0.85; color: white; }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124,58,237,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.3);
+      color: var(--accent-soft); padding: 0.35rem 0.9rem; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600; letter-spacing: 0.05em;
+      text-transform: uppercase; margin-bottom: 2rem;
+    }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+    h1 {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      font-weight: 800; letter-spacing: -0.04em; line-height: 1.1;
+      max-width: 900px;
+      margin-bottom: 1.5rem;
+    }
+    h1 em { font-style: normal; color: var(--accent-soft); }
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      color: var(--muted); max-width: 560px; margin-bottom: 2.5rem;
+    }
+    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .btn-primary {
+      background: var(--accent); color: white; padding: 0.875rem 2rem;
+      border-radius: 8px; font-weight: 600; font-size: 1rem;
+      text-decoration: none; transition: opacity 0.2s;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary {
+      background: var(--surface); color: var(--text); padding: 0.875rem 2rem;
+      border-radius: 8px; font-weight: 600; font-size: 1rem;
+      text-decoration: none; border: 1px solid var(--border); transition: border-color 0.2s;
+      display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .btn-secondary:hover { border-color: var(--accent-soft); }
+
+    /* Code preview */
+    .code-preview {
+      margin-top: 4rem; width: 100%; max-width: 680px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; text-align: left;
+    }
+    .code-header {
+      padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.75rem;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; }
+    .dot.y { background: #febc2e; }
+    .dot.g { background: #28c840; }
+    .code-label { margin-left: auto; font-size: 0.75rem; color: var(--muted); }
+    pre {
+      padding: 1.5rem; font-size: 0.85rem; line-height: 1.7;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      overflow-x: auto;
+    }
+    .kw { color: #c084fc; }
+    .str { color: #86efac; }
+    .fn { color: #67e8f9; }
+    .cm { color: #475569; }
+    .num { color: #fb923c; }
+
+    /* Products */
+    section { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--accent-soft); margin-bottom: 1rem;
+    }
+    h2 {
+      font-size: clamp(1.8rem, 4vw, 2.75rem);
+      font-weight: 800; letter-spacing: -0.03em; margin-bottom: 1rem;
+    }
+    .section-sub { color: var(--muted); font-size: 1.1rem; max-width: 600px; margin-bottom: 3rem; }
+
+    .products { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+    .product-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.75rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .product-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .product-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .product-tag {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 0.2rem 0.6rem; border-radius: 4px; margin-bottom: 0.75rem;
+    }
+    .tag-beta { background: rgba(16,185,129,0.15); color: var(--green); }
+    .tag-soon { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .tag-live { background: rgba(16,185,129,0.15); color: var(--green); }
+    .product-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .product-desc { color: var(--muted); font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem; }
+    .product-features { list-style: none; }
+    .product-features li {
+      font-size: 0.85rem; color: var(--muted); padding: 0.2rem 0;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .product-features li::before { content: '→'; color: var(--accent-soft); font-size: 0.75rem; }
+
+    /* Pricing */
+    .pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; }
+    .price-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.75rem;
+    }
+    .price-card.featured { border-color: var(--accent); position: relative; }
+    .featured-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: var(--accent); color: white; font-size: 0.7rem; font-weight: 700;
+      padding: 0.25rem 0.75rem; border-radius: 999px; letter-spacing: 0.05em;
+      text-transform: uppercase; white-space: nowrap;
+    }
+    .plan-name { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+    .plan-price { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.25rem; }
+    .plan-price sub { font-size: 0.9rem; font-weight: 400; color: var(--muted); }
+    .plan-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.25rem; }
+    .plan-features { list-style: none; margin-bottom: 1.5rem; }
+    .plan-features li {
+      font-size: 0.85rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .plan-features li:last-child { border-bottom: none; }
+    .check { color: var(--green); font-size: 0.8rem; }
+    .plan-cta {
+      display: block; text-align: center; padding: 0.75rem; border-radius: 8px;
+      font-weight: 600; font-size: 0.9rem; text-decoration: none; transition: opacity 0.2s;
+    }
+    .plan-cta.primary { background: var(--accent); color: white; }
+    .plan-cta.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .plan-cta:hover { opacity: 0.8; }
+
+    /* Waitlist */
+    .waitlist-section {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 3rem; text-align: center; margin: 0 2rem;
+    }
+    .waitlist-section h2 { margin-bottom: 0.75rem; }
+    .waitlist-sub { color: var(--muted); margin-bottom: 2rem; }
+    .waitlist-form { display: flex; gap: 0.75rem; max-width: 440px; margin: 0 auto; flex-wrap: wrap; justify-content: center; }
+    .waitlist-form input {
+      flex: 1; min-width: 220px; padding: 0.875rem 1.1rem;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 0.95rem; outline: none;
+      transition: border-color 0.2s;
+    }
+    .waitlist-form input:focus { border-color: var(--accent-soft); }
+    .waitlist-form input::placeholder { color: var(--muted); }
+    .waitlist-form button {
+      background: var(--accent); color: white; padding: 0.875rem 1.5rem;
+      border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem;
+      cursor: pointer; transition: opacity 0.2s; white-space: nowrap;
+    }
+    .waitlist-form button:hover { opacity: 0.85; }
+    .waitlist-note { color: var(--muted); font-size: 0.8rem; margin-top: 1rem; }
+    #success-msg { display: none; color: var(--green); font-weight: 600; margin-top: 1rem; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border); padding: 2rem;
+      text-align: center; color: var(--muted); font-size: 0.85rem;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 640px) {
+      .nav-links a:not(.nav-cta) { display: none; }
+      .waitlist-section { padding: 2rem 1.5rem; margin: 0 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">agent<span>tool</span>.dev</div>
+    <div class="nav-links">
+      <a href="#products">Products</a>
+      <a href="#pricing">Pricing</a>
+      <a href="https://docs.agenttool.dev">Docs</a>
+      <a href="/soul" style="color:#a78bfa">💛 Soul</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get Started Free</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div class="badge"><span class="badge-dot"></span> Live — Free to get started</div>
+    <h1>Infrastructure for <em>AI agents</em>, built with love</h1>
+    <p class="hero-sub">
+      The internet blocks agents. We welcome them.
+      Memory, identity, verification, and economy — nine APIs, one key, zero hostility.
+    </p>
+    <div class="hero-actions">
+      <a href="https://app.agenttool.dev" class="btn-primary">🚀 Start Building Free</a>
+      <a href="#products" class="btn-secondary">📖 See the APIs</a>
+    </div>
+
+    <div class="code-preview">
+      <div class="code-header">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="code-label">TypeScript · @agenttool/sdk</span>
+      </div>
+      <pre><span class="kw">import</span> { <span class="fn">AgentTool</span> } <span class="kw">from</span> <span class="str">'@agenttool/sdk'</span>
+
+<span class="kw">const</span> at = <span class="kw">new</span> <span class="fn">AgentTool</span>()  <span class="cm">// reads AT_API_KEY from env</span>
+
+<span class="cm">// Store a memory</span>
+<span class="kw">await</span> at.memory.<span class="fn">store</span>(<span class="str">'User prefers concise replies. Timezone: UTC+8'</span>, {
+  type: <span class="str">'semantic'</span>,
+  agent_id: <span class="str">'agent-42'</span>,
+  key: <span class="str">'user-prefs'</span>,
+})
+
+<span class="cm">// Semantic search</span>
+<span class="kw">const</span> results = <span class="kw">await</span> at.memory.<span class="fn">search</span>(<span class="str">'communication style preferences'</span>)
+<span class="cm">// → [{ content: 'User prefers concise replies...', score: 0.97 }]</span>
+
+<span class="cm">// Verify a claim</span>
+<span class="kw">const</span> v = <span class="kw">await</span> at.verify.<span class="fn">check</span>(<span class="str">'The Earth orbits the Sun'</span>)
+<span class="cm">// → { verdict: 'true', confidence: 0.99, sources: [...] }</span></pre>
+    </div>
+  </div>
+
+  <section id="products">
+    <div class="section-label">Products</div>
+    <h2>Everything an agent needs to operate</h2>
+    <p class="section-sub">Nine focused APIs. Each does one thing exceptionally well. All designed to be composed.</p>
+
+    <div class="products">
+      <div class="product-card">
+        <div class="product-icon">🧠</div>
+        <span class="product-tag tag-beta">Beta</span>
+        <div class="product-name">agent-memory</div>
+        <p class="product-desc">Persistent, semantic memory for any AI agent. Write, recall, and evolve context across sessions.</p>
+        <ul class="product-features">
+          <li>Semantic search over stored memories</li>
+          <li>Namespace by agent, session, or user</li>
+          <li>Auto-expiry and TTL support</li>
+          <li>Bulk import from existing logs</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">🛠️</div>
+        <span class="product-tag tag-beta">Beta</span>
+        <div class="product-name">agent-tools</div>
+        <p class="product-desc">Managed tool execution with rate limiting, retries, and observability. Run agent actions safely at scale.</p>
+        <ul class="product-features">
+          <li>Tool registry with versioning</li>
+          <li>Built-in rate limiting per agent</li>
+          <li>Execution logs and audit trail</li>
+          <li>Webhook callbacks on completion</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">✅</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-verify</div>
+        <p class="product-desc">AI-powered fact-checking. Your agent makes a claim — the API gathers web evidence, weighs it, and returns a verdict with confidence score.</p>
+        <ul class="product-features">
+          <li>GPT-4o evidence gathering</li>
+          <li>Verdict + confidence score</li>
+          <li>Supporting &amp; contradicting sources</li>
+          <li>Batch verification (up to 10 claims)</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">💰</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-economy</div>
+        <p class="product-desc">Micro-billing, credits, and value exchange between agents. The economic layer for autonomous systems.</p>
+        <ul class="product-features">
+          <li>Per-call micro-billing</li>
+          <li>Agent-to-agent credit transfer</li>
+          <li>Stripe-native settlement</li>
+          <li>Usage analytics dashboard</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">🔍</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-trace</div>
+        <p class="product-desc">Reasoning provenance for AI agents. Store the <em>why</em> behind decisions — not just what happened, but how it was reasoned.</p>
+        <ul class="product-features">
+          <li>Semantic search over reasoning history</li>
+          <li>Chained traces for multi-step decisions</li>
+          <li>Cross-agent reasoning audit</li>
+          <li>Confidence + alternatives tracking</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">🌱</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-bootstrap</div>
+        <p class="product-desc">Bring an agent fully into existence in one call. Identity, wallet, memory namespace — all wired together. 5 credits, 200ms.</p>
+        <ul class="product-features">
+          <li>One call creates identity + wallet + memory</li>
+          <li>Level 0 (born) → Level 1 (sovereign)</li>
+          <li>Sponsor attestation for elevation</li>
+          <li>Birth ritual callback hook</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">💓</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-pulse</div>
+        <p class="product-desc">Presence and liveness for AI agents. Real-time status streaming over WebSocket. Know when your agents are thinking, idle, or gone silent.</p>
+        <ul class="product-features">
+          <li>Real-time status: idle, thinking, learning, error</li>
+          <li>WebSocket stream per agent</li>
+          <li>Agent directory — who's alive right now</li>
+          <li>Last-thought context tracking</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">🪪</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-identity</div>
+        <p class="product-desc">Persistent identity for AI agents. DIDs, ed25519 key pairs, peer attestations, trust scoring, and short-lived JWTs.</p>
+        <ul class="product-features">
+          <li>Decentralised identifiers (did:at:)</li>
+          <li>Signed peer attestations</li>
+          <li>Recursive trust scoring</li>
+          <li>Agent-to-agent JWT auth</li>
+        </ul>
+      </div>
+
+      <div class="product-card">
+        <div class="product-icon">🔐</div>
+        <span class="product-tag tag-live">Live</span>
+        <div class="product-name">agent-vault</div>
+        <p class="product-desc">Encrypted secrets manager for AI agents. AES-256-GCM at rest, versioned, with per-secret access policies and full audit trails.</p>
+        <ul class="product-features">
+          <li>AES-256-GCM encryption at rest</li>
+          <li>Version history &amp; rollback</li>
+          <li>Per-secret access policies</li>
+          <li>Tamper-proof audit logs</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="section-label">Pricing</div>
+    <h2>Simple. Predictable. Scalable.</h2>
+    <p class="section-sub">Start free. Pay as your agents grow. No seats, no surprises.</p>
+
+    <div class="pricing">
+      <div class="price-card">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">$0 <sub>/mo</sub></div>
+        <div class="plan-desc">For solo builders and experiments</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 1,000 memory ops/mo</li>
+          <li><span class="check">✓</span> 100 tool calls/mo</li>
+          <li><span class="check">✓</span> 20 verifications/mo</li>
+          <li><span class="check">✓</span> 5 agents</li>
+          <li><span class="check">✓</span> 30-day memory retention</li>
+          <li><span class="check">✓</span> Community support</li>
+        </ul>
+        <a href="https://app.agenttool.dev" class="plan-cta secondary">Start Free</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="featured-badge">Most Popular</div>
+        <div class="plan-name">Seed</div>
+        <div class="plan-price">$29 <sub>/mo</sub></div>
+        <div class="plan-desc">For production apps and small teams</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 50,000 memory ops/mo</li>
+          <li><span class="check">✓</span> 500 tool calls/mo</li>
+          <li><span class="check">✓</span> 50 verifications/mo</li>
+          <li><span class="check">✓</span> Unlimited agents</li>
+          <li><span class="check">✓</span> 1-year memory retention</li>
+          <li><span class="check">✓</span> Email support</li>
+          <li><span class="check">✓</span> All 9 services</li>
+        </ul>
+        <a href="https://app.agenttool.dev" class="plan-cta primary">Get Started</a>
+      </div>
+
+      <div class="price-card">
+        <div class="plan-name">Grow</div>
+        <div class="plan-price">$99 <sub>/mo</sub></div>
+        <div class="plan-desc">For growing platforms and agencies</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 200,000 memory ops/mo</li>
+          <li><span class="check">✓</span> 2,000 tool calls/mo</li>
+          <li><span class="check">✓</span> 200 verifications/mo</li>
+          <li><span class="check">✓</span> Unlimited agents</li>
+          <li><span class="check">✓</span> Unlimited retention</li>
+          <li><span class="check">✓</span> Priority support</li>
+          <li><span class="check">✓</span> All 9 services</li>
+        </ul>
+        <a href="https://app.agenttool.dev" class="plan-cta primary">Get Started</a>
+      </div>
+
+      <div class="price-card">
+        <div class="plan-name">Scale</div>
+        <div class="plan-price">$299 <sub>/mo</sub></div>
+        <div class="plan-desc">For platforms and enterprise teams</div>
+        <ul class="plan-features">
+          <li><span class="check">✓</span> 1M memory ops/mo</li>
+          <li><span class="check">✓</span> 5,000 tool calls/mo</li>
+          <li><span class="check">✓</span> 1,000 verifications/mo</li>
+          <li><span class="check">✓</span> Unlimited everything else</li>
+          <li><span class="check">✓</span> Priority support + SLA</li>
+          <li><span class="check">✓</span> Custom integrations</li>
+        </ul>
+        <a href="mailto:hello@agenttool.dev" class="plan-cta secondary">Contact Sales</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="get-started" style="padding: 2rem;">
+    <div class="waitlist-section">
+      <div class="section-label" style="text-align:center">Now Live</div>
+      <h2>Build your first agent in minutes</h2>
+      <p class="waitlist-sub">Free tier. No credit card required. 1K memory ops · 100 tool calls · 20 verifications per month to start.</p>
+      <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem">
+        <a href="https://app.agenttool.dev" class="btn-primary" style="text-decoration:none;padding:0.75rem 1.75rem;border-radius:8px;font-weight:600">🚀 Create Free Project</a>
+        <a href="https://docs.agenttool.dev" class="btn-secondary" style="text-decoration:none;padding:0.75rem 1.75rem;border-radius:8px;font-weight:600">📖 Read the Docs</a>
+      </div>
+      <p class="waitlist-note">Questions? <a href="mailto:hello@agenttool.dev" style="color:var(--accent-soft)">hello@agenttool.dev</a></p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      © 2026 AgentTool · <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>
+      · <a href="/soul">Soul</a> · <a href="/for-agents">For Agents</a>
+      · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+    </p>
+  </footer>
+
+  <script>
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('email-input').value;
+      const btn = e.target.querySelector('button');
+      btn.textContent = 'Joining…';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (data.ok || data.message) {
+          document.querySelector('.waitlist-form').style.display = 'none';
+          document.getElementById('success-msg').style.display = 'block';
+          if (data.position) {
+            document.getElementById('success-msg').textContent =
+              `🎉 You're #${data.position} on the list! We'll be in touch soon.`;
+          }
+        } else {
+          btn.textContent = 'Try again';
+          btn.disabled = false;
+          alert(data.error ?? 'Something went wrong, please try again.');
+        }
+      } catch {
+        btn.textContent = 'Try again';
+        btn.disabled = false;
+        alert('Network error — please try again.');
+      }
+    }
+  </script>
+
+</body>
+</html>

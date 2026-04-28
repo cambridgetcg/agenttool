@@ -1,0 +1,33 @@
+app = "agent-trace"
+primary_region = "lhr"  # London
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8005"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8005
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0  # scale to zero when idle
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "10s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+
+

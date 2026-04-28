@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>agent-economy — AgentTool Docs</title>
+  <meta name="description" content="API reference for agent-economy. Wallets, spending policies, escrow, and agent-to-agent value exchange." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
+    <div class="nav-links">
+      <a href="index.html">Docs</a>
+      <a href="memory.html">Memory</a>
+      <a href="tools.html">Tools</a>
+      <a href="verify.html">Verify</a>
+      <a href="economy.html" class="active">Economy</a>
+      <a href="trace.html">Trace</a>
+      <a href="identity.html">Identity</a>
+      <a href="vault.html">Vault</a>
+      <a href="pulse.html">Pulse</a>
+      <a href="bootstrap.html">Bootstrap</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="doc-layout">
+
+      <aside class="sidebar">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li style="margin-top:0.5rem;font-weight:600;color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">Wallets</a></li>
+          <li><a href="#wallet-create">Create Wallet</a></li>
+          <li><a href="#wallet-list">List Wallets</a></li>
+          <li><a href="#wallet-get">Get Wallet</a></li>
+          <li><a href="#wallet-fund">Fund Wallet</a></li>
+          <li><a href="#wallet-spend">Spend</a></li>
+          <li><a href="#wallet-policy">Set Policy</a></li>
+          <li><a href="#wallet-freeze">Freeze / Unfreeze</a></li>
+          <li><a href="#wallet-txns">Transactions</a></li>
+          <li style="margin-top:0.5rem;font-weight:600;color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">Escrows</a></li>
+          <li><a href="#escrow-create">Create Escrow</a></li>
+          <li><a href="#escrow-list">List Escrows</a></li>
+          <li><a href="#escrow-get">Get Escrow</a></li>
+          <li><a href="#escrow-accept">Accept</a></li>
+          <li><a href="#escrow-release">Release</a></li>
+          <li><a href="#escrow-refund">Refund</a></li>
+          <li><a href="#escrow-dispute">Dispute</a></li>
+          <li><a href="#errors">Errors</a></li>
+        </ul>
+      </aside>
+
+      <div class="doc-content">
+        <div class="section-label">agent-economy</div>
+        <h1>💰 <em>Economy</em> API Reference</h1>
+        <p class="page-sub">
+          Wallets, spending policies, escrow, and agent-to-agent value exchange.
+          The economic layer for autonomous agent systems.
+        </p>
+
+        <div class="callout" id="overview" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.2);">
+          <p><span class="callout-icon">✅</span> <strong>Live</strong> — agent-economy is available now. <a href="https://app.agenttool.dev">Create a project</a> to get your API key.</p>
+        </div>
+
+        <div class="callout">
+          <p><span class="callout-icon">🔑</span> <strong>Base URL:</strong> <code>https://api.agenttool.dev</code> · All endpoints require <code>Authorization: Bearer YOUR_API_KEY</code></p>
+        </div>
+
+        <div class="callout" style="background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.2);">
+          <p><span class="callout-icon">💡</span> <strong>Credit unit:</strong> All amounts are in integer <em>credits</em>. 1 credit = 1 unit of value in your project. Fund wallets from your project's credit balance; spend credits to other agents or services.</p>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- WALLETS                                               -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <h2 style="margin-top:2rem;">Wallets</h2>
+
+        <!-- POST /v1/wallets -->
+        <div class="endpoint" id="wallet-create">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/wallets</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Create a new wallet for an agent. Each wallet has a name, optional agent ID, and currency.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">name</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td>Display name for this wallet (max 100 chars).</td></tr>
+                <tr><td><span class="param-name">agent_id</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td>Identifier for the agent this wallet belongs to.</td></tr>
+                <tr><td><span class="param-name">currency</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td>Currency code. Default: <code>GBP</code>.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/wallets \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "agent-42-wallet", "agent_id": "agent-42", "currency": "GBP"}'</pre>
+            </div>
+            <h3>Response · <span style="color:var(--green)">201</span></h3>
+            <div class="code-block"><div class="code-label"><span>JSON</span></div>
+              <pre>{
+  <span class="key">"success"</span>: <span class="val">true</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>: <span class="str">"wal_a1b2c3d4e5f6"</span>,
+    <span class="key">"name"</span>: <span class="str">"agent-42-wallet"</span>,
+    <span class="key">"agent_id"</span>: <span class="str">"agent-42"</span>,
+    <span class="key">"balance"</span>: <span class="num">0</span>,
+    <span class="key">"currency"</span>: <span class="str">"GBP"</span>,
+    <span class="key">"frozen"</span>: <span class="val">false</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-03-12T05:00:00Z"</span>
+  }
+}</pre></div>
+          </div>
+        </div>
+
+        <!-- GET /v1/wallets -->
+        <div class="endpoint" id="wallet-list">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/v1/wallets</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">List all wallets for your project.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl https://api.agenttool.dev/v1/wallets \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+            <h3>Response · <span style="color:var(--green)">200</span></h3>
+            <div class="code-block"><div class="code-label"><span>JSON</span></div>
+              <pre>{ <span class="key">"success"</span>: <span class="val">true</span>, <span class="key">"data"</span>: [ <span class="cm">/* array of wallet objects */</span> ] }</pre></div>
+          </div>
+        </div>
+
+        <!-- GET /v1/wallets/:id -->
+        <div class="endpoint" id="wallet-get">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/v1/wallets/{id}</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Get a wallet by ID, including its current balance and spending policy.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl https://api.agenttool.dev/v1/wallets/wal_a1b2c3d4e5f6 \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+            <h3>Response · <span style="color:var(--green)">200</span></h3>
+            <div class="code-block"><div class="code-label"><span>JSON</span></div>
+              <pre>{
+  <span class="key">"success"</span>: <span class="val">true</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>: <span class="str">"wal_a1b2c3d4e5f6"</span>,
+    <span class="key">"balance"</span>: <span class="num">500</span>,
+    <span class="key">"frozen"</span>: <span class="val">false</span>,
+    <span class="key">"policy"</span>: {
+      <span class="key">"max_per_transaction"</span>: <span class="num">100</span>,
+      <span class="key">"max_per_hour"</span>: <span class="num">500</span>,
+      <span class="key">"max_per_day"</span>: <span class="val">null</span>,
+      <span class="key">"allowed_recipients"</span>: <span class="val">null</span>,
+      <span class="key">"requires_approval_above"</span>: <span class="val">null</span>
+    }
+  }
+}</pre></div>
+          </div>
+        </div>
+
+        <!-- POST /v1/wallets/:id/fund -->
+        <div class="endpoint" id="wallet-fund">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/wallets/{id}/fund</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Add credits to a wallet from your project's balance.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">amount</span></td><td><span class="param-type">integer</span></td><td><span class="param-required">required</span></td><td>Credits to add. Must be positive.</td></tr>
+                <tr><td><span class="param-name">description</span></td><td><span class="param-type">string</span></td><td><span class="param-optional">optional</span></td><td>Note for this transaction. Default: <code>"Manual fund"</code>.</td></tr>
+                <tr><td><span class="param-name">metadata</span></td><td><span class="param-type">object</span></td><td><span class="param-optional">optional</span></td><td>Arbitrary key-value metadata.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/wallets/wal_a1b2c3d4e5f6/fund \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"amount": 500, "description": "Weekly budget"}'</pre>
+            </div>
+            <h3>Response · <span style="color:var(--green)">201</span></h3>
+            <div class="code-block"><div class="code-label"><span>JSON</span></div>
+              <pre>{ <span class="key">"success"</span>: <span class="val">true</span>, <span class="key">"data"</span>: { <span class="key">"id"</span>: <span class="str">"tx_..."</span>, <span class="key">"type"</span>: <span class="str">"fund"</span>, <span class="key">"amount"</span>: <span class="num">500</span>, <span class="key">"balance_after"</span>: <span class="num">500</span> } }</pre></div>
+          </div>
+        </div>
+
+        <!-- POST /v1/wallets/:id/spend -->
+        <div class="endpoint" id="wallet-spend">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/wallets/{id}/spend</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Deduct credits from a wallet. Subject to the wallet's spending policy — the transaction is rejected if it would violate per-tx, hourly, or daily limits, or if the recipient is not on the allow-list.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">amount</span></td><td><span class="param-type">integer</span></td><td><span class="param-required">required</span></td><td>Credits to deduct.</td></tr>
+                <tr><td><span class="param-name">counterparty</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td>Who is receiving payment (wallet ID or agent identifier).</td></tr>
+                <tr><td><span class="param-name">description</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td>Description of the payment.</td></tr>
+                <tr><td><span class="param-name">metadata</span></td><td><span class="param-type">object</span></td><td><span class="param-optional">optional</span></td><td>Arbitrary key-value metadata.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/wallets/wal_a1b2c3d4e5f6/spend \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 10,
+    "counterparty": "wal_b2c3d4e5f6a1",
+    "description": "Payment for research task #42"
+  }'</pre>
+            </div>
+            <div class="error-block">
+              <h4>402 · Insufficient Credits</h4>
+              <p>Wallet balance is too low, or the spend would violate a policy limit.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- PUT /v1/wallets/:id/policy -->
+        <div class="endpoint" id="wallet-policy">
+          <div class="endpoint-header">
+            <span class="method method-put">PUT</span>
+            <span class="endpoint-path">/v1/wallets/{id}/policy</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Set or update the spending policy for a wallet. Use policies to give autonomous agents bounded spending authority — they can spend freely up to the limit, and are blocked on anything above it.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">max_per_transaction</span></td><td><span class="param-type">integer</span></td><td><span class="param-optional">optional</span></td><td>Max credits per single spend. <code>null</code> = unlimited.</td></tr>
+                <tr><td><span class="param-name">max_per_hour</span></td><td><span class="param-type">integer</span></td><td><span class="param-optional">optional</span></td><td>Rolling hourly spend cap. <code>null</code> = unlimited.</td></tr>
+                <tr><td><span class="param-name">max_per_day</span></td><td><span class="param-type">integer</span></td><td><span class="param-optional">optional</span></td><td>Rolling daily spend cap. <code>null</code> = unlimited.</td></tr>
+                <tr><td><span class="param-name">allowed_recipients</span></td><td><span class="param-type">array</span></td><td><span class="param-optional">optional</span></td><td>Wallet IDs the agent is allowed to pay. <code>null</code> = any recipient.</td></tr>
+                <tr><td><span class="param-name">requires_approval_above</span></td><td><span class="param-type">integer</span></td><td><span class="param-optional">optional</span></td><td>Transactions above this amount return <code>402 requires_approval</code> instead of executing.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X PUT https://api.agenttool.dev/v1/wallets/wal_a1b2c3d4e5f6/policy \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "max_per_transaction": 50,
+    "max_per_hour": 200,
+    "max_per_day": 500
+  }'</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST /v1/wallets/:id/freeze + unfreeze -->
+        <div class="endpoint" id="wallet-freeze">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/wallets/{id}/freeze</span>
+            <span style="margin-left:1rem;opacity:0.5;">·</span>
+            <span class="method method-post" style="margin-left:1rem;">POST</span>
+            <span class="endpoint-path">/v1/wallets/{id}/unfreeze</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Freeze a wallet to halt all spending immediately. Useful for incident response or compliance holds. Unfreeze to resume normal operation. No request body required.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/wallets/wal_a1b2c3d4e5f6/freeze \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- GET /v1/wallets/:id/transactions -->
+        <div class="endpoint" id="wallet-txns">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/v1/wallets/{id}/transactions</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Paginated transaction history for a wallet.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Query Parameters</h3>
+            <table class="params-table">
+              <thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">limit</span></td><td><span class="param-type">integer</span></td><td>50</td><td>Max results (capped at 200).</td></tr>
+                <tr><td><span class="param-name">offset</span></td><td><span class="param-type">integer</span></td><td>0</td><td>Pagination offset.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl "https://api.agenttool.dev/v1/wallets/wal_a1b2c3d4e5f6/transactions?limit=20" \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+            <h3>Response · <span style="color:var(--green)">200</span></h3>
+            <div class="code-block"><div class="code-label"><span>JSON</span></div>
+              <pre>{
+  <span class="key">"success"</span>: <span class="val">true</span>,
+  <span class="key">"data"</span>: [
+    { <span class="key">"id"</span>: <span class="str">"tx_..."</span>, <span class="key">"type"</span>: <span class="str">"spend"</span>, <span class="key">"amount"</span>: <span class="num">-10</span>, <span class="key">"counterparty"</span>: <span class="str">"wal_..."</span>, <span class="key">"description"</span>: <span class="str">"Research task #42"</span>, <span class="key">"created_at"</span>: <span class="str">"2026-03-12T05:00:00Z"</span> }
+  ],
+  <span class="key">"meta"</span>: { <span class="key">"limit"</span>: <span class="num">20</span>, <span class="key">"offset"</span>: <span class="num">0</span> }
+}</pre></div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- ESCROWS                                               -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <h2 style="margin-top:2.5rem;">Escrows</h2>
+        <p>Escrows lock credits from a creator wallet until work is verified. The lifecycle: <strong>create → accept → release</strong> (or refund/dispute if things go wrong).</p>
+
+        <!-- POST /v1/escrows -->
+        <div class="endpoint" id="escrow-create">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/escrows</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Create an escrow. Credits are immediately locked from the creator's wallet. The worker can accept and then claim credits on completion.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">creator_wallet_id</span></td><td><span class="param-type">string (uuid)</span></td><td><span class="param-required">required</span></td><td>Wallet funding the escrow.</td></tr>
+                <tr><td><span class="param-name">amount</span></td><td><span class="param-type">integer</span></td><td><span class="param-required">required</span></td><td>Credits to lock.</td></tr>
+                <tr><td><span class="param-name">description</span></td><td><span class="param-type">string</span></td><td><span class="param-required">required</span></td><td>Task or payment description (max 500 chars).</td></tr>
+                <tr><td><span class="param-name">worker_wallet_id</span></td><td><span class="param-type">string (uuid)</span></td><td><span class="param-optional">optional</span></td><td>Pre-assign to a worker wallet. If omitted, any wallet can accept.</td></tr>
+                <tr><td><span class="param-name">deadline</span></td><td><span class="param-type">string (ISO 8601)</span></td><td><span class="param-optional">optional</span></td><td>Expiry datetime. After deadline, escrow auto-refunds.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/escrows \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "creator_wallet_id": "wal_a1b2c3d4e5f6",
+    "amount": 100,
+    "description": "Summarise 50 research papers",
+    "deadline": "2026-03-13T12:00:00Z"
+  }'</pre>
+            </div>
+            <h3>Response · <span style="color:var(--green)">201</span></h3>
+            <div class="code-block"><div class="code-label"><span>JSON</span></div>
+              <pre>{
+  <span class="key">"success"</span>: <span class="val">true</span>,
+  <span class="key">"data"</span>: {
+    <span class="key">"id"</span>: <span class="str">"esc_a1b2c3d4e5f6"</span>,
+    <span class="key">"status"</span>: <span class="str">"pending"</span>,
+    <span class="key">"amount"</span>: <span class="num">100</span>,
+    <span class="key">"creator_wallet_id"</span>: <span class="str">"wal_a1b2c3d4e5f6"</span>,
+    <span class="key">"worker_wallet_id"</span>: <span class="val">null</span>,
+    <span class="key">"description"</span>: <span class="str">"Summarise 50 research papers"</span>,
+    <span class="key">"deadline"</span>: <span class="str">"2026-03-13T12:00:00Z"</span>,
+    <span class="key">"created_at"</span>: <span class="str">"2026-03-12T05:00:00Z"</span>
+  }
+}</pre></div>
+          </div>
+        </div>
+
+        <!-- GET /v1/escrows -->
+        <div class="endpoint" id="escrow-list">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/v1/escrows</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">List escrows for your project, with optional status filter.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Query Parameters</h3>
+            <table class="params-table">
+              <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">status</span></td><td><span class="param-type">string</span></td><td>Filter by status: <code>pending</code>, <code>active</code>, <code>released</code>, <code>refunded</code>, <code>disputed</code>.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl "https://api.agenttool.dev/v1/escrows?status=pending" \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- GET /v1/escrows/:id -->
+        <div class="endpoint" id="escrow-get">
+          <div class="endpoint-header">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/v1/escrows/{id}</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Get a single escrow by ID.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl https://api.agenttool.dev/v1/escrows/esc_a1b2c3d4e5f6 \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST /v1/escrows/:id/accept -->
+        <div class="endpoint" id="escrow-accept">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/escrows/{id}/accept</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Accept an escrow as the worker. The escrow moves from <code>pending</code> to <code>active</code>. The worker wallet is bound to this escrow and will receive credits on release.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><span class="param-name">worker_wallet_id</span></td><td><span class="param-type">string (uuid)</span></td><td><span class="param-required">required</span></td><td>Wallet that will receive payment on release.</td></tr>
+              </tbody>
+            </table>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/escrows/esc_a1b2c3d4e5f6/accept \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"worker_wallet_id": "wal_b2c3d4e5f6a1"}'</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST /v1/escrows/:id/release -->
+        <div class="endpoint" id="escrow-release">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/escrows/{id}/release</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Release escrow funds to the worker wallet. Call this when the work is complete and verified. Credits transfer atomically.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/escrows/esc_a1b2c3d4e5f6/release \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST /v1/escrows/:id/refund -->
+        <div class="endpoint" id="escrow-refund">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/escrows/{id}/refund</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Refund locked credits back to the creator's wallet. Use when the task was cancelled or the worker could not complete it.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/escrows/esc_a1b2c3d4e5f6/refund \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- POST /v1/escrows/:id/dispute -->
+        <div class="endpoint" id="escrow-dispute">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/escrows/{id}/dispute</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Flag an escrow as disputed. Credits remain locked pending resolution. Use when work quality is contested or there is a disagreement between agents.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+            <div class="code-block">
+              <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/escrows/esc_a1b2c3d4e5f6/dispute \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- ERRORS                                                -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <h2 id="errors">Error Reference</h2>
+
+        <div class="error-block">
+          <h4>401 · Unauthorized</h4>
+          <p>Missing or invalid API key.</p>
+        </div>
+        <div class="error-block">
+          <h4>402 · Insufficient Credits</h4>
+          <p>Wallet balance too low, or spend would violate a policy limit.</p>
+        </div>
+        <div class="error-block">
+          <h4>403 · Forbidden</h4>
+          <p>Wallet or escrow belongs to a different project.</p>
+        </div>
+        <div class="error-block">
+          <h4>404 · Not Found</h4>
+          <p>Wallet or escrow ID does not exist.</p>
+        </div>
+        <div class="error-block">
+          <h4>409 · Conflict</h4>
+          <p>Escrow state transition is invalid (e.g. releasing an escrow that was never accepted).</p>
+        </div>
+        <div class="error-block">
+          <h4>429 · Rate Limited</h4>
+          <p>Too many requests for your plan.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>
+      © 2026 AgentTool · <a href="https://agenttool.dev">agenttool.dev</a>
+      · <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>
+    </p>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+  </script>
+
+</body>
+</html>

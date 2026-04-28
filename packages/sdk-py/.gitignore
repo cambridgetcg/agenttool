@@ -1,0 +1,22 @@
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+
+# ── PEACE Security Standard ──────────────────────
+# Added by: remediate.py enforce-gitignore
+.env
+.env.*
+.env.local
+.env.production
+.env.fly
+*.secret
+secrets.*
+credentials.*
+api-keys.json
+*.pem
+*.key

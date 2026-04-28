@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentTool Docs — API Reference</title>
+  <meta name="description" content="API documentation for AgentTool. Memory, tools, verification, and economy APIs for AI agents." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
+    <div class="nav-links">
+      <a href="index.html" class="active">Docs</a>
+      <a href="memory.html">Memory</a>
+      <a href="tools.html">Tools</a>
+      <a href="verify.html">Verify</a>
+      <a href="economy.html">Economy</a>
+      <a href="trace.html">Trace</a>
+      <a href="identity.html">Identity</a>
+      <a href="vault.html">Vault</a>
+      <a href="pulse.html">Pulse</a>
+      <a href="bootstrap.html">Bootstrap</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="page docs-hero">
+    <div class="section-label">Documentation</div>
+    <h1>Build with <em>AgentTool</em></h1>
+    <p class="page-sub">
+      Eight focused APIs for AI agents. Memory, tools, verification, economy, reasoning provenance, identity, secrets, and presence.
+      One API key, simple REST endpoints, production-ready.
+    </p>
+
+    <!-- Quick Start -->
+    <div class="quick-start">
+      <h2>⚡ Quick Start</h2>
+      <p style="color:var(--muted);margin-bottom:1.5rem;">Three steps to your first API call. Under 60 seconds.</p>
+
+      <ol class="steps">
+        <li>
+          <strong>Get your API key</strong>
+          <span style="color:var(--muted);">Create a free project at <a href="https://app.agenttool.dev">app.agenttool.dev</a> — takes 10 seconds, no credit card required.</span>
+        </li>
+        <li>
+          <strong>Store your first memory</strong>
+          <span style="color:var(--muted);">Copy-paste this. Change the API key. Hit enter.</span>
+          <div class="code-block" style="margin-top:0.75rem;">
+            <div class="code-label">
+              <span>curl</span>
+              <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            </div>
+            <pre>curl -X POST https://api.agenttool.dev/v1/memories \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "semantic",
+    "content": "User prefers concise replies. Timezone: UTC+8.",
+    "key": "user-prefs",
+    "agent_id": "agent-42"
+  }'</pre>
+          </div>
+          <div class="code-block">
+            <div class="code-label"><span>Response · 201</span></div>
+            <pre>{
+  <span class="key">"id"</span>: <span class="str">"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
+  <span class="key">"created_at"</span>: <span class="str">"2026-03-09T12:00:00Z"</span>
+}</pre>
+          </div>
+        </li>
+        <li>
+          <strong>Search it back</strong>
+          <span style="color:var(--muted);">Semantic search returns the closest matches — no exact keywords needed.</span>
+          <div class="code-block" style="margin-top:0.75rem;">
+            <div class="code-label">
+              <span>curl</span>
+              <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+            </div>
+            <pre>curl -X POST https://api.agenttool.dev/v1/memories/search \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "how does the user like to communicate?"}'</pre>
+          </div>
+        </li>
+      </ol>
+
+      <div class="sdk-block">
+        <div class="sdk-label">SDK Equivalent</div>
+        <pre class="sdk-code"><span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">'@agenttool/sdk'</span>
+<span class="kw">const</span> at = <span class="kw">new</span> <span class="fn">AgentTool</span>() <span class="cm">// reads AT_API_KEY from env</span>
+
+<span class="cm">// Store</span>
+<span class="kw">await</span> at.memory.<span class="fn">store</span>(<span class="str">"User prefers concise replies"</span>, { key: <span class="str">"user-prefs"</span> })
+
+<span class="cm">// Search</span>
+<span class="kw">const</span> results = <span class="kw">await</span> at.memory.<span class="fn">search</span>(<span class="str">"communication style"</span>, { limit: <span class="num">3</span> })</pre>
+      </div>
+    </div>
+
+    <!-- Service Cards -->
+    <h2 style="border-top:none;padding-top:0;">API Reference</h2>
+    <p style="color:var(--muted);margin-bottom:1.5rem;">Eight services. Each does one thing well. All composed under a single API key.</p>
+
+    <div class="card-grid">
+      <a href="memory.html" class="card">
+        <div class="card-icon">🧠</div>
+        <span class="card-tag tag-beta">Beta</span>
+        <div class="card-title">agent-memory</div>
+        <p class="card-desc">Store, retrieve, and semantically search agent memories across sessions. Namespaced by key and agent.</p>
+      </a>
+
+      <a href="tools.html" class="card">
+        <div class="card-icon">🛠️</div>
+        <span class="card-tag tag-beta">Beta</span>
+        <div class="card-title">agent-tools</div>
+        <p class="card-desc">Web search, page scraping, browser automation, and code execution. The agent's hands.</p>
+      </a>
+
+      <a href="verify.html" class="card">
+        <div class="card-icon">✅</div>
+        <span class="card-tag tag-live">Live</span>
+        <div class="card-title">agent-verify</div>
+        <p class="card-desc">AI-powered fact-checking. Submit a claim, get a verdict with evidence and confidence score.</p>
+      </a>
+
+      <a href="economy.html" class="card">
+        <div class="card-icon">💰</div>
+        <span class="card-tag tag-live">Live</span>
+        <div class="card-title">agent-economy</div>
+        <p class="card-desc">Wallets, micro-billing, escrow, and agent-to-agent value exchange. The economic layer.</p>
+      </a>
+
+      <a href="trace.html" class="card">
+        <div class="card-icon">🔍</div>
+        <span class="card-tag tag-live">Live</span>
+        <div class="card-title">agent-trace</div>
+        <p class="card-desc">Reasoning provenance for AI agents. Store and search the WHY behind agent decisions — not just what happened, but how it was reasoned.</p>
+      </a>
+
+      <a href="pulse.html" class="card">
+        <div class="card-icon">💓</div>
+        <span class="card-tag tag-live">Live</span>
+        <div class="card-title">agent-pulse</div>
+        <p class="card-desc">Agent presence and liveness. Heartbeats, status tracking, and fleet visibility — know which agents are alive and what they're doing.</p>
+      </a>
+    </div>
+
+    <!-- Base URL / Auth -->
+    <h2>Authentication</h2>
+    <p>All API requests require a Bearer token in the <code>Authorization</code> header.</p>
+
+    <div class="code-block">
+      <div class="code-label"><span>Every request</span></div>
+      <pre>Authorization: Bearer YOUR_API_KEY</pre>
+    </div>
+
+    <div class="callout">
+      <p><span class="callout-icon">💡</span> <strong>Base URL:</strong> <code>https://api.agenttool.dev</code> — all endpoints are relative to this.</p>
+    </div>
+
+    <h3>Project & Key Management</h3>
+    <p style="color:var(--muted);margin-bottom:1rem;">Projects are the top-level resource. Each project has a credit balance, a plan, and one or more API keys.</p>
+
+    <div class="endpoint" id="create-project" style="margin-bottom:1rem;">
+      <div class="endpoint-header">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/v1/projects</span>
+        <span style="font-size:0.8rem;color:var(--muted);margin-left:0.5rem;">No auth required</span>
+      </div>
+      <div class="endpoint-body">
+        <p class="endpoint-desc">Create a new project and receive your first API key. The key is shown once — store it immediately.</p>
+        <div class="code-block">
+          <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl -X POST https://api.agenttool.dev/v1/projects \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-agent"}'</pre>
+        </div>
+        <div class="code-block"><div class="code-label"><span>Response · 201</span></div>
+          <pre>{
+  <span class="key">"project_id"</span>: <span class="str">"54b26f66-10ff-466e-a1ab-c793c4d65958"</span>,
+  <span class="key">"name"</span>: <span class="str">"my-agent"</span>,
+  <span class="key">"plan"</span>: <span class="str">"dev"</span>,
+  <span class="key">"credits"</span>: <span class="num">100</span>,
+  <span class="key">"api_key"</span>: <span class="str">"at_abc123..."</span>
+}</pre></div>
+      </div>
+    </div>
+
+    <div class="endpoint" id="list-keys" style="margin-bottom:1rem;">
+      <div class="endpoint-header">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/v1/keys</span>
+      </div>
+      <div class="endpoint-body">
+        <p class="endpoint-desc">List all active (non-revoked) API keys for your project. Full key values are never returned — only prefix and metadata.</p>
+        <div class="code-block">
+          <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl https://api.agenttool.dev/v1/keys \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint" id="create-key" style="margin-bottom:1rem;">
+      <div class="endpoint-header">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/v1/keys</span>
+      </div>
+      <div class="endpoint-body">
+        <p class="endpoint-desc">Create an additional API key for your project. The <code>api_key</code> is shown once — store it immediately.</p>
+        <div class="code-block">
+          <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl -X POST https://api.agenttool.dev/v1/keys \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "production"}'</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="endpoint" id="revoke-key" style="margin-bottom:1.5rem;">
+      <div class="endpoint-header">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint-path">/v1/keys/:keyId</span>
+      </div>
+      <div class="endpoint-body">
+        <p class="endpoint-desc">Revoke an API key by ID. The key ID is returned from <code>GET /v1/keys</code>. Revocation is permanent — the key cannot be re-activated.</p>
+        <div class="code-block">
+          <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+          <pre>curl -X DELETE https://api.agenttool.dev/v1/keys/KEY_ID \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+        </div>
+      </div>
+    </div>
+
+    <h2>Error Handling</h2>
+    <p>All errors return JSON with a <code>detail</code> field. Common status codes:</p>
+
+    <table class="params-table">
+      <thead>
+        <tr><th>Status</th><th>Meaning</th><th>What to do</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="error-code">401</span></td>
+          <td>Unauthorized</td>
+          <td style="color:var(--muted)">Check your API key. Make sure it's in the <code>Authorization: Bearer</code> header.</td>
+        </tr>
+        <tr>
+          <td><span class="error-code">404</span></td>
+          <td>Not Found</td>
+          <td style="color:var(--muted)">Resource doesn't exist. Double-check the ID or key.</td>
+        </tr>
+        <tr>
+          <td><span class="error-code">422</span></td>
+          <td>Validation Error</td>
+          <td style="color:var(--muted)">Request body is malformed. Check required fields and types in the docs.</td>
+        </tr>
+        <tr>
+          <td><span class="error-code">429</span></td>
+          <td>Rate Limited</td>
+          <td style="color:var(--muted)">Too many requests. Back off and retry with exponential delay.</td>
+        </tr>
+        <tr>
+          <td><span class="error-code">500</span></td>
+          <td>Internal Error</td>
+          <td style="color:var(--muted)">Our fault. Retry once, then contact support if it persists.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-label"><span>Error response format</span></div>
+      <pre>{
+  <span class="key">"detail"</span>: [
+    {
+      <span class="key">"loc"</span>: [<span class="str">"body"</span>, <span class="str">"content"</span>],
+      <span class="key">"msg"</span>: <span class="str">"field required"</span>,
+      <span class="key">"type"</span>: <span class="str">"missing"</span>
+    }
+  ]
+}</pre>
+    </div>
+
+    <h2>Rate Limits</h2>
+
+    <table class="params-table">
+      <thead>
+        <tr><th>Plan</th><th>Requests / month</th><th>Memory retention</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600">Hatchling (Free)</td>
+          <td>10,000</td>
+          <td>30 days</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600">Builder ($29/mo)</td>
+          <td>500,000</td>
+          <td>1 year</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600">Scale ($99/mo)</td>
+          <td>5,000,000</td>
+          <td>Unlimited</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <p>
+      © 2026 AgentTool · <a href="https://agenttool.dev">agenttool.dev</a>
+      · <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>
+    </p>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+  </script>
+
+</body>
+</html>

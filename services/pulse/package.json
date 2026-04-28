@@ -1,0 +1,14 @@
+{
+  "name": "agent-pulse",
+  "version": "1.0.0",
+  "description": "Agent presence WebSocket service for agenttool.dev",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "ioredis": "^5.3.2"
+  }
+}

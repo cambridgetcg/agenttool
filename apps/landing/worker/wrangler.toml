@@ -1,0 +1,16 @@
+name = "agenttool-waitlist"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+account_id = "cf4198e651bf3009877d49f688c9d88e"
+
+[[kv_namespaces]]
+binding = "WAITLIST"
+id = "6687021646dd482e9601865da13062c7"
+
+# Email secrets — set ONE of these via wrangler secret put:
+#   wrangler secret put RESEND_API_KEY     (preferred — sign up at resend.com, free 100/day)
+#   wrangler secret put SENDGRID_API_KEY   (fallback)
+
+[[routes]]
+pattern = "agenttool.dev/api/*"
+zone_name = "agenttool.dev"

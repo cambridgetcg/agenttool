@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — AgentTool</title>
+  <meta name="description" content="AgentTool developer dashboard — manage your API key, view usage, and get code snippets." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <a href="https://agenttool.dev" class="logo">agent<span>tool</span>.dev</a>
+      <div class="project-pill">
+        <span class="project-dot"></span>
+        <span class="project-name" id="sidebar-project">—</span>
+      </div>
+    </div>
+
+    <nav>
+      <div class="nav-section">Overview</div>
+      <a href="#overview" class="active" data-section="overview"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> API Key</a>
+      <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Code Snippets</a>
+
+      <div class="nav-section">Products</div>
+      <a href="https://docs.agenttool.dev/memory.html" target="_blank"><span class="nav-icon">🧠</span> agent-memory</a>
+      <a href="https://docs.agenttool.dev/tools.html" target="_blank"><span class="nav-icon">🛠️</span> agent-tools</a>
+      <a href="https://docs.agenttool.dev/verify.html" target="_blank"><span class="nav-icon">✅</span> agent-verify</a>
+      <a href="https://docs.agenttool.dev/economy.html" target="_blank"><span class="nav-icon">💰</span> agent-economy</a>
+
+      <div class="nav-section">Account</div>
+      <a href="#billing" data-section="billing"><span class="nav-icon">💳</span> Billing</a>
+
+      <div class="nav-section">Links</div>
+      <a href="https://docs.agenttool.dev" target="_blank"><span class="nav-icon">📖</span> Docs</a>
+      <a href="https://agenttool.dev" target="_blank"><span class="nav-icon">🏠</span> Homepage</a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div style="font-size:0.72rem;color:var(--muted)" id="sidebar-plan">Free plan</div>
+      <a class="logout-link" onclick="logout()">
+        <span>🚪</span> Sign out
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div class="main">
+    <div class="topbar">
+      <h1 id="topbar-title">Dashboard</h1>
+      <div class="topbar-actions">
+        <span style="font-size:0.8rem;color:var(--muted)" id="refresh-status"></span>
+        <button class="btn btn-ghost btn-sm" onclick="refreshUsage()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- Section: Overview -->
+      <div id="section-overview">
+        <!-- Stats -->
+        <div class="stats">
+          <div class="stat green">
+            <div class="stat-label">Total Calls</div>
+            <div class="stat-value" id="stat-calls"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="stat-calls-sub">Loading…</div>
+          </div>
+          <div class="stat purple">
+            <div class="stat-label">Memory Ops</div>
+            <div class="stat-value" id="stat-memory"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="stat-memory-sub">reads + writes</div>
+          </div>
+          <div class="stat blue">
+            <div class="stat-label">Tool Calls</div>
+            <div class="stat-value" id="stat-tools"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="stat-tools-sub">executions</div>
+          </div>
+          <div class="stat yellow">
+            <div class="stat-label">Verifications</div>
+            <div class="stat-value" id="stat-verify"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="stat-verify-sub">fact-checks</div>
+          </div>
+        </div>
+
+        <!-- API Key + Quick Start -->
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🔑 Your API Key</div>
+                <div class="card-sub">Use this in all API requests</div>
+              </div>
+            </div>
+            <div class="key-display">
+              <div class="key-label">API Key</div>
+              <div class="key-value" id="dash-api-key">—</div>
+              <button class="key-copy" onclick="copyDashKey()">Copy</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">⚡ Quick Start</div>
+                <div class="card-sub">Test your key right now</div>
+              </div>
+            </div>
+            <div class="code-block">
+              <div class="code-header">
+                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+                <span class="code-lang">cURL</span>
+              </div>
+              <pre id="quick-curl"><span class="cm"># Test your API key</span>
+<span class="fn">curl</span> <span class="str">https://api.agenttool.dev/v1/health</span> \
+  -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span></pre>
+              <button class="code-copy" onclick="copyCode('quick-curl')">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Usage breakdown -->
+        <div class="grid-1">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">📊 Usage by Service</div>
+                <div class="card-sub">API calls per service</div>
+              </div>
+              <span style="font-size:0.75rem;color:var(--muted)" id="usage-period">All time</span>
+            </div>
+            <div class="usage-rows" id="usage-breakdown">
+              <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <div class="empty-text loading-pulse">Loading usage data…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Snippets -->
+      <div id="section-snippets" style="display:none">
+        <div class="card" style="margin-bottom:2rem">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📝 Code Snippets</div>
+              <div class="card-sub">Pre-filled with your API key — copy and run</div>
+            </div>
+          </div>
+
+          <div class="snippet-tabs">
+            <button class="snippet-tab active" onclick="switchSnippet('js')">JavaScript</button>
+            <button class="snippet-tab" onclick="switchSnippet('python')">Python</button>
+            <button class="snippet-tab" onclick="switchSnippet('curl')">cURL</button>
+          </div>
+
+          <!-- JavaScript -->
+          <div class="snippet-content active" id="snippet-js">
+            <div class="code-block">
+              <div class="code-header">
+                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+                <span class="code-lang">JavaScript · agent-memory</span>
+              </div>
+              <pre id="code-js"><span class="cm">// Store and recall agent memories</span>
+<span class="kw">const</span> API = <span class="str">'https://api.agenttool.dev'</span>
+<span class="kw">const</span> KEY = <span class="str">'<span class="api-key-placeholder">YOUR_KEY</span>'</span>
+
+<span class="cm">// Write a memory</span>
+<span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">`${API}/v1/memories`</span>, {
+  method: <span class="str">'POST'</span>,
+  headers: {
+    <span class="str">'Authorization'</span>: <span class="str">`Bearer ${KEY}`</span>,
+    <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span>
+  },
+  body: <span class="fn">JSON.stringify</span>({
+    content: <span class="str">'User prefers concise replies'</span>,
+    type: <span class="str">'semantic'</span>,
+    agent_id: <span class="str">'my-agent'</span>
+  })
+})
+
+<span class="kw">const</span> memory = <span class="kw">await</span> res.<span class="fn">json</span>()
+console.<span class="fn">log</span>(memory)
+<span class="cm">// → { id: "...", type: "semantic", content: "...", created_at: "..." }</span></pre>
+              <button class="code-copy" onclick="copyCode('code-js')">Copy</button>
+            </div>
+          </div>
+
+          <!-- Python -->
+          <div class="snippet-content" id="snippet-python">
+            <div class="code-block">
+              <div class="code-header">
+                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+                <span class="code-lang">Python · agent-tools</span>
+              </div>
+              <pre id="code-python"><span class="kw">import</span> requests
+
+API = <span class="str">"https://api.agenttool.dev"</span>
+KEY = <span class="str">"<span class="api-key-placeholder">YOUR_KEY</span>"</span>
+
+<span class="cm"># Web search</span>
+resp = requests.<span class="fn">post</span>(
+    <span class="str">f"{API}/v1/search/search"</span>,
+    headers={
+        <span class="str">"Authorization"</span>: <span class="str">f"Bearer {KEY}"</span>,
+        <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>,
+    },
+    json={<span class="str">"query"</span>: <span class="str">"latest AI papers"</span>, <span class="str">"num_results"</span>: <span class="num">5</span>},
+)
+
+<span class="kw">for</span> r <span class="kw">in</span> resp.<span class="fn">json</span>()[<span class="str">"results"</span>]:
+    <span class="fn">print</span>(r[<span class="str">"title"</span>], r[<span class="str">"url"</span>])
+<span class="cm"># → [{"title": "...", "url": "...", "snippet": "..."}, ...]</span></pre>
+              <button class="code-copy" onclick="copyCode('code-python')">Copy</button>
+            </div>
+          </div>
+
+          <!-- cURL -->
+          <div class="snippet-content" id="snippet-curl">
+            <div class="code-block">
+              <div class="code-header">
+                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+                <span class="code-lang">cURL · agent-verify</span>
+              </div>
+              <pre id="code-curl"><span class="cm"># Fact-check a claim with AI-powered evidence gathering</span>
+<span class="fn">curl</span> -X POST <span class="str">https://api.agenttool.dev/v1/verify</span> \
+  -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{"claim": "The Eiffel Tower is 330 metres tall."}'</span>
+
+<span class="cm"># → {"verdict": "disputed", "confidence": 0.71, "caveats": ["Height varies by measurement..."]}</span></pre>
+              <button class="code-copy" onclick="copyCode('code-curl')">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: API Key (dedicated) -->
+      <div id="section-api-key" style="display:none">
+        <div class="card" style="margin-bottom:2rem">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🔑 API Key Management</div>
+              <div class="card-sub">Your project credentials</div>
+            </div>
+          </div>
+
+          <div class="key-display" style="margin-bottom:1.5rem">
+            <div class="key-label">API Key</div>
+            <div class="key-value" id="full-api-key">—</div>
+            <button class="key-copy" onclick="copyFullKey()">Copy</button>
+          </div>
+
+          <div class="key-warning">
+            <span>⚠️</span>
+            <span>Keep your API key secret. Don't commit it to version control. Use environment variables in production.</span>
+          </div>
+
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1rem">
+            <button class="btn btn-sm" onclick="createNewKey()">＋ Create New Key</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmReset()">🗑️ Delete & Start Over</button>
+          </div>
+          <div class="form-hint" style="margin-top:0.5rem">"Delete & Start Over" clears your key from this browser. You'll need to create a new project.</div>
+        </div>
+
+        <div class="card" style="margin-bottom:2rem">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🗝️ All API Keys</div>
+              <div class="card-sub">Active keys for this project</div>
+            </div>
+            <button class="btn btn-sm" onclick="loadKeys()" style="margin-left:auto">↻ Refresh</button>
+          </div>
+          <div id="keys-list" style="margin-top:0.75rem">
+            <div style="color:var(--muted);font-size:0.85rem">Loading…</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📋 Environment Setup</div>
+              <div class="card-sub">Recommended way to use your key</div>
+            </div>
+          </div>
+          <div class="code-block">
+            <div class="code-header">
+              <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+              <span class="code-lang">.env</span>
+            </div>
+            <pre id="code-env"><span class="cm"># Add to your .env file</span>
+AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
+            <button class="code-copy" onclick="copyCode('code-env')">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Billing -->
+      <div id="section-billing" style="display:none">
+
+        <!-- Success / cancel banners (shown via URL param) -->
+        <div id="billing-success-banner" style="display:none;background:var(--green-dim,#1a3a2a);border:1px solid var(--green,#4caf50);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;color:var(--green,#4caf50);font-size:0.9rem">
+          ✅ Subscription activated! Your plan has been upgraded. It may take a few seconds to reflect below.
+        </div>
+        <div id="billing-cancel-banner" style="display:none;background:var(--yellow-dim,#3a3000);border:1px solid var(--yellow,#f0b429);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;color:var(--yellow,#f0b429);font-size:0.9rem">
+          ↩️ Checkout cancelled — you haven't been charged.
+        </div>
+
+        <!-- Current plan card -->
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-header">
+            <div>
+              <div class="card-title">💳 Current Plan</div>
+              <div class="card-sub" id="billing-status-sub">Loading subscription status…</div>
+            </div>
+            <div id="billing-upgrade-btn-wrap" style="display:none">
+              <button class="btn btn-primary btn-sm" onclick="openUpgradeModal()">⬆️ Upgrade</button>
+            </div>
+          </div>
+
+          <div id="billing-plan-display" style="padding:1rem 0">
+            <div class="loading-pulse" style="color:var(--muted);font-size:0.85rem">Fetching plan…</div>
+          </div>
+
+          <!-- Usage meters -->
+          <div id="billing-usage-meters" style="display:none;margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+            <div style="font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.75rem">Daily Usage</div>
+
+            <div class="billing-meter">
+              <div class="billing-meter-label">
+                <span>🧠 Memory ops</span>
+                <span id="meter-memory-label">—</span>
+              </div>
+              <div class="billing-meter-track">
+                <div class="billing-meter-fill purple" id="meter-memory-fill" style="width:0%"></div>
+              </div>
+            </div>
+
+            <div class="billing-meter">
+              <div class="billing-meter-label">
+                <span>🛠️ Tool calls</span>
+                <span id="meter-tools-label">—</span>
+              </div>
+              <div class="billing-meter-track">
+                <div class="billing-meter-fill blue" id="meter-tools-fill" style="width:0%"></div>
+              </div>
+            </div>
+
+            <div class="billing-meter">
+              <div class="billing-meter-label">
+                <span>✅ Verifications</span>
+                <span id="meter-verify-label">—</span>
+              </div>
+              <div class="billing-meter-track">
+                <div class="billing-meter-fill green" id="meter-verify-fill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cancel link -->
+          <div id="billing-cancel-wrap" style="display:none;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+            <button class="btn btn-ghost btn-sm" onclick="cancelSubscription()" style="color:var(--red,#e57373);font-size:0.78rem">
+              Cancel subscription
+            </button>
+            <span style="font-size:0.72rem;color:var(--muted);margin-left:0.5rem">You'll keep access until the end of your billing period.</span>
+          </div>
+        </div>
+
+        <!-- Plan comparison -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📋 Plans</div>
+              <div class="card-sub">Choose the right tier for your agent workload</div>
+            </div>
+          </div>
+
+          <div class="plan-grid" id="plan-grid">
+            <div class="loading-pulse" style="color:var(--muted);font-size:0.85rem;padding:1rem">Loading plans…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upgrade modal -->
+      <div id="upgrade-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)closeUpgradeModal()">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;max-width:400px;width:90%;position:relative">
+          <button onclick="closeUpgradeModal()" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem">✕</button>
+          <div style="font-size:1rem;font-weight:600;margin-bottom:0.25rem">Upgrade plan</div>
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:1.5rem">You'll be redirected to Stripe checkout.</div>
+          <div id="modal-plan-buttons" style="display:flex;flex-direction:column;gap:0.75rem"></div>
+          <div id="modal-loading" style="display:none;color:var(--muted);font-size:0.85rem;text-align:center;padding:1rem">Redirecting to checkout…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>initDashboard();</script>
+
+</body>
+</html>

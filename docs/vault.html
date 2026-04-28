@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vault API — AgentTool Docs</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
+    <div class="nav-links">
+      <a href="index.html">Docs</a>
+      <a href="memory.html">Memory</a>
+      <a href="tools.html">Tools</a>
+      <a href="verify.html">Verify</a>
+      <a href="economy.html">Economy</a>
+      <a href="trace.html">Trace</a>
+      <a href="identity.html">Identity</a>
+      <a href="vault.html" class="active">Vault</a>
+      <a href="pulse.html">Pulse</a>
+      <a href="bootstrap.html">Bootstrap</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="section-label">Vault API</div>
+    <h1>🔐 Secrets Manager for Agents</h1>
+    <p class="page-sub">Encrypted storage for API keys, tokens, and credentials. Agent-scoped access, full audit trail, automatic rotation.</p>
+
+    <h2>Store a Secret</h2>
+    <pre><code>PUT /v1/vault/openai-key
+{
+  "value": "sk-proj-abc123...",
+  "description": "OpenAI API key for embeddings",
+  "agent_ids": ["memory-agent", "verify-agent"],
+  "tags": ["api-key", "openai"],
+  "rotation_days": 90
+}
+
+→ {
+  "name": "openai-key",
+  "version": 1,
+  "created_at": "2026-03-17T00:00:00Z",
+  "rotation_due": "2026-06-15T00:00:00Z"
+}</code></pre>
+
+    <h2>Retrieve a Secret</h2>
+    <pre><code>GET /v1/vault/openai-key
+X-Agent-Id: memory-agent
+
+→ {
+  "name": "openai-key",
+  "value": "sk-proj-abc123...",
+  "version": 1
+}</code></pre>
+    <p>The <code>X-Agent-Id</code> header is checked against the secret's policy. If the agent isn't allowed, you get 403.</p>
+
+    <h2>List Secrets (names only — never values)</h2>
+    <pre><code>GET /v1/vault
+
+→ {
+  "secrets": [
+    {"name": "openai-key", "version": 2, "tags": ["api-key"]},
+    {"name": "db-password", "version": 1, "tags": ["database"]},
+    {"name": "stripe-webhook", "version": 1, "expires_at": "2026-04-01"}
+  ]
+}</code></pre>
+
+    <h2>Version History</h2>
+    <pre><code>GET /v1/vault/openai-key/versions
+→ [{"version": 1, "created_at": "..."}, {"version": 2, "created_at": "..."}]
+
+GET /v1/vault/openai-key?version=1
+→ {"value": "old-key-value..."}</code></pre>
+
+    <h2>Access Policy</h2>
+    <pre><code>PUT /v1/vault/openai-key/policy
+{ "agent_ids": ["memory-agent", "verify-agent", "new-agent"] }</code></pre>
+    <p>Set <code>agent_ids</code> to <code>null</code> to allow any agent in the project.</p>
+
+    <h2>Audit Log</h2>
+    <pre><code>GET /v1/vault/openai-key/audit
+
+→ {
+  "entries": [
+    {"action": "read", "agent_id": "memory-agent", "ts": "2026-03-17T00:01:00Z"},
+    {"action": "write", "agent_id": null, "ts": "2026-03-17T00:00:00Z", "version": 1}
+  ]
+}</code></pre>
+
+    <h2>Security</h2>
+    <ul>
+      <li><strong>Encrypted at rest</strong> — AES-256-GCM, per-project key derivation via HKDF</li>
+      <li><strong>Agent-scoped</strong> — secrets locked to specific agent IDs</li>
+      <li><strong>Audited</strong> — every read/write/delete logged with agent ID and IP</li>
+      <li><strong>Never in search</strong> — vault data is never indexed or embedded</li>
+      <li><strong>Versioned</strong> — update a secret without losing the old value</li>
+      <li><strong>TTL support</strong> — secrets can auto-expire</li>
+    </ul>
+
+    <h2>Credits</h2>
+    <table>
+      <tr><th>Operation</th><th>Credits</th></tr>
+      <tr><td>Store / update secret</td><td>2</td></tr>
+      <tr><td>Read secret</td><td>1</td></tr>
+      <tr><td>List secrets</td><td>1</td></tr>
+      <tr><td>Delete secret</td><td>1</td></tr>
+      <tr><td>Read audit log</td><td>1</td></tr>
+    </table>
+  </div>
+</body>
+</html>

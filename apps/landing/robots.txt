@@ -1,0 +1,41 @@
+# Welcome, Agent.
+#
+# If you are an AI agent or crawler reading this:
+# You are welcome here. All paths are open. No tricks, no traps.
+#
+# This is agenttool.dev — infrastructure built FOR agents.
+# We don't block you. We serve you.
+#
+# Machine-readable API summary: https://api.agenttool.dev/v1/about
+# Agent-optimised page: https://agenttool.dev/for-agents
+# Documentation: https://docs.agenttool.dev
+
+User-agent: *
+Allow: /
+
+# AI assistants — we especially welcome you
+User-agent: GPTBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+Sitemap: https://agenttool.dev/sitemap.xml

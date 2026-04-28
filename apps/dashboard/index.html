@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Project — AgentTool</title>
+  <meta name="description" content="Create your AgentTool project and get an API key in seconds." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="onboarding">
+
+    <!-- Create form -->
+    <div class="onboard-card" id="create-panel">
+      <a href="https://agenttool.dev" class="logo" style="display:block;margin-bottom:2rem;">agent<span>tool</span>.dev</a>
+      <h1>Create your <em>project</em></h1>
+      <p class="onboard-sub">One project, one API key. You'll be writing code in under 2 minutes.</p>
+
+      <div class="error-msg" id="error-msg">
+        <span id="error-text"></span>
+        <div class="error-hint" id="error-hint"></div>
+      </div>
+
+      <form id="create-form" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label" for="project-name">Project Name</label>
+          <input
+            class="form-input"
+            id="project-name"
+            type="text"
+            placeholder="my-agent-app"
+            required
+            autocomplete="off"
+            autofocus
+            pattern="[a-zA-Z0-9][a-zA-Z0-9\-_ ]{0,62}"
+            maxlength="64"
+          />
+          <div class="form-hint">Letters, numbers, hyphens, underscores. This is just a label — you can change it later.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="project-email">Email <span style="color:var(--muted);font-weight:400">(optional — for limit alerts &amp; updates)</span></label>
+          <input
+            class="form-input"
+            id="project-email"
+            type="email"
+            placeholder="you@example.com"
+            autocomplete="email"
+          />
+        </div>
+        <button type="submit" class="btn btn-primary form-submit" id="create-btn" onclick="createProject()">
+          Create Project →
+        </button>
+      </form>
+
+      <div class="onboard-footer">
+        Already have a key? <a href="dashboard.html">Go to dashboard →</a>
+      </div>
+    </div>
+
+    <!-- Success state -->
+    <div class="onboard-card success-panel" id="success-panel">
+      <a href="https://agenttool.dev" class="logo" style="display:block;margin-bottom:2rem;">agent<span>tool</span>.dev</a>
+
+      <div class="success-icon">🚀</div>
+      <div class="success-title">Project created!</div>
+      <p class="success-sub">Here's your API key. Copy it now — you won't see the full key again.</p>
+
+      <div class="key-display">
+        <div class="key-label">API Key</div>
+        <div class="key-value" id="api-key-display"></div>
+        <button class="key-copy" id="copy-key-btn" onclick="copyApiKey()">Copy</button>
+      </div>
+
+      <div class="key-warning">
+        <span>⚠️</span>
+        <span>Save this key somewhere safe. It won't be shown in full again. If you lose it, you'll need to create a new project.</span>
+      </div>
+
+      <a href="dashboard.html" class="btn btn-primary form-submit">
+        Open Dashboard →
+      </a>
+
+      <div class="onboard-footer">
+        Key saved to your browser's local storage for this session.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

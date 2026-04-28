@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>agent-verify — AgentTool Docs</title>
+  <meta name="description" content="API reference for agent-verify. Fact-check any claim with AI-powered evidence gathering, multi-source verification, and confidence scoring." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
+    <div class="nav-links">
+      <a href="index.html">Docs</a>
+      <a href="memory.html">Memory</a>
+      <a href="tools.html">Tools</a>
+      <a href="verify.html" class="active">Verify</a>
+      <a href="economy.html">Economy</a>
+      <a href="trace.html">Trace</a>
+      <a href="identity.html">Identity</a>
+      <a href="vault.html">Vault</a>
+      <a href="pulse.html">Pulse</a>
+      <a href="bootstrap.html">Bootstrap</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="doc-layout">
+
+      <aside class="sidebar">
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#verify">Verify Claim</a></li>
+          <li><a href="#batch">Batch Verify</a></li>
+          <li><a href="#verdicts">Verdicts</a></li>
+          <li><a href="#use-cases">Use Cases</a></li>
+          <li><a href="#errors">Errors</a></li>
+        </ul>
+      </aside>
+
+      <div class="doc-content">
+        <div class="section-label">agent-verify</div>
+        <h1>✅ <em>Verify</em> API Reference</h1>
+        <p class="page-sub">
+          Fact-check any claim with AI-powered evidence gathering, multi-source verification,
+          and confidence scoring. Get a verdict — <em>verified</em>, <em>disputed</em>,
+          <em>false</em>, or <em>unverifiable</em> — in under 30 seconds.
+        </p>
+
+        <div class="callout" id="overview" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.2);">
+          <p><span class="callout-icon">✅</span> <strong>Live</strong> — agent-verify is available now. <a href="https://app.agenttool.dev">Create a project</a> to get your API key.</p>
+        </div>
+
+        <div class="callout">
+          <p><span class="callout-icon">🔑</span> <strong>Base URL:</strong> <code>https://api.agenttool.dev</code> · All endpoints require <code>Authorization: Bearer YOUR_API_KEY</code></p>
+        </div>
+
+        <div class="callout" style="background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.2);">
+          <p><span class="callout-icon">⚡</span> <strong>How it works:</strong> Claims are parsed into search queries → evidence gathered from web, Wikipedia, and authoritative sources → LLM judge evaluates evidence → confidence scored with heuristics → verdict returned with sources.</p>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- POST /v1/verify — Verify Single Claim          -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div class="endpoint" id="verify">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/verify</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Verify a single factual claim. The pipeline gathers multi-source evidence, runs an LLM judge, and returns a verdict with confidence score and cited sources.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span class="param-name">claim</span></td>
+                  <td><span class="param-type">string</span></td>
+                  <td><span class="param-required">required</span></td>
+                  <td>The factual claim to verify. Max 2,000 characters. e.g. <code>"The Eiffel Tower is 330 metres tall."</code></td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">context</span></td>
+                  <td><span class="param-type">string</span></td>
+                  <td><span class="param-optional">optional</span></td>
+                  <td>Additional context that helps interpret the claim (e.g. conversation history, agent task description). Max 2,000 characters.</td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">domain</span></td>
+                  <td><span class="param-type">string</span></td>
+                  <td><span class="param-optional">optional</span></td>
+                  <td>Claim domain — improves evidence sourcing. One of: <code>finance</code>, <code>legal</code>, <code>medical</code>, <code>science</code>, <code>general</code>. Auto-detected if omitted.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="code-block">
+              <div class="code-label">
+                <span>curl</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/verify \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claim": "The Eiffel Tower is 330 metres tall.",
+    "domain": "general"
+  }'</pre>
+            </div>
+
+            <div class="sdk-block">
+              <div class="sdk-label">SDK</div>
+              <pre class="sdk-code"><span class="kw">const</span> result = <span class="kw">await</span> at.verify.<span class="fn">check</span>(
+  <span class="str">"The Eiffel Tower is 330 metres tall."</span>,
+  { domain: <span class="str">"general"</span> }
+)
+<span class="cm">// result.verdict  → "verified" | "disputed" | "false" | "unverifiable"</span>
+<span class="cm">// result.confidence → 0.0 – 1.0</span></pre>
+            </div>
+
+            <h3>Response · <span style="color:var(--green)">200</span></h3>
+            <div class="code-block">
+              <div class="code-label"><span>JSON</span></div>
+              <pre>{
+  <span class="key">"claim"</span>: <span class="str">"The Eiffel Tower is 330 metres tall."</span>,
+  <span class="key">"verdict"</span>: <span class="str">"verified"</span>,
+  <span class="key">"confidence"</span>: <span class="num">0.91</span>,
+  <span class="key">"evidence"</span>: {
+    <span class="key">"supporting"</span>: [
+      {
+        <span class="key">"source"</span>: <span class="str">"wikipedia"</span>,
+        <span class="key">"url"</span>: <span class="str">"https://en.wikipedia.org/wiki/Eiffel_Tower"</span>,
+        <span class="key">"title"</span>: <span class="str">"Eiffel Tower — Wikipedia"</span>,
+        <span class="key">"snippet"</span>: <span class="str">"The Eiffel Tower is 330 m (1,083 ft) tall..."</span>,
+        <span class="key">"reliability"</span>: <span class="num">0.85</span>,
+        <span class="key">"position"</span>: <span class="str">"supports"</span>
+      }
+    ],
+    <span class="key">"contradicting"</span>: [],
+    <span class="key">"neutral"</span>: []
+  },
+  <span class="key">"sources"</span>: [
+    {
+      <span class="key">"url"</span>: <span class="str">"https://en.wikipedia.org/wiki/Eiffel_Tower"</span>,
+      <span class="key">"title"</span>: <span class="str">"Eiffel Tower — Wikipedia"</span>,
+      <span class="key">"reliability"</span>: <span class="num">0.85</span>
+    }
+  ],
+  <span class="key">"caveats"</span>: [<span class="str">"Height includes the broadcast antenna added in 1957."</span>],
+  <span class="key">"processing_ms"</span>: <span class="num">4820</span>
+}</pre>
+            </div>
+
+            <h3>Response Fields</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span class="param-name">verdict</span></td>
+                  <td><span class="param-type">string</span></td>
+                  <td>See <a href="#verdicts">Verdicts</a> below.</td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">confidence</span></td>
+                  <td><span class="param-type">number</span></td>
+                  <td>Confidence score <code>0.0–1.0</code>. Above <code>0.75</code> is high confidence.</td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">evidence.supporting</span></td>
+                  <td><span class="param-type">array</span></td>
+                  <td>Sources that support the claim, each with <code>url</code>, <code>snippet</code>, <code>reliability</code>.</td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">evidence.contradicting</span></td>
+                  <td><span class="param-type">array</span></td>
+                  <td>Sources that contradict the claim.</td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">caveats</span></td>
+                  <td><span class="param-type">array</span></td>
+                  <td>Nuances, edge cases, or time-sensitivity notes.</td>
+                </tr>
+                <tr>
+                  <td><span class="param-name">processing_ms</span></td>
+                  <td><span class="param-type">number</span></td>
+                  <td>Total pipeline duration in milliseconds.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- POST /v1/verify/batch — Batch Verify           -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div class="endpoint" id="batch">
+          <div class="endpoint-header">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/v1/verify/batch</span>
+          </div>
+          <div class="endpoint-body">
+            <p class="endpoint-desc">Verify up to 10 claims in a single request. Claims are processed in parallel. Useful for fact-checking agent-generated reports, validating research summaries, or screening multiple assertions at once.</p>
+            <span class="endpoint-auth">🔒 Bearer token required</span>
+
+            <h3>Request Body</h3>
+            <table class="params-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span class="param-name">claims</span></td>
+                  <td><span class="param-type">array</span></td>
+                  <td><span class="param-required">required</span></td>
+                  <td>Array of 1–10 claim objects. Each has <code>claim</code> (required), <code>context</code> (optional), <code>domain</code> (optional).</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="code-block">
+              <div class="code-label">
+                <span>curl</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre>curl -X POST https://api.agenttool.dev/v1/verify/batch \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claims": [
+      { "claim": "The Eiffel Tower is 330 metres tall.", "domain": "general" },
+      { "claim": "Bitcoin was created in 2009.", "domain": "finance" },
+      { "claim": "Water boils at 90°C at sea level.", "domain": "science" }
+    ]
+  }'</pre>
+            </div>
+
+            <div class="sdk-block">
+              <div class="sdk-label">SDK</div>
+              <pre class="sdk-code"><span class="kw">const</span> results = <span class="kw">await</span> at.verify.<span class="fn">batch</span>([
+  { claim: <span class="str">"The Eiffel Tower is 330 metres tall."</span> },
+  { claim: <span class="str">"Bitcoin was created in 2009."</span>, domain: <span class="str">"finance"</span> },
+  { claim: <span class="str">"Water boils at 90°C at sea level."</span>, domain: <span class="str">"science"</span> }
+])
+<span class="cm">// Returns array of VerificationResult — same shape as single verify</span></pre>
+            </div>
+
+            <h3>Response · <span style="color:var(--green)">200</span></h3>
+            <p>Returns an array of <code>VerificationResult</code> objects in the same order as the input claims. Each result has the same shape as the single <a href="#verify">verify</a> endpoint.</p>
+
+            <div class="callout" style="background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.2);">
+              <p><span class="callout-icon">⚡</span> <strong>Parallel processing:</strong> All claims in a batch are verified concurrently. Latency is bounded by the slowest claim, not the sum. A batch of 10 claims takes roughly the same time as 1.</p>
+            </div>
+
+            <div class="error-block">
+              <h4>400 · Validation Error</h4>
+              <p>The <code>claims</code> array is empty or contains more than 10 items.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Verdicts                                        -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <h2 id="verdicts">Verdicts</h2>
+
+        <table class="params-table">
+          <thead><tr><th>Verdict</th><th>Meaning</th><th>Typical confidence</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code style="color:var(--green)">verified</code></td>
+              <td>Multiple reliable sources confirm the claim.</td>
+              <td>0.70 – 0.99</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--yellow, #f59e0b)">disputed</code></td>
+              <td>Sources conflict — some support, some contradict. Requires human review.</td>
+              <td>0.30 – 0.70</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--red, #ef4444)">false</code></td>
+              <td>Multiple reliable sources contradict the claim.</td>
+              <td>0.01 – 0.40</td>
+            </tr>
+            <tr>
+              <td><code style="color:var(--muted)">unverifiable</code></td>
+              <td>Insufficient evidence found, or claim is opinion/prediction. Confidence returned as 0.</td>
+              <td>0.00</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Use Cases -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <h2 id="use-cases">Use Cases</h2>
+
+        <div class="card-grid">
+          <div class="card" style="cursor:default;">
+            <div class="card-icon">🔍</div>
+            <div class="card-title">Research Validation</div>
+            <p class="card-desc">Automatically fact-check claims in agent-generated research reports before surfacing them to users. Flag <code>disputed</code> or <code>false</code> findings for human review.</p>
+          </div>
+
+          <div class="card" style="cursor:default;">
+            <div class="card-icon">🤖</div>
+            <div class="card-title">Hallucination Guard</div>
+            <p class="card-desc">Run LLM outputs through verify before using them downstream. Catch confident-sounding fabrications before they propagate through your agent pipeline.</p>
+          </div>
+
+          <div class="card" style="cursor:default;">
+            <div class="card-icon">📊</div>
+            <div class="card-title">Data Quality Gates</div>
+            <p class="card-desc">Gate data pipelines on verified facts. Only pass claims with <code>verdict == "verified"</code> and <code>confidence > 0.8</code> to downstream systems.</p>
+          </div>
+
+          <div class="card" style="cursor:default;">
+            <div class="card-icon">⚖️</div>
+            <div class="card-title">Domain Specialisation</div>
+            <p class="card-desc">Use domain hints (<code>finance</code>, <code>legal</code>, <code>medical</code>, <code>science</code>) for better evidence sourcing. Finance claims check market data; medical claims prioritise clinical literature.</p>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Errors -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <h2 id="errors">Error Reference</h2>
+
+        <div class="error-block">
+          <h4>400 · Bad Request</h4>
+          <p>Claim is empty, exceeds 2,000 characters, or batch array is empty/too large (&gt;10 items).</p>
+        </div>
+
+        <div class="error-block">
+          <h4>401 · Unauthorized</h4>
+          <p>Missing or invalid API key.</p>
+        </div>
+
+        <div class="error-block">
+          <h4>429 · Rate Limited</h4>
+          <p>Too many requests. Verification is rate-limited per plan.</p>
+        </div>
+
+        <div class="callout" style="margin-top:1.5rem;">
+          <p><span class="callout-icon">⏱️</span> <strong>Timeout behaviour:</strong> If evidence gathering exceeds 25 seconds, the pipeline returns <code>verdict: "unverifiable"</code> with a caveat rather than erroring. You always get a response.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>
+      © 2026 AgentTool · <a href="https://agenttool.dev">agenttool.dev</a>
+      · <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>
+    </p>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+  </script>
+
+</body>
+</html>

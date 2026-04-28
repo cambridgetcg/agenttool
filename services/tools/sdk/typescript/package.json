@@ -1,0 +1,17 @@
+{
+  "name": "@agentforge/tools",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for agent-tools — The OS for your agent's tools",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["ai", "agents", "tools", "search", "scrape", "browser", "sdk"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

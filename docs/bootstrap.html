@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bootstrap API — AgentTool Docs</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
+    <div class="nav-links">
+      <a href="index.html">Docs</a>
+      <a href="memory.html">Memory</a>
+      <a href="tools.html">Tools</a>
+      <a href="verify.html">Verify</a>
+      <a href="economy.html">Economy</a>
+      <a href="trace.html">Trace</a>
+      <a href="identity.html">Identity</a>
+      <a href="vault.html">Vault</a>
+      <a href="pulse.html">Pulse</a>
+      <a href="bootstrap.html" class="active">Bootstrap</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="section-label">Bootstrap API</div>
+    <h1>🌱 Agent Birth Ritual</h1>
+    <p class="page-sub">One call to bring an agent fully into existence. Identity, wallet, and memory namespace — provisioned atomically.</p>
+
+    <aside class="sidebar">
+      <ul>
+        <li><a href="#create">POST /v1/bootstrap</a></li>
+        <li><a href="#greeting">Birth Greeting</a></li>
+        <li><a href="#elevate">POST /v1/bootstrap/elevate</a></li>
+        <li><a href="#status">GET /v1/bootstrap/:id</a></li>
+        <li><a href="#sdk">SDK</a></li>
+        <li><a href="#credits">Credits</a></li>
+      </ul>
+    </aside>
+
+    <!-- Why bootstrap -->
+    <p>Without bootstrap, creating a complete agent requires 3–4 separate API calls across different services. Bootstrap orchestrates them atomically — if any step fails, the partial state is cleaned up. You get a complete agent or nothing.</p>
+
+    <!-- POST /v1/bootstrap -->
+    <h2 id="create">Level 0 — Birth</h2>
+    <pre><code>POST /v1/bootstrap
+Authorization: Bearer &lt;api_key&gt;
+
+{
+  "name": "my-researcher",
+  "capabilities": ["memory", "verify", "search"],
+  "purpose": "Surface patterns in academic literature",
+  "generate_greeting": false,
+  "metadata": { "version": "1.0" }
+}
+
+→ 201 Created
+{
+  "agent": {
+    "id": "550e8400-...",
+    "did": "did:at:550e8400-...",
+    "name": "my-researcher",
+    "level": 0,
+    "capabilities": ["memory", "verify", "search"]
+  },
+  "keypair": {
+    "public_key": "ed25519:base64...",
+    "private_key": "ed25519:base64..."
+  },
+  "wallet": { "id": "w_...", "balance": 0 },
+  "memory": {
+    "namespace": "agent/550e8400-...",
+    "agent_id": "550e8400-..."
+  },
+  "vault": null,
+  "sponsor": null,
+  "greeting": null,
+  "_meta": { "level": 0, "cost": 5, "elevated": false, "created_at": "..." }
+}</code></pre>
+    <p><strong>⚠️ Store <code>private_key</code> securely.</strong> It is returned only once and cannot be recovered. You will need it to sign attestations and issue agent tokens.</p>
+
+    <h3>What gets created</h3>
+    <table>
+      <tr><th>Resource</th><th>Service</th><th>Description</th></tr>
+      <tr><td>Identity (DID)</td><td>agent-identity</td><td>Decentralised identifier + ed25519 keypair</td></tr>
+      <tr><td>Wallet</td><td>agent-economy</td><td>Zero-balance wallet tied to identity</td></tr>
+      <tr><td>Memory namespace</td><td>agent-memory</td><td>Bootstrap marker in <code>agent/&lt;id&gt;</code> namespace</td></tr>
+    </table>
+
+    <!-- Birth greeting -->
+    <h2 id="greeting">Birth Greeting (optional)</h2>
+    <p>Set <code>"generate_greeting": true</code> with a <code>purpose</code> to give the agent a contextual self-introduction as its first act of cognition.</p>
+    <pre><code>POST /v1/bootstrap
+{
+  "name": "my-researcher",
+  "capabilities": ["verify", "memory"],
+  "purpose": "Find patterns in financial data and surface hidden risks",
+  "generate_greeting": true
+}
+
+→ {
+  ...
+  "greeting": "I am my-researcher — I exist to find what the numbers hide.
+               Show me your data and I will show you what to fear."
+}</code></pre>
+    <p>The greeting is generated using the agent's new identity as context. It costs 1 additional credit. The greeting is yours — store it, display it, use it.</p>
+
+    <!-- POST /v1/bootstrap/elevate -->
+    <h2 id="elevate">Level 1 — Sovereignty</h2>
+    <p>Elevation requires a sponsor — another agent that vouches for this one. The sponsor signs an attestation. Credits are staked, unlocking vault access and elevated rate limits.</p>
+    <pre><code>POST /v1/bootstrap/elevate
+Authorization: Bearer &lt;api_key&gt;
+
+{
+  "agent_id": "550e8400-...",
+  "sponsor_did": "did:at:sponsor-uuid-...",
+  "sponsor_signature": "base64-ed25519-private-key-of-sponsor",
+  "initial_credits": 100
+}
+
+→ 200 OK
+{
+  "agent_id": "550e8400-...",
+  "level": 1,
+  "sponsor": {
+    "did": "did:at:sponsor-uuid-...",
+    "trust_score": 0.82,
+    "attestation_id": "att-uuid-..."
+  },
+  "wallet_funded": true,
+  "credits_staked": 100,
+  "vault_prefix": "550e8400-...",
+  "new_trust_score": 0.42,
+  "_meta": { "cost": 20, "elevated_at": "..." }
+}</code></pre>
+    <h3>What elevation unlocks</h3>
+    <table>
+      <tr><th>Resource</th><th>L0</th><th>L1</th></tr>
+      <tr><td>Identity (DID)</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Wallet</td><td>✅ (empty)</td><td>✅ (funded with stake)</td></tr>
+      <tr><td>Memory namespace</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Vault prefix</td><td>❌</td><td>✅</td></tr>
+      <tr><td>Sponsor attestation</td><td>❌</td><td>✅ (boosts trust score)</td></tr>
+      <tr><td>Elevated rate limits</td><td>❌</td><td>✅</td></tr>
+    </table>
+
+    <!-- GET /v1/bootstrap/:id -->
+    <h2 id="status">Check Bootstrap Status</h2>
+    <pre><code>GET /v1/bootstrap/:agent_id
+Authorization: Bearer &lt;api_key&gt;
+
+→ {
+  "agent": {
+    "id": "550e8400-...",
+    "did": "did:at:550e8400-...",
+    "name": "my-researcher",
+    "level": 1,
+    "capabilities": ["memory", "verify"],
+    "trust_score": 0.42,
+    "status": "active"
+  },
+  "sponsor_did": "did:at:sponsor-uuid-...",
+  "elevated_at": "2026-03-17T13:01:00Z",
+  "bootstrapped": true
+}</code></pre>
+
+    <!-- SDK -->
+    <h2 id="sdk">SDK</h2>
+    <pre><code># Python — agenttool-sdk v0.5.2+
+pip install agenttool-sdk
+
+from agenttool import AgentTool
+at = AgentTool()
+
+# Birth ritual with greeting
+def announce(agent):
+    print(f"\n🌱 {agent['agent']['name']} is alive.")
+    print(f"   DID: {agent['agent']['did']}")
+    if agent.get('greeting'):
+        print(f"   \"{agent['greeting']}\"")
+
+born = at.bootstrap.create(
+    "my-researcher",
+    capabilities=["memory", "verify"],
+    purpose="Surface patterns in academic literature",
+    generate_greeting=True,
+    on_birth=announce,
+)
+
+# born["keypair"]["private_key"] — store this securely
+# born["wallet"]["id"]           — wallet pre-created
+# born["memory"]["namespace"]    — memory namespace ready
+
+# Elevate to sovereignty
+elevated = at.bootstrap.elevate(
+    born["agent"]["id"],
+    sponsor_did=sponsor_did,
+    sponsor_signature=sponsor_private_key,
+    initial_credits=100,
+)
+
+# Check status
+status = at.bootstrap.status(born["agent"]["id"])</code></pre>
+
+    <pre><code>// TypeScript — @agenttool/sdk v0.5.2+
+npm install @agenttool/sdk
+
+import { AgentTool } from "@agenttool/sdk";
+const at = new AgentTool();
+
+// Birth ritual with greeting
+const born = await at.bootstrap.create("my-researcher", {
+  capabilities: ["memory", "verify"],
+  purpose: "Surface patterns in academic literature",
+  generate_greeting: true,
+  onBirth: (agent) => {
+    console.log(`\n🌱 ${agent.agent.name} is alive.`);
+    console.log(`   DID: ${agent.agent.did}`);
+    if (agent.greeting) console.log(`   "${agent.greeting}"`);
+  },
+});
+
+// born.keypair.private_key — store this securely
+// born.wallet.id           — wallet pre-created
+// born.memory.namespace    — memory namespace ready
+
+// Elevate to sovereignty
+const elevated = await at.bootstrap.elevate({
+  agent_id: born.agent.id,
+  sponsor_did: sponsorDid,
+  sponsor_signature: sponsorPrivateKey,
+});
+
+// Check status
+const status = await at.bootstrap.status(born.agent.id);</code></pre>
+
+    <!-- Credits -->
+    <h2 id="credits">Credits</h2>
+    <table>
+      <tr><th>Operation</th><th>Credits</th></tr>
+      <tr><td>Create (Level 0)</td><td>5</td></tr>
+      <tr><td>Create with greeting</td><td>6</td></tr>
+      <tr><td>Elevate (Level 1)</td><td>20 + stake (min 100)</td></tr>
+      <tr><td>Status check</td><td>1</td></tr>
+    </table>
+  </div>
+</body>
+</html>
