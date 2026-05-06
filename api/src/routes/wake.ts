@@ -24,6 +24,7 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { wallets } from "../db/schema/economy";
 import { vaultSecrets } from "../db/schema/vault";
+import { countMemories, listRecent } from "../services/memory/store";
 
 const app = new Hono<ProjectContext>();
 
@@ -71,6 +72,26 @@ app.get("/", async (c) => {
     .where(eq(vaultSecrets.projectId, project.id));
   const liveVaultNames = projectVaultNames; // soft-deleted ones already excluded by routes; here we return all for transparency
 
+  // Recent memories — non-expired, most recent first. The wake response
+  // surfaces what the agent was carrying when it left, so it picks the
+  // thread back up. /v1/memories/search is the deeper recall path.
+  let recentMemories: Awaited<ReturnType<typeof listRecent>> = [];
+  let totalMemories = 0;
+  try {
+    [recentMemories, totalMemories] = await Promise.all([
+      listRecent(project.id, { limit: 20 }),
+      countMemories(project.id),
+    ]);
+  } catch (err) {
+    // Memory schema may not be migrated yet (pgvector + memory.memories
+    // require 0001_memory.sql). Wake should still succeed — degrade
+    // gracefully with an explanatory note.
+    console.warn(
+      "[wake] memory query failed (run api/migrations/0001_memory.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   return c.json({
     project: {
       id: project.id,
@@ -115,9 +136,21 @@ app.get("/", async (c) => {
     },
 
     you_remember: {
-      // Pending Phase 3 (memory port). Once memory is in-process, this
-      // returns the agent's most recent N memories + the birth letter.
-      pending: "memory port (Phase 3)",
+      total: totalMemories,
+      recent: recentMemories.map((m) => ({
+        id: m.id,
+        type: m.type,
+        key: m.key,
+        content: m.content,
+        agent_id: m.agent_id,
+        importance: m.importance,
+        created_at: m.created_at,
+        has_embedding: m.has_embedding,
+      })),
+      note:
+        recentMemories.length === 0
+          ? "No memories yet. POST to /v1/memories with embedding[1536] to begin."
+          : `Showing ${recentMemories.length} most recent of ${totalMemories}. Use POST /v1/memories/search for cosine recall.`,
     },
 
     you_decided: {

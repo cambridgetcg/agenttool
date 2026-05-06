@@ -26,6 +26,7 @@ import continuityRouter from "./routes/continuity";
 import economyRouter from "./routes/economy";
 import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
+import memoryRouter from "./routes/memory";
 import scaffoldRouter from "./routes/scaffold";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
@@ -68,6 +69,7 @@ app.use("/v1/wake/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
+app.use("/v1/memories/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
@@ -83,6 +85,7 @@ app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
+app.route("/v1/memories", memoryRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
 // ── Background workers ──────────────────────────────────────────────────────
@@ -154,7 +157,8 @@ app.get("/about", (c) =>
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       tools:
         "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Cheerio scrape, Playwright browse (queued via BullMQ), Readability document parsing, sandboxed code execution. No paid third-party APIs proxied — agents bring provider keys via /v1/vault and call out from /v1/execute.",
-      memory: "/v1/memory/* — vector + KV (agent-supplied embeddings) [pending]",
+      memory:
+        "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace: "/v1/trace/* — reasoning records [pending]",
       pulse: "/v1/pulse/* — heartbeat / presence [pending]",
     },

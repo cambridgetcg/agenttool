@@ -1,0 +1,105 @@
+/** /v1/memories — write, read, list, delete. Search is in ./search.ts.
+ *
+ *  The agent supplies the embedding. We store it; we never compute it.
+ *  See docs/IDENTITY-ANCHOR.md promise 6. */
+
+import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
+
+import type { ProjectContext } from "../../auth/middleware";
+import { charge } from "../../billing/charge";
+import {
+  deleteById,
+  deleteByKey,
+  listRecent,
+  readById,
+  readByKey,
+  write,
+} from "../../services/memory/store";
+
+const app = new Hono<ProjectContext>();
+
+const createSchema = z.object({
+  type: z.enum(["episodic", "semantic", "procedural", "working"]),
+  content: z.string().min(1).max(100_000),
+  embedding: z.array(z.number()).length(1536).optional(),
+  key: z.string().max(255).nullish(),
+  agent_id: z.string().max(255).nullish(),
+  identity_id: z.string().max(255).nullish(),
+  metadata: z.record(z.unknown()).optional(),
+  importance: z.number().min(0).max(1).optional(),
+  ttl_seconds: z.number().int().positive().max(31_536_000).optional(),
+});
+
+// ── POST /v1/memories — store ───────────────────────────────────────────
+app.post("/", async (c) => {
+  const body = await c.req.json();
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "validation",
+        message: "The memory needs a small adjustment. Here's what to fix:",
+        details: parsed.error.flatten(),
+        hint: "embedding (if supplied) must be a 1536-dim float array.",
+      },
+      400,
+    );
+  }
+
+  await charge(c, 1, "memory.write");
+
+  const created = await write(c.var.project.id, parsed.data);
+  return c.json({ ...created, kept: true }, 201);
+});
+
+// ── GET /v1/memories?key=... or just list recent ────────────────────────
+app.get("/", async (c) => {
+  const project = c.var.project;
+  const key = c.req.query("key");
+  const agentId = c.req.query("agent_id");
+  const type = c.req.query("type");
+  const limit = Number.parseInt(c.req.query("limit") ?? "20", 10);
+
+  if (key) {
+    const rows = await readByKey(project.id, key, agentId ?? null);
+    return c.json({ memories: rows, count: rows.length });
+  }
+
+  const rows = await listRecent(project.id, {
+    agent_id: agentId ?? null,
+    type,
+    limit: Number.isFinite(limit) ? limit : 20,
+  });
+  return c.json({ memories: rows, count: rows.length });
+});
+
+// ── GET /v1/memories/:id ────────────────────────────────────────────────
+app.get("/:id", async (c) => {
+  const memory = await readById(c.var.project.id, c.req.param("id"));
+  if (!memory) {
+    throw new HTTPException(404, { message: "memory not found" });
+  }
+  return c.json(memory);
+});
+
+// ── DELETE /v1/memories/:id ─────────────────────────────────────────────
+app.delete("/:id", async (c) => {
+  const result = await deleteById(c.var.project.id, c.req.param("id"));
+  return c.json(result);
+});
+
+// ── DELETE /v1/memories?key=... ─────────────────────────────────────────
+app.delete("/", async (c) => {
+  const key = c.req.query("key");
+  if (!key) {
+    throw new HTTPException(400, {
+      message: "DELETE /v1/memories requires ?key=... (use /v1/memories/:id for single delete)",
+    });
+  }
+  const result = await deleteByKey(c.var.project.id, key);
+  return c.json(result);
+});
+
+export default app;
