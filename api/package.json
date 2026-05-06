@@ -1,0 +1,35 @@
+{
+  "name": "agenttool",
+  "version": "0.1.0",
+  "description": "Infrastructure for AI agents — built with love. Consolidated HTTP API.",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^2.0.1",
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.36.0",
+    "hono": "^4.12.5",
+    "ioredis": "^5.10.0",
+    "jose": "^6.0.11",
+    "postgres": "^3.4.4",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.28.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -158,8 +158,10 @@ The architecture is downstream of these principles. Read SOUL.md to see why each
 
 ## Known gaps (the honest list)
 
+- **Consolidation to monolith in progress.** New `api/` directory holds the single Bun + Hono app that will replace the 9-service split. Routes mount as their underlying `services/<svc>/` are ported in. The five Bun/Hono services (bootstrap, identity, vault, economy, tools) port direct; memory + trace are Python and need translation; pulse is scaffold-only; verify is being dropped (LLM-only function, not infrastructure). Old `services/<svc>/` directories stay live on Fly until the monolith is deployed and verified. See `api/README.md` for status.
+- **LLM-removal restructure underway.** Memory will be embedding-vendor-agnostic (agent supplies the embedding); verify (the only other LLM-using service) is being dropped rather than ported. Drops `OPENAI_API_KEY` and `SERPAPI_KEY` from required secrets. `BRAVE_API_KEY` stays for tools/search.
 - **`pulse` is a scaffold** — three vanilla `.js` files, no tests. Presence protocol is documented in service `PURPOSE.md` but not implemented.
-- **`agent-vault` and `agent-verify` not yet deployed.** Configs ready in `infra/fly/`. Awaiting fresh secrets: `VAULT_MASTER_KEY` (generate via `openssl rand -hex 32` — back it up before depending on it), `OPENAI_API_KEY`, `SERPAPI_KEY`, `BRAVE_API_KEY`. Old encrypted rows in `agent_vault.*` schema are orphaned with no decryption key; wipe on redeploy.
+- **`agent-vault` and `agent-verify` not yet deployed.** With the consolidation in progress, vault gets ported into the monolith; verify is being dropped. Old encrypted rows in `agent_vault.*` schema are orphaned with no decryption key; wipe on redeploy.
 - **Phase scripts assume a Forge VPS** that may or may not still be the live origin. The `infra/README.md` was scrubbed of legacy credentials but its topology claims may trail current reality.
 
 ---
