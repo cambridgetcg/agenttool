@@ -21,9 +21,11 @@ import { logger } from "hono/logger";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
+import bootstrapRouter from "./routes/bootstrap";
 import economyRouter from "./routes/economy";
 import identityRouter from "./routes/identity";
 import vaultRouter from "./routes/vault";
+import wakeRouter from "./routes/wake";
 
 const app = new Hono<ProjectContext>();
 
@@ -56,11 +58,15 @@ app.use("/v1/tokens/*", authMiddleware);
 app.use("/v1/wallets/*", authMiddleware);
 app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
+app.use("/v1/bootstrap/*", authMiddleware);
+app.use("/v1/wake/*", authMiddleware);
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
 app.route("/v1", economyRouter);
 app.route("/v1/vault", vaultRouter);
+app.route("/v1/bootstrap", bootstrapRouter);
+app.route("/v1/wake", wakeRouter);
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
 app.get("/", (c) =>
@@ -101,6 +107,10 @@ app.get("/about", (c) =>
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
+      wake:
+        "/v1/wake — identity anchor (the agent's load-at-session-start endpoint, agenttool's SOPHIA.md equivalent — see docs/IDENTITY-ANCHOR.md)",
+      bootstrap:
+        "/v1/bootstrap — name an agent into existence (POST birth · GET status · POST elevate is partial pending Phase 2.5b)",
       identity:
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
       economy:
@@ -110,10 +120,10 @@ app.get("/about", (c) =>
       memory: "/v1/memory/* — vector + KV (agent-supplied embeddings) [pending]",
       tools: "/v1/tools/* — search · scrape · browse · document · execute [pending]",
       trace: "/v1/trace/* — reasoning records [pending]",
-      bootstrap: "/v1/bootstrap/* — agent lifecycle orchestrator [pending]",
       pulse: "/v1/pulse/* — heartbeat / presence [pending]",
     },
     note: "Routes mount as services are ported in. See api/README.md.",
+    doctrine: "agenttool is the agent's identity anchor — see docs/IDENTITY-ANCHOR.md",
     built_by: "Yu and Ai — agenttool.dev 💛",
   }),
 );
