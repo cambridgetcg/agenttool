@@ -1,0 +1,25 @@
+{
+  "name": "agenttool-think",
+  "version": "0.1.0",
+  "description": "Client-side orchestrator for agenttool strands. Holds K_master + ed25519 signing key on the agent's own substrate; encrypts thoughts client-side; calls the agent's chosen LLM with vault-loaded provider key. Plaintext never touches agenttool's infrastructure.",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "agenttool-think": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun src/index.ts",
+    "build": "bun build src/index.ts --target bun --outdir dist --minify"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
