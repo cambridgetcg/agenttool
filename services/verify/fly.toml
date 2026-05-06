@@ -1,4 +1,4 @@
-app = "atool-proof"
+app = "agent-verify"
 primary_region = "lhr"  # London
 
 [build]

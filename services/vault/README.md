@@ -122,7 +122,7 @@ VAULT_MASTER_KEY=$(openssl rand -hex 32) bun run dev   # watch mode on :3000
 For production, generate `VAULT_MASTER_KEY` once and keep it in Fly secrets:
 
 ```bash
-fly secrets set VAULT_MASTER_KEY=$(openssl rand -hex 32) --app atool-vault
+fly secrets set VAULT_MASTER_KEY=$(openssl rand -hex 32) --app agent-vault
 ```
 
 > ⚠ The master key is the root of trust. **If you lose it, every encrypted secret in the project becomes unrecoverable.** Back it up to a separate secure store before depending on this service.
@@ -136,10 +136,8 @@ bun test             # 2 test files under tests/
 ## Deploy
 
 ```bash
-fly deploy           # uses Dockerfile + fly.toml — app: atool-vault, region: lhr
+fly deploy           # uses Dockerfile + fly.toml — app: agent-vault, region: lhr
 ```
-
-> **Note** the Fly app name is `atool-vault`, not `agent-vault` — a naming inconsistency from the consolidation. Tracked as a known gap in the repo `README.md`.
 
 ## Credit costs
 

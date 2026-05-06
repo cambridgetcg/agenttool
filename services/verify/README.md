@@ -1,4 +1,4 @@
-# agent-verify (atool-proof)
+# agent-verify
 
 **Fact verification and claim attestation for AI agents.**
 

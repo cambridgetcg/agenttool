@@ -7,7 +7,7 @@ export const config = {
   identityUrl: process.env.IDENTITY_URL ?? "https://agent-identity.fly.dev",
   economyUrl: process.env.ECONOMY_URL ?? "https://agent-economy.fly.dev",
   memoryUrl: process.env.MEMORY_URL ?? "https://agent-memory.fly.dev",
-  vaultUrl: process.env.VAULT_URL ?? "https://atool-vault.fly.dev",
+  vaultUrl: process.env.VAULT_URL ?? "https://agent-vault.fly.dev",
 
   /** Database URL for bootstrap records (Supabase). */
   databaseUrl: process.env.DATABASE_URL ?? "",

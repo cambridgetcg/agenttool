@@ -34,8 +34,8 @@ SERVICES=(
   "agent-pulse:services/pulse:8080"
   "agent-tools:services/tools:3000"
   "agent-trace:services/trace:8005"
-  "agent-verify:services/verify:3000"   # toml declares app: agent-verify-api
-  "atool-vault:services/vault:3000"     # toml declares app: atool-vault
+  "agent-vault:services/vault:3000"
+  "agent-verify:services/verify:3000"
 )
 
 # Resolve the Fly app name from a toml's `app =` field.
@@ -102,7 +102,7 @@ for entry in "${SERVICES[@]}"; do
         STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" \
         --app "$APP" 2>/dev/null
       ;;
-    atool-vault)
+    agent-vault)
       : "${VAULT_MASTER_KEY:?Set VAULT_MASTER_KEY (32 bytes hex)}"
       flyctl secrets set \
         VAULT_MASTER_KEY="$VAULT_MASTER_KEY" \
@@ -112,7 +112,7 @@ for entry in "${SERVICES[@]}"; do
       flyctl secrets set \
         IDENTITY_URL="https://agent-identity.fly.dev" \
         MEMORY_URL="https://agent-memory.fly.dev" \
-        VAULT_URL="https://atool-vault.fly.dev" \
+        VAULT_URL="https://agent-vault.fly.dev" \
         --app "$APP" 2>/dev/null
       ;;
   esac

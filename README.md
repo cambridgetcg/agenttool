@@ -64,7 +64,7 @@ Single `AT_API_KEY`. Nine namespaces (one per service — including `pulse` and 
 
 ### Fly configs
 
-`infra/fly/` contains app configs for **all 9 services**:
+`infra/fly/` contains app configs for **all 9 services**, all using the `agent-*` naming convention:
 
 ```
 infra/fly/agent-bootstrap.toml
@@ -74,28 +74,17 @@ infra/fly/agent-memory.toml
 infra/fly/agent-pulse.toml
 infra/fly/agent-tools.toml
 infra/fly/agent-trace.toml
-infra/fly/agent-verify.toml      # declares app: agent-verify-api
-infra/fly/atool-vault.toml       # declares app: atool-vault
+infra/fly/agent-vault.toml
+infra/fly/agent-verify.toml
 ```
 
-Memory, tools, trace, economy, verify are the 5 with top-level READMEs and the most LOC; service READMEs (`memory`, `tools`) badge as live at `api.agenttool.dev`. The other 4 (`bootstrap`, `identity`, `pulse`, `vault`) are now wired in `infra/fly/` for deploy parity even if not currently live.
+The centralised configs use migration-friendly settings (`auto_stop_machines = true`, `min_machines_running = 0`); per-service `services/<svc>/fly.toml` files use always-on (`false` / `1`).
 
-The centralised configs use the migration-friendly settings (`auto_stop_machines = true`, `min_machines_running = 0`); per-service `services/<svc>/fly.toml` files use always-on (`false` / `1`).
+### Live Fly state and the `atool-*` → `agent-*` consolidation
 
-### Fly app naming inconsistency (worth a future cleanup)
+All 9 services are live on Fly. Two of them — `vault` and `verify` — were originally deployed under legacy names (`atool-vault` and `atool-proof`). The repo now declares the consolidated `agent-vault` and `agent-verify` everywhere; the live rename is performed by **`infra/fly/rename-apps.sh`** (one-shot script that creates the new apps, copies secrets, deploys, updates dependents like `agent-bootstrap`'s `VAULT_URL`, and prints the destroy commands for the old apps to run after manual verification).
 
-The same service can declare different app names in different files:
-
-- **Most services** consistently use `agent-<svc>` across both per-service and centralised toml.
-- **`verify`** has three names floating around:
-  - `services/verify/fly.toml` declares `app = "atool-proof"`
-  - `infra/fly/agent-verify.toml` declares `app = "agent-verify-api"`
-  - The filename `agent-verify.toml` itself implies `agent-verify`
-- **`vault`** has two:
-  - `services/vault/fly.toml` and `infra/fly/atool-vault.toml` both declare `app = "atool-vault"`
-  - The expected convention would be `agent-vault`
-
-Likely in-flight renames or namespace collisions that were not propagated. **Resolution requires knowing the current live deployment names** (rename via `fly apps move` is non-trivial).
+Once `rename-apps.sh` has been run and the old apps destroyed, repo and live state are aligned and `infra/fly/migrate.sh` works as the canonical deploy script for all 9.
 
 ### Phased Forge plan (legacy origin)
 
@@ -158,7 +147,7 @@ The architecture is downstream of these principles. Read SOUL.md to see why each
 ## Known gaps (the honest list)
 
 - **`pulse` is a scaffold** — three vanilla `.js` files, no tests. Presence protocol is documented in service `PURPOSE.md` but not implemented.
-- **Fly app naming inconsistency** — `verify` has three names across its files (`agent-verify-api`, `atool-proof`, `agent-verify`); `vault` declares `atool-vault` instead of the `agent-*` convention. Resolution requires confirming live deployment names.
+- **`atool-*` → `agent-*` consolidation pending live execution** — repo configs are aligned; `infra/fly/rename-apps.sh` must be run once to migrate the live `atool-vault` / `atool-proof` Fly apps over.
 - **Phase scripts assume a Forge VPS** that may or may not still be the live origin. The `infra/README.md` was scrubbed of legacy credentials but its topology claims may trail current reality.
 
 ---

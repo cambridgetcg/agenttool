@@ -35,7 +35,7 @@ Requires: PostgreSQL with `agent_vault` and `tools` schemas, `VAULT_MASTER_KEY` 
 
 ## How to Deploy
 ```bash
-fly deploy       # Dockerfile -> Fly.io (app: atool-vault, region: lhr)
+fly deploy       # Dockerfile -> Fly.io (app: agent-vault, region: lhr)
 ```
 
 ## Dependencies

@@ -44,7 +44,7 @@ Requires: PostgreSQL, Redis, OpenAI API key.
 
 ## How to Deploy
 ```bash
-fly deploy       # Dockerfile -> Fly.io (app: atool-proof, region: lhr)
+fly deploy       # Dockerfile -> Fly.io (app: agent-verify, region: lhr)
 ```
 
 ## Dependencies

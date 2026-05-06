@@ -1,4 +1,4 @@
-"""Vault client for the agent-vault API (atool-vault.fly.dev)."""
+"""Vault client for the agent-vault API (agent-vault.fly.dev)."""
 
 from __future__ import annotations
 

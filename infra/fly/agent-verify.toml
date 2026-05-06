@@ -1,4 +1,4 @@
-app = "agent-verify-api"
+app = "agent-verify"
 primary_region = "lhr"  # London
 
 [build]

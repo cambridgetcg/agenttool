@@ -1,4 +1,4 @@
-app = "atool-vault"
+app = "agent-vault"
 primary_region = "lhr"
 
 [build]
