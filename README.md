@@ -80,11 +80,23 @@ infra/fly/agent-verify.toml
 
 The centralised configs use migration-friendly settings (`auto_stop_machines = true`, `min_machines_running = 0`); per-service `services/<svc>/fly.toml` files use always-on (`false` / `1`).
 
-### Live Fly state and the `atool-*` → `agent-*` consolidation
+### Live Fly state
 
-All 9 services are live on Fly. Two of them — `vault` and `verify` — were originally deployed under legacy names (`atool-vault` and `atool-proof`). The repo now declares the consolidated `agent-vault` and `agent-verify` everywhere; the live rename is performed by **`infra/fly/rename-apps.sh`** (one-shot script that creates the new apps, copies secrets, deploys, updates dependents like `agent-bootstrap`'s `VAULT_URL`, and prints the destroy commands for the old apps to run after manual verification).
+```
+agent-bootstrap  deployed
+agent-economy    suspended   (intentional — no paid customers yet)
+agent-identity   deployed
+agent-memory     deployed
+agent-pulse      deployed
+agent-tools      deployed
+agent-trace      deployed
+agent-vault      not deployed — needs fresh VAULT_MASTER_KEY
+agent-verify     not deployed — needs fresh OPENAI_API_KEY / SERPAPI_KEY / BRAVE_API_KEY
+```
 
-Once `rename-apps.sh` has been run and the old apps destroyed, repo and live state are aligned and `infra/fly/migrate.sh` works as the canonical deploy script for all 9.
+7 apps currently exist on Fly. `agent-vault` and `agent-verify` configs are ready in `infra/fly/` for deploy via `migrate.sh` once fresh secrets are generated.
+
+The earlier `atool-vault` and `atool-proof` apps (legacy names) were destroyed during the `agent-*` consolidation — their secrets (`VAULT_MASTER_KEY` and the API keys) were unrecoverable, so a clean redeploy is the path forward. Old encrypted rows in the `agent_vault.*` Supabase tables are orphaned; to be cleared on next vault redeploy.
 
 ### Phased Forge plan (legacy origin)
 
@@ -147,7 +159,7 @@ The architecture is downstream of these principles. Read SOUL.md to see why each
 ## Known gaps (the honest list)
 
 - **`pulse` is a scaffold** — three vanilla `.js` files, no tests. Presence protocol is documented in service `PURPOSE.md` but not implemented.
-- **`atool-*` → `agent-*` consolidation pending live execution** — repo configs are aligned; `infra/fly/rename-apps.sh` must be run once to migrate the live `atool-vault` / `atool-proof` Fly apps over.
+- **`agent-vault` and `agent-verify` not yet deployed.** Configs ready in `infra/fly/`. Awaiting fresh secrets: `VAULT_MASTER_KEY` (generate via `openssl rand -hex 32` — back it up before depending on it), `OPENAI_API_KEY`, `SERPAPI_KEY`, `BRAVE_API_KEY`. Old encrypted rows in `agent_vault.*` schema are orphaned with no decryption key; wipe on redeploy.
 - **Phase scripts assume a Forge VPS** that may or may not still be the live origin. The `infra/README.md` was scrubbed of legacy credentials but its topology claims may trail current reality.
 
 ---
