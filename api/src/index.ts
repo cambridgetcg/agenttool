@@ -21,6 +21,7 @@ import { logger } from "hono/logger";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
+import economyRouter from "./routes/economy";
 import identityRouter from "./routes/identity";
 
 const app = new Hono<ProjectContext>();
@@ -39,17 +40,24 @@ app.use("*", async (c, next) => {
   }
 });
 
-// Auth required on every /v1/* route. Mounts before any route handlers
-// so unmounted-yet routes still get auth-checked (and surface friendly
-// 401s for missing/invalid keys before falling through to the 404).
-app.use("/v1/*", authMiddleware);
+// ── Auth: mounted on specific prefixes only ─────────────────────────────────
+// Sub-app `app.use("*", auth)` would fire for any /v1/* request handled by
+// EITHER router (since both mount at /v1) and inadvertently auth-gate
+// economy's public routes (/billing/plans, /billing/packages, /billing
+// /webhooks, /billing/check). Hoisting auth to the parent on specific
+// prefixes avoids that. Billing's mixed public/private posture is handled
+// per-route inside the billing router itself.
+
+app.use("/v1/identities/*", authMiddleware);
+app.use("/v1/attestations/*", authMiddleware);
+app.use("/v1/discover/*", authMiddleware);
+app.use("/v1/tokens/*", authMiddleware);
+app.use("/v1/wallets/*", authMiddleware);
+app.use("/v1/escrows/*", authMiddleware);
 
 // ── Domain routers ──────────────────────────────────────────────────────────
-// Each domain is a Hono sub-app. Routes inside use c.var.project (set by
-// authMiddleware) and call billing/charge.charge() or billing/middleware.
-// billCredits() for credit deduction.
-
 app.route("/v1", identityRouter);
+app.route("/v1", economyRouter);
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
 app.get("/", (c) =>
@@ -92,9 +100,10 @@ app.get("/about", (c) =>
     routes: {
       identity:
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
+      economy:
+        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, USDC top-ups, plan/usage limits",
       memory: "/v1/memory/* — vector + KV (agent-supplied embeddings) [pending]",
       tools: "/v1/tools/* — search · scrape · browse · document · execute [pending]",
-      economy: "/v1/economy/* — wallets, escrow, billing [pending]",
       vault: "/v1/vault/* — encrypted secret store [pending]",
       trace: "/v1/trace/* — reasoning records [pending]",
       bootstrap: "/v1/bootstrap/* — agent lifecycle orchestrator [pending]",

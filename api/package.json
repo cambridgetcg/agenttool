@@ -14,6 +14,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
     "@noble/ed25519": "^2.2.3",
     "@noble/hashes": "^2.0.1",
     "bcryptjs": "^2.4.3",
@@ -22,6 +23,7 @@
     "ioredis": "^5.10.0",
     "jose": "^6.0.11",
     "postgres": "^3.4.4",
+    "stripe": "^22.1.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

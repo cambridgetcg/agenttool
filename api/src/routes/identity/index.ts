@@ -23,6 +23,12 @@ import keysRoutes from "./keys";
 import tokenVerifyRoutes from "./token-verify";
 import tokensRoutes from "./tokens";
 
+// Auth posture: all identity routes are auth-required. The parent app in
+// api/src/index.ts mounts authMiddleware on /v1/identities/*,
+// /v1/attestations/*, /v1/discover/*, /v1/tokens/* — so we don't need a
+// per-router `app.use("*", auth)` here (that would also intercept other
+// routers mounted at /v1 like economy, blocking their public routes).
+
 const app = new Hono<ProjectContext>();
 
 // Standalone resource roots

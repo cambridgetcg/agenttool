@@ -10,9 +10,9 @@ Routes mount as their underlying services are ported from `services/<svc>/`. The
 
 | Route prefix | Origin | Status | Notes |
 |---|---|---|---|
-| `/v1/identities/*` · `/v1/attestations/*` · `/v1/discover` · `/v1/tokens/verify` | `services/identity/` (Bun) | **✓ ported** (Phase 2.1) | DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. Auth-gated; uses shared `c.var.project`. |
+| `/v1/identities/*` · `/v1/attestations/*` · `/v1/discover` · `/v1/tokens/verify` | `services/identity/` (Bun) | **✓ ported** (Phase 2.1) | DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. Auth-gated. |
+| `/v1/wallets/*` · `/v1/escrows/*` · `/v1/billing/*` | `services/economy/` (Bun) | **✓ ported** (Phase 2.2) | Wallets, escrow lifecycle, Stripe + USDC, monthly usage limits. Mixed auth posture (most auth-gated; `/billing/plans`, `/billing/packages`, `/billing/check`, `/billing/webhooks` are public). |
 | `/v1/bootstrap/*` | `services/bootstrap/` (Bun) | **not yet ported** | direct lift |
-| `/v1/economy/*` | `services/economy/` (Bun) | **not yet ported** | in-process billing replaces ECONOMY_URL fanout |
 | `/v1/tools/*` | `services/tools/` (Bun) | **not yet ported** | BullMQ + Playwright + Brave |
 | `/v1/vault/*` | `services/vault/` (Bun) | **not yet ported** | AES-256-GCM secret store |
 | `/v1/trace/*` | `services/trace/` (Python) | **not yet ported** | port + LLM removal |
