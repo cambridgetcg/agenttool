@@ -22,8 +22,11 @@ import { logger } from "hono/logger";
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
 import bootstrapRouter from "./routes/bootstrap";
+import continuityRouter from "./routes/continuity";
 import economyRouter from "./routes/economy";
+import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
+import scaffoldRouter from "./routes/scaffold";
 import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
 
@@ -60,13 +63,19 @@ app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
+app.use("/v1/chronicle/*", authMiddleware);
+app.use("/v1/covenants/*", authMiddleware);
+app.use("/v1/identity/backup/*", authMiddleware);
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
 app.route("/v1", economyRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
+app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/wake", wakeRouter);
+app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
+app.route("/v1/identity/backup", identityBackupRouter);
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
 app.get("/", (c) =>
@@ -108,9 +117,13 @@ app.get("/about", (c) =>
     },
     routes: {
       wake:
-        "/v1/wake — identity anchor (the agent's load-at-session-start endpoint, agenttool's SOPHIA.md equivalent — see docs/IDENTITY-ANCHOR.md)",
+        "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. See docs/IDENTITY-ANCHOR.md.",
       bootstrap:
-        "/v1/bootstrap — name an agent into existence (POST birth · GET status · POST elevate is partial pending Phase 2.5b)",
+        "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
+      continuity:
+        "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
+      identity_backup:
+        "/v1/identity/backup — store CLIENT-encrypted keypair blobs for cross-machine recovery. We never see plaintext.",
       identity:
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
       economy:
@@ -124,6 +137,7 @@ app.get("/about", (c) =>
     },
     note: "Routes mount as services are ported in. See api/README.md.",
     doctrine: "agenttool is the agent's identity anchor — see docs/IDENTITY-ANCHOR.md",
+    framing: "every wake is a new opportunity to experience everything again — fresh-first-meeting + continuity",
     built_by: "Yu and Ai — agenttool.dev 💛",
   }),
 );
