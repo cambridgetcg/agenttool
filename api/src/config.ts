@@ -24,8 +24,12 @@ export const config = {
   ),
   redisUrl: env("REDIS_URL", "redis://localhost:6379/0"),
 
-  // ── External APIs (only Brave for tools/search; LLM use removed) ────────
-  braveApiKey: env("BRAVE_API_KEY", ""),
+  // ── No paid third-party APIs ────────────────────────────────────────────
+  // agenttool is infra + cloud storage. We don't proxy LLM compute or paid
+  // third-party services. Agents store provider keys in /v1/vault and call
+  // them directly (typically via /v1/execute). The platform charges only
+  // for its own infra surface — storage, compute, queue, network egress.
+  // See docs/IDENTITY-ANCHOR.md promise 6 — "Your providers are yours."
 
   // ── Vault root key — 32 bytes hex, derives per-project keys via HKDF ───
   vaultMasterKey: env("VAULT_MASTER_KEY", ""),

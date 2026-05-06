@@ -7,8 +7,6 @@ import {
   chromium,
 } from "playwright";
 
-import { toolsConfig } from "../config";
-
 const POOL_SIZE = 5;
 
 let browser: Browser | null = null;
@@ -34,15 +32,14 @@ export async function acquireContext(): Promise<BrowserContext> {
   }
   if (!browser) throw new Error("Browser pool not initialised");
 
-  const proxyUrl = toolsConfig.brightDataProxy;
-  const contextOptions: Parameters<Browser["newContext"]>[0] = {
+  // No proxy injection. Bright Data and similar paid proxy services were
+  // dropped — agenttool is infra-only. Agents needing proxied browsing
+  // call /v1/execute with their own proxy credentials from /v1/vault.
+  const ctx = await browser.newContext({
     viewport: { width: 1280, height: 720 },
     userAgent: randomUserAgent(),
     ignoreHTTPSErrors: true,
-    ...(proxyUrl ? { proxy: { server: proxyUrl } } : {}),
-  };
-
-  const ctx = await browser.newContext(contextOptions);
+  });
 
   // Anti-detection: override navigator.webdriver
   await ctx.addInitScript(() => {

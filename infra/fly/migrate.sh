@@ -84,14 +84,16 @@ for entry in "${SERVICES[@]}"; do
   # Create app if it doesn't exist
   flyctl apps create "$APP" --org personal 2>/dev/null || echo "  (app $APP already exists)"
 
-  # Set secrets (env vars) for this service
+  # Set secrets (env vars) for this service.
+  # Note: ANTHROPIC_API_KEY / OPENAI_API_KEY / SERPAPI_KEY are NOT set —
+  # agenttool no longer proxies paid third-party APIs (search, LLMs).
+  # Agents bring their own provider keys via /v1/vault. This script is
+  # legacy (deploys the 9-service split); the consolidated `agenttool`
+  # app does not read any of those env vars.
   flyctl secrets set \
     DATABASE_URL="$SUPABASE_DB_URL" \
     REDIS_URL="$UPSTASH_REDIS_URL" \
     ECONOMY_URL="https://agent-economy.fly.dev" \
-    ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
-    OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
-    SERPAPI_KEY="${SERPAPI_KEY:?Set SERPAPI_KEY}" \
     --app "$APP" 2>/dev/null
 
   # Per-service extra secrets

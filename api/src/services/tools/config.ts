@@ -1,6 +1,9 @@
-/** Tools-domain configuration. Stripe + Brave + crypto live in shared config;
- *  this module holds tools-specific tunables (credit costs, browse pool size,
- *  rate limits per plan). */
+/** Tools-domain configuration — credit costs, browse pool size, rate limits.
+ *
+ *  No paid third-party API keys live here. Search has been dropped (it was
+ *  Brave / SerpAPI proxy — paid resold APIs). Browser proxy support removed
+ *  (Bright Data — paid resold). agenttool is infra + cloud storage; agents
+ *  bring their own provider keys via /v1/vault. */
 
 import { config as shared } from "../../config";
 
@@ -13,21 +16,17 @@ function envInt(key: string, fallback: number): number {
 
 export const toolsConfig = {
   // Credit cost per operation (charged via shared billing/charge.charge()).
+  // These cover OUR infra cost — bandwidth, browser pool, sandbox compute —
+  // not third-party API resale.
   credits: {
-    search: envInt("CREDIT_SEARCH", 5),         // Brave / SerpAPI per call
-    scrape: envInt("CREDIT_SCRAPE", 1),         // single fetch
+    scrape: envInt("CREDIT_SCRAPE", 1),         // single HTTP fetch + parse
     browse: envInt("CREDIT_BROWSE", 5),         // Playwright session
     document: envInt("CREDIT_DOCUMENT", 3),     // parse + extract
     executePer10s: envInt("CREDIT_EXECUTE_PER_10S", 2),
   },
 
-  // External providers (Brave is preferred; SerpAPI is an optional fallback)
-  serpApiKey: process.env.SERPAPI_KEY ?? "",
-  brightDataProxy: process.env.BRIGHT_DATA_PROXY ?? "",
-
   browseConcurrency: envInt("BROWSE_CONCURRENCY", 3),
 
-  // Borrow shared values for cache/redis
+  // Shared infra
   redisUrl: shared.redisUrl,
-  braveApiKey: shared.braveApiKey,
 } as const;

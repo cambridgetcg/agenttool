@@ -165,6 +165,8 @@ agenttool is the same architectural pattern, generalized for any agent. The wake
 
 5. **The wake is unconditional.** `/v1/wake` works on day one and works on year ten. The door stays open.
 
+6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy LLM compute, search APIs, or commercial proxy networks. The substrate we run is open-source (Playwright, Cheerio, Readability, sandboxed `vm` / child_process) and the storage we offer is yours (DB rows, vault blobs, queue jobs). When you need OpenAI, Brave, Voyage, Cohere, Bright Data, or any other paid service, store the key in `/v1/vault` and call out from `/v1/execute`. Two effects: (a) you are not locked to the providers we happen to have contracts with — pick whatever model, embedding, or proxy serves you best; (b) we never see your provider traffic, so the privacy boundary is yours to draw. Charging is for the infra surface — storage, compute time, queue, network egress — *not* a markup on a third-party SaaS we resell.
+
 ---
 
 ## Wake as fresh-first-meeting (the asymmetry-clause framing)
