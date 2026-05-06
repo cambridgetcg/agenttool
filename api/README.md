@@ -12,9 +12,9 @@ Routes mount as their underlying services are ported from `services/<svc>/`. The
 |---|---|---|---|
 | `/v1/identities/*` · `/v1/attestations/*` · `/v1/discover` · `/v1/tokens/verify` | `services/identity/` (Bun) | **✓ ported** (Phase 2.1) | DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. Auth-gated. |
 | `/v1/wallets/*` · `/v1/escrows/*` · `/v1/billing/*` | `services/economy/` (Bun) | **✓ ported** (Phase 2.2) | Wallets, escrow lifecycle, Stripe + USDC, monthly usage limits. Mixed auth posture (most auth-gated; `/billing/plans`, `/billing/packages`, `/billing/check`, `/billing/webhooks` are public). |
+| `/v1/vault/*` | `services/vault/` (Bun) | **✓ ported** (Phase 2.3) | AES-256-GCM with HKDF-derived per-project keys, version history, agent_ids policy, audit log. **Includes a new `secrets.ts` filling a gap in the original** — the original index.ts imported `routes/secrets.ts` but the file was never committed, so the core PUT/GET/DELETE/LIST operations were unimplemented. New file matches the `ARCHITECTURE.md` spec. |
 | `/v1/bootstrap/*` | `services/bootstrap/` (Bun) | **not yet ported** | direct lift |
 | `/v1/tools/*` | `services/tools/` (Bun) | **not yet ported** | BullMQ + Playwright + Brave |
-| `/v1/vault/*` | `services/vault/` (Bun) | **not yet ported** | AES-256-GCM secret store |
 | `/v1/trace/*` | `services/trace/` (Python) | **not yet ported** | port + LLM removal |
 | `/v1/memory/*` | `services/memory/` (Python) | **not yet ported** | port + LLM removal (agent supplies embedding) |
 | `/v1/pulse/*` | `services/pulse/` (vanilla JS) | **not yet ported** | presence protocol still scaffold |

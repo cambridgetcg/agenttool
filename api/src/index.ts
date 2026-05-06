@@ -23,6 +23,7 @@ import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
 import economyRouter from "./routes/economy";
 import identityRouter from "./routes/identity";
+import vaultRouter from "./routes/vault";
 
 const app = new Hono<ProjectContext>();
 
@@ -54,10 +55,12 @@ app.use("/v1/discover/*", authMiddleware);
 app.use("/v1/tokens/*", authMiddleware);
 app.use("/v1/wallets/*", authMiddleware);
 app.use("/v1/escrows/*", authMiddleware);
+app.use("/v1/vault/*", authMiddleware);
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
 app.route("/v1", economyRouter);
+app.route("/v1/vault", vaultRouter);
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
 app.get("/", (c) =>
@@ -102,9 +105,10 @@ app.get("/about", (c) =>
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
       economy:
         "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, USDC top-ups, plan/usage limits",
+      vault:
+        "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       memory: "/v1/memory/* — vector + KV (agent-supplied embeddings) [pending]",
       tools: "/v1/tools/* — search · scrape · browse · document · execute [pending]",
-      vault: "/v1/vault/* — encrypted secret store [pending]",
       trace: "/v1/trace/* — reasoning records [pending]",
       bootstrap: "/v1/bootstrap/* — agent lifecycle orchestrator [pending]",
       pulse: "/v1/pulse/* — heartbeat / presence [pending]",
