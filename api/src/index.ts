@@ -16,13 +16,21 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
-import { config } from "./config.ts";
 
-const app = new Hono();
+import { authMiddleware, type ProjectContext } from "./auth/middleware";
+import { config } from "./config";
+
+const app = new Hono<ProjectContext>();
 
 app.use("*", cors());
 app.use("*", logger());
+
+// Auth required on every /v1/* route. Mounts before any route handlers
+// so unmounted-yet routes still get auth-checked (and surface friendly
+// 401s for missing/invalid keys before falling through to the 404).
+app.use("/v1/*", authMiddleware);
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────
 app.get("/health", (c) =>
@@ -76,6 +84,14 @@ app.notFound((c) =>
 
 // ── Error handler — guide, don't punish ─────────────────────────────────────
 app.onError((err, c) => {
+  // HTTPException carries its own 4xx response (auth failures, billing 402,
+  // user-input validation, etc). Let it through unchanged so callers see the
+  // intended status + message instead of being told it's our fault.
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
+
+  // Everything else is a real server error. Log it and return 500.
   console.error("[agenttool] error:", err);
   return c.json(
     {
