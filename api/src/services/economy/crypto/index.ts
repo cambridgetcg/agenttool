@@ -27,7 +27,11 @@ import {
   type EvmChain,
 } from "./chains";
 import { deriveDepositAddress, isChainSupported } from "./hd";
-import { buildChallenge, verifyEvmSignature } from "./sign";
+import {
+  buildChallenge,
+  verifyEvmSignature,
+  verifySolanaSignature,
+} from "./sign";
 
 import { randomBytes } from "node:crypto";
 
@@ -166,13 +170,11 @@ export async function verifyAndBind(
     return { error: "challenge_expired" };
   }
 
-  if (!isEvmChain(p.chain)) {
-    return {
-      error: `signature verification for ${p.chain} pending Phase 3c (ed25519)`,
-    };
-  }
-
-  const ok = verifyEvmSignature(stored.message, p.signature, p.address);
+  const ok = isEvmChain(p.chain)
+    ? verifyEvmSignature(stored.message, p.signature, p.address)
+    : p.chain === "solana"
+      ? verifySolanaSignature(stored.message, p.signature, p.address)
+      : false;
   if (!ok) return { error: "signature_invalid" };
 
   challenges.delete(p.nonce);

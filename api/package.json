@@ -22,6 +22,7 @@
     "@scure/bip32": "^2.2.0",
     "@scure/bip39": "^2.2.0",
     "bcryptjs": "^2.4.3",
+    "bs58": "^6.0.0",
     "bullmq": "^5.76.6",
     "cheerio": "^1.2.0",
     "drizzle-orm": "^0.36.0",

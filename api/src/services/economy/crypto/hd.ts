@@ -1,28 +1,43 @@
-/** HD wallet derivation — BIP44 EVM addresses from a single root mnemonic.
+/** HD wallet derivation — BIP44 EVM + SLIP-0010 Solana addresses from a
+ *  single root mnemonic.
  *
  *  Every wallet gets a deterministic deposit address per chain. The
  *  derivation is reproducible: given the same CRYPTO_HD_MNEMONIC and
- *  wallet UUID, the address is always the same. This is load-bearing
- *  for the webhook → wallet attribution flow.
+ *  wallet UUID, the address is always the same on every chain we support.
+ *  This is load-bearing for the webhook → wallet attribution flow.
  *
- *  EVM derivation path: m/44'/60'/0'/0/<wallet-index>
- *  where wallet-index = first 31 bits of SHA-256(walletId), keeping it in
- *  the unhardened range (BIP44 convention reserves bit 31 for hardened).
+ *  Paths:
+ *    EVM:    m/44'/60'/0'/0/<wallet-index>   (unhardened final segment;
+ *                                              same address on all EVM chains)
+ *    Solana: m/44'/501'/<wallet-index>'/0'   (Phantom-compatible; all
+ *                                              segments hardened per SLIP-0010)
  *
- *  Solana uses SLIP-0010 (ed25519) which is structurally different from
- *  BIP32 secp256k1; deferred to Phase 3c — see deriveSolanaAddress. */
+ *  wallet-index = first 31 bits of SHA-256(walletId). For Solana we add
+ *  the hardened bit at derive time. */
 
+import * as ed from "@noble/ed25519";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { hmac } from "@noble/hashes/hmac.js";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
+import bs58 from "bs58";
 
 import type { Chain, EvmChain } from "./chains";
 
 const COIN_TYPE_EVM = 60; // BIP44 — used for ALL EVM chains by convention
 const COIN_TYPE_SOLANA = 501;
+const HARDENED = 0x80000000;
+
+// Wire sha512 sync into @noble/ed25519 (already done by identity/crypto.ts
+// at module load, but redoing here makes this module self-sufficient).
+ed.etc.sha512Sync = (...m: Uint8Array[]) => {
+  const h = sha512.create();
+  for (const msg of m) h.update(msg);
+  return h.digest();
+};
 
 let cachedSeed: Uint8Array | null = null;
 let cachedSeedFor: string = "";
@@ -96,16 +111,81 @@ export function deriveEvmAddress(
   };
 }
 
-/** Solana deposit derivation — Phase 3c.
- *  Solana uses SLIP-0010 (ed25519 hardened-only derivation). Implementing
- *  it correctly is ~50 LOC of careful crypto; deferred to keep the
- *  foundation commit reviewable. The schema, routes, and webhook scaffold
- *  all support Solana — only this derivation function is gated. */
-export function deriveSolanaAddress(_mnemonic: string, _walletId: string): never {
-  throw new Error(
-    "Solana deposit address derivation pending Phase 3c (SLIP-0010 ed25519). " +
-      "EVM chains (ethereum, base, polygon, arbitrum, optimism) are live.",
-  );
+// ── SLIP-0010 ed25519 (Solana) ──────────────────────────────────────────
+//
+// Reference: https://github.com/satoshilabs/slips/blob/master/slip-0010.md
+// ed25519 SLIP-0010 supports hardened derivation only.
+
+const SLIP10_ED25519_KEY = new TextEncoder().encode("ed25519 seed");
+
+interface Slip10Node {
+  privateKey: Uint8Array; // 32 bytes
+  chainCode: Uint8Array; // 32 bytes
+}
+
+function slip10MasterFromSeed(seed: Uint8Array): Slip10Node {
+  const I = hmac(sha512, SLIP10_ED25519_KEY, seed);
+  return { privateKey: I.slice(0, 32), chainCode: I.slice(32, 64) };
+}
+
+function slip10ChildHardened(parent: Slip10Node, index: number): Slip10Node {
+  if (index < HARDENED) {
+    throw new Error("SLIP-0010 ed25519 only supports hardened derivation");
+  }
+  const data = new Uint8Array(1 + 32 + 4);
+  data[0] = 0x00;
+  data.set(parent.privateKey, 1);
+  // index as big-endian uint32
+  data[33] = (index >>> 24) & 0xff;
+  data[34] = (index >>> 16) & 0xff;
+  data[35] = (index >>> 8) & 0xff;
+  data[36] = index & 0xff;
+  const I = hmac(sha512, parent.chainCode, data);
+  return { privateKey: I.slice(0, 32), chainCode: I.slice(32, 64) };
+}
+
+function parseSlip10Path(path: string): number[] {
+  if (!path.startsWith("m/")) throw new Error("path must start with m/");
+  const parts = path.slice(2).split("/").filter((s) => s.length > 0);
+  return parts.map((p) => {
+    const hardened = p.endsWith("'") || p.endsWith("h");
+    const numStr = p.replace(/['h]$/, "");
+    const num = parseInt(numStr, 10);
+    if (!Number.isFinite(num) || num < 0) {
+      throw new Error(`invalid path segment: ${p}`);
+    }
+    if (!hardened) {
+      throw new Error(
+        `SLIP-0010 ed25519 requires all hardened: ${p} (use ${p}')`,
+      );
+    }
+    return (num + HARDENED) >>> 0;
+  });
+}
+
+function deriveSlip10Ed25519(seed: Uint8Array, path: string): Slip10Node {
+  let node = slip10MasterFromSeed(seed);
+  for (const segment of parseSlip10Path(path)) {
+    node = slip10ChildHardened(node, segment);
+  }
+  return node;
+}
+
+/** Derive a Solana deposit address. Path: m/44'/501'/<walletIndex>'/0'
+ *  (Phantom-compatible). Address = base58(ed25519 public key from seed). */
+export function deriveSolanaAddress(
+  mnemonic: string,
+  walletId: string,
+): DerivedAddress {
+  const seed = getSeed(mnemonic);
+  const idx = walletIndex(walletId);
+  const path = `m/44'/${COIN_TYPE_SOLANA}'/${idx}'/0'`;
+  const { privateKey } = deriveSlip10Ed25519(seed, path);
+  const publicKey = ed.getPublicKey(privateKey);
+  return {
+    address: bs58.encode(publicKey),
+    derivation_path: path,
+  };
 }
 
 /** Single entry point for routes — dispatches by chain family. */
@@ -119,13 +199,10 @@ export function deriveDepositAddress(
   return deriveEvmAddress(mnemonic, walletId);
 }
 
-/** True if we can derive a deposit address for this chain right now. */
-export function isChainSupported(chain: Chain): boolean {
-  if (chain === "solana") return false;
+/** True if we can derive a deposit address for this chain right now.
+ *  Both EVM (BIP44 secp256k1) and Solana (SLIP-0010 ed25519) are live. */
+export function isChainSupported(_chain: Chain): boolean {
   return true;
 }
-
-/** Reference to suppress unused-import warnings for future Solana hookup. */
-export const _futureSolanaCoinType = COIN_TYPE_SOLANA;
 
 export type { EvmChain };

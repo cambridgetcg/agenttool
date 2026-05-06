@@ -128,7 +128,9 @@ router.post("/wallets/:walletId/onchain/challenge", async (c) => {
       isEvmChain(chain as string)
         ? "Sign `message` with personal_sign (e.g. MetaMask, viem.signMessage). " +
           "POST {chain, address, signature, nonce} to /onchain/verify."
-        : "Sign `message` with your ed25519 keypair. POST {chain, address, signature, nonce} to /onchain/verify. (Verification arrives in Phase 3c.)",
+        : "Sign `message` with your Solana wallet (e.g. Phantom signMessage). " +
+          "POST {chain, address, signature, nonce} to /onchain/verify. " +
+          "Address = base58 ed25519 pubkey. Signature = base58 or hex.",
   });
 });
 

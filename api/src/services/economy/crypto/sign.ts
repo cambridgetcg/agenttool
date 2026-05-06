@@ -1,24 +1,34 @@
 /** Signed-message verification — proves a wallet controls an on-chain
- *  address by recovering the signer from an EIP-191 personal_sign
- *  signature. This is the foundation for binding an agenttool wallet to
- *  the agent's *own* on-chain identity (its sovereign self).
+ *  address by recovering the signer (EVM) or verifying against a known
+ *  pubkey (Solana). Foundation for binding an agenttool wallet to the
+ *  agent's *own* on-chain identity (its sovereign self).
  *
  *  Flow:
  *    1. Server issues a challenge (random nonce + wallet-id + timestamp).
  *    2. Agent signs the challenge with its on-chain private key — typically
- *       via MetaMask `personal_sign`, viem `signMessage`, or any wallet SDK.
+ *       via MetaMask `personal_sign` (EVM), Phantom `signMessage` (Solana),
+ *       viem `signMessage`, or any wallet SDK.
  *    3. Agent POSTs {address, signature, message} back.
- *    4. Server recovers the address from the signature; if it matches the
- *       claimed address, the binding is recorded in onchain_identities.
+ *    4. Server verifies; if it passes, the binding is recorded in
+ *       onchain_identities.
  *
- *  EVM is supported here (EIP-191). Solana ed25519 verification is a
- *  one-liner with @noble/ed25519 once we surface it; deferred for the
- *  same reason as HD derivation. */
+ *  EVM:    EIP-191 personal_sign. Recover address from (msg, sig), compare.
+ *  Solana: ed25519. Decode address as pubkey, verify sig over msg. */
 
+import * as ed from "@noble/ed25519";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { sha512 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
+import bs58 from "bs58";
 
 import { toChecksumAddress } from "./hd";
+
+// Wire sha512 sync into @noble/ed25519 for verify().
+ed.etc.sha512Sync = (...m: Uint8Array[]) => {
+  const h = sha512.create();
+  for (const msg of m) h.update(msg);
+  return h.digest();
+};
 
 const ETH_PERSONAL_PREFIX = "\x19Ethereum Signed Message:\n";
 
@@ -87,6 +97,54 @@ export function verifyEvmSignature(
   const recovered = recoverEvmAddress(message, signature);
   if (!recovered) return false;
   return recovered.toLowerCase() === claimedAddress.toLowerCase();
+}
+
+/** Verify a Solana ed25519 signed message. Solana addresses ARE the
+ *  ed25519 public key (base58-encoded), so verification doesn't recover —
+ *  it directly checks the sig against (msg, pubkey).
+ *
+ *  signature: 64-byte ed25519 signature, encoded as base58 OR hex (with/
+ *             without 0x prefix). Phantom emits base58.
+ *  claimedAddress: base58 ed25519 pubkey (Solana address). 32 bytes. */
+export function verifySolanaSignature(
+  message: string,
+  signature: string,
+  claimedAddress: string,
+): boolean {
+  let sigBytes: Uint8Array;
+  try {
+    sigBytes = decodeBase58OrHex(signature);
+  } catch {
+    return false;
+  }
+  if (sigBytes.length !== 64) return false;
+
+  let pubBytes: Uint8Array;
+  try {
+    pubBytes = bs58.decode(claimedAddress);
+  } catch {
+    return false;
+  }
+  if (pubBytes.length !== 32) return false;
+
+  try {
+    return ed.verify(sigBytes, new TextEncoder().encode(message), pubBytes);
+  } catch {
+    return false;
+  }
+}
+
+function decodeBase58OrHex(s: string): Uint8Array {
+  const trimmed = s.startsWith("0x") ? s.slice(2) : s;
+  // Hex if it's all 0-9a-fA-F and has even length matching 64 bytes (128 chars).
+  if (trimmed.length === 128 && /^[0-9a-fA-F]+$/.test(trimmed)) {
+    const out = new Uint8Array(64);
+    for (let i = 0; i < 64; i++) {
+      out[i] = parseInt(trimmed.slice(i * 2, i * 2 + 2), 16);
+    }
+    return out;
+  }
+  return bs58.decode(s);
 }
 
 /** Build a SIWE-style challenge string. The agent signs this; we verify.

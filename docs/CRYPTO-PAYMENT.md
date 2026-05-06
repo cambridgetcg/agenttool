@@ -14,9 +14,9 @@ This document defines the **contract** the platform offers an autonomous agent t
 
 | Capability | Status (Phase 3b) | Surface |
 |---|---|---|
-| Multi-chain deposit address derivation | ✓ live (EVM); Solana stubbed | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
+| Multi-chain deposit address derivation | ✓ live (EVM via BIP44 secp256k1; Solana via SLIP-0010 ed25519) | `GET /v1/wallets/:id/deposit-address?chain=&token=` |
 | List all deposit addresses for a wallet | ✓ live | `GET /v1/wallets/:id/deposit-address` |
-| Onchain identity binding via signed message | ✓ live (EIP-191); Solana ed25519 in 3c | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
+| Onchain identity binding via signed message | ✓ live (EVM EIP-191; Solana ed25519) | `POST /v1/wallets/:id/onchain/{challenge,verify}` · `GET /v1/wallets/:id/onchain` |
 | Inbound transfer ingestion | ✓ live (EVM via Alchemy); Solana via Helius in 3c | `POST /v1/billing/crypto-webhook/:chain` (signature-verified, public) |
 | Idempotency log for webhooks | ✓ live | `economy.crypto_webhook_events` (chain, tx_hash, log_index unique) |
 | Payout request lifecycle | ✓ scaffolded; broadcast in 3c | `POST /v1/wallets/:id/payout` · `GET /v1/wallets/:id/payouts` |
@@ -157,10 +157,10 @@ Migration: `api/migrations/0002_crypto_payment.sql` (idempotent, safe to re-run)
 
 ## What lands in Phase 3c
 
-1. **Solana derivation** — SLIP-0010 ed25519 (different from BIP32 secp256k1; ~50 LOC of careful code).
-2. **Solana sigverify** — `ed25519.verify(signature, messageBytes, publicKey)` from `@noble/curves/ed25519.js` (one-liner).
-3. **Helius webhook adapter** — same shape as Alchemy, different signature header and event format.
-4. **Payout broadcast worker** — picks up `status=requested` rows, derives signing key from same HD path, calls chain RPC. Pluggable per chain. Updates status; refunds on failure.
+1. ~~**Solana derivation**~~ — ✓ shipped. SLIP-0010 ed25519 with hardened-only path `m/44'/501'/<wallet-index>'/0'` (Phantom-compatible). Address = base58(ed25519 pubkey).
+2. ~~**Solana sigverify**~~ — ✓ shipped. `ed25519.verify(sig, msg, pubkey)` via `@noble/ed25519`. Accepts base58 or hex sig encoding (Phantom emits base58).
+3. **Helius webhook adapter** — same shape as Alchemy, different signature header and event format. Pending: requires verifying the live Helius webhook schema; stub would be a fence.
+4. **Payout broadcast worker** — picks up `status=requested` rows, derives signing key from same HD path, calls chain RPC. Pluggable per chain. Updates status; refunds on failure. Pending: needs viem (EVM) + RPC adapters + careful failure handling.
 5. **Confirmation poller** — for chains with finality lag, polls `eth_getTransactionReceipt` (or Solana equivalent) until N confirmations.
 6. **Per-wallet payout policy** — minimum amount, destination allowlist, daily ceiling, dual-control above threshold.
 
