@@ -10,8 +10,8 @@ Routes mount as their underlying services are ported from `services/<svc>/`. The
 
 | Route prefix | Origin | Status | Notes |
 |---|---|---|---|
+| `/v1/identities/*` · `/v1/attestations/*` · `/v1/discover` · `/v1/tokens/verify` | `services/identity/` (Bun) | **✓ ported** (Phase 2.1) | DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. Auth-gated; uses shared `c.var.project`. |
 | `/v1/bootstrap/*` | `services/bootstrap/` (Bun) | **not yet ported** | direct lift |
-| `/v1/identity/*` | `services/identity/` (Bun) | **not yet ported** | direct lift |
 | `/v1/economy/*` | `services/economy/` (Bun) | **not yet ported** | in-process billing replaces ECONOMY_URL fanout |
 | `/v1/tools/*` | `services/tools/` (Bun) | **not yet ported** | BullMQ + Playwright + Brave |
 | `/v1/vault/*` | `services/vault/` (Bun) | **not yet ported** | AES-256-GCM secret store |

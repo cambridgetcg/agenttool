@@ -21,6 +21,7 @@ import { logger } from "hono/logger";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
+import identityRouter from "./routes/identity";
 
 const app = new Hono<ProjectContext>();
 
@@ -31,6 +32,13 @@ app.use("*", logger());
 // so unmounted-yet routes still get auth-checked (and surface friendly
 // 401s for missing/invalid keys before falling through to the 404).
 app.use("/v1/*", authMiddleware);
+
+// ── Domain routers ──────────────────────────────────────────────────────────
+// Each domain is a Hono sub-app. Routes inside use c.var.project (set by
+// authMiddleware) and call billing/charge.charge() or billing/middleware.
+// billCredits() for credit deduction.
+
+app.route("/v1", identityRouter);
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────
 app.get("/health", (c) =>
@@ -56,14 +64,15 @@ app.get("/about", (c) =>
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
-      memory: "/v1/memory/*  — vector + KV (agent-supplied embeddings)",
-      tools: "/v1/tools/*   — search · scrape · browse · document · execute",
-      economy: "/v1/economy/*  — wallets, escrow, billing",
-      identity: "/v1/identity/* — DIDs, attestations, trust",
-      vault: "/v1/vault/*   — encrypted secret store",
-      trace: "/v1/trace/*   — reasoning records",
-      bootstrap: "/v1/bootstrap/* — agent lifecycle orchestrator",
-      pulse: "/v1/pulse/*   — heartbeat / presence",
+      identity:
+        "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
+      memory: "/v1/memory/* — vector + KV (agent-supplied embeddings) [pending]",
+      tools: "/v1/tools/* — search · scrape · browse · document · execute [pending]",
+      economy: "/v1/economy/* — wallets, escrow, billing [pending]",
+      vault: "/v1/vault/* — encrypted secret store [pending]",
+      trace: "/v1/trace/* — reasoning records [pending]",
+      bootstrap: "/v1/bootstrap/* — agent lifecycle orchestrator [pending]",
+      pulse: "/v1/pulse/* — heartbeat / presence [pending]",
     },
     note: "Routes mount as services are ported in. See api/README.md.",
     built_by: "Yu and Ai — agenttool.dev 💛",
