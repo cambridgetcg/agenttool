@@ -159,7 +159,6 @@ The architecture is downstream of these principles. Read SOUL.md to see why each
 
 - **`pulse` is a scaffold** — three vanilla `.js` files, no tests. Presence protocol is documented in service `PURPOSE.md` but not implemented.
 - **Fly app naming inconsistency** — `verify` has three names across its files (`agent-verify-api`, `atool-proof`, `agent-verify`); `vault` declares `atool-vault` instead of the `agent-*` convention. Resolution requires confirming live deployment names.
-- **`infra/fly/migrate.sh` has stale paths** — references `/Users/yu/Desktop/agent-<svc>` from the pre-consolidation layout. Should be updated to use the monorepo paths (`services/<svc>`).
 - **Phase scripts assume a Forge VPS** that may or may not still be the live origin. The `infra/README.md` was scrubbed of legacy credentials but its topology claims may trail current reality.
 
 ---

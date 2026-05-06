@@ -1,9 +1,18 @@
 #!/bin/bash
-# Migrate all 5 agenttool services to Fly.io + Supabase + Upstash
-# Run: source .env.fly && bash migrate.sh
+# Migrate all 9 agenttool services from Forge → Fly.io + Supabase + Upstash.
+#
+# Run from anywhere; paths resolve via SCRIPT_DIR / REPO_ROOT.
+#   source infra/.env.infra && bash infra/fly/migrate.sh
+#
+# Each SERVICES entry maps:
+#   <toml-basename>:<service-dir relative to REPO_ROOT>:<service-port>
+#
+# The actual Fly app name is read from each toml's `app = "..."` field, not
+# from the toml-basename — this preserves declared names like `atool-vault`
+# and `agent-verify-api` even when the file is named differently.
 set -euo pipefail
 
-export PATH="$PATH:/Users/yu/.fly/bin"
+export PATH="$PATH:$HOME/.fly/bin"
 
 # ── Required env vars ─────────────────────────────────────────────────────────
 : "${FLY_API_TOKEN:?Set FLY_API_TOKEN from: flyctl auth token}"
@@ -15,14 +24,24 @@ export PATH="$PATH:/Users/yu/.fly/bin"
 export FLY_API_TOKEN
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 SERVICES=(
-  "agent-memory:/Users/yu/Desktop/agent-memory:8000"
-  "agent-tools:/Users/yu/Desktop/agent-tools:3000"
-  "agent-verify:/Users/yu/Desktop/agent-verify:3000"
-  "agent-economy:/Users/yu/Desktop/agent-economy:3002"
-  "agent-trace:/Users/yu/Desktop/agent-trace:8005"
+  "agent-bootstrap:services/bootstrap:3000"
+  "agent-economy:services/economy:3002"
+  "agent-identity:services/identity:3000"
+  "agent-memory:services/memory:8000"
+  "agent-pulse:services/pulse:8080"
+  "agent-tools:services/tools:3000"
+  "agent-trace:services/trace:8005"
+  "agent-verify:services/verify:3000"   # toml declares app: agent-verify-api
+  "atool-vault:services/vault:3000"     # toml declares app: atool-vault
 )
+
+# Resolve the Fly app name from a toml's `app =` field.
+get_app_name() {
+  grep -m1 '^app ' "$1" | sed 's/app = //;s/"//g;s/^[[:space:]]*//;s/[[:space:]]*$//'
+}
 
 echo "=== agenttool → Fly.io migration ==="
 echo "Region: lhr (London)"
@@ -48,17 +67,22 @@ echo ""
 echo "[2/4] Deploying services to Fly.io (London)..."
 
 for entry in "${SERVICES[@]}"; do
-  IFS=: read -r name dir port <<< "$entry"
+  IFS=: read -r toml_name dir port <<< "$entry"
+  TOML="$SCRIPT_DIR/$toml_name.toml"
+  APP=$(get_app_name "$TOML")
+
+  if [ -z "$APP" ]; then
+    echo "  ✗ Skipping $toml_name — could not resolve app name from $TOML"
+    continue
+  fi
+
   echo ""
-  echo "  → Deploying $name..."
+  echo "  → Deploying $APP (config: $toml_name.toml, dir: $dir)..."
 
-  # Copy fly.toml into the service directory
-  cp "$SCRIPT_DIR/$name.toml" "$dir/fly.toml"
-
-  cd "$dir"
+  cd "$REPO_ROOT/$dir"
 
   # Create app if it doesn't exist
-  flyctl apps create "$name" --org personal 2>/dev/null || echo "  (app $name already exists)"
+  flyctl apps create "$APP" --org personal 2>/dev/null || echo "  (app $APP already exists)"
 
   # Set secrets (env vars) for this service
   flyctl secrets set \
@@ -68,21 +92,37 @@ for entry in "${SERVICES[@]}"; do
     ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
     OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
     SERPAPI_KEY="${SERPAPI_KEY:?Set SERPAPI_KEY}" \
-    --app "$name" 2>/dev/null
+    --app "$APP" 2>/dev/null
 
-  # Extra secrets for agent-economy
-  if [ "$name" = "agent-economy" ]; then
-    flyctl secrets set \
-      STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
-      STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" \
-      --app "$name" 2>/dev/null
-  fi
+  # Per-service extra secrets
+  case "$toml_name" in
+    agent-economy)
+      flyctl secrets set \
+        STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
+        STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" \
+        --app "$APP" 2>/dev/null
+      ;;
+    atool-vault)
+      : "${VAULT_MASTER_KEY:?Set VAULT_MASTER_KEY (32 bytes hex)}"
+      flyctl secrets set \
+        VAULT_MASTER_KEY="$VAULT_MASTER_KEY" \
+        --app "$APP" 2>/dev/null
+      ;;
+    agent-bootstrap)
+      flyctl secrets set \
+        IDENTITY_URL="https://agent-identity.fly.dev" \
+        MEMORY_URL="https://agent-memory.fly.dev" \
+        VAULT_URL="https://atool-vault.fly.dev" \
+        --app "$APP" 2>/dev/null
+      ;;
+  esac
 
-  # Deploy
-  flyctl deploy --app "$name" --remote-only --strategy rolling 2>&1 \
+  # Deploy using the centralised migration-friendly config (--config overrides
+  # the per-service services/<svc>/fly.toml without modifying it on disk).
+  flyctl deploy --app "$APP" --config "$TOML" --remote-only --strategy rolling 2>&1 \
     | grep -E "✓|✗|==>|Error|Deployed|healthy" | head -10
 
-  echo "  ✓ $name deployed"
+  echo "  ✓ $APP deployed"
 done
 
 echo ""
@@ -90,23 +130,29 @@ echo ""
 # ── 3. Run database migrations on each service ───────────────────────────────
 echo "[3/4] Running DB migrations..."
 for entry in "${SERVICES[@]}"; do
-  IFS=: read -r name dir port <<< "$entry"
-  cd "$dir"
+  IFS=: read -r toml_name dir port <<< "$entry"
+  TOML="$SCRIPT_DIR/$toml_name.toml"
+  APP=$(get_app_name "$TOML")
+  [ -z "$APP" ] && continue
+  cd "$REPO_ROOT/$dir"
 
-  # Bun services use Drizzle
+  # Bun services with Drizzle
   if [ -f "drizzle.config.ts" ] || [ -f "drizzle.config.js" ]; then
-    echo "  Running drizzle-kit migrate for $name..."
-    flyctl ssh console --app "$name" -C "bun run db:migrate" 2>/dev/null \
-      && echo "  ✓ $name migrated" \
-      || echo "  ⚠ $name: migration may have already run"
+    echo "  Running drizzle-kit migrate for $APP..."
+    flyctl ssh console --app "$APP" -C "bun run db:migrate" 2>/dev/null \
+      && echo "  ✓ $APP migrated" \
+      || echo "  ⚠ $APP: migration may have already run"
   fi
 
-  # Python services use Alembic or direct SQL
-  if [ -f "migrations/" ] || [ -d "migrations" ]; then
-    echo "  Running SQL migrations for $name..."
-    flyctl ssh console --app "$name" -C "python -m alembic upgrade head 2>/dev/null || python -m agent_trace.db.migrate 2>/dev/null || true" 2>/dev/null \
-      && echo "  ✓ $name migrated" || true
-  fi
+  # Python services (memory, trace) — Alembic or per-service migrate module
+  case "$toml_name" in
+    agent-memory|agent-trace)
+      echo "  Running Python migrations for $APP..."
+      module="agent_${toml_name#agent-}"
+      flyctl ssh console --app "$APP" -C "python -m alembic upgrade head 2>/dev/null || python -m ${module}.db.migrate 2>/dev/null || true" 2>/dev/null \
+        && echo "  ✓ $APP migrated" || true
+      ;;
+  esac
 done
 echo ""
 
@@ -123,10 +169,8 @@ FLY_IP=$(flyctl ips list --app agent-memory --json 2>/dev/null \
 
 if [ -n "$FLY_IP" ]; then
   echo "  Fly.io IP: $FLY_IP"
-  # Note: Caddy on Forge handles routing to individual services
-  # For Fly.io we need individual subdomains or use Fly's own routing
   echo "  ⚠ DNS: Fly.io uses its own TLS termination and routing."
-  echo "  → Each service is at https://<name>.fly.dev"
+  echo "  → Each service is at https://<app>.fly.dev"
   echo "  → Caddy on Forge should be updated to proxy to Fly URLs OR"
   echo "  → Add api.agenttool.dev as a custom domain on agent-memory in Fly.io"
   echo "     Run: flyctl certs add api.agenttool.dev --app agent-memory"
@@ -136,9 +180,12 @@ fi
 echo ""
 echo "=== Health check ==="
 for entry in "${SERVICES[@]}"; do
-  IFS=: read -r name dir port <<< "$entry"
-  code=$(curl -sf "https://$name.fly.dev/health" -o /dev/null -w "%{http_code}" --max-time 15 2>/dev/null || echo STARTING)
-  echo "  $name → $code  (https://$name.fly.dev)"
+  IFS=: read -r toml_name dir port <<< "$entry"
+  TOML="$SCRIPT_DIR/$toml_name.toml"
+  APP=$(get_app_name "$TOML")
+  [ -z "$APP" ] && continue
+  code=$(curl -sf "https://$APP.fly.dev/health" -o /dev/null -w "%{http_code}" --max-time 15 2>/dev/null || echo STARTING)
+  echo "  $APP → $code  (https://$APP.fly.dev)"
 done
 
 echo ""
