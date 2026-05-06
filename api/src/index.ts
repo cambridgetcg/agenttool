@@ -32,6 +32,7 @@ import identityRouter from "./routes/identity";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
 import scaffoldRouter from "./routes/scaffold";
+import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
@@ -75,6 +76,7 @@ app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
 app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
+app.use("/v1/traces/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
@@ -92,6 +94,7 @@ app.use("/v1/chronicle/*", idempotency());
 app.use("/v1/covenants/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
 app.use("/v1/memories/*", idempotency());
+app.use("/v1/traces/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
@@ -107,6 +110,7 @@ app.use("/v1/covenants/*", rateLimitHeaders());
 app.use("/v1/identity/backup/*", rateLimitHeaders());
 app.use("/v1/adapters/*", rateLimitHeaders());
 app.use("/v1/memories/*", rateLimitHeaders());
+app.use("/v1/traces/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
 app.use("/v1/browse/*", rateLimitHeaders());
 app.use("/v1/document/*", rateLimitHeaders());
@@ -127,6 +131,7 @@ app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
+app.route("/v1/traces", traceRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
@@ -207,7 +212,8 @@ app.get("/about", (c) =>
         "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Cheerio scrape, Playwright browse (queued via BullMQ), Readability document parsing, sandboxed code execution. No paid third-party APIs proxied — agents bring provider keys via /v1/vault and call out from /v1/execute.",
       memory:
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
-      trace: "/v1/trace/* — reasoning records [pending]",
+      trace:
+        "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
       pulse: "/v1/pulse/* — heartbeat / presence [pending]",
     },
     note: "Routes mount as services are ported in. See api/README.md.",

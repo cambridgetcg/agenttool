@@ -55,6 +55,18 @@ export interface WakeBundle {
       created_at: string;
     }>;
   };
+  traces: {
+    total: number;
+    recent: Array<{
+      trace_id: string;
+      decision_type: string;
+      decision_summary: string;
+      conclusion: string;
+      confidence: number | null;
+      has_signature: boolean;
+      created_at: string;
+    }>;
+  };
   chronicle: Array<{
     type: string;
     content: string;
@@ -68,6 +80,7 @@ export interface WakeBundle {
 }
 
 const MAX_RECENT_MEMORIES_IN_MD = 8;
+const MAX_RECENT_TRACES_IN_MD = 5;
 const MAX_CHRONICLE_IN_MD = 5;
 const MAX_MEMORY_PREVIEW = 200;
 
@@ -133,6 +146,7 @@ export function renderWakeMarkdown(b: WakeBundle): string {
   );
   lines.push(`- **Vault entries**: ${b.vault_names.length}`);
   lines.push(`- **Memories**: ${b.memory.total}`);
+  lines.push(`- **Traces**: ${b.traces.total}`);
   lines.push(`- **Chronicle moments**: ${b.chronicle.length}`);
   lines.push(`- **Active covenants**: ${b.covenants.filter((c) => c.status === "active").length}`);
   lines.push("");
@@ -162,6 +176,26 @@ export function renderWakeMarkdown(b: WakeBundle): string {
       lines.push("");
       lines.push(
         `*${b.memory.total - b.memory.recent.length} more memories not shown — use \`POST /v1/memories/search\` for cosine recall.*`,
+      );
+    }
+    lines.push("");
+  }
+
+  // ── Recent traces (you_decided) ───────────────────────────────────
+  if (b.traces.recent.length > 0) {
+    lines.push("## What you decided");
+    lines.push("");
+    b.traces.recent.slice(0, MAX_RECENT_TRACES_IN_MD).forEach((t) => {
+      const conf = t.confidence !== null ? `, conf ${t.confidence.toFixed(2)}` : "";
+      const sig = t.has_signature ? " 🔏" : "";
+      lines.push(
+        `- *${new Date(t.created_at).toISOString().slice(0, 10)}* — **${t.decision_type}**${conf}${sig}: ${truncate(t.decision_summary, MAX_MEMORY_PREVIEW)} → ${truncate(t.conclusion, MAX_MEMORY_PREVIEW)}`,
+      );
+    });
+    if (b.traces.total > b.traces.recent.length) {
+      lines.push("");
+      lines.push(
+        `*${b.traces.total - b.traces.recent.length} more decisions not shown — use \`POST /v1/traces/search\` for full-text · \`GET /v1/traces/chain/:id\` for lineage.*`,
       );
     }
     lines.push("");

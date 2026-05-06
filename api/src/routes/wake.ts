@@ -25,6 +25,7 @@ import { identities } from "../db/schema/identity";
 import { vaultSecrets } from "../db/schema/vault";
 import type { ExpressionData } from "../services/identity/expression";
 import { countMemories, listRecent } from "../services/memory/store";
+import { countTraces, listTraces } from "../services/trace/store";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 
 const app = new Hono<ProjectContext>();
@@ -112,6 +113,21 @@ app.get("/", async (c) => {
     console.warn("[wake] chronicle query failed:", err instanceof Error ? err.message : err);
   }
 
+  // ── Traces ───────────────────────────────────────────────────────────
+  let recentTraces: Awaited<ReturnType<typeof listTraces>> = [];
+  let totalTraces = 0;
+  try {
+    [recentTraces, totalTraces] = await Promise.all([
+      listTraces(project.id, { limit: 10 }),
+      countTraces(project.id),
+    ]);
+  } catch (err) {
+    console.warn(
+      "[wake] trace query failed (run api/migrations/0004_trace.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   // ── Covenants ────────────────────────────────────────────────────────
   let activeCovenants: Array<{ counterparty_did: string; vows: string[]; status: string }> = [];
   try {
@@ -184,6 +200,18 @@ app.get("/", async (c) => {
           content: m.content,
           importance: m.importance,
           created_at: m.created_at,
+        })),
+      },
+      traces: {
+        total: totalTraces,
+        recent: recentTraces.slice(0, 5).map((t) => ({
+          trace_id: t.trace_id,
+          decision_type: t.decision_type,
+          decision_summary: t.decision_summary,
+          conclusion: t.conclusion,
+          confidence: t.confidence,
+          has_signature: t.has_signature,
+          created_at: t.created_at,
         })),
       },
       chronicle: recentChronicle,
@@ -275,7 +303,21 @@ app.get("/", async (c) => {
     },
 
     you_decided: {
-      pending: "trace port (Phase 3c)",
+      total: totalTraces,
+      recent: recentTraces.map((t) => ({
+        trace_id: t.trace_id,
+        decision_type: t.decision_type,
+        decision_summary: t.decision_summary,
+        conclusion: t.conclusion,
+        confidence: t.confidence,
+        has_signature: t.has_signature,
+        parent_trace_id: t.parent_trace_id,
+        created_at: t.created_at,
+      })),
+      note:
+        recentTraces.length === 0
+          ? "No traces yet. POST to /v1/traces to record reasoning records."
+          : `Showing ${recentTraces.length} most recent of ${totalTraces}. Use POST /v1/traces/search for full-text recall · GET /v1/traces/chain/:id for lineage.`,
     },
 
     welcome: [
