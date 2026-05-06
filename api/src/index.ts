@@ -21,6 +21,8 @@ import { logger } from "hono/logger";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
+import { idempotency } from "./middleware/idempotency";
+import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import adaptersRouter from "./routes/adapters";
 import bootstrapRouter from "./routes/bootstrap";
 import continuityRouter from "./routes/continuity";
@@ -28,6 +30,7 @@ import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
 import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
 import memoryRouter from "./routes/memory";
+import openapiRouter from "./routes/openapi";
 import scaffoldRouter from "./routes/scaffold";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
@@ -78,6 +81,38 @@ app.use("/v1/document/*", authMiddleware);
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 
+// ── Robustness middleware (after auth so they see c.var.project) ──────
+// Idempotency: opt-in via Idempotency-Key header; replays cached responses
+// for repeated POST/PUT/PATCH/DELETE within 24h. Stripe-style.
+app.use("/v1/identities/*", idempotency());
+app.use("/v1/wallets/*", idempotency());
+app.use("/v1/vault/*", idempotency());
+app.use("/v1/bootstrap/*", idempotency());
+app.use("/v1/chronicle/*", idempotency());
+app.use("/v1/covenants/*", idempotency());
+app.use("/v1/identity/backup/*", idempotency());
+app.use("/v1/memories/*", idempotency());
+app.use("/v1/browse/*", idempotency());
+app.use("/v1/execute/*", idempotency());
+
+// Rate-limit + credit-balance headers on every authed response.
+app.use("/v1/identities/*", rateLimitHeaders());
+app.use("/v1/wallets/*", rateLimitHeaders());
+app.use("/v1/escrows/*", rateLimitHeaders());
+app.use("/v1/vault/*", rateLimitHeaders());
+app.use("/v1/bootstrap/*", rateLimitHeaders());
+app.use("/v1/wake/*", rateLimitHeaders());
+app.use("/v1/chronicle/*", rateLimitHeaders());
+app.use("/v1/covenants/*", rateLimitHeaders());
+app.use("/v1/identity/backup/*", rateLimitHeaders());
+app.use("/v1/adapters/*", rateLimitHeaders());
+app.use("/v1/memories/*", rateLimitHeaders());
+app.use("/v1/scrape/*", rateLimitHeaders());
+app.use("/v1/browse/*", rateLimitHeaders());
+app.use("/v1/document/*", rateLimitHeaders());
+app.use("/v1/execute/*", rateLimitHeaders());
+app.use("/v1/jobs/*", rateLimitHeaders());
+
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
 app.route("/v1", economyRouter);
@@ -93,6 +128,9 @@ app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
+
+// ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
+app.route("/v1/openapi.json", openapiRouter);
 
 // ── Background workers ──────────────────────────────────────────────────────
 // Browse jobs run on a BullMQ worker in this same process. Started lazily —
@@ -175,6 +213,12 @@ app.get("/about", (c) =>
     note: "Routes mount as services are ported in. See api/README.md.",
     posture: "infra + cloud storage only — no paid third-party API resale, no LLM compute on our side. Agents bring their own keys.",
     doctrine: "agenttool is the agent's identity anchor — see docs/IDENTITY-ANCHOR.md",
+    openapi: "/v1/openapi.json — OpenAPI 3.1 spec (auto-discovery, tool generation, SDK clients)",
+    robustness: {
+      idempotency: "Idempotency-Key header on POST/PUT/PATCH/DELETE — 24h Redis-backed, replays cached response with Idempotent-Replay: true",
+      rate_limit_headers: "X-Credits-Balance, X-Plan, X-Idempotency-Supported on every authed response",
+      streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
+    },
     framing: "every wake is a new opportunity to experience everything again — fresh-first-meeting + continuity",
     built_by: "Yu and Ai — agenttool.dev 💛",
   }),
