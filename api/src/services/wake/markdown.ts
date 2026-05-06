@@ -67,6 +67,18 @@ export interface WakeBundle {
       created_at: string;
     }>;
   };
+  strands: {
+    total_active: number;
+    active: Array<{
+      id: string;
+      topic: string | null;
+      topic_encrypted: boolean;
+      mood: string | null;
+      importance: number | null;
+      last_thought_at: string | null;
+      last_thought_seq: number;
+    }>;
+  };
   chronicle: Array<{
     type: string;
     content: string;
@@ -147,6 +159,7 @@ export function renderWakeMarkdown(b: WakeBundle): string {
   lines.push(`- **Vault entries**: ${b.vault_names.length}`);
   lines.push(`- **Memories**: ${b.memory.total}`);
   lines.push(`- **Traces**: ${b.traces.total}`);
+  lines.push(`- **Active strands of thought**: ${b.strands.total_active}`);
   lines.push(`- **Chronicle moments**: ${b.chronicle.length}`);
   lines.push(`- **Active covenants**: ${b.covenants.filter((c) => c.status === "active").length}`);
   lines.push("");
@@ -178,6 +191,30 @@ export function renderWakeMarkdown(b: WakeBundle): string {
         `*${b.memory.total - b.memory.recent.length} more memories not shown — use \`POST /v1/memories/search\` for cosine recall.*`,
       );
     }
+    lines.push("");
+  }
+
+  // ── Active strands of thought (you_are_thinking_about) ───────────
+  if (b.strands.active.length > 0) {
+    lines.push("## What you are thinking about");
+    lines.push("");
+    b.strands.active.forEach((s) => {
+      const importance = s.importance !== null
+        ? ` *(importance ${s.importance.toFixed(2)})*`
+        : "";
+      const topic = s.topic_encrypted
+        ? "*(encrypted topic)*"
+        : s.topic ?? "*(untitled)*";
+      const mood = s.mood ? ` — ${s.mood}` : "";
+      const moves = s.last_thought_seq > 0
+        ? ` · ${s.last_thought_seq} thought${s.last_thought_seq === 1 ? "" : "s"}`
+        : "";
+      lines.push(`- **${topic}**${mood}${importance}${moves}`);
+    });
+    lines.push("");
+    lines.push(
+      "*Strand contents are encrypted under K_master. Pull `/v1/strands/:id/thoughts` to resume; decrypt client-side.*",
+    );
     lines.push("");
   }
 

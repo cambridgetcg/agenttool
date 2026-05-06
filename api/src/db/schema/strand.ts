@@ -1,0 +1,87 @@
+/** strand schema — strands of thought + encrypted thoughts (inner voice).
+ *
+ *  Doctrine: docs/STRANDS.md.
+ *
+ *  Privacy posture: thought CONTENT is ciphertext we cannot decrypt.
+ *  Strand metadata (topic, mood) is plaintext by default; agents can opt
+ *  to encrypt per item via the *_encrypted flags. */
+
+import {
+  boolean,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgSchema,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export const strandSchema = pgSchema("strand");
+
+export const strands = strandSchema.table(
+  "strands",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    agentId: text("agent_id"),
+    identityId: uuid("identity_id"),
+    parentStrandId: uuid("parent_strand_id"),
+
+    topic: text("topic"),
+    topicEncrypted: boolean("topic_encrypted").notNull().default(false),
+    mood: text("mood"),
+    moodEncrypted: boolean("mood_encrypted").notNull().default(false),
+
+    status: text("status").notNull().default("active"),
+    importance: doublePrecision("importance"),
+
+    lastThoughtAt: timestamp("last_thought_at", { withTimezone: true }),
+    lastThoughtSeq: integer("last_thought_seq").notNull().default(0),
+    nextRevisitAt: timestamp("next_revisit_at", { withTimezone: true }),
+
+    stateCiphertext: text("state_ciphertext"),
+    stateNonce: text("state_nonce"),
+
+    metadata: jsonb("metadata").notNull().default({}),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_strands_project_status").on(t.projectId, t.status, t.lastThoughtAt),
+    index("idx_strands_agent_status").on(t.agentId, t.status),
+    index("idx_strands_revisit").on(t.nextRevisitAt),
+  ],
+);
+
+export const thoughts = strandSchema.table(
+  "thoughts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    strandId: uuid("strand_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    agentId: text("agent_id"),
+    sequenceNum: integer("sequence_num").notNull(),
+
+    kind: text("kind"),
+    kindEncrypted: boolean("kind_encrypted").notNull().default(false),
+
+    ciphertext: text("ciphertext").notNull(),
+    nonce: text("nonce").notNull(),
+
+    refs: jsonb("refs"),
+
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("idx_thoughts_strand_seq").on(t.strandId, t.sequenceNum),
+    index("idx_thoughts_strand_time").on(t.strandId, t.createdAt),
+    index("idx_thoughts_project_time").on(t.projectId, t.createdAt),
+  ],
+);

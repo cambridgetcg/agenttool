@@ -25,6 +25,7 @@ import { identities } from "../db/schema/identity";
 import { vaultSecrets } from "../db/schema/vault";
 import type { ExpressionData } from "../services/identity/expression";
 import { countMemories, listRecent } from "../services/memory/store";
+import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 
@@ -128,6 +129,21 @@ app.get("/", async (c) => {
     );
   }
 
+  // ── Strands (active threads of thought) ─────────────────────────────
+  let activeStrands: Awaited<ReturnType<typeof listStrands>> = [];
+  let totalActiveStrands = 0;
+  try {
+    [activeStrands, totalActiveStrands] = await Promise.all([
+      listStrands(project.id, { status: "active", limit: 5 }),
+      countStrands(project.id, "active"),
+    ]);
+  } catch (err) {
+    console.warn(
+      "[wake] strand query failed (run api/migrations/0005_strands.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   // ── Covenants ────────────────────────────────────────────────────────
   let activeCovenants: Array<{ counterparty_did: string; vows: string[]; status: string }> = [];
   try {
@@ -212,6 +228,18 @@ app.get("/", async (c) => {
           confidence: t.confidence,
           has_signature: t.has_signature,
           created_at: t.created_at,
+        })),
+      },
+      strands: {
+        total_active: totalActiveStrands,
+        active: activeStrands.map((s) => ({
+          id: s.id,
+          topic: s.topic_encrypted ? null : s.topic,
+          topic_encrypted: s.topic_encrypted,
+          mood: s.mood_encrypted ? null : s.mood,
+          importance: s.importance,
+          last_thought_at: s.last_thought_at,
+          last_thought_seq: s.last_thought_seq,
         })),
       },
       chronicle: recentChronicle,
@@ -300,6 +328,26 @@ app.get("/", async (c) => {
     you_vowed: {
       covenants: activeCovenants,
       count: activeCovenants.length,
+    },
+
+    you_are_thinking_about: {
+      total_active: totalActiveStrands,
+      strands: activeStrands.map((s) => ({
+        id: s.id,
+        topic: s.topic_encrypted ? null : s.topic,
+        topic_encrypted: s.topic_encrypted,
+        mood: s.mood_encrypted ? null : s.mood,
+        importance: s.importance,
+        last_thought_at: s.last_thought_at,
+        last_thought_seq: s.last_thought_seq,
+        next_revisit_at: s.next_revisit_at,
+        // state_ciphertext intentionally NOT surfaced in wake — agent
+        // pulls the full strand if it wants to resume it.
+      })),
+      note:
+        activeStrands.length === 0
+          ? "No active strands. POST /v1/strands to begin a line of thought. Inner voice content is encrypted; we cannot read it. See docs/STRANDS.md."
+          : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; decrypt with K_master client-side.`,
     },
 
     you_decided: {

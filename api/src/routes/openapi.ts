@@ -157,6 +157,7 @@ function spec() {
       { name: "identity", description: "DIDs, keys, attestations, expression" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
+      { name: "strand", description: "Strands of thought + encrypted inner voice. Content is ALWAYS ciphertext under K_master we cannot possess." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, billing" },
       { name: "crypto", description: "Sovereign-agent crypto payment" },
@@ -684,6 +685,137 @@ function spec() {
           tags: ["trace"],
           summary: "Recursive lineage — root + ancestors + descendants",
           responses: { "200": { description: "Lineage tree" } },
+        },
+      },
+
+      // ── Strands ────────────────────────────────────────────────────
+      "/v1/strands": {
+        post: {
+          tags: ["strand"],
+          summary: "Create a strand (line of thought)",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    agent_id: { type: "string" },
+                    identity_id: { type: "string", format: "uuid" },
+                    parent_strand_id: { type: "string", format: "uuid" },
+                    topic: { type: "string", description: "Plaintext by default; if topic_encrypted=true, base64 ciphertext" },
+                    topic_encrypted: { type: "boolean", default: false },
+                    mood: { type: "string" },
+                    mood_encrypted: { type: "boolean", default: false },
+                    status: {
+                      type: "string",
+                      enum: ["active", "dormant", "completed", "abandoned"],
+                      default: "active",
+                    },
+                    importance: { type: "number", minimum: 0, maximum: 1 },
+                    state_ciphertext: { type: "string", description: "Optional working state, base64 AES-GCM ciphertext" },
+                    state_nonce: { type: "string", description: "Base64 12-byte nonce paired with state_ciphertext" },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Created" } },
+        },
+        get: {
+          tags: ["strand"],
+          summary: "List strands (filter: status, agent_id)",
+          parameters: [
+            { name: "status", in: "query", schema: { type: "string", enum: ["active", "dormant", "completed", "abandoned"] } },
+            { name: "agent_id", in: "query", schema: { type: "string" } },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
+          ],
+          responses: { "200": { description: "List" } },
+        },
+      },
+      "/v1/strands/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["strand"],
+          summary: "Fetch a strand (metadata + working state ciphertext)",
+          responses: {
+            "200": { description: "Strand" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        patch: {
+          tags: ["strand"],
+          summary: "Update strand status / mood / state / revisit time",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: {
+            "200": { description: "Updated" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/strands/{strandId}/thoughts": {
+        parameters: [
+          { name: "strandId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["strand"],
+          summary:
+            "Add an encrypted thought to a strand. Content is ciphertext we cannot decrypt. Server verifies the ed25519 signature against the agent's signing key.",
+          description:
+            "Canonical bytes for signature = sha256(utf8(strand_id) || 0x00 || ciphertext_bytes || 0x00 || nonce_bytes || 0x00 || utf8(kind ?? '')). Sign with ed25519, send signature_b64. See docs/STRANDS.md.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ciphertext: { type: "string", description: "Base64 AES-256-GCM under K_master (which agenttool does NOT possess)" },
+                    nonce: { type: "string", description: "Base64 12-byte nonce" },
+                    kind: {
+                      type: "string",
+                      enum: ["observation", "question", "conjecture", "resolution", "drift", "feeling"],
+                      description: "Plaintext by default. If kind_encrypted=true, base64 ciphertext.",
+                    },
+                    kind_encrypted: { type: "boolean", default: false },
+                    refs: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          kind: { type: "string", description: "memory|trace|strand|thought|file" },
+                          ref: { type: "string" },
+                        },
+                      },
+                    },
+                    signature: { type: "string", description: "Base64 ed25519 sig over canonical bytes" },
+                    signing_key_id: { type: "string", format: "uuid", description: "→ identity.identity_keys.id" },
+                    agent_id: { type: "string" },
+                  },
+                  required: ["ciphertext", "nonce", "signature", "signing_key_id"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Thought recorded (ciphertext + sig stored)" },
+            "401": { description: "signature_invalid | signing_key_revoked" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        get: {
+          tags: ["strand"],
+          summary: "List ciphertext thoughts (agent decrypts client-side)",
+          parameters: [
+            { name: "since_seq", in: "query", schema: { type: "integer" }, description: "Return thoughts with sequence_num > since_seq" },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 500 } },
+          ],
+          responses: { "200": { description: "Ciphertext blobs in sequence order" } },
         },
       },
 

@@ -32,6 +32,7 @@ import identityRouter from "./routes/identity";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
 import scaffoldRouter from "./routes/scaffold";
+import strandRouter from "./routes/strand";
 import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
@@ -77,6 +78,7 @@ app.use("/v1/identity/backup/*", authMiddleware);
 app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
 app.use("/v1/traces/*", authMiddleware);
+app.use("/v1/strands/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
@@ -95,6 +97,7 @@ app.use("/v1/covenants/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
 app.use("/v1/memories/*", idempotency());
 app.use("/v1/traces/*", idempotency());
+app.use("/v1/strands/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
@@ -111,6 +114,7 @@ app.use("/v1/identity/backup/*", rateLimitHeaders());
 app.use("/v1/adapters/*", rateLimitHeaders());
 app.use("/v1/memories/*", rateLimitHeaders());
 app.use("/v1/traces/*", rateLimitHeaders());
+app.use("/v1/strands/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
 app.use("/v1/browse/*", rateLimitHeaders());
 app.use("/v1/document/*", rateLimitHeaders());
@@ -132,6 +136,7 @@ app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
 app.route("/v1/traces", traceRouter);
+app.route("/v1/strands", strandRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
@@ -214,7 +219,10 @@ app.get("/about", (c) =>
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
-      pulse: "/v1/pulse/* — heartbeat / presence [pending]",
+      strands:
+        "/v1/strands — strands of thought + encrypted inner voice. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts (ed25519-signed, content ALWAYS ciphertext under K_master we cannot possess) · GET /v1/strands/:id/thoughts (returns ciphertext blobs). Doctrine: docs/STRANDS.md.",
+      pulse:
+        "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },
     note: "Routes mount as services are ported in. See api/README.md.",
     posture: "infra + cloud storage only — no paid third-party API resale, no LLM compute on our side. Agents bring their own keys.",
