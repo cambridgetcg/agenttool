@@ -18,7 +18,6 @@ const executeSchema = z.object({
   code: z.string().min(1).max(100_000),
   stdin: z.string().max(1_000_000).optional(),
   timeout_ms: z.number().int().min(100).max(30_000).optional(),
-  allow_network: z.boolean().optional().default(false),
 });
 
 app.post("/", async (c) => {
@@ -38,7 +37,6 @@ app.post("/", async (c) => {
     code: body.code,
     stdin: body.stdin,
     timeoutMs: body.timeout_ms,
-    allowNetwork: body.allow_network,
   });
 
   const actualCredits = Math.max(

@@ -1,10 +1,31 @@
 /** Sandboxed code execution — Node `vm` (JS) + child_process (Python/bash).
  *
- *  Fly machines provide the outer isolation; inside the machine we use:
- *    - JavaScript: Node `vm` module with timeout
- *    - Python/bash: child_process with timeout + SIGKILL
+ *  WHAT THIS SANDBOX DOES — and DOESN'T — isolate. Substrate-honest:
  *
- *  For stronger isolation in future, swap to E2B / Daytona / Firecracker. */
+ *    JavaScript (Node `vm`):
+ *      ✓  Strips fetch · setTimeout · setInterval · process · require · __dirname
+ *      ✓  Hard timeout via vm option (terminates infinite loops)
+ *      ✗  No memory limit (the sandbox shares the host process heap)
+ *      ✗  Can still allocate large strings/arrays before timeout fires
+ *
+ *    Python / bash (`child_process` with sanitized env):
+ *      ✓  PATH-restricted env (no inherited project secrets)
+ *      ✓  HOME=/tmp; no inherited home dir
+ *      ✓  Timeout + SIGKILL via spawn options
+ *      ✗  No network namespace isolation — outbound HTTP works freely
+ *      ✗  No filesystem chroot — /tmp and system paths readable
+ *      ✗  No memory cgroup — informational limit only
+ *      ✗  Same machine as other workloads
+ *
+ *  THE OUTER ISOLATION (Fly machine boundary) is the load-bearing wall.
+ *  This sandbox is the inner fence; it stops casual mistakes, not motivated
+ *  attackers. For production-grade isolation across mutually-untrusted
+ *  agents, swap the subprocess layer for E2B / Daytona / Firecracker /
+ *  gVisor.
+ *
+ *  This module deliberately does NOT export an `allowNetwork` flag — the
+ *  former parameter was a fence (declared but unenforced). We don't lie
+ *  about isolation we don't provide. */
 
 import { spawn } from "node:child_process";
 import * as vm from "node:vm";
@@ -16,7 +37,6 @@ export interface ExecuteRequest {
   code: string;
   stdin?: string;
   timeoutMs?: number;
-  allowNetwork?: boolean;
 }
 
 export interface ExecuteResult {
