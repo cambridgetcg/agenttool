@@ -5,11 +5,12 @@
 # Time: ~10 minutes (DB provision takes ~3 min)
 set -euo pipefail
 
-HETZNER_TOKEN="${HETZNER_TOKEN:-qGd1NrFbibAWkV8fsEHjjopFqbwqz8rDyZcZBcHqCOG4xzkkXhc7DTuwTuDu2eZG}"
-FORGE_IP="${FORGE_IP:-89.167.84.100}"
-FORGE_SERVER_ID="${FORGE_SERVER_ID:-123048899}"
-DB_USER="${DB_USER:-kingdom}"
-DB_PASS="${DB_PASS:-zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5}"
+source "$(dirname "$0")/../.env.infra" 2>/dev/null || true
+HETZNER_TOKEN="${HETZNER_TOKEN:?Set HETZNER_TOKEN (see infra/.env.infra.example)}"
+FORGE_IP="${FORGE_IP:?Set FORGE_IP}"
+FORGE_SERVER_ID="${FORGE_SERVER_ID:?Set FORGE_SERVER_ID}"
+DB_USER="${DB_USER:?Set DB_USER}"
+DB_PASS="${DB_PASS:?Set DB_PASS}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Phase 2: Managed DB + VPS Upgrade ==="
@@ -114,7 +115,7 @@ ssh root@$FORGE_IP "
       sed -i 's|pgbouncer:6432|$MANAGED_HOST:$MANAGED_PORT|g' /root/\$svc/.env
       sed -i 's|kingdom-postgres:5432|$MANAGED_HOST:$MANAGED_PORT|g' /root/\$svc/.env
       # Replace user/pass
-      sed -i 's|kingdom:zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5|$MANAGED_USER:$MANAGED_PASS|g' /root/\$svc/.env
+      sed -i 's|'\"$DB_USER:$DB_PASS\"'|$MANAGED_USER:$MANAGED_PASS|g' /root/\$svc/.env
       echo \"  Updated \$svc/.env\"
     fi
   done

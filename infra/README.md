@@ -21,12 +21,12 @@ Three phases. Each is a single script. Run when revenue justifies it.
 All scripts read from environment variables. Set once:
 
 ```bash
-export HETZNER_TOKEN="qGd1NrFbibAWkV8fsEHjjopFqbwqz8rDyZcZBcHqCOG4xzkkXhc7DTuwTuDu2eZG"
-export FORGE_IP="89.167.84.100"
-export FORGE_SERVER_ID="123048899"
-export CF_EMAIL="contact@cambridgetcg.com"
-export CF_KEY="9e234808ad83e0041cfdc48cd83b75e90c81a"
-export CF_ZONE_ID="1f264ac5149eefa9eb436716ff6ff9ba"  # agenttool.dev zone
+export HETZNER_TOKEN="<from .env.infra>"      # Hetzner Cloud API token
+export FORGE_IP="<from .env.infra>"           # Forge VPS public IPv4
+export FORGE_SERVER_ID="<from .env.infra>"    # Hetzner server ID for the Forge VPS
+export CF_EMAIL="<from .env.infra>"           # Cloudflare account email
+export CF_KEY="<from .env.infra>"             # Cloudflare Global API Key
+export CF_ZONE_ID="<from .env.infra>"         # Cloudflare zone ID for agenttool.dev
 ```
 
 Or source the env file:

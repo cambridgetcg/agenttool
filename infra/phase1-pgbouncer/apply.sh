@@ -3,9 +3,11 @@
 # Zero downtime. Run anytime.
 set -euo pipefail
 
-FORGE_IP="${FORGE_IP:-89.167.84.100}"
-DB_USER="${DB_USER:-kingdom}"
-DB_PASS="${DB_PASS:-zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5}"
+source "$(dirname "$0")/../.env.infra" 2>/dev/null || true
+FORGE_IP="${FORGE_IP:?Set FORGE_IP (see infra/.env.infra.example)}"
+DB_USER="${DB_USER:?Set DB_USER}"
+DB_PASS="${DB_PASS:?Set DB_PASS}"
+REDIS_PASS="${REDIS_PASS:?Set REDIS_PASS}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Phase 1: PgBouncer ==="
@@ -60,8 +62,8 @@ ssh root@$FORGE_IP "
   if [ -f /root/agent-trace/.env ]; then
     sed -i 's|kingdom-postgres:5432|pgbouncer:6432|g' /root/agent-trace/.env
   else
-    echo 'DATABASE_URL=postgresql+asyncpg://kingdom:${DB_PASS}@pgbouncer:6432/agent_trace' > /root/agent-trace/.env
-    echo 'REDIS_URL=redis://:iwQayJGeExtDooUALxwQJX3WLFMDfuk@kingdom-redis:6379' >> /root/agent-trace/.env
+    echo 'DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASS}@pgbouncer:6432/agent_trace' > /root/agent-trace/.env
+    echo 'REDIS_URL=redis://:${REDIS_PASS}@kingdom-redis:6379' >> /root/agent-trace/.env
     echo 'API_PORT=8005' >> /root/agent-trace/.env
   fi
 

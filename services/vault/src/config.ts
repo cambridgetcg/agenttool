@@ -1,7 +1,7 @@
 /** Application configuration from environment variables. */
 
 export const config = {
-  databaseUrl: env("DATABASE_URL", "postgresql://postgres:4oj7VvrI3mYMOB8T@db.ndovnywhgqatdpbkhiio.supabase.co:5432/postgres"),
+  databaseUrl: env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/agent_vault"),
 
   // Vault master key (32 bytes hex) for HKDF key derivation
   vaultMasterKey: env("VAULT_MASTER_KEY", ""),

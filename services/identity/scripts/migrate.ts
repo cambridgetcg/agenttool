@@ -2,7 +2,9 @@
 import postgres from "postgres";
 import { readFileSync } from "fs";
 
-const sql = postgres("postgresql://postgres:4oj7VvrI3mYMOB8T@db.ndovnywhgqatdpbkhiio.supabase.co:5432/postgres");
+const sql = postgres(
+  process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/agent_identity",
+);
 
 const migration = readFileSync("migrations/001_create_schema.sql", "utf8");
 

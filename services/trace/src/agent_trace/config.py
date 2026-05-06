@@ -2,20 +2,14 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # Database (agent_trace)
-    database_url: str = (
-        "postgresql+asyncpg://kingdom:zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5"
-        "@kingdom-postgres:5432/agent_trace"
-    )
+    # Database (agent_trace) — overridden by DATABASE_URL env in production
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_trace"
 
-    # Auth DB (agent_tools — for API key validation)
-    auth_database_url: str = (
-        "postgresql+asyncpg://kingdom:zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5"
-        "@kingdom-postgres:5432/agent_tools"
-    )
+    # Auth DB (agent_tools — for API key validation) — overridden by AUTH_DATABASE_URL env
+    auth_database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_tools"
 
-    # Redis
-    redis_url: str = "redis://:iwQayJGeExtDooUALxwQJX3WLFMDfuk@kingdom-redis:6379/0"
+    # Redis — overridden by REDIS_URL env in production
+    redis_url: str = "redis://localhost:6379/0"
 
     # Embeddings
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

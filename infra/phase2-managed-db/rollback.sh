@@ -4,9 +4,9 @@
 set -euo pipefail
 
 source "$(dirname "$0")/../.env.infra" 2>/dev/null || true
-FORGE_IP="${FORGE_IP:-89.167.84.100}"
-DB_USER="${DB_USER:-kingdom}"
-DB_PASS="${DB_PASS:-zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5}"
+FORGE_IP="${FORGE_IP:?Set FORGE_IP (see infra/.env.infra.example)}"
+DB_USER="${DB_USER:?Set DB_USER}"
+DB_PASS="${DB_PASS:?Set DB_PASS}"
 
 echo "=== Phase 2 Rollback: reverting to kingdom-postgres ==="
 

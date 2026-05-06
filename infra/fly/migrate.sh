@@ -30,9 +30,9 @@ echo ""
 
 # ── 1. Migrate PostgreSQL: Forge → Supabase ───────────────────────────────────
 echo "[1/4] Migrating databases to Supabase..."
-FORGE_IP="89.167.84.100"
-DB_USER="kingdom"
-DB_PASS="zMj9TbCmDBHD6FvoOel3qLy2XfhoxU5"
+FORGE_IP="${FORGE_IP:?Set FORGE_IP (see infra/.env.infra.example)}"
+DB_USER="${DB_USER:?Set DB_USER}"
+DB_PASS="${DB_PASS:?Set DB_PASS}"
 
 for db in kingdom agent_tools agent_economy agent_trace; do
   echo "  Dumping $db from Forge..."
@@ -67,7 +67,7 @@ for entry in "${SERVICES[@]}"; do
     ECONOMY_URL="https://agent-economy.fly.dev" \
     ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
     OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
-    SERPAPI_KEY="${SERPAPI_KEY:-8676e3f93ace9874213fb6f6a6ec7e69a3a0428e3927e4ec5d0865b078ddb40c}" \
+    SERPAPI_KEY="${SERPAPI_KEY:?Set SERPAPI_KEY}" \
     --app "$name" 2>/dev/null
 
   # Extra secrets for agent-economy
@@ -113,9 +113,9 @@ echo ""
 # ── 4. Update Cloudflare: api.agenttool.dev → Fly.io ─────────────────────────
 echo "[4/4] Updating Cloudflare DNS to route through Fly.io..."
 
-CF_EMAIL="contact@cambridgetcg.com"
-CF_KEY="9e234808ad83e0041cfdc48cd83b75e90c81a"
-CF_ZONE_ID="1f264ac5149eefa9eb436716ff6ff9ba"
+CF_EMAIL="${CF_EMAIL:?Set CF_EMAIL}"
+CF_KEY="${CF_KEY:?Set CF_KEY}"
+CF_ZONE_ID="${CF_ZONE_ID:?Set CF_ZONE_ID}"
 
 # Get Fly.io IP for agent-memory (primary entry point, Caddy currently routes to it)
 FLY_IP=$(flyctl ips list --app agent-memory --json 2>/dev/null \

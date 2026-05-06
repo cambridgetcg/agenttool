@@ -11,7 +11,7 @@
 
 ## DNS (Cloudflare)
 
-Add to `agenttool.dev` zone (Zone ID: `1f264ac5149eefa9eb436716ff6ff9ba`):
+Add to `agenttool.dev` zone (Zone ID: see `infra/.env.infra` → `$CF_ZONE_ID`):
 
 ```
 A  economy.agenttool.dev  →  <hetzner_ip>  (proxied)
