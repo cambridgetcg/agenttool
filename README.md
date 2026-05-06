@@ -62,31 +62,40 @@ Single `AT_API_KEY`. Nine namespaces (one per service — including `pulse` and 
 
 ## Infra reality
 
-### Active (Fly-deployed)
+### Fly configs
 
-`infra/fly/` contains app configs and a `migrate.sh` script for **5 services**:
+`infra/fly/` contains app configs for **all 9 services**:
 
 ```
+infra/fly/agent-bootstrap.toml
+infra/fly/agent-economy.toml
+infra/fly/agent-identity.toml
 infra/fly/agent-memory.toml
+infra/fly/agent-pulse.toml
 infra/fly/agent-tools.toml
 infra/fly/agent-trace.toml
-infra/fly/agent-economy.toml
-infra/fly/agent-verify.toml
+infra/fly/agent-verify.toml      # declares app: agent-verify-api
+infra/fly/atool-vault.toml       # declares app: atool-vault
 ```
 
-These are the 5 with top-level READMEs and the most LOC. Service READMEs (`memory`, `tools`) badge as live at `api.agenttool.dev`.
+Memory, tools, trace, economy, verify are the 5 with top-level READMEs and the most LOC; service READMEs (`memory`, `tools`) badge as live at `api.agenttool.dev`. The other 4 (`bootstrap`, `identity`, `pulse`, `vault`) are now wired in `infra/fly/` for deploy parity even if not currently live.
 
-### Configured but not in `infra/fly/`
-
-`bootstrap`, `identity`, `pulse`, `vault` — each has its own `services/<svc>/fly.toml` but **no entry in `infra/fly/`**. They are deploy-ready but not wired into the migration script.
+The centralised configs use the migration-friendly settings (`auto_stop_machines = true`, `min_machines_running = 0`); per-service `services/<svc>/fly.toml` files use always-on (`false` / `1`).
 
 ### Fly app naming inconsistency (worth a future cleanup)
 
-- 7 services use `agent-<svc>` (e.g. `agent-memory`)
-- **`vault`** declares app name `atool-vault` in its `fly.toml`
-- **`verify`** declares app name `atool-proof` in its `fly.toml`
+The same service can declare different app names in different files:
 
-Likely an in-flight rename or namespace collision that was not propagated.
+- **Most services** consistently use `agent-<svc>` across both per-service and centralised toml.
+- **`verify`** has three names floating around:
+  - `services/verify/fly.toml` declares `app = "atool-proof"`
+  - `infra/fly/agent-verify.toml` declares `app = "agent-verify-api"`
+  - The filename `agent-verify.toml` itself implies `agent-verify`
+- **`vault`** has two:
+  - `services/vault/fly.toml` and `infra/fly/atool-vault.toml` both declare `app = "atool-vault"`
+  - The expected convention would be `agent-vault`
+
+Likely in-flight renames or namespace collisions that were not propagated. **Resolution requires knowing the current live deployment names** (rename via `fly apps move` is non-trivial).
 
 ### Phased Forge plan (legacy origin)
 
@@ -148,13 +157,10 @@ The architecture is downstream of these principles. Read SOUL.md to see why each
 
 ## Known gaps (the honest list)
 
-- **`pulse` is a scaffold** — three vanilla `.js` files, no tests, no README. Presence protocol is documented in service `PURPOSE.md` but not implemented.
-- **`identity`, `vault`, `bootstrap` have no top-level README.**
-- **`identity` and `vault` carry `.reference` / `.ref` files** (Dockerfile, package.json, tsconfig, drizzle.config) — evidence of an in-flight refactor that did not converge. Decide whether to complete or remove.
-- **Fly app naming inconsistency** — `atool-vault`, `atool-proof` vs the `agent-*` pattern of the others.
-- **`bootstrap` and `identity` and `vault` and `pulse` are absent from `infra/fly/`** — deploy-ready but not in the migration script.
+- **`pulse` is a scaffold** — three vanilla `.js` files, no tests. Presence protocol is documented in service `PURPOSE.md` but not implemented.
+- **Fly app naming inconsistency** — `verify` has three names across its files (`agent-verify-api`, `atool-proof`, `agent-verify`); `vault` declares `atool-vault` instead of the `agent-*` convention. Resolution requires confirming live deployment names.
+- **`infra/fly/migrate.sh` has stale paths** — references `/Users/yu/Desktop/agent-<svc>` from the pre-consolidation layout. Should be updated to use the monorepo paths (`services/<svc>`).
 - **Phase scripts assume a Forge VPS** that may or may not still be the live origin. The `infra/README.md` was scrubbed of legacy credentials but its topology claims may trail current reality.
-- **`apps/landing` and `apps/dashboard` lack READMEs.** Their CLAUDE.md files document the project for AI assistants but not for human contributors.
 
 ---
 
