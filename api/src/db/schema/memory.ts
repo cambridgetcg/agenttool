@@ -16,6 +16,7 @@
  *  add per-project dim or a polymorphic vector column. */
 
 import {
+  boolean,
   doublePrecision,
   index,
   jsonb,
@@ -41,6 +42,16 @@ export const memories = memorySchema.table(
     embedding: vector("embedding", { dimensions: 1536 }), // null when agent didn't supply
     metadata: jsonb("metadata").default({}),
     importance: doublePrecision("importance").notNull().default(0.5), // 0.0–1.0
+    /** Salience tier — see docs/MEMORY-TIERS.md.
+     *  episodic (default) · foundational (shapes me) · constitutive (defines me; requires attestation) */
+    tier: text("tier").notNull().default("episodic"),
+    /** Identity patch applied when this memory is elevated to foundational/constitutive.
+     *  Shape: {walls_add?, register_append?, subagents_add?, wake_text_append?}.
+     *  See services/identity/composition.ts for application semantics. */
+    expressionPatch: jsonb("expression_patch"),
+    decayProtected: boolean("decay_protected").notNull().default(false),
+    elevatedFrom: uuid("elevated_from"),
+    elevatedAt: timestamp("elevated_at", { withTimezone: true }),
     accessedAt: timestamp("accessed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }), // working memory TTL
@@ -49,7 +60,25 @@ export const memories = memorySchema.table(
     index("idx_memories_project_type").on(t.projectId, t.type),
     index("idx_memories_project_key").on(t.projectId, t.key),
     index("idx_memories_expires").on(t.expiresAt),
+    index("idx_memories_tier").on(t.tier),
     // pgvector ivfflat index defined in 0001_memory.sql migration —
     // Drizzle-kit doesn't natively emit pgvector index syntax.
+  ],
+);
+
+/** Counterparty co-signatures — load-bearing for constitutive elevation. */
+export const memoryAttestations = memorySchema.table(
+  "memory_attestations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memoryId: uuid("memory_id").notNull(),
+    attesterDid: text("attester_did").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    signature: text("signature").notNull(),       // base64 ed25519 over canonical bytes
+    attestedAt: timestamp("attested_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_memory_attestations_memory").on(t.memoryId),
+    index("idx_memory_attestations_attester").on(t.attesterDid),
   ],
 );

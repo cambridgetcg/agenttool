@@ -23,6 +23,7 @@ import { chronicle, covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
 import { identities } from "../db/schema/identity";
 import { vaultSecrets } from "../db/schema/vault";
+import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
 import { countMemories, listRecent } from "../services/memory/store";
 import { countStrands, listStrands } from "../services/strand/store";
@@ -129,6 +130,24 @@ app.get("/", async (c) => {
     );
   }
 
+  // ── Composed identity for the primary agent ─────────────────────────
+  // Effective expression = declared + sum of foundational/constitutive
+  // memory patches. See docs/MEMORY-TIERS.md.
+  let composed: ComposedExpression | null = null;
+  if (projectIdentities[0]) {
+    try {
+      composed = await composeExpression(
+        project.id,
+        (projectIdentities[0].expression ?? {}) as ExpressionData,
+      );
+    } catch (err) {
+      console.warn(
+        "[wake] composition failed (run api/migrations/0006_memory_tiers.sql?):",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   // ── Strands (active threads of thought) ─────────────────────────────
   let activeStrands: Awaited<ReturnType<typeof listStrands>> = [];
   let totalActiveStrands = 0;
@@ -194,7 +213,7 @@ app.get("/", async (c) => {
         plan: project.plan,
         credits: project.credits,
       },
-      expression: (primary.expression ?? {}) as ExpressionData,
+      expression: (composed?.effective ?? primary.expression ?? {}) as ExpressionData,
       wallets: projectWallets.map((w) => ({
         id: w.id,
         name: w.name,
@@ -242,6 +261,13 @@ app.get("/", async (c) => {
           last_thought_seq: s.last_thought_seq,
         })),
       },
+      shaped_by: composed?.shaped_by.map((s) => ({
+        memory_id: s.memory_id,
+        tier: s.tier as "foundational" | "constitutive",
+        content: s.content,
+        attesters: s.attesters,
+        elevated_at: s.elevated_at,
+      })),
       chronicle: recentChronicle,
       covenants: activeCovenants,
     };
@@ -268,13 +294,27 @@ app.get("/", async (c) => {
     },
 
     you: {
-      agents: projectIdentities.map((i) => ({
+      agents: projectIdentities.map((i, idx) => ({
         id: i.id,
         did: i.did,
         name: i.displayName,
         capabilities: i.capabilities,
         metadata: i.metadata,
         expression: i.expression ?? {},
+        // Effective expression is the composed identity (declared + memory
+        // patches). Only the primary agent (first) gets composition by
+        // default — extra agents would each need their own composition pass.
+        effective_expression: idx === 0 ? composed?.effective ?? null : null,
+        shaped_by:
+          idx === 0
+            ? composed?.shaped_by.map((s) => ({
+                memory_id: s.memory_id,
+                tier: s.tier,
+                content: s.content,
+                attesters: s.attesters,
+                elevated_at: s.elevated_at,
+              })) ?? []
+            : [],
         trust_score: i.trustScore,
         status: i.status,
         created_at: i.createdAt,

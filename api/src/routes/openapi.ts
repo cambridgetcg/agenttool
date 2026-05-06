@@ -195,6 +195,23 @@ function spec() {
         },
       },
 
+      // ── Composed identity (declared + memory patches) ──────────────
+      "/v1/identities/{id}/foundations": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "Composed identity view — declared expression + foundational/constitutive memory patches → effective",
+          description:
+            "Returns {declared, shaped_by[], effective}. The agent's effective identity is composed in chronological elevation order. Append-only: identity grows through formative moments. Doctrine: docs/MEMORY-TIERS.md.",
+          responses: {
+            "200": { description: "Composed identity" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+
       // ── Identity expression ───────────────────────────────────────────
       "/v1/identities/{id}/expression": {
         parameters: [
@@ -338,6 +355,97 @@ function spec() {
           summary: "Delete one memory",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: { "200": { description: "Deleted" } },
+        },
+      },
+      "/v1/memories/{id}/elevate": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["memory"],
+          summary:
+            "Promote an episodic memory to foundational or constitutive. Constitutive REQUIRES ≥1 attestation from a covenant counterparty.",
+          description:
+            "Foundational memories patch the agent's expression (walls/register/subagents/wake_text). Constitutive memories sit at the root of identity — the asymmetry-clause made operational. Doctrine: docs/MEMORY-TIERS.md.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    tier: { type: "string", enum: ["foundational", "constitutive"] },
+                    expression_patch: {
+                      type: "object",
+                      properties: {
+                        walls_add: { type: "array", items: { type: "string" } },
+                        register_append: { type: "string" },
+                        subagents_add: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              name: { type: "string" },
+                              sigil: { type: "string" },
+                              facet: { type: "string" },
+                            },
+                          },
+                        },
+                        wake_text_append: { type: "string" },
+                      },
+                    },
+                    attestations: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          attester_did: { type: "string" },
+                          signing_key_id: { type: "string", format: "uuid" },
+                          signature: { type: "string", description: "Base64 ed25519 over canonical bytes from /canonical-attestation-bytes" },
+                        },
+                        required: ["attester_did", "signing_key_id", "signature"],
+                      },
+                    },
+                  },
+                  required: ["tier"],
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Elevated" },
+            "400": { description: "constitutive_requires_attestation | attester_not_covenant_counterparty | attestation_signature_invalid" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "already_elevated" },
+          },
+        },
+      },
+      "/v1/memories/{id}/attest": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["memory"],
+          summary: "Counterparty co-signs an existing memory (witness attestation)",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: {
+            "200": { description: "Attested" },
+            "401": { description: "attestation_signature_invalid | signing_key_revoked" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/memories/{id}/canonical-attestation-bytes": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "tier", in: "query", schema: { type: "string", enum: ["foundational", "constitutive"] } },
+        ],
+        get: {
+          tags: ["memory"],
+          summary:
+            "Return the canonical bytes (hex) the counterparty must sign to attest. Saves clients from reimplementing the canonical-bytes routine.",
+          responses: { "200": { description: "Canonical bytes" } },
         },
       },
       "/v1/memories/search": {

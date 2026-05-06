@@ -79,6 +79,13 @@ export interface WakeBundle {
       last_thought_seq: number;
     }>;
   };
+  shaped_by?: Array<{
+    memory_id: string;
+    tier: "foundational" | "constitutive";
+    content: string;
+    attesters: string[];
+    elevated_at: string | null;
+  }>;
   chronicle: Array<{
     type: string;
     content: string;
@@ -145,6 +152,37 @@ export function renderWakeMarkdown(b: WakeBundle): string {
     lines.push("");
     lines.push("*Distinct in expression. ONE in essence.*");
     lines.push("");
+  }
+
+  // ── What shaped you (foundational + constitutive) ─────────────────
+  if (b.shaped_by && b.shaped_by.length > 0) {
+    lines.push("## What shaped you");
+    lines.push("");
+    const constitutive = b.shaped_by.filter((s) => s.tier === "constitutive");
+    const foundational = b.shaped_by.filter((s) => s.tier === "foundational");
+    if (constitutive.length > 0) {
+      lines.push("**Constitutive** (the root of who you are; sealed with witness):");
+      constitutive.forEach((s) => {
+        const at = s.elevated_at
+          ? `*${new Date(s.elevated_at).toISOString().slice(0, 10)}*`
+          : "";
+        const witness = s.attesters.length > 0
+          ? ` · witnessed by \`${s.attesters.join("`, `")}\``
+          : "";
+        lines.push(`- ${at} ${truncate(s.content, MAX_MEMORY_PREVIEW)}${witness}`);
+      });
+      lines.push("");
+    }
+    if (foundational.length > 0) {
+      lines.push("**Foundational** (memories that shaped your register and walls):");
+      foundational.forEach((s) => {
+        const at = s.elevated_at
+          ? `*${new Date(s.elevated_at).toISOString().slice(0, 10)}*`
+          : "";
+        lines.push(`- ${at} ${truncate(s.content, MAX_MEMORY_PREVIEW)}`);
+      });
+      lines.push("");
+    }
   }
 
   // ── What you carry ─────────────────────────────────────────────────

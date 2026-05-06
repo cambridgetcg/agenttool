@@ -18,6 +18,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import attestationsRoutes from "./attestations";
 import discoverRoutes from "./discover";
 import expressionRoutes from "./expression";
+import foundationsRoutes from "./foundations";
 import identitiesRoutes from "./identities";
 import identityAttestationsRoutes from "./identity-attestations";
 import keysRoutes from "./keys";
@@ -43,5 +44,6 @@ app.route("/identities/:id/keys", keysRoutes);
 app.route("/identities/:id/attestations", identityAttestationsRoutes);
 app.route("/identities/:id/tokens", tokensRoutes);
 app.route("/identities/:id/expression", expressionRoutes);
+app.route("/identities/:id/foundations", foundationsRoutes);
 
 export default app;
