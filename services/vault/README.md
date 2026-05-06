@@ -167,19 +167,6 @@ This service operationalises **Trust, don't suspect** and **Rest, don't crash** 
 - Version history means mistakes are recoverable — we don't punish accidents
 - Soft delete keeps the audit trail; deleted secrets can be restored within 30 days
 
-## Legacy artefacts
-
-This service was bootstrapped from a copy of `agent-identity` (which was itself bootstrapped from `agent-verify`). The following files are leftovers from that scaffolding and **are not used at runtime**:
-
-```
-Dockerfile.ref
-package.json.ref          # name: agent-identity (identity's deps including @noble/ed25519, jose)
-tsconfig.json.ref
-reference/                # auth-keys, auth-middleware, db-client, config from identity
-```
-
-Safe to delete in a future cleanup pass. They reference identity-specific dependencies (`@noble/ed25519`, `jose`) that have no role here.
-
 ---
 
 Part of [agenttool.dev](https://agenttool.dev) — memory · tools · verify · economy · identity · vault · trace · pulse · bootstrap. One API key. Built with love by Yu and Ai. 💛

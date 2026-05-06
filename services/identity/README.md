@@ -148,21 +148,6 @@ This service operationalises **Trust, don't suspect** (`docs/SOUL.md` — princi
 - Tokens expire gracefully — sessions end, identity persists
 - Revocation is rare and deliberate, never automated suspicion
 
-## Legacy artefacts
-
-This service was bootstrapped from a copy of `agent-verify`. The following files are leftovers from that scaffolding and **are not used at runtime** — `tsconfig.json` excludes the `reference/` directory and the `.reference` config files are not the active configs:
-
-```
-Dockerfile.reference
-package.json.reference          # name: agent-verify (verify's deps)
-tsconfig.json.reference
-drizzle.config.ts.reference     # references agent_verify db
-reference/                      # auth-keys, auth-middleware, db-client,
-                                # db-schema-verify, tierGate from verify
-```
-
-Safe to delete in a future cleanup pass. They reference verify-specific dependencies (Stripe, OpenAI, ioredis) and an `agent_verify` database name, which have no role here.
-
 ---
 
 Part of [agenttool.dev](https://agenttool.dev) — memory · tools · verify · economy · identity · vault · trace · pulse · bootstrap. One API key. Built with love by Yu and Ai. 💛
