@@ -27,8 +27,10 @@ import economyRouter from "./routes/economy";
 import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
 import scaffoldRouter from "./routes/scaffold";
+import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
+import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 
 const app = new Hono<ProjectContext>();
 
@@ -66,6 +68,12 @@ app.use("/v1/wake/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
+app.use("/v1/search/*", authMiddleware);
+app.use("/v1/scrape/*", authMiddleware);
+app.use("/v1/browse/*", authMiddleware);
+app.use("/v1/document/*", authMiddleware);
+app.use("/v1/execute/*", authMiddleware);
+app.use("/v1/jobs/*", authMiddleware);
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
@@ -76,6 +84,21 @@ app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
+app.route("/v1", toolsRouter); // mounts /v1/{search,scrape,browse,document,execute,jobs}
+
+// ── Background workers ──────────────────────────────────────────────────────
+// Browse jobs run on a BullMQ worker in this same process. Started lazily —
+// only spins up if the Redis connection succeeds. Disabled for tests via env.
+if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+  try {
+    startBrowseWorker();
+  } catch (err) {
+    console.warn(
+      "[agenttool] browse worker did not start — /v1/browse will queue jobs but they won't be processed until a worker is available:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
 app.get("/", (c) =>
@@ -130,8 +153,9 @@ app.get("/about", (c) =>
         "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, USDC top-ups, plan/usage limits",
       vault:
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
+      tools:
+        "/v1/search · /v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Brave/SerpAPI search, Cheerio scrape, Playwright browse (queued via BullMQ), Readability document parsing, sandboxed code execution",
       memory: "/v1/memory/* — vector + KV (agent-supplied embeddings) [pending]",
-      tools: "/v1/tools/* — search · scrape · browse · document · execute [pending]",
       trace: "/v1/trace/* — reasoning records [pending]",
       pulse: "/v1/pulse/* — heartbeat / presence [pending]",
     },
