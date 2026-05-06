@@ -23,7 +23,7 @@ import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
 import bootstrapRouter from "./routes/bootstrap";
 import continuityRouter from "./routes/continuity";
-import economyRouter from "./routes/economy";
+import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
 import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
 import memoryRouter from "./routes/memory";
@@ -79,6 +79,9 @@ app.use("/v1/jobs/*", authMiddleware);
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
 app.route("/v1", economyRouter);
+// Public — signature-verified per chain. Mounted at parent so the
+// authMiddleware on /v1/wallets/* doesn't fire for inbound transfer events.
+app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/bootstrap/scaffold", scaffoldRouter);
@@ -152,7 +155,9 @@ app.get("/about", (c) =>
       identity:
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
       economy:
-        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, USDC top-ups, plan/usage limits",
+        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, plan/usage limits",
+      crypto:
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — sovereign-agent crypto payment foundation: BIP44 multi-chain deposit derivation, EIP-191 onchain identity binding, USDC ingestion (Alchemy webhook on EVM chains). See docs/CRYPTO-PAYMENT.md.",
       vault:
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       tools:

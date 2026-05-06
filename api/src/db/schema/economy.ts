@@ -10,6 +10,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgSchema,
   text,
   timestamp,
@@ -139,6 +140,98 @@ export const stripeEvents = economySchema.table("stripe_events", {
   stripeEventId: text("stripe_event_id").primaryKey(),
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Crypto: deposit addresses · onchain identities · payouts · webhooks ────
+//
+//   deposit_addresses     — derived BIP44 addresses per (wallet, chain)
+//   onchain_identities    — verified bindings (wallet ↔ on-chain address)
+//   crypto_payouts        — outgoing transfers (request → broadcast → confirm)
+//   crypto_webhook_events — receipts; idempotency for inbound transfer events
+//
+// Doctrine: docs/CRYPTO-PAYMENT.md
+
+export const depositAddresses = economySchema.table(
+  "deposit_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    chain: text("chain").notNull(),         // ethereum | base | polygon | arbitrum | optimism | solana
+    token: text("token").notNull(),         // USDC (foundation: USDC everywhere)
+    address: text("address").notNull(),
+    derivationPath: text("derivation_path").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("idx_deposit_chain_addr").on(t.chain, t.address),
+    index("idx_deposit_wallet").on(t.walletId),
+  ],
+);
+
+export const onchainIdentities = economySchema.table(
+  "onchain_identities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    chain: text("chain").notNull(),
+    address: text("address").notNull(),
+    challenge: text("challenge").notNull(),     // the signed message
+    signature: text("signature").notNull(),     // hex
+    verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("idx_onchain_chain_addr").on(t.chain, t.address),
+    index("idx_onchain_wallet").on(t.walletId),
+  ],
+);
+
+export const cryptoPayouts = economySchema.table(
+  "crypto_payouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id),
+    projectId: uuid("project_id").notNull(),    // logical FK → tools.projects.id
+    chain: text("chain").notNull(),
+    token: text("token").notNull(),
+    // amount in token base-units (USDC has 6 decimals → 1.5 USDC = 1500000)
+    amountBase: numeric("amount_base", { precision: 78, scale: 0 }).notNull(),
+    destinationAddress: text("destination_address").notNull(),
+    status: text("status").notNull().default("requested"), // requested | signing | broadcast | confirmed | failed
+    txHash: text("tx_hash"),
+    error: text("error"),
+    metadata: jsonb("metadata").default({}),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_payouts_wallet").on(t.walletId),
+    index("idx_payouts_status").on(t.status),
+  ],
+);
+
+/** Idempotency log for inbound crypto webhooks across chains. */
+export const cryptoWebhookEvents = economySchema.table(
+  "crypto_webhook_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chain: text("chain").notNull(),
+    txHash: text("tx_hash").notNull(),
+    logIndex: integer("log_index"),               // for multi-transfer txs
+    walletId: uuid("wallet_id").references(() => wallets.id),
+    creditsAdded: bigint("credits_added", { mode: "number" }),
+    rawPayload: jsonb("raw_payload").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("idx_crypto_event_dedupe").on(t.chain, t.txHash, t.logIndex),
+    index("idx_crypto_event_wallet").on(t.walletId),
+  ],
+);
 
 // ─── Daily usage counters (aggregated to monthly for plan limit enforcement)
 
