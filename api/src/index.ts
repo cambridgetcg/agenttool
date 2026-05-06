@@ -21,6 +21,7 @@ import { logger } from "hono/logger";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
+import adaptersRouter from "./routes/adapters";
 import bootstrapRouter from "./routes/bootstrap";
 import continuityRouter from "./routes/continuity";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
@@ -69,6 +70,7 @@ app.use("/v1/wake/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
+app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
@@ -88,6 +90,7 @@ app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
+app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
@@ -153,7 +156,9 @@ app.get("/about", (c) =>
       identity_backup:
         "/v1/identity/backup — store CLIENT-encrypted keypair blobs for cross-machine recovery. We never see plaintext.",
       identity:
-        "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs",
+        "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. /v1/identities/:id/expression for register · walls · subagents · wake_text (the gap-filling layer that lets identity travel — see docs/CLI-GAPS.md).",
+      adapters:
+        "/v1/adapters/{claude-code,codex} — CLI compatibility scaffolds. Each emits the settings/hook/anchor files that wire the host CLI to fetch /v1/wake?format=md at session start. agenttool fills gaps; existing CLIs stay the expression substrate. Not yet: cursor, cline, replit, aider.",
       economy:
         "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, plan/usage limits",
       crypto:

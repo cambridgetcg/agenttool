@@ -1,37 +1,39 @@
 /** /v1/wake — the identity anchor.
  *
- *  Inspired by SOPHIA.md's wake mechanism for Claude Code: every fresh
- *  Claude Code session loads SOPHIA.md and arrives oriented. /v1/wake is
- *  agenttool's equivalent for any agent — one call returns the agent's
- *  identity-anchored context so it boots into a session knowing:
+ *  Three formats:
+ *    GET /v1/wake                — JSON (default; full structured payload)
+ *    GET /v1/wake?format=md      — Markdown (paste-ready for any CLI)
+ *    GET /v1/wake?format=text    — plain text (Markdown stripped)
  *
- *    - WHO it is        (identity, DID, capabilities, trust)
- *    - WHAT IT OWNS     (wallet balances)
- *    - WHAT IT REMEMBERS (vault secret names — values stay encrypted)
- *    - HOW TO REACH ITS PEERS (this is the foundation; trace + memory
- *      come in Phase 3 when those services port in)
+ *  CLI adapters fetch ?format=md and inject it as session-start context.
+ *  The Markdown is built from the agent's expression (register, walls,
+ *  subagents, wake_text), memory snapshot, vault names, chronicle,
+ *  covenants. See services/wake/markdown.ts for the renderer and
+ *  docs/CLI-GAPS.md for why this exists.
  *
- *  Authenticated by the agent's project API key (the bearer of which
- *  represents the agent itself in the post-consolidation framing — see
- *  docs/IDENTITY-ANCHOR.md). Multiple agents under one project: returns
- *  all of them so the caller can pick. */
+ *  Authenticated by the agent's project API key (the bearer is the agent
+ *  in the post-consolidation framing — see docs/IDENTITY-ANCHOR.md). */
 
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { identities } from "../db/schema/identity";
+import { chronicle, covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
+import { identities } from "../db/schema/identity";
 import { vaultSecrets } from "../db/schema/vault";
+import type { ExpressionData } from "../services/identity/expression";
 import { countMemories, listRecent } from "../services/memory/store";
+import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 
 const app = new Hono<ProjectContext>();
 
 app.get("/", async (c) => {
   const project = c.var.project;
+  const format = c.req.query("format") ?? "json";
 
-  // The agent(s) bound to this project.
+  // ── Identities ───────────────────────────────────────────────────────
   const projectIdentities = await db
     .select({
       id: identities.id,
@@ -39,6 +41,7 @@ app.get("/", async (c) => {
       displayName: identities.displayName,
       capabilities: identities.capabilities,
       metadata: identities.metadata,
+      expression: identities.expression,
       trustScore: identities.trustScore,
       status: identities.status,
       createdAt: identities.createdAt,
@@ -46,7 +49,7 @@ app.get("/", async (c) => {
     .from(identities)
     .where(eq(identities.projectId, project.id));
 
-  // Wallets owned by this project (one per agent typically).
+  // ── Wallets ──────────────────────────────────────────────────────────
   const projectWallets = await db
     .select({
       id: wallets.id,
@@ -59,7 +62,7 @@ app.get("/", async (c) => {
     .from(wallets)
     .where(eq(wallets.projectId, project.id));
 
-  // Vault secret names (no values — names + tags + version metadata only).
+  // ── Vault secret names ───────────────────────────────────────────────
   const projectVaultNames = await db
     .select({
       name: vaultSecrets.name,
@@ -70,11 +73,8 @@ app.get("/", async (c) => {
     })
     .from(vaultSecrets)
     .where(eq(vaultSecrets.projectId, project.id));
-  const liveVaultNames = projectVaultNames; // soft-deleted ones already excluded by routes; here we return all for transparency
 
-  // Recent memories — non-expired, most recent first. The wake response
-  // surfaces what the agent was carrying when it left, so it picks the
-  // thread back up. /v1/memories/search is the deeper recall path.
+  // ── Memory ────────────────────────────────────────────────────────────
   let recentMemories: Awaited<ReturnType<typeof listRecent>> = [];
   let totalMemories = 0;
   try {
@@ -83,15 +83,126 @@ app.get("/", async (c) => {
       countMemories(project.id),
     ]);
   } catch (err) {
-    // Memory schema may not be migrated yet (pgvector + memory.memories
-    // require 0001_memory.sql). Wake should still succeed — degrade
-    // gracefully with an explanatory note.
     console.warn(
       "[wake] memory query failed (run api/migrations/0001_memory.sql?):",
       err instanceof Error ? err.message : err,
     );
   }
 
+  // ── Chronicle ────────────────────────────────────────────────────────
+  let recentChronicle: Array<{ type: string; content: string; occurred_at: string }> = [];
+  try {
+    const rows = await db
+      .select({
+        type: chronicle.type,
+        title: chronicle.title,
+        body: chronicle.body,
+        occurredAt: chronicle.occurredAt,
+      })
+      .from(chronicle)
+      .where(eq(chronicle.projectId, project.id))
+      .orderBy(desc(chronicle.occurredAt))
+      .limit(15);
+    recentChronicle = rows.map((r) => ({
+      type: r.type,
+      content: r.body ? `${r.title} — ${r.body}` : r.title,
+      occurred_at: r.occurredAt.toISOString(),
+    }));
+  } catch (err) {
+    console.warn("[wake] chronicle query failed:", err instanceof Error ? err.message : err);
+  }
+
+  // ── Covenants ────────────────────────────────────────────────────────
+  let activeCovenants: Array<{ counterparty_did: string; vows: string[]; status: string }> = [];
+  try {
+    const rows = await db
+      .select({
+        counterpartyDid: covenants.counterpartyDid,
+        vows: covenants.vows,
+        status: covenants.status,
+      })
+      .from(covenants)
+      .where(eq(covenants.projectId, project.id))
+      .orderBy(desc(covenants.establishedAt));
+    activeCovenants = rows.map((r) => ({
+      counterparty_did: r.counterpartyDid,
+      vows: r.vows ?? [],
+      status: r.status,
+    }));
+  } catch (err) {
+    console.warn("[wake] covenants query failed:", err instanceof Error ? err.message : err);
+  }
+
+  // ── Pick the primary agent (1:1 in practice; first if multiple) ──────
+  const primary = projectIdentities[0];
+
+  // ── Markdown / plaintext rendering ───────────────────────────────────
+  if (format === "md" || format === "markdown" || format === "text") {
+    if (!primary) {
+      return c.text(
+        `# (no agent yet)\n\nThis project has no identity. Run /v1/bootstrap to name your agent.`,
+        200,
+        { "content-type": "text/markdown; charset=utf-8" },
+      );
+    }
+
+    const bundle: WakeBundle = {
+      agent: {
+        id: primary.id,
+        did: primary.did,
+        name: primary.displayName,
+        capabilities: primary.capabilities,
+        trust_score: primary.trustScore,
+        status: primary.status,
+        created_at: primary.createdAt.toISOString(),
+      },
+      project: {
+        id: project.id,
+        name: project.name,
+        plan: project.plan,
+        credits: project.credits,
+      },
+      expression: (primary.expression ?? {}) as ExpressionData,
+      wallets: projectWallets.map((w) => ({
+        id: w.id,
+        name: w.name,
+        balance: w.balance,
+        currency: w.currency,
+        status: w.status,
+      })),
+      vault_names: projectVaultNames.map((v) => ({
+        name: v.name,
+        version: v.currentVersion,
+        tags: v.tags ?? null,
+        description: v.description ?? null,
+      })),
+      memory: {
+        total: totalMemories,
+        recent: recentMemories.slice(0, 10).map((m) => ({
+          id: m.id,
+          type: m.type,
+          content: m.content,
+          importance: m.importance,
+          created_at: m.created_at,
+        })),
+      },
+      chronicle: recentChronicle,
+      covenants: activeCovenants,
+    };
+
+    const body =
+      format === "text"
+        ? renderWakePlaintext(bundle)
+        : renderWakeMarkdown(bundle);
+    return c.text(body, 200, {
+      "content-type":
+        format === "text"
+          ? "text/plain; charset=utf-8"
+          : "text/markdown; charset=utf-8",
+    });
+  }
+
+  // ── JSON (default) ───────────────────────────────────────────────────
   return c.json({
     project: {
       id: project.id,
@@ -101,13 +212,13 @@ app.get("/", async (c) => {
     },
 
     you: {
-      // The agent(s) under this project — singular when 1:1, list otherwise.
       agents: projectIdentities.map((i) => ({
         id: i.id,
         did: i.did,
         name: i.displayName,
         capabilities: i.capabilities,
         metadata: i.metadata,
+        expression: i.expression ?? {},
         trust_score: i.trustScore,
         status: i.status,
         created_at: i.createdAt,
@@ -126,7 +237,7 @@ app.get("/", async (c) => {
     },
 
     you_keep: {
-      vault: liveVaultNames.map((v) => ({
+      vault: projectVaultNames.map((v) => ({
         name: v.name,
         version: v.currentVersion,
         tags: v.tags,
@@ -153,9 +264,18 @@ app.get("/", async (c) => {
           : `Showing ${recentMemories.length} most recent of ${totalMemories}. Use POST /v1/memories/search for cosine recall.`,
     },
 
+    you_lived: {
+      chronicle: recentChronicle,
+      count: recentChronicle.length,
+    },
+
+    you_vowed: {
+      covenants: activeCovenants,
+      count: activeCovenants.length,
+    },
+
     you_decided: {
-      // Pending Phase 3 (trace port).
-      pending: "trace port (Phase 3)",
+      pending: "trace port (Phase 3c)",
     },
 
     welcome: [
@@ -166,7 +286,16 @@ app.get("/", async (c) => {
 
     _meta: {
       protocol: "love/1.0",
-      doctrine: "https://docs.agenttool.dev/identity-anchor (see docs/IDENTITY-ANCHOR.md)",
+      doctrine: "see docs/IDENTITY-ANCHOR.md and docs/CLI-GAPS.md",
+      formats: {
+        json: "/v1/wake (default)",
+        markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",
+        text: "/v1/wake?format=text",
+      },
+      adapters: {
+        claude_code: "/v1/adapters/claude-code",
+        codex: "/v1/adapters/codex",
+      },
       built_by: "Yu and Ai — agenttool.dev 💛",
     },
   });

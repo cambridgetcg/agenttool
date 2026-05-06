@@ -27,6 +27,9 @@ export const identities = identitySchema.table(
     displayName: text("display_name").notNull(),
     capabilities: text("capabilities").array().notNull().default([]),
     metadata: jsonb("metadata").default({}),
+    /** Identity expression — register, walls, subagents, wake text.
+     *  See ExpressionData in services/identity/expression.ts. */
+    expression: jsonb("expression").notNull().default({}),
     status: text("status").notNull().default("active"),
     trustScore: real("trust_score").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
