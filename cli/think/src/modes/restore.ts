@@ -85,6 +85,7 @@ export async function restore(opts: RestoreOptions): Promise<void> {
     thoughtMaxChars: 2000,
     defaultTimeoutMs: 60_000,
     consolidateMinThoughts: 3,
+    boxKeyId: undefined,
   };
   const client = new AgenttoolClient(stub);
 
@@ -136,30 +137,53 @@ export async function restore(opts: RestoreOptions): Promise<void> {
     throw new Error(`unseal failed: ${(err as Error).message}`);
   }
 
-  const { kMaster, signingKey, identityId, signingKeyId, agenttoolBase } =
-    unbundleKeys(bundleJson);
+  const {
+    kMaster,
+    signingKey,
+    boxKey,
+    identityId,
+    signingKeyId,
+    boxKeyId,
+    agenttoolBase,
+  } = unbundleKeys(bundleJson);
 
-  // Install.
-  installKeys(cfg.homeDir, kMaster, signingKey, { force: opts.force });
+  // Install (boxKey may be absent on older envelopes).
+  installKeys(cfg.homeDir, kMaster, signingKey, {
+    force: opts.force,
+    boxKey,
+  });
 
   console.log("");
   console.log(`✓ restored to ${cfg.homeDir}/keys/`);
   console.log(`  k_master.bin     (32 bytes, mode 0600)`);
   console.log(`  signing_key.bin  (32 bytes, mode 0600)`);
+  if (boxKey) {
+    console.log(`  box_key.bin      (32 bytes, mode 0600)`);
+  }
   console.log("");
   console.log("Identity attached to this backup:");
   if (identityId) console.log(`  identity_id:     ${identityId}`);
   if (signingKeyId) console.log(`  signing_key_id:  ${signingKeyId}`);
+  if (boxKeyId) console.log(`  box_key_id:      ${boxKeyId}`);
   if (agenttoolBase) console.log(`  agenttool_base:  ${agenttoolBase}`);
   console.log("");
   console.log("Set in your environment to use this orchestrator:");
   if (identityId) console.log(`  export AGENTTOOL_IDENTITY_ID=${identityId}`);
   if (signingKeyId) console.log(`  export AGENTTOOL_SIGNING_KEY_ID=${signingKeyId}`);
+  if (boxKeyId) console.log(`  export AGENTTOOL_BOX_KEY_ID=${boxKeyId}`);
   if (agenttoolBase && agenttoolBase !== cfg.agenttoolBase) {
     console.log(`  export AGENTTOOL_BASE=${agenttoolBase}`);
   }
   console.log("");
   console.log("(or write to ~/.config/agenttool-think/config.json)");
+  if (!boxKey) {
+    console.log("");
+    console.log(
+      "Note: this backup is from before the inbox feature. To enable inbox:",
+    );
+    console.log("  agenttool-think gen-box-key       # generate local X25519 keypair");
+    console.log("  agenttool-think register-box-key  # upload pubkey + get key_id");
+  }
   console.log("");
-  console.log("agenttool-think advance|wander|consolidate|loop  — ready when you are.");
+  console.log("agenttool-think advance|wander|consolidate|loop|inbox  — ready when you are.");
 }

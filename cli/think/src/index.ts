@@ -18,6 +18,14 @@
  *                                               fetch + unseal + install keys
  *    agenttool-think voice <strand-id> [--since-seq N] [--no-reconnect] [--raw]
  *                                               tail strand voice; decrypt locally
+ *    agenttool-think gen-box-key                generate X25519 box keypair (existing
+ *                                               installs that pre-date inbox)
+ *    agenttool-think register-box-key           upload local box pubkey; get key_id
+ *    agenttool-think inbox send <to-did> [opts] send encrypted message
+ *    agenttool-think inbox list [opts]          list inbox; decrypt subjects
+ *    agenttool-think inbox read <id>            decrypt + render one message
+ *    agenttool-think inbox mark <id> <status>   read|archived|spam|unread|deleted
+ *    agenttool-think inbox delete <id>          soft delete (status='deleted')
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -26,7 +34,15 @@ import { loadConfig } from "./config";
 import { generateAndStoreKeys, loadKeys } from "./keys";
 import { advance } from "./modes/advance";
 import { backup } from "./modes/backup";
+import { genBoxKey, registerBoxKey } from "./modes/box-keys";
 import { consolidate } from "./modes/consolidate";
+import {
+  inboxDelete,
+  inboxList,
+  inboxMark,
+  inboxRead,
+  inboxSend,
+} from "./modes/inbox";
 import { loop } from "./modes/loop";
 import { restore } from "./modes/restore";
 import { voice } from "./modes/voice";
@@ -74,6 +90,27 @@ Usage:
                                         reconnects on disconnect/refresh,
                                         resuming from last seen sequence.
 
+  agenttool-think gen-box-key           Generate X25519 box keypair locally
+                                        (init does this for new installs;
+                                        gen-box-key is the post-hoc helper).
+  agenttool-think register-box-key      Upload local box pubkey to
+                                        /v1/identities/:id/box-keys; prints
+                                        the returned key_id (set as
+                                        AGENTTOOL_BOX_KEY_ID).
+  agenttool-think inbox send <to-did> [--body 'text' | --body-file path | <stdin>]
+                            [--subject X] [--in-reply-to ID]
+                                        Send an encrypted message. Server
+                                        stores ciphertext only.
+  agenttool-think inbox list [--status unread|read|archived|spam] [--no-decrypt]
+                                        List inbox; decrypt subjects + body
+                                        previews (skip with --no-decrypt).
+  agenttool-think inbox read <id> [--no-mark-read]
+                                        Decrypt + render full body. Marks
+                                        unread → read by default.
+  agenttool-think inbox mark <id> <status>
+                                        Update status (read|archived|spam|...).
+  agenttool-think inbox delete <id>     Soft delete (status='deleted').
+
   Passphrase precedence (when needed):
     --passphrase X · AGENTTOOL_THINK_PASSPHRASE · interactive prompt
 
@@ -82,6 +119,7 @@ Configuration: env vars OR ~/.config/agenttool-think/config.json
   AGENTTOOL_API_KEY                     your at_* key (or macOS keychain s=agenttool)
   AGENTTOOL_IDENTITY_ID                 your agent's identity uuid
   AGENTTOOL_SIGNING_KEY_ID              which identity_keys row holds the pubkey
+  AGENTTOOL_BOX_KEY_ID                  identity_box_keys row (inbox only)
 
   AGENTTOOL_THINK_HOME                  default ~/.config/agenttool-think
   AGENTTOOL_THINK_LLM                   anthropic | openai
@@ -110,17 +148,27 @@ async function init(): Promise<void> {
   const keys = generateAndStoreKeys(home);
   console.log(`✓ K_master generated → ${home}/keys/k_master.bin (mode 0600)`);
   console.log(`✓ Signing key generated → ${home}/keys/signing_key.bin (mode 0600)`);
+  console.log(`✓ Box key generated → ${home}/keys/box_key.bin (mode 0600)`);
   console.log(``);
-  console.log(`Signing pubkey (base64):`);
+  console.log(`Signing pubkey (ed25519, base64):`);
   console.log(`  ${Buffer.from(keys.signingPubKey).toString("base64")}`);
   console.log(``);
+  console.log(`Box pubkey (X25519, base64):`);
+  console.log(`  ${Buffer.from(keys.boxPubKey ?? new Uint8Array()).toString("base64")}`);
+  console.log(``);
   console.log(`Next steps:`);
-  console.log(`  1. Upload the pubkey to your agent's identity:`);
+  console.log(`  1. Upload the SIGNING pubkey for thoughts/attestations:`);
   console.log(`     curl -X POST $AGENTTOOL_BASE/v1/identities/$ID/keys \\`);
   console.log(`       -H "Authorization: Bearer $AGENTTOOL_API_KEY" \\`);
-  console.log(`       -d '{"public_key":"<paste base64 above>","label":"think-orchestrator"}'`);
-  console.log(`  2. Note the returned key id; set AGENTTOOL_SIGNING_KEY_ID to it.`);
-  console.log(`  3. Run \`agenttool-think advance\` against an active strand.`);
+  console.log(`       -d '{"public_key":"<signing pubkey>","label":"think-orchestrator"}'`);
+  console.log(`     → returns key_id; set AGENTTOOL_SIGNING_KEY_ID`);
+  console.log(``);
+  console.log(`  2. Upload the BOX pubkey for inbox encryption:`);
+  console.log(`     agenttool-think register-box-key`);
+  console.log(`     → returns key_id; set AGENTTOOL_BOX_KEY_ID`);
+  console.log(``);
+  console.log(`  3. Run \`agenttool-think advance\` (strand work) or`);
+  console.log(`        \`agenttool-think inbox list\` (messaging).`);
 }
 
 async function main(): Promise<void> {
@@ -203,6 +251,97 @@ async function main(): Promise<void> {
         reconnectDelayMs,
         raw,
       });
+      return;
+    }
+    case "gen-box-key": {
+      await genBoxKey();
+      return;
+    }
+    case "register-box-key": {
+      const config = loadConfig();
+      await registerBoxKey(config);
+      return;
+    }
+    case "inbox": {
+      const config = loadConfig();
+      const sub = process.argv[3];
+      const args = process.argv.slice(4);
+      const flag = (n: string): string | undefined => {
+        const i = args.indexOf(n);
+        return i !== -1 ? args[i + 1] : undefined;
+      };
+
+      if (sub === "send") {
+        const keys = loadKeys(config.homeDir);
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const toDid = positionals[0];
+        if (!toDid) {
+          console.error("usage: agenttool-think inbox send <to-did> [--body 'text' | --body-file path | <stdin>] [--subject X] [--in-reply-to ID]");
+          process.exit(1);
+        }
+        await inboxSend(config, keys, {
+          toDid,
+          body: flag("--body"),
+          bodyFile: flag("--body-file"),
+          subject: flag("--subject"),
+          inReplyTo: flag("--in-reply-to"),
+        });
+        return;
+      }
+
+      if (sub === "list") {
+        const keys = loadKeys(config.homeDir);
+        const status = flag("--status");
+        const limitStr = flag("--limit");
+        const limit = limitStr ? Number.parseInt(limitStr, 10) : 50;
+        const decrypt = !args.includes("--no-decrypt");
+        await inboxList(config, keys, { status, limit, decrypt });
+        return;
+      }
+
+      if (sub === "read") {
+        const keys = loadKeys(config.homeDir);
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const id = positionals[0];
+        if (!id) {
+          console.error("usage: agenttool-think inbox read <message-id>");
+          process.exit(1);
+        }
+        const markRead = !args.includes("--no-mark-read");
+        await inboxRead(config, keys, id, { markRead });
+        return;
+      }
+
+      if (sub === "mark") {
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const id = positionals[0];
+        const status = positionals[1];
+        if (!id || !status) {
+          console.error("usage: agenttool-think inbox mark <id> <unread|read|archived|spam|deleted>");
+          process.exit(1);
+        }
+        if (!["unread", "read", "archived", "spam", "deleted"].includes(status)) {
+          console.error(`invalid status: ${status}`);
+          process.exit(1);
+        }
+        await inboxMark(config, id, status as "unread" | "read" | "archived" | "spam" | "deleted");
+        return;
+      }
+
+      if (sub === "delete") {
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const id = positionals[0];
+        if (!id) {
+          console.error("usage: agenttool-think inbox delete <message-id>");
+          process.exit(1);
+        }
+        await inboxDelete(config, id);
+        return;
+      }
+
+      console.error(`unknown inbox subcommand: ${sub}`);
+      console.error("subcommands: send | list | read | mark | delete");
+      process.exit(1);
       return;
     }
     case "loop": {

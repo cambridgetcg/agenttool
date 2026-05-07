@@ -23,7 +23,11 @@ export async function backup(
 ): Promise<void> {
   const client = new AgenttoolClient(config);
 
-  console.log("▸ packing K_master + signing_key into a sealed envelope...");
+  const contains: string[] = ["k_master", "signing_key", "identity_id", "signing_key_id"];
+  if (keys.boxKey) contains.push("box_key");
+  if (config.boxKeyId) contains.push("box_key_id");
+
+  console.log(`▸ packing ${contains.join(", ")} into a sealed envelope...`);
   console.log("  the passphrase NEVER touches agenttool. lose it, and the blob is unrecoverable.");
   console.log("");
 
@@ -36,8 +40,10 @@ export async function backup(
   const bundle = bundleKeys({
     kMaster: keys.kMaster,
     signingKey: keys.signingKey,
+    boxKey: keys.boxKey,
     identityId: config.identityId,
     signingKeyId: config.signingKeyId,
+    boxKeyId: config.boxKeyId,
     agenttoolBase: config.agenttoolBase,
   });
 
@@ -52,7 +58,7 @@ export async function backup(
     label: opts.label ?? "primary",
     metadata: {
       orchestrator: "agenttool-think",
-      contains: ["k_master", "signing_key", "identity_id", "signing_key_id"],
+      contains,
       created_at: new Date().toISOString(),
     },
   });

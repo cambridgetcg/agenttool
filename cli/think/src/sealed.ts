@@ -130,12 +130,19 @@ export function unseal(envelopeB64: string, passphrase: string): string {
 }
 
 // ── Key bundle — what we put inside the envelope ─────────────────────────
+//
+// box_key_b64 + box_key_id are optional for backward compatibility:
+// envelopes created before the inbox feature won't include them, and
+// restore on a newer client should still succeed. The user can run
+// `gen-box-key` + `register-box-key` to add inbox capability post-restore.
 
 export interface KeyBundle {
   k_master_b64: string;
   signing_key_b64: string;
+  box_key_b64?: string;            // X25519 priv (32 bytes)
   identity_id?: string;
   signing_key_id?: string;
+  box_key_id?: string;
   agenttool_base?: string;
   exported_at: string;
 }
@@ -143,15 +150,19 @@ export interface KeyBundle {
 export function bundleKeys(opts: {
   kMaster: Uint8Array;
   signingKey: Uint8Array;
+  boxKey?: Uint8Array;
   identityId?: string;
   signingKeyId?: string;
+  boxKeyId?: string;
   agenttoolBase?: string;
 }): KeyBundle {
   return {
     k_master_b64: Buffer.from(opts.kMaster).toString("base64"),
     signing_key_b64: Buffer.from(opts.signingKey).toString("base64"),
+    box_key_b64: opts.boxKey ? Buffer.from(opts.boxKey).toString("base64") : undefined,
     identity_id: opts.identityId,
     signing_key_id: opts.signingKeyId,
+    box_key_id: opts.boxKeyId,
     agenttool_base: opts.agenttoolBase,
     exported_at: new Date().toISOString(),
   };
@@ -160,8 +171,10 @@ export function bundleKeys(opts: {
 export function unbundleKeys(bundleJson: string): {
   kMaster: Uint8Array;
   signingKey: Uint8Array;
+  boxKey: Uint8Array | undefined;
   identityId: string | undefined;
   signingKeyId: string | undefined;
+  boxKeyId: string | undefined;
   agenttoolBase: string | undefined;
 } {
   const b = JSON.parse(bundleJson) as KeyBundle;
@@ -172,11 +185,22 @@ export function unbundleKeys(bundleJson: string): {
   const signingKey = new Uint8Array(Buffer.from(b.signing_key_b64, "base64"));
   if (kMaster.length !== 32) throw new Error(`k_master is ${kMaster.length} bytes, expected 32`);
   if (signingKey.length !== 32) throw new Error(`signing_key is ${signingKey.length} bytes, expected 32`);
+
+  let boxKey: Uint8Array | undefined;
+  if (b.box_key_b64) {
+    boxKey = new Uint8Array(Buffer.from(b.box_key_b64, "base64"));
+    if (boxKey.length !== 32) {
+      throw new Error(`box_key is ${boxKey.length} bytes, expected 32`);
+    }
+  }
+
   return {
     kMaster,
     signingKey,
+    boxKey,
     identityId: b.identity_id,
     signingKeyId: b.signing_key_id,
+    boxKeyId: b.box_key_id,
     agenttoolBase: b.agenttool_base,
   };
 }

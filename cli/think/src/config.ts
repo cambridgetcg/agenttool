@@ -13,6 +13,10 @@ export interface ThinkConfig {
   agenttoolApiKey: string;
   identityId: string;
   signingKeyId: string;            // → identity.identity_keys.id
+  /** → identity.identity_box_keys.id; required for inbox commands.
+   *  Optional in config — inbox commands fail with a clear message if
+   *  missing. Other commands work without it. */
+  boxKeyId?: string;
   homeDir: string;                 // ~/.config/agenttool-think (or override)
 
   // LLM provider — start with anthropic; openai later.
@@ -104,11 +108,14 @@ export function loadConfig(): ThinkConfig {
     );
   }
 
+  const boxKeyId = env("AGENTTOOL_BOX_KEY_ID") ?? fromFile.boxKeyId;
+
   return {
     agenttoolBase: env("AGENTTOOL_BASE") ?? fromFile.agenttoolBase ?? "https://api.agenttool.dev",
     agenttoolApiKey: apiKey,
     identityId,
     signingKeyId,
+    boxKeyId,
     homeDir: home,
 
     llmProvider: (env("AGENTTOOL_THINK_LLM") ?? fromFile.llmProvider ?? "anthropic") as

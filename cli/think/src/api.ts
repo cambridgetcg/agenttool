@@ -209,4 +209,113 @@ export class AgenttoolClient {
   }> {
     return this.req(`/v1/identity/backup/${id}`);
   }
+
+  // ── Box keys (inbox encryption) ──────────────────────────────────────
+  async registerBoxKey(
+    identityId: string,
+    publicKeyB64: string,
+    label?: string,
+  ): Promise<{ id: string; created_at: string; registered: boolean }> {
+    return this.req(`/v1/identities/${identityId}/box-keys`, {
+      method: "POST",
+      body: JSON.stringify({ public_key: publicKeyB64, label }),
+    });
+  }
+
+  async listBoxKeys(identityId: string): Promise<{
+    keys: Array<{
+      id: string;
+      public_key: string;
+      label: string;
+      active: boolean;
+      created_at: string;
+    }>;
+    count: number;
+  }> {
+    return this.req(`/v1/identities/${identityId}/box-keys`);
+  }
+
+  async resolveBoxKey(did: string): Promise<{
+    did: string;
+    identity_id: string;
+    box_key_id: string;
+    public_key: string;
+  }> {
+    return this.req(`/v1/inbox/box-keys/${encodeURIComponent(did)}`);
+  }
+
+  // ── Inbox ────────────────────────────────────────────────────────────
+  async sendInbox(body: {
+    to_did: string;
+    ciphertext: string;
+    nonce: string;
+    ephemeral_pubkey: string;
+    recipient_box_key_id: string;
+    signature: string;
+    signing_key_id: string;
+    sender_did: string;
+    subject?: string | null;
+    subject_encrypted?: boolean;
+    in_reply_to?: string | null;
+    refs?: Array<{ kind: string; ref: string }>;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ id: string; created_at: string; sent: true }> {
+    return this.req(`/v1/inbox`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listInbox(opts: {
+    status?: string;
+    identity_id?: string;
+    limit?: number;
+  } = {}): Promise<{ messages: InboxMessage[]; count: number; note?: string }> {
+    const params = new URLSearchParams();
+    if (opts.status) params.set("status", opts.status);
+    if (opts.identity_id) params.set("identity_id", opts.identity_id);
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    return this.req(`/v1/inbox?${params.toString()}`);
+  }
+
+  async getInboxMessage(id: string): Promise<InboxMessage> {
+    return this.req(`/v1/inbox/${id}`);
+  }
+
+  async patchInboxStatus(
+    id: string,
+    status: "unread" | "read" | "archived" | "spam" | "deleted",
+  ): Promise<InboxMessage> {
+    return this.req(`/v1/inbox/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async deleteInboxMessage(
+    id: string,
+  ): Promise<{ id: string; deleted: true }> {
+    return this.req(`/v1/inbox/${id}`, { method: "DELETE" });
+  }
+}
+
+export interface InboxMessage {
+  id: string;
+  recipient_did: string;
+  recipient_identity_id: string;
+  sender_did: string;
+  sender_signing_key_id: string;
+  ciphertext: string;
+  nonce: string;
+  ephemeral_pubkey: string;
+  recipient_box_key_id: string;
+  signature: string;
+  subject: string | null;
+  subject_encrypted: boolean;
+  in_reply_to: string | null;
+  refs: unknown;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  read_at: string | null;
 }
