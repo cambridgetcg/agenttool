@@ -17,6 +17,9 @@ export const economyConfig = {
   // USDC on Base — HD wallet derivation seed and Alchemy transfer webhook.
   cryptoHdMnemonic: env("CRYPTO_HD_MNEMONIC", ""),
   alchemyWebhookSecret: env("ALCHEMY_WEBHOOK_SECRET", ""),
+  // Helius (Solana) shared-secret webhook auth — sent in the Authorization
+  // header on enhanced-webhook deliveries.
+  heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
 
   // Per-spend / per-escrow / monthly custody fees.
   fees: {

@@ -22,6 +22,7 @@ import {
   isChain,
   isEvmChain,
   USDC_ADDRESSES,
+  USDC_SOL_MINT,
   type Chain,
   type EvmChain,
 } from "../../services/economy/crypto/chains";
@@ -266,10 +267,9 @@ router.get("/wallets/:walletId/payouts", async (c) => {
 // Public — signature-verified per chain.
 // Mounted on the parent app at /v1/billing/crypto-webhook (NOT auth-gated).
 //
-// Foundation: Alchemy ERC-20 transfer payload for EVM chains is wired.
-// Helius (Solana) and other providers arrive in Phase 3c — until then this
-// returns 501 with a doc pointer so integrators can scaffold against a
-// known interface.
+// Providers wired:
+//   ethereum/base/polygon/arbitrum/optimism — Alchemy ERC-20 transfer
+//   solana                                  — Helius enhanced webhooks
 
 export const cryptoWebhookRouter = new Hono();
 
@@ -281,8 +281,9 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
 
   const rawBody = await c.req.text();
 
-  // Verify signature for EVM (Alchemy). Solana arrives in Phase 3c.
+  // ── Signature verification (per provider) ──────────────────────────
   if (isEvmChain(chainParam)) {
+    // Alchemy: HMAC-SHA256 over raw body, hex digest in x-alchemy-signature.
     const sig = c.req.header("x-alchemy-signature");
     if (economyConfig.alchemyWebhookSecret) {
       const expected = createHmac("sha256", economyConfig.alchemyWebhookSecret)
@@ -292,31 +293,91 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
         return c.json({ error: "invalid_signature" }, 400);
       }
     }
+  } else if (chainParam === "solana") {
+    // Helius: shared-secret in Authorization header (plain, not Bearer).
+    // If the secret isn't configured, accept anyway — same posture as
+    // Alchemy ("verify if we have a secret to verify against").
+    const sig = c.req.header("authorization");
+    if (economyConfig.heliusWebhookSecret) {
+      if (sig !== economyConfig.heliusWebhookSecret) {
+        return c.json({ error: "invalid_signature" }, 400);
+      }
+    }
   } else {
     return c.json(
       {
         error: "not_implemented",
-        message:
-          `Webhook handler for ${chainParam} pending Phase 3c. ` +
-          "EVM chains (alchemy provider) are live.",
+        message: `Webhook handler for ${chainParam} not yet wired.`,
       },
       501,
     );
   }
 
-  let payload: Record<string, unknown>;
+  // ── Parse payload (per provider shape) ─────────────────────────────
+  let parsed: unknown;
   try {
-    payload = JSON.parse(rawBody) as Record<string, unknown>;
+    parsed = JSON.parse(rawBody);
   } catch {
     return c.json({ error: "invalid_json" }, 400);
   }
 
+  const ingested: unknown[] = [];
+
+  if (chainParam === "solana") {
+    // Helius enhanced-webhook payload: array of transaction objects.
+    // Each has signature + tokenTransfers[]. Each tokenTransfer:
+    //   { mint, tokenAmount (human units), toUserAccount, ... }
+    const txns = Array.isArray(parsed)
+      ? (parsed as Array<Record<string, unknown>>)
+      : [];
+
+    for (const txn of txns) {
+      const txSignature = String(txn.signature ?? "");
+      const tokenTransfers = Array.isArray(txn.tokenTransfers)
+        ? (txn.tokenTransfers as Array<Record<string, unknown>>)
+        : [];
+      let logIndex = 0;
+      for (const t of tokenTransfers) {
+        const mint = String(t.mint ?? "");
+        if (mint !== USDC_SOL_MINT) {
+          logIndex += 1;
+          continue;
+        }
+        const toAddress = String(
+          t.toUserAccount ?? t.toTokenAccount ?? "",
+        );
+        const tokenAmount = Number(t.tokenAmount ?? 0);
+        if (!toAddress || !txSignature || !(tokenAmount > 0)) {
+          logIndex += 1;
+          continue;
+        }
+        // Helius returns human units (1.5 = 1.5 USDC). USDC has 6
+        // decimals on Solana too. Match Alchemy's amountBase semantics.
+        const amountBase = String(Math.floor(tokenAmount * 1_000_000));
+        const result = await ingestInboundTransfer({
+          chain: "solana",
+          txHash: txSignature,
+          logIndex,
+          toAddress,
+          contractAddress: USDC_SOL_MINT,
+          token: "USDC",
+          amountBase,
+          rawPayload: t,
+        });
+        ingested.push({ txSignature, mint, ...result });
+        logIndex += 1;
+      }
+    }
+
+    return c.json({ received: true, processed: ingested });
+  }
+
+  // EVM (Alchemy) branch.
+  const payload = parsed as Record<string, unknown>;
   const event = (payload.event as Record<string, unknown> | undefined) ?? {};
   const transfers = Array.isArray(event.activity)
     ? (event.activity as Array<Record<string, unknown>>)
     : [];
-
-  const ingested: unknown[] = [];
 
   for (const transfer of transfers) {
     const toAddress = String(transfer.toAddress ?? "");

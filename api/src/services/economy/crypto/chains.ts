@@ -40,6 +40,9 @@ export const USDC_ADDRESSES: Record<EvmChain, string> = {
   optimism: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
 };
 
+/** Solana USDC mint address (canonical native USDC on Solana mainnet). */
+export const USDC_SOL_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
 /** USDC base-unit decimals (1 USDC = 10^6 base units on every chain). */
 export const USDC_DECIMALS = 6;
 
