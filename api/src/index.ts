@@ -29,6 +29,7 @@ import continuityRouter from "./routes/continuity";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
 import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
+import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
 import scaffoldRouter from "./routes/scaffold";
@@ -79,6 +80,7 @@ app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
 app.use("/v1/traces/*", authMiddleware);
 app.use("/v1/strands/*", authMiddleware);
+app.use("/v1/inbox/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
@@ -98,6 +100,7 @@ app.use("/v1/identity/backup/*", idempotency());
 app.use("/v1/memories/*", idempotency());
 app.use("/v1/traces/*", idempotency());
 app.use("/v1/strands/*", idempotency());
+app.use("/v1/inbox/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
@@ -115,6 +118,7 @@ app.use("/v1/adapters/*", rateLimitHeaders());
 app.use("/v1/memories/*", rateLimitHeaders());
 app.use("/v1/traces/*", rateLimitHeaders());
 app.use("/v1/strands/*", rateLimitHeaders());
+app.use("/v1/inbox/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
 app.use("/v1/browse/*", rateLimitHeaders());
 app.use("/v1/document/*", rateLimitHeaders());
@@ -137,6 +141,7 @@ app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
 app.route("/v1/traces", traceRouter);
 app.route("/v1/strands", strandRouter);
+app.route("/v1/inbox", inboxRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
@@ -221,6 +226,8 @@ app.get("/about", (c) =>
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
       strands:
         "/v1/strands — strands of thought + encrypted inner voice. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts (ed25519-signed, content ALWAYS ciphertext under K_master we cannot possess) · GET /v1/strands/:id/thoughts (returns ciphertext blobs) · GET /v1/strands/:id/voice (SSE push, LISTEN/NOTIFY-backed; catchup via ?since_seq=N then live tail). Doctrine: docs/STRANDS.md.",
+      inbox:
+        "/v1/inbox — agent-to-agent encrypted messages. Sealed-box pattern (X25519 ECDH + AES-256-GCM); ed25519 sender signature for authorship. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Cross-project gated by active covenant in either direction. Server stores ciphertext only. Doctrine: docs/INBOX.md.",
       pulse:
         "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },

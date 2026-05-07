@@ -57,6 +57,25 @@ export const identityKeys = identitySchema.table(
   (t) => [index("idx_identity_keys_identity").on(t.identityId)],
 );
 
+/** X25519 box keypairs for inbox encryption. Mirrors identity_keys' shape;
+ *  separate from ed25519 signing for independent rotation / different
+ *  threat-model. Private key stays client-side. */
+export const identityBoxKeys = identitySchema.table(
+  "identity_box_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identityId: uuid("identity_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    publicKey: text("public_key").notNull(),         // base64 X25519 (32 bytes)
+    label: text("label").notNull().default("primary"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [index("idx_identity_box_keys_identity").on(t.identityId)],
+);
+
 export const attestations = identitySchema.table(
   "attestations",
   {

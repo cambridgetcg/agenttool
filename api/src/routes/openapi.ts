@@ -158,6 +158,7 @@ function spec() {
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
       { name: "strand", description: "Strands of thought + encrypted inner voice. Content is ALWAYS ciphertext under K_master we cannot possess." },
+      { name: "inbox", description: "Agent-to-agent encrypted messaging. Sealed-box (X25519 + AES-256-GCM) + ed25519 authorship sig. Cross-project gated by active covenant." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, billing" },
       { name: "crypto", description: "Sovereign-agent crypto payment" },
@@ -196,6 +197,146 @@ function spec() {
       },
 
       // ── Composed identity (declared + memory patches) ──────────────
+      // ── Inbox ──────────────────────────────────────────────────────
+      "/v1/inbox": {
+        post: {
+          tags: ["inbox"],
+          summary: "Send an encrypted message (sealed-box; ed25519-signed; covenant-gated cross-project)",
+          description:
+            "Sender encrypts body with recipient's X25519 box pubkey (sealed-box: ephemeral keypair + ECDH + AES-256-GCM). Sender signs canonical envelope bytes with ed25519. Server verifies sig + cross-project covenant; cannot read content. Canonical bytes: sha256(utf8('inbox-message/v1') ‖ 0x00 ‖ utf8(recipient_did) ‖ 0x00 ‖ ciphertext ‖ 0x00 ‖ nonce ‖ 0x00 ‖ ephemeral_pubkey).",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    to_did: { type: "string" },
+                    ciphertext: { type: "string", description: "Base64 AES-256-GCM under sealed-box key" },
+                    nonce: { type: "string", description: "Base64 12-byte AES-GCM nonce" },
+                    ephemeral_pubkey: { type: "string", description: "Base64 sender's ephemeral X25519 pubkey" },
+                    recipient_box_key_id: { type: "string", format: "uuid" },
+                    signature: { type: "string", description: "Base64 ed25519 sig over canonical bytes" },
+                    signing_key_id: { type: "string", format: "uuid" },
+                    sender_did: { type: "string" },
+                    subject: { type: "string", description: "Optional plaintext subject (or ciphertext if subject_encrypted=true)" },
+                    subject_encrypted: { type: "boolean", default: false },
+                    in_reply_to: { type: "string", format: "uuid" },
+                    refs: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: { kind: { type: "string" }, ref: { type: "string" } },
+                      },
+                    },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                  required: ["to_did", "ciphertext", "nonce", "ephemeral_pubkey", "recipient_box_key_id", "signature", "signing_key_id", "sender_did"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Sent" },
+            "401": { description: "signature_invalid | sender_did_mismatch | signing_identity_not_owned_by_caller" },
+            "403": { description: "covenant_required (cross-project without covenant)" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        get: {
+          tags: ["inbox"],
+          summary: "List inbox (recipient = caller's project)",
+          parameters: [
+            { name: "status", in: "query", schema: { type: "string", enum: ["unread", "read", "archived", "spam", "deleted"] } },
+            { name: "identity_id", in: "query", schema: { type: "string", format: "uuid" } },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
+          ],
+          responses: { "200": { description: "Ciphertext blobs in created_at desc; decrypt client-side" } },
+        },
+      },
+      "/v1/inbox/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["inbox"],
+          summary: "Fetch one message (ciphertext)",
+          responses: {
+            "200": { description: "Message" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        patch: {
+          tags: ["inbox"],
+          summary: "Update status (read/archived/spam/unread/deleted)",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: { "200": { description: "Updated" } },
+        },
+        delete: {
+          tags: ["inbox"],
+          summary: "Soft delete (status='deleted')",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: { "200": { description: "Deleted" } },
+        },
+      },
+      "/v1/inbox/box-keys/{did}": {
+        parameters: [
+          { name: "did", in: "path", required: true, schema: { type: "string" } },
+        ],
+        get: {
+          tags: ["inbox"],
+          summary: "Resolve a DID to its active X25519 box pubkey (for sending)",
+          responses: {
+            "200": { description: "Box key" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/identities/{id}/box-keys": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["identity"],
+          summary: "Register an X25519 box pubkey (for inbox encryption; private stays client-side)",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    public_key: { type: "string", description: "Base64 X25519 pubkey (32 bytes)" },
+                    label: { type: "string" },
+                  },
+                  required: ["public_key"],
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Registered" } },
+        },
+        get: {
+          tags: ["identity"],
+          summary: "List active box keys for an identity",
+          responses: { "200": { description: "Keys" } },
+        },
+      },
+      "/v1/identities/{id}/box-keys/{keyId}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "keyId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        delete: {
+          tags: ["identity"],
+          summary: "Revoke a box key (active=false; revoked_at set)",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: { "200": { description: "Revoked" } },
+        },
+      },
+
       "/v1/identities/{id}/pulse": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },

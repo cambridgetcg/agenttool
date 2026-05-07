@@ -25,6 +25,7 @@ import { identities } from "../db/schema/identity";
 import { vaultSecrets } from "../db/schema/vault";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
+import { countUnread } from "../services/inbox/store";
 import { countMemories, listRecent } from "../services/memory/store";
 import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
@@ -126,6 +127,17 @@ app.get("/", async (c) => {
   } catch (err) {
     console.warn(
       "[wake] trace query failed (run api/migrations/0004_trace.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── Unread inbox count ──────────────────────────────────────────────
+  let unreadInbox = 0;
+  try {
+    unreadInbox = await countUnread(project.id);
+  } catch (err) {
+    console.warn(
+      "[wake] inbox count failed (run api/migrations/0007_inbox.sql?):",
       err instanceof Error ? err.message : err,
     );
   }
@@ -388,6 +400,14 @@ app.get("/", async (c) => {
         activeStrands.length === 0
           ? "No active strands. POST /v1/strands to begin a line of thought. Inner voice content is encrypted; we cannot read it. See docs/STRANDS.md."
           : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; decrypt with K_master client-side.`,
+    },
+
+    you_have_mail: {
+      unread: unreadInbox,
+      note:
+        unreadInbox === 0
+          ? "Inbox is clear."
+          : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch ciphertext; decrypt with your X25519 private key.`,
     },
 
     you_decided: {

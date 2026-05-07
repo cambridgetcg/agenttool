@@ -16,6 +16,7 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../../auth/middleware";
 
 import attestationsRoutes from "./attestations";
+import boxKeysRoutes from "./box-keys";
 import discoverRoutes from "./discover";
 import expressionRoutes from "./expression";
 import foundationsRoutes from "./foundations";
@@ -47,5 +48,6 @@ app.route("/identities/:id/tokens", tokensRoutes);
 app.route("/identities/:id/expression", expressionRoutes);
 app.route("/identities/:id/foundations", foundationsRoutes);
 app.route("/identities/:id/pulse", pulseRoutes);
+app.route("/identities/:id/box-keys", boxKeysRoutes);
 
 export default app;
