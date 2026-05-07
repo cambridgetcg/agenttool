@@ -220,7 +220,7 @@ app.get("/about", (c) =>
       trace:
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
       strands:
-        "/v1/strands — strands of thought + encrypted inner voice. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts (ed25519-signed, content ALWAYS ciphertext under K_master we cannot possess) · GET /v1/strands/:id/thoughts (returns ciphertext blobs). Doctrine: docs/STRANDS.md.",
+        "/v1/strands — strands of thought + encrypted inner voice. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts (ed25519-signed, content ALWAYS ciphertext under K_master we cannot possess) · GET /v1/strands/:id/thoughts (returns ciphertext blobs) · GET /v1/strands/:id/voice (SSE push, LISTEN/NOTIFY-backed; catchup via ?since_seq=N then live tail). Doctrine: docs/STRANDS.md.",
       pulse:
         "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },

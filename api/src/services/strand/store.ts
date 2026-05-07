@@ -14,6 +14,7 @@ import { db } from "../../db/client";
 import { identityKeys } from "../../db/schema/identity";
 import { strands, thoughts } from "../../db/schema/strand";
 import { verifyThoughtSignature } from "./sig";
+import { publishThought } from "./voice";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -286,7 +287,7 @@ export async function addThought(
   if (!ok) throw new Error("signature_invalid");
 
   // 4. Atomic insert with monotonic sequence_num + strand bookkeeping.
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // Bump sequence + lock the strand row.
     const updated = await tx
       .update(strands)
@@ -318,6 +319,13 @@ export async function addThought(
 
     return thoughtToOut(inserted[0]!);
   });
+
+  // 5. Publish to voice subscribers (LISTEN/NOTIFY backplane).
+  //    Fire-and-forget: notification failure is non-fatal — the row is
+  //    persisted, subscribers can catch up via since_seq on next reconnect.
+  void publishThought(result.strand_id, result.id);
+
+  return result;
 }
 
 export async function listThoughts(

@@ -865,6 +865,26 @@ function spec() {
           },
         },
       },
+      "/v1/strands/{strandId}/voice": {
+        parameters: [
+          { name: "strandId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "since_seq", in: "query", schema: { type: "integer", minimum: 0 }, description: "Replay thoughts with sequence_num > since_seq before going live. 0 (or absent) tails only." },
+        ],
+        get: {
+          tags: ["strand"],
+          summary:
+            "SSE push channel for new thoughts on a strand. Three-phase protocol: catchup-start → thought ×N → catchup-end → live.",
+          description:
+            "Postgres LISTEN/NOTIFY-backed. Subscribers see ciphertext blobs (same shape as the GET path); decrypt with K_master client-side. Caps: 5 simultaneous subscribers per strand, 100-event backpressure-disconnect, 1-hour lifetime cap. Keepalive every 15s. See docs/STRANDS.md (Voice section).",
+          responses: {
+            "200": {
+              description: "text/event-stream — events: catchup-start, thought, catchup-end, catchup-truncated (if N>200), keepalive, refresh (lifetime cap), disconnect (backpressure or aborted), rejected (subscriber cap)",
+              content: { "text/event-stream": { schema: { type: "string" } } },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
       "/v1/strands/{strandId}/thoughts": {
         parameters: [
           { name: "strandId", in: "path", required: true, schema: { type: "string", format: "uuid" } },

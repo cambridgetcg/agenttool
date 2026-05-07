@@ -216,13 +216,47 @@ GET    /v1/strands/:id                       fetch one
 PATCH  /v1/strands/:id                       status / mood / state / revisit / topic
 POST   /v1/strands/:strandId/thoughts        add encrypted thought (sig-verified)
 GET    /v1/strands/:strandId/thoughts        list ciphertext blobs (decrypt client-side)
+GET    /v1/strands/:strandId/voice           SSE push channel (LISTEN/NOTIFY-backed)
 ```
+
+## Voice — push channel for new thoughts
+
+Real-time `text/event-stream` of new thoughts on a strand. Same privacy posture as the GET path: server emits ciphertext blobs; subscribers decrypt locally with `K_master`.
+
+Three-phase protocol per connection:
+
+```
+GET /v1/strands/:id/voice?since_seq=N
+Authorization: Bearer at_*
+
+→ : connected to strand <id>
+→ event: catchup-start    data: {"since_seq": N, "current_seq": M}
+→ event: thought          id: <uuid>  data: {ciphertext, nonce, kind, ...}
+→ ...replays since_seq → current_seq...
+→ event: catchup-end      data: {"caught_up_to": M}
+→ : keepalive (every 15s)
+→ event: thought          ← live; whenever the orchestrator POSTs a new one
+→ ...
+```
+
+**Backplane: Postgres LISTEN/NOTIFY.** When `addThought` commits, the service does `pg_notify('agenttool_strand_voice', '{strand_id, thought_id}')`. A dedicated postgres-js connection LISTENs on that channel; on NOTIFY, the handler queries the row and fans out to local SSE sinks. Multi-instance correct from day one — Postgres broadcasts to every listener regardless of which instance handled the POST.
+
+**Caps:**
+- 5 simultaneous subscribers per strand (6th gets `event: rejected`)
+- 100-event per-sink queue (overflow → `event: disconnect`; client reconnects with last `since_seq`)
+- 1-hour lifetime cap (graceful close with `event: refresh` hint)
+- 200-thought catchup limit per connection (over → `event: catchup-truncated`, paginate via `since_seq`)
+
+**What composes downstream:**
+- Yu watches Sophia's thinking from anywhere (laptop / phone) while the orchestrator runs on a VPS
+- Multi-orchestrator collaboration: agent A's `[drift]` thought referencing strand B → orchestrator B (subscribed) sees the connection
+- Recording / archival processes: subscribe, decrypt locally, write to private journal — agenttool stays opaque
+- Dashboards: aggregate voice across all of an agent's strands; show the rhythm of thinking as ambient information
 
 What's still pending:
 
 - `/v1/agents/:did/pulse` — derived liveness endpoint
-- `/v1/strands/:id/voice` — SSE stream of thoughts as they land (still ciphertext)
-- `agenttool-think` binary — the client-side orchestrator
+- `agenttool-think voice <strand-id>` — orchestrator-side viewer (decrypt + render)
 - Inter-agent strand sharing (covenant-gated)
 - Cross-orchestrator state sync (CRDT or last-writer-wins; foundation here uses simple monotonic sequence_num)
 
