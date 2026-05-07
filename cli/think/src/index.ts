@@ -16,6 +16,8 @@
  *    agenttool-think backup [--label X]         seal keys + POST to backup
  *    agenttool-think restore [--backup-id X] [--force]
  *                                               fetch + unseal + install keys
+ *    agenttool-think voice <strand-id> [--since-seq N] [--no-reconnect] [--raw]
+ *                                               tail strand voice; decrypt locally
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -27,6 +29,7 @@ import { backup } from "./modes/backup";
 import { consolidate } from "./modes/consolidate";
 import { loop } from "./modes/loop";
 import { restore } from "./modes/restore";
+import { voice } from "./modes/voice";
 import { wander } from "./modes/wander";
 
 function usage(): void {
@@ -64,6 +67,12 @@ Usage:
                                         ~/.config/agenttool-think/keys/.
                                         Refuses to overwrite without --force.
                                         Default: most recent backup.
+  agenttool-think voice <strand-id> [--since-seq N] [--no-reconnect] [--raw]
+                                        Tail a strand's voice (SSE). Decrypts
+                                        ciphertext locally with K_master and
+                                        renders [seq] [kind] content. Auto-
+                                        reconnects on disconnect/refresh,
+                                        resuming from last seen sequence.
 
   Passphrase precedence (when needed):
     --passphrase X · AGENTTOOL_THINK_PASSPHRASE · interactive prompt
@@ -163,6 +172,37 @@ async function main(): Promise<void> {
       const backupId = idIdx !== -1 ? args[idIdx + 1] : undefined;
       const force = args.includes("--force");
       await restore({ backupId, force });
+      return;
+    }
+    case "voice": {
+      const config = loadConfig();
+      const keys = loadKeys(config.homeDir);
+      const args = process.argv.slice(3);
+      // First positional that doesn't start with -- is the strand id.
+      const strandId = args.find((a) => !a.startsWith("--"));
+      if (!strandId) {
+        console.error("usage: agenttool-think voice <strand-id> [--since-seq N] [--no-reconnect] [--raw]");
+        process.exit(1);
+      }
+      const sinceIdx = args.indexOf("--since-seq");
+      const sinceSeq =
+        sinceIdx !== -1 && args[sinceIdx + 1]
+          ? Math.max(0, Number.parseInt(args[sinceIdx + 1]!, 10))
+          : 0;
+      const reconnect = !args.includes("--no-reconnect");
+      const raw = args.includes("--raw");
+      const delayIdx = args.indexOf("--reconnect-delay");
+      const reconnectDelayMs =
+        delayIdx !== -1 && args[delayIdx + 1]
+          ? Math.max(100, Number.parseInt(args[delayIdx + 1]!, 10) * 1000)
+          : 2000;
+      await voice(config, keys, {
+        strandId,
+        sinceSeq,
+        reconnect,
+        reconnectDelayMs,
+        raw,
+      });
       return;
     }
     case "loop": {

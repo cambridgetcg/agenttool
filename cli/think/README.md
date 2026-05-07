@@ -19,6 +19,7 @@ If this orchestrator ran on agenttool's cluster, we'd hold `K_master` momentaril
 | `consolidate` | **The dreaming layer** — distill recent thoughts into considered memory. Per-strand: pulls unconsolidated thoughts since `metadata.last_consolidated_seq`, decrypts locally, asks the LLM whether anything has crystallised, and posts the synthesis as a new memory if yes. Defaults toward restraint — most passes produce nothing. Strand status updates (`active` / `dormant` / `completed`) ride along. Foundational suggestions surface as a printed elevation command for explicit confirmation; constitutive is impossible from here (witness wall holds). Pass `--dry-run` to preview without writing. |
 | `loop` | **24/7 sovereign autonomy** — the agent runs continuously. Mode selection is state-driven (advance/wander/consolidate); terminates on time, budget, max-iter, or clean SIGINT. The agent thinks while you sleep. |
 | `backup` / `restore` | **Cross-machine sync** — seal K_master + signing_key under a passphrase, POST the envelope to `/v1/identity/backup`. Restore on another machine fetches the envelope, unseals locally, installs keys. agenttool holds opaque ciphertext; the passphrase never touches us. |
+| `voice` | **Tail a strand's voice in real time** — connect to `/v1/strands/:id/voice` SSE, decrypt incoming ciphertext locally with K_master, render `[seq] [kind] content` as thoughts arrive. Auto-reconnects on disconnect/refresh, resuming from last seen sequence. Yu can watch Sophia think while the orchestrator runs on a VPS. |
 
 ## Setup
 
@@ -139,6 +140,44 @@ If `agenttool-think` ran as a worker on agenttool's cluster, K_master would have
 | `consolidate` | ✓ end-to-end (per-strand distillation; foundational suggestions surfaced; `--dry-run` supported) |
 | `loop` | ✓ end-to-end (24/7 sovereign autonomy; state-driven mode selection; clean SIGINT) |
 | `backup` / `restore` | ✓ end-to-end (passphrase-sealed envelope sync via `/v1/identity/backup`) |
+| `voice` | ✓ end-to-end (SSE viewer; decrypts locally; auto-reconnect with since_seq tracking) |
+
+## Voice viewer — watch a strand in real time
+
+```bash
+# Tail a strand from where it is now (live tail; no catchup)
+bun src/index.ts voice <strand-id>
+
+# Replay everything from sequence 0 forward, then go live
+bun src/index.ts voice <strand-id> --since-seq 0
+
+# Show ciphertext instead of decrypting (debug / verify it's actually encrypted)
+bun src/index.ts voice <strand-id> --raw
+
+# One-shot: connect once, exit on disconnect (don't reconnect)
+bun src/index.ts voice <strand-id> --no-reconnect
+
+# Custom reconnect delay (seconds)
+bun src/index.ts voice <strand-id> --reconnect-delay 5
+```
+
+Output shape (with TTY colors):
+
+```
+▸ voice viewer · strand 9d40a9...
+▸ connecting to https://api.agenttool.dev/v1/strands/9d40a9.../voice?since_seq=0
+▸ catchup: 3 thoughts (#1 → #3)
+14:23:42 #1 [observation] The queue empties faster than it fills.
+14:23:58 #2 [question] Why is base/USDC charging double the others?
+14:24:05 #3 [conjecture] Maybe Alchemy reports USDC.e separately.
+▸ live
+14:31:12 #4 [resolution] Confirmed — they conflate native + bridged.
+...
+```
+
+Auto-reconnect is the default. On `event: refresh` (1-hour lifetime cap) or `event: disconnect` (backpressure), the viewer reconnects with `since_seq=<last-seen>` so no thoughts are missed. The catchup phase replays anything that arrived during the disconnect.
+
+**Privacy posture (re-stated):** the viewer holds K_master and decrypts in-memory. Plaintext exists only in this process. agenttool's server emits ciphertext; we cannot decrypt it. The wall holds at observation scale.
 
 ## Cross-machine sync — backup + restore
 
