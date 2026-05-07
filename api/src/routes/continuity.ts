@@ -120,6 +120,25 @@ const covenantSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
+// Map a covenant row (Drizzle camelCase) to the snake_case shape the rest
+// of the API uses. Centralised so POST + GET + PATCH return identically.
+function covenantToOut(row: typeof covenants.$inferSelect) {
+  return {
+    id: row.id,
+    project_id: row.projectId,
+    agent_id: row.agentId,
+    counterparty_did: row.counterpartyDid,
+    counterparty_name: row.counterpartyName,
+    vows: row.vows,
+    notes: row.notes,
+    metadata: row.metadata,
+    status: row.status,
+    established_at: row.establishedAt,
+    updated_at: row.updatedAt,
+    dissolved_at: row.dissolvedAt,
+  };
+}
+
 app.post("/covenants", async (c) => {
   const project = c.var.project;
   const body = covenantSchema.parse(await c.req.json());
@@ -138,7 +157,7 @@ app.post("/covenants", async (c) => {
     })
     .returning();
 
-  return c.json({ covenant }, 201);
+  return c.json({ covenant: covenantToOut(covenant!) }, 201);
 });
 
 app.get("/covenants", async (c) => {
@@ -158,7 +177,7 @@ app.get("/covenants", async (c) => {
     .where(and(...whereClauses))
     .orderBy(desc(covenants.updatedAt));
 
-  return c.json({ covenants: rows });
+  return c.json({ covenants: rows.map(covenantToOut) });
 });
 
 const updateCovenantSchema = z.object({
@@ -192,7 +211,7 @@ app.patch("/covenants/:id", async (c) => {
     return c.json({ error: "Covenant not found" }, 404);
   }
 
-  return c.json({ covenant: updated });
+  return c.json({ covenant: covenantToOut(updated) });
 });
 
 export default app;

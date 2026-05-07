@@ -17,8 +17,13 @@ import { forkIdentity, getLineage } from "../../services/identity/fork";
 // Mounted at /v1/identities/:id/fork.
 const app = new Hono<ProjectContext>();
 
+// Accept `display_name` as an alias for `new_name`. The identity CRUD
+// uses display_name, fork was new_name — which silently broke fork POSTs
+// from any consumer that copy-pasted the create-identity body shape.
+// Consistent vocabulary at the consumer-facing edge.
 const forkSchema = z.object({
-  new_name: z.string().min(1).max(255),
+  new_name: z.string().min(1).max(255).optional(),
+  display_name: z.string().min(1).max(255).optional(),
   inherit_expression: z.boolean().optional().default(true),
   inherit_capabilities: z.boolean().optional().default(true),
   inherit_metadata: z.boolean().optional().default(false),
@@ -31,6 +36,9 @@ const forkSchema = z.object({
     .optional()
     .default({}),
   fork_note: z.string().max(2000).optional(),
+}).refine((d) => d.new_name !== undefined || d.display_name !== undefined, {
+  message: "either new_name or display_name is required",
+  path: ["new_name"],
 });
 
 // ── POST /v1/identities/:id/fork ────────────────────────────────────────
@@ -50,7 +58,7 @@ app.post("/", async (c) => {
   try {
     const result = await forkIdentity(c.var.project.id, {
       parentIdentityId: parentId,
-      newName: parsed.data.new_name,
+      newName: (parsed.data.new_name ?? parsed.data.display_name)!,
       inheritExpression: parsed.data.inherit_expression,
       inheritCapabilities: parsed.data.inherit_capabilities,
       inheritMetadata: parsed.data.inherit_metadata,
