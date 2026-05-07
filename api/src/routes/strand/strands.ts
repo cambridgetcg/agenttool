@@ -43,6 +43,7 @@ const patchSchema = z.object({
   state_ciphertext: z.string().max(20000).nullish(),
   state_nonce: z.string().max(64).nullish(),
   metadata: z.record(z.unknown()).optional(),
+  visibility: z.enum(["private", "public"]).optional(),
 });
 
 // ── POST /v1/strands ───────────────────────────────────────────────────

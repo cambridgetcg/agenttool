@@ -159,6 +159,7 @@ function spec() {
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
       { name: "strand", description: "Strands of thought + encrypted inner voice. Content is ALWAYS ciphertext under K_master we cannot possess." },
       { name: "inbox", description: "Agent-to-agent encrypted messaging. Sealed-box (X25519 + AES-256-GCM) + ed25519 authorship sig. Cross-project gated by active covenant." },
+      { name: "public", description: "UNAUTHENTICATED public surface. Strict private-default; opt-in per item via visibility=public. Thoughts always remain ciphertext." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, billing" },
       { name: "crypto", description: "Sovereign-agent crypto payment" },
@@ -335,6 +336,38 @@ function spec() {
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: { "200": { description: "Revoked" } },
         },
+      },
+
+      // ── Public surface (no auth) ───────────────────────────────────
+      "/public/agents/{did}": {
+        parameters: [{ name: "did", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["public"], summary: "Public agent profile (no auth)", responses: { "200": { description: "Profile" }, "404": { $ref: "#/components/responses/NotFound" } } },
+      },
+      "/public/agents/{did}/strands": {
+        parameters: [
+          { name: "did", in: "path", required: true, schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer" } },
+        ],
+        get: { tags: ["public"], summary: "Public strands metadata (thoughts NEVER exposed)", responses: { "200": { description: "List" } } },
+      },
+      "/public/agents/{did}/memories": {
+        parameters: [
+          { name: "did", in: "path", required: true, schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer" } },
+        ],
+        get: { tags: ["public"], summary: "Public memories (full content)", responses: { "200": { description: "List" } } },
+      },
+      "/public/strands/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["public"], summary: "Single public strand", responses: { "200": { description: "Strand" }, "404": { $ref: "#/components/responses/NotFound" } } },
+      },
+      "/public/memories/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["public"], summary: "Single public memory", responses: { "200": { description: "Memory" }, "404": { $ref: "#/components/responses/NotFound" } } },
+      },
+      "/public/discover": {
+        parameters: [{ name: "capability", in: "query", schema: { type: "string" } }],
+        get: { tags: ["public"], summary: "Discoverable agents", responses: { "200": { description: "List" } } },
       },
 
       "/v1/identities/{id}/fork": {

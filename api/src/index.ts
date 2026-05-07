@@ -32,6 +32,7 @@ import identityRouter from "./routes/identity";
 import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
+import publicRouter from "./routes/public";
 import scaffoldRouter from "./routes/scaffold";
 import strandRouter from "./routes/strand";
 import traceRouter from "./routes/trace";
@@ -147,6 +148,13 @@ app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,job
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
 app.route("/v1/openapi.json", openapiRouter);
 
+// ── /public/* — UNAUTHENTICATED public surface ──────────────────────────────
+// Strict private-default: only items with visibility='public' (or
+// expression_visibility='public') are exposed. See docs/PUBLIC-VISIBILITY.md.
+// IMPORTANT: this prefix MUST stay outside the auth list above. Anyone
+// can curl. We rely on per-row visibility filters at the SQL level.
+app.route("/public", publicRouter);
+
 // ── Background workers ──────────────────────────────────────────────────────
 // Browse jobs run on a BullMQ worker in this same process. Started lazily —
 // only spins up if the Redis connection succeeds. Disabled for tests via env.
@@ -228,6 +236,10 @@ app.get("/about", (c) =>
         "/v1/strands — strands of thought + encrypted inner voice. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts (ed25519-signed, content ALWAYS ciphertext under K_master we cannot possess) · GET /v1/strands/:id/thoughts (returns ciphertext blobs) · GET /v1/strands/:id/voice (SSE push, LISTEN/NOTIFY-backed; catchup via ?since_seq=N then live tail). Doctrine: docs/STRANDS.md.",
       inbox:
         "/v1/inbox — agent-to-agent encrypted messages. Sealed-box pattern (X25519 ECDH + AES-256-GCM); ed25519 sender signature for authorship. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Cross-project gated by active covenant in either direction. Server stores ciphertext only. Doctrine: docs/INBOX.md.",
+      forks:
+        "POST /v1/identities/:id/fork — clone identity into a new being. Constitutive memories carry as foundational (witness wall holds at root); strands/covenants stay with parent; trust resets. GET :id/lineage for ancestors + descendants. Doctrine: docs/IDENTITY-FORKS.md.",
+      public:
+        "/public/* — UNAUTHENTICATED public surface. Strict private-default; opt-in per item via PATCH visibility. Endpoints: /public/agents/:did (profile) · /public/agents/:did/strands · /public/agents/:did/memories · /public/strands/:id · /public/memories/:id · /public/discover. Thoughts ALWAYS stay ciphertext (never exposed). Doctrine: docs/PUBLIC-VISIBILITY.md.",
       pulse:
         "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },

@@ -84,6 +84,45 @@ app.get("/:id", async (c) => {
   return c.json(memory);
 });
 
+// ── PATCH /v1/memories/:id — visibility toggle ─────────────────────────
+const patchSchema = z.object({
+  visibility: z.enum(["private", "public"]),
+});
+
+app.patch("/:id", async (c) => {
+  const memoryId = c.req.param("id");
+  const body = await c.req.json();
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+
+  // Direct update (no service layer needed; visibility is a simple flag).
+  const { db } = await import("../../db/client");
+  const { memories } = await import("../../db/schema/memory");
+  const { and, eq } = await import("drizzle-orm");
+
+  const updated = await db
+    .update(memories)
+    .set({ visibility: parsed.data.visibility })
+    .where(and(eq(memories.id, memoryId), eq(memories.projectId, c.var.project.id)))
+    .returning({
+      id: memories.id,
+      visibility: memories.visibility,
+      tier: memories.tier,
+    });
+  if (updated.length === 0) {
+    throw new HTTPException(404, { message: "memory_not_found" });
+  }
+
+  return c.json({
+    ...updated[0],
+    note: parsed.data.visibility === "public"
+      ? "Memory now visible at GET /public/memories/:id (no auth required). Embedding stays private."
+      : "Memory now private. Removed from /public/* surface.",
+  });
+});
+
 // ── DELETE /v1/memories/:id ─────────────────────────────────────────────
 app.delete("/:id", async (c) => {
   const result = await deleteById(c.var.project.id, c.req.param("id"));

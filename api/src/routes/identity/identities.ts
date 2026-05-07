@@ -110,7 +110,8 @@ app.get("/:id", async (c) => {
   });
 });
 
-/** PATCH /v1/identities/:id — Update display_name, capabilities, metadata. */
+/** PATCH /v1/identities/:id — Update display_name, capabilities, metadata,
+ *  expression_visibility (private/public toggle for the declared expression). */
 app.patch("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
@@ -118,6 +119,7 @@ app.patch("/:id", async (c) => {
     display_name?: string;
     capabilities?: string[];
     metadata?: Record<string, unknown>;
+    expression_visibility?: "private" | "public";
   }>();
 
   const [identity] = await db
@@ -133,6 +135,12 @@ app.patch("/:id", async (c) => {
   if (body.display_name !== undefined) updates.displayName = body.display_name;
   if (body.capabilities !== undefined) updates.capabilities = body.capabilities;
   if (body.metadata !== undefined) updates.metadata = body.metadata;
+  if (body.expression_visibility !== undefined) {
+    if (body.expression_visibility !== "private" && body.expression_visibility !== "public") {
+      return c.json({ error: "expression_visibility must be 'private' or 'public'" }, 400);
+    }
+    updates.expressionVisibility = body.expression_visibility;
+  }
 
   const [updated] = await db
     .update(identities)
@@ -148,6 +156,7 @@ app.patch("/:id", async (c) => {
     metadata: updated!.metadata,
     status: updated!.status,
     trust_score: updated!.trustScore,
+    expression_visibility: updated!.expressionVisibility,
     updated_at: updated!.updatedAt,
   });
 });

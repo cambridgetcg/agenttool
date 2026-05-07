@@ -50,6 +50,9 @@ export const memories = memorySchema.table(
      *  See services/identity/composition.ts for application semantics. */
     expressionPatch: jsonb("expression_patch"),
     decayProtected: boolean("decay_protected").notNull().default(false),
+    /** Public/private toggle — defaults to private. Public exposes
+     *  full content + importance + tier to /public/* endpoints. */
+    visibility: text("visibility").notNull().default("private"),
     elevatedFrom: uuid("elevated_from"),
     elevatedAt: timestamp("elevated_at", { withTimezone: true }),
     accessedAt: timestamp("accessed_at", { withTimezone: true }),

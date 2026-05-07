@@ -30,6 +30,10 @@ export const identities = identitySchema.table(
     /** Identity expression — register, walls, subagents, wake text.
      *  See ExpressionData in services/identity/expression.ts. */
     expression: jsonb("expression").notNull().default({}),
+    /** Public/private toggle for declared expression — defaults to
+     *  private. Public exposes register/walls/subagents/wake_text to
+     *  /public/agents/:did. */
+    expressionVisibility: text("expression_visibility").notNull().default("private"),
     status: text("status").notNull().default("active"),
     trustScore: real("trust_score").notNull().default(0),
     /** Fork lineage — non-null when this identity was created by forking

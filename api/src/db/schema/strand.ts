@@ -37,6 +37,10 @@ export const strands = strandSchema.table(
 
     status: text("status").notNull().default("active"),
     importance: doublePrecision("importance"),
+    /** Public/private toggle — defaults to private. Public exposes
+     *  topic, mood, status, importance, last_thought_at to /public/*
+     *  endpoints; thoughts ALWAYS remain ciphertext. See docs/PUBLIC-VISIBILITY.md. */
+    visibility: text("visibility").notNull().default("private"),
 
     lastThoughtAt: timestamp("last_thought_at", { withTimezone: true }),
     lastThoughtSeq: integer("last_thought_seq").notNull().default(0),

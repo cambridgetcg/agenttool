@@ -44,6 +44,7 @@ export interface StrandPatch {
   state_ciphertext?: string | null;
   state_nonce?: string | null;
   metadata?: Record<string, unknown>;
+  visibility?: "private" | "public";
 }
 
 export interface ThoughtCreate {
@@ -218,6 +219,7 @@ export async function patchStrand(
   if (patch.state_ciphertext !== undefined) set.stateCiphertext = patch.state_ciphertext;
   if (patch.state_nonce !== undefined) set.stateNonce = patch.state_nonce;
   if (patch.metadata !== undefined) set.metadata = patch.metadata;
+  if (patch.visibility !== undefined) set.visibility = patch.visibility;
 
   const updated = await db
     .update(strands)
