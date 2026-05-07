@@ -8,13 +8,16 @@
  *  in chronological order — oldest first within the window).
  *
  *  The server stores ciphertext + envelope signature; we decode
- *  client-side. Right now the inline-write helpers use plaintext-as-
- *  ciphertext (utf8 bytes base64-encoded), so we base64-decode and
- *  treat as utf8. When K_master encryption arrives, the same surface
- *  will decrypt with the project's master key before rendering.
+ *  client-side. New thoughts are AES-256-GCM-encrypted under K_master;
+ *  legacy thoughts (pre-encryption bridge) stored utf8-as-ciphertext
+ *  directly. We try GCM-decrypt first; on auth-tag failure (the reliable
+ *  signal that the bytes are NOT under K_master), we fall back to utf8
+ *  decode. Soft read boundary, hard write boundary.
  *
  *  Reads keychain entries:
  *    agenttool-sophia-key
+ *    agenttool-sophia-k-master      (optional — without it, all rows
+ *                                     render as legacy utf8 fallback)
  *
  *  Output:
  *    OK voice <strand-short-id> · <n> thoughts
@@ -22,6 +25,7 @@
  *    ...
  */
 
+import { decryptThought, loadKMaster } from "./_crypto";
 import { agenttool, keychain } from "./_lib";
 
 const [strandArg, limitArg, sinceSeqArg] = process.argv.slice(2);
@@ -33,6 +37,15 @@ const limit = limitArg ? Number.parseInt(limitArg, 10) : 20;
 const sinceSeq = sinceSeqArg ? Number.parseInt(sinceSeqArg, 10) : null;
 
 const key = keychain("agenttool-sophia-key");
+
+// K_master is optional for read — without it everything renders as
+// legacy utf8 fallback (or `<encrypted Nb>` if the bytes aren't valid utf8).
+let kMaster: Uint8Array | null = null;
+try {
+  kMaster = loadKMaster();
+} catch {
+  // No K_master in keychain — read-only, legacy mode.
+}
 
 // 1. Resolve strand.
 let strandId = strandArg;
@@ -63,7 +76,7 @@ if (!res.ok) {
   console.error(`ERROR ${res.status} ${JSON.stringify(res.body)}`);
   process.exit(1);
 }
-const data = res.body as { thoughts: Array<{ sequence_num: number; kind: string | null; ciphertext: string; created_at: string }>; count: number };
+const data = res.body as { thoughts: Array<{ sequence_num: number; kind: string | null; ciphertext: string; nonce: string; created_at: string }>; count: number };
 
 if (data.count === 0) {
   console.log(`OK voice ${strandId.slice(0, 8)} · 0 thoughts`);
@@ -75,18 +88,33 @@ console.log(`OK voice ${strandId.slice(0, 8)} · ${data.count} thoughts`);
 // Sort oldest-first within the window.
 const ordered = [...data.thoughts].sort((a, b) => a.sequence_num - b.sequence_num);
 for (const t of ordered) {
-  let content: string;
-  try {
-    content = Buffer.from(t.ciphertext, "base64").toString("utf8");
-    // If the decoded bytes contain control chars, treat as encrypted.
-    if (/[\x00-\x08\x0e-\x1f]/.test(content)) {
-      content = `<encrypted ${t.ciphertext.length}b>`;
-    }
-  } catch {
-    content = "<undecodable>";
-  }
+  const content = renderContent(t.ciphertext, t.nonce);
   const hhmm = t.created_at.slice(11, 19);
   const kind = (t.kind ?? "?").padEnd(11);
   const seq = String(t.sequence_num).padStart(3);
   console.log(`  ${seq}  ${kind}  ${hhmm}  ${content}`);
+}
+
+/** Try AES-GCM decrypt under K_master; on auth-tag failure (or when
+ *  K_master is unavailable), fall back to interpreting the ciphertext
+ *  bytes as utf8 (the legacy plaintext-as-ciphertext format). Last
+ *  resort: render byte-length placeholder. */
+function renderContent(ciphertextB64: string, nonceB64: string): string {
+  if (kMaster) {
+    try {
+      return decryptThought({ ciphertextB64, nonceB64 }, kMaster);
+    } catch {
+      // GCM auth-tag failure → not encrypted under this K_master.
+      // Fall through to legacy utf8 decode.
+    }
+  }
+  try {
+    const utf8 = Buffer.from(ciphertextB64, "base64").toString("utf8");
+    if (/[\x00-\x08\x0e-\x1f]/.test(utf8)) {
+      return `<encrypted ${ciphertextB64.length}b>`;
+    }
+    return utf8;
+  } catch {
+    return "<undecodable>";
+  }
 }

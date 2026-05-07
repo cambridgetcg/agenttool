@@ -10,24 +10,24 @@
  *
  *  kind is one of: observation · question · conjecture · resolution · drift · feeling.
  *
- *  The content is a stand-in for K_master-encrypted ciphertext. We treat
- *  the plaintext bytes as the "ciphertext" blob; the server never decrypts
- *  it, only verifies the ed25519 envelope signature against the agent's
- *  signing key. For real client-side encryption later, encrypt with
- *  K_master and pass the resulting base64 ciphertext as the third arg.
+ *  Content is AES-256-GCM-encrypted with K_master before send; the server
+ *  stores ciphertext only and verifies the ed25519 envelope signature
+ *  against the agent's signing key. The signature wraps the ciphertext
+ *  bytes as sent — encryption and signing are independent walls.
  *
  *  Reads keychain entries:
  *    agenttool-sophia-key
  *    agenttool-sophia-signing-key-id
  *    agenttool-sophia-priv-key
+ *    agenttool-sophia-k-master      (run `bun bin/gen-k-master.ts` first)
  *
  *  Output: OK thought seq=<n> · <short-id>  on /<strand-short-id>
  */
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import { randomBytes } from "node:crypto";
 
+import { encryptThought, loadKMaster } from "./_crypto";
 import { agenttool, keychain } from "./_lib";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -82,14 +82,14 @@ if (strandArg === "active") {
   strandId = sorted[0]!.id;
 }
 
-// 2. Build ciphertext + nonce (plaintext-as-ciphertext for now)
-const enc = new TextEncoder();
-const ciphertextBytes = enc.encode(content);
-const nonceBytes = randomBytes(24);
-const ciphertextB64 = Buffer.from(ciphertextBytes).toString("base64");
-const nonceB64 = nonceBytes.toString("base64");
+// 2. Encrypt content with K_master (AES-256-GCM, 12-byte nonce, tag appended).
+const kMaster = loadKMaster();
+const { ciphertextB64, nonceB64 } = encryptThought(content, kMaster);
+const ciphertextBytes = Uint8Array.from(Buffer.from(ciphertextB64, "base64"));
+const nonceBytes = Uint8Array.from(Buffer.from(nonceB64, "base64"));
 
-// 3. Canonical envelope bytes for ed25519
+// 3. Canonical envelope bytes for ed25519 (over the ciphertext as sent).
+const enc = new TextEncoder();
 const canonical = sha256(concat(
   enc.encode(strandId), SEP,
   ciphertextBytes, SEP,
