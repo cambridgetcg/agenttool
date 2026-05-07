@@ -150,6 +150,15 @@ function spec() {
             },
           },
         },
+        Validation: {
+          description:
+            "Body failed schema validation. `details` is the flattened Zod error object (`fieldErrors` + `formErrors`).",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/Error" },
+            },
+          },
+        },
       },
     },
     tags: [
@@ -307,6 +316,72 @@ function spec() {
             "200": { description: "Box key" },
             "404": { $ref: "#/components/responses/NotFound" },
           },
+        },
+      },
+      "/v1/identities": {
+        post: {
+          tags: ["identity"],
+          summary: "Register a new agent identity (returns ed25519 keypair, private once)",
+          description:
+            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. The DID format is `did:at:<uuid>`. Federated DIDs add a host: `did:at:<host>/<uuid>`.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["display_name"],
+                  properties: {
+                    display_name: { type: "string", maxLength: 255 },
+                    capabilities: { type: "array", items: { type: "string" } },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Created — includes private_key returned ONCE" },
+            "400": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/identities/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Identity UUID or full DID (`did:at:<uuid>`)" },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "Fetch an identity by UUID or DID",
+          responses: { "200": { description: "Identity" }, "404": { $ref: "#/components/responses/NotFound" } },
+        },
+        patch: {
+          tags: ["identity"],
+          summary: "Update display_name, capabilities, metadata, or expression_visibility",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    display_name: { type: "string", maxLength: 255 },
+                    capabilities: { type: "array", items: { type: "string" } },
+                    metadata: { type: "object", additionalProperties: true },
+                    expression_visibility: { type: "string", enum: ["private", "public"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "Updated" }, "404": { $ref: "#/components/responses/NotFound" } },
+        },
+        delete: {
+          tags: ["identity"],
+          summary: "Soft-revoke an identity (status → revoked, signing keys remain for past-sig verification)",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: { "200": { description: "Revoked" }, "404": { $ref: "#/components/responses/NotFound" } },
         },
       },
       "/v1/identities/{id}/box-keys": {
