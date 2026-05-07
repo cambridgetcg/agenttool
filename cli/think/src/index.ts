@@ -33,6 +33,8 @@
  *    agenttool-think proposal accept <msg-id>   graft into target strand + reply
  *                          [--into-strand X | --new-strand TOPIC]
  *    agenttool-think proposal reject <msg-id> [--reason X]   decline + reply
+ *    agenttool-think dashboard [--identity-id X] [--json]
+ *                                               third-person observability view
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -43,6 +45,7 @@ import { advance } from "./modes/advance";
 import { backup } from "./modes/backup";
 import { genBoxKey, registerBoxKey } from "./modes/box-keys";
 import { consolidate } from "./modes/consolidate";
+import { dashboard } from "./modes/dashboard";
 import {
   inboxDelete,
   inboxList,
@@ -214,6 +217,15 @@ async function main(): Promise<void> {
       const config = loadConfig();
       const keys = loadKeys(config.homeDir);
       await advance(config, keys);
+      return;
+    }
+    case "dashboard": {
+      const config = loadConfig();
+      const args = process.argv.slice(3);
+      const idIdx = args.indexOf("--identity-id");
+      const identityId = idIdx !== -1 ? args[idIdx + 1] : undefined;
+      const json = args.includes("--json");
+      await dashboard(config, { identityId, json });
       return;
     }
     case "wander": {

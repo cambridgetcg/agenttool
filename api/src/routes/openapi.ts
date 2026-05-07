@@ -169,6 +169,20 @@ function spec() {
       { name: "bootstrap", description: "Agent lifecycle entry" },
     ],
     paths: {
+      // ── Dashboard ─────────────────────────────────────────────────────
+      "/v1/dashboard": {
+        parameters: [
+          { name: "identity_id", in: "query", schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["wake"],
+          summary: "Composed observability view — third-person monitoring (vs /v1/wake which is first-person orientation)",
+          description:
+            "Aggregates strands, thoughts, memories, traces, chronicle, covenants, inbox, wallet, lineage. No new schema; pure composition.",
+          responses: { "200": { description: "Dashboard snapshot" } },
+        },
+      },
+
       // ── Wake ──────────────────────────────────────────────────────────
       "/v1/wake": {
         get: {

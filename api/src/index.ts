@@ -24,6 +24,7 @@ import { config } from "./config";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import adaptersRouter from "./routes/adapters";
+import dashboardRouter from "./routes/dashboard";
 import bootstrapRouter from "./routes/bootstrap";
 import continuityRouter from "./routes/continuity";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
@@ -74,6 +75,7 @@ app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
+app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
@@ -112,6 +114,7 @@ app.use("/v1/escrows/*", rateLimitHeaders());
 app.use("/v1/vault/*", rateLimitHeaders());
 app.use("/v1/bootstrap/*", rateLimitHeaders());
 app.use("/v1/wake/*", rateLimitHeaders());
+app.use("/v1/dashboard/*", rateLimitHeaders());
 app.use("/v1/chronicle/*", rateLimitHeaders());
 app.use("/v1/covenants/*", rateLimitHeaders());
 app.use("/v1/identity/backup/*", rateLimitHeaders());
@@ -136,6 +139,7 @@ app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/wake", wakeRouter);
+app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/adapters", adaptersRouter);
@@ -210,6 +214,8 @@ app.get("/about", (c) =>
     routes: {
       wake:
         "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. See docs/IDENTITY-ANCHOR.md.",
+      dashboard:
+        "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
       bootstrap:
         "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
       continuity:

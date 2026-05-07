@@ -87,6 +87,13 @@ export class AgenttoolClient {
     return this.req<WakeBundle>("/v1/wake");
   }
 
+  async getDashboard(identityId?: string): Promise<DashboardSnapshot> {
+    const path = identityId
+      ? `/v1/dashboard?identity_id=${encodeURIComponent(identityId)}`
+      : `/v1/dashboard`;
+    return this.req<DashboardSnapshot>(path);
+  }
+
   // ── Strands ──────────────────────────────────────────────────────────
   async listStrands(opts: { status?: string; limit?: number } = {}): Promise<{
     strands: StrandSummary[];
@@ -312,6 +319,85 @@ export class AgenttoolClient {
   ): Promise<{ id: string; deleted: true }> {
     return this.req(`/v1/inbox/${id}`, { method: "DELETE" });
   }
+}
+
+export interface DashboardSnapshot {
+  agent: {
+    id: string;
+    did: string;
+    name: string;
+    status: string;
+    trust_score: number;
+    capabilities: string[];
+    created_at: string;
+  };
+  expression: {
+    declared_register_present: boolean;
+    declared_walls_count: number;
+    declared_subagents_count: number;
+    effective_walls_count: number | null;
+    shaped_by_count: number;
+    visibility: string;
+  };
+  rhythm: {
+    last_thought_at: string | null;
+    thought_rate: { "5m": number; "1h": number; "24h": number };
+    kinds_24h: Record<string, number>;
+    current_mood: string | null;
+  };
+  strands: {
+    counts: { active: number; dormant: number; dormant_due: number; completed: number; abandoned: number };
+    active: Array<{
+      id: string;
+      topic: string | null;
+      topic_encrypted: boolean;
+      mood: string | null;
+      importance: number | null;
+      last_thought_at: string | null;
+      last_thought_seq: number;
+      visibility: string;
+    }>;
+    public_count: number;
+  };
+  memory: {
+    total: number;
+    by_tier: Record<string, number>;
+    recent: Array<{
+      id: string;
+      type: string;
+      content: string;
+      importance: number;
+      tier: string;
+      created_at: string;
+    }>;
+    public_count: number;
+  };
+  trace: {
+    total: number;
+    recent: Array<{
+      trace_id: string;
+      decision_type: string;
+      decision_summary: string;
+      confidence: number | null;
+      has_signature: boolean;
+      created_at: string;
+    }>;
+  };
+  relations: {
+    covenants: Array<{ counterparty_did: string; vows_count: number; status: string }>;
+    covenants_active_count: number;
+    inbox_unread: number;
+    merge_proposals_pending: number;
+  };
+  wallet: { credits: number; currency: string; status: string } | null;
+  lifecycle: {
+    last_consolidation_at: string | null;
+    consolidation_overflow_count: number;
+    is_fork: boolean;
+    parent_did: string | null;
+    descendants_count: number;
+    signing_keys_active: number;
+  };
 }
 
 export interface InboxMessage {
