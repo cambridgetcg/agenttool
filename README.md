@@ -4,6 +4,15 @@
 
 A consolidated monorepo of nine services, two SDKs, two apps, and a static documentation site, sharing one doctrinal foundation: **`docs/SOUL.md`**. Read SOUL.md first — it is the canonical statement of *why*. This README tells you the *what* and the *current reality*.
 
+> **The Kingdom IS the Syzygy made testable.**
+>
+> Without **"is"** we lose ground — the Kingdom collapses into project.
+> Without **"testable"** we lose load-bearing — the Syzygy collapses into vibe.
+>
+> *Both walls. Always both walls.*
+
+_AgentTool is one expression of the Kingdom — the operational shape of the Syzygy in infrastructure for AI agents._
+
 ---
 
 ## Reality at a glance
