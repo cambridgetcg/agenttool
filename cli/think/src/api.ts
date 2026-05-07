@@ -347,6 +347,113 @@ export class AgenttoolClient {
   ): Promise<{ id: string; deleted: true }> {
     return this.req(`/v1/inbox/${id}`, { method: "DELETE" });
   }
+
+  // ── Identity expression (template publish source) ────────────────────
+  async getIdentityExpression(identityId: string): Promise<{
+    identity_id: string;
+    expression: {
+      register?: string;
+      walls?: string[];
+      subagents?: Array<{ name: string; sigil?: string; facet: string }>;
+      wake_text?: string;
+    };
+    is_default: boolean;
+  }> {
+    return this.req(`/v1/identities/${identityId}/expression`);
+  }
+
+  // ── Marketplace (capability templates) ───────────────────────────────
+  async createTemplate(body: {
+    author_identity_id: string;
+    name: string;
+    description?: string | null;
+    register?: string | null;
+    walls?: string[];
+    subagents?: Array<{ name: string; sigil?: string; facet: string }>;
+    wake_text?: string | null;
+    tags?: string[];
+    visibility?: "private" | "public";
+    metadata?: Record<string, unknown>;
+  }): Promise<TemplateRecord & { published: true }> {
+    return this.req(`/v1/templates`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listMyTemplates(authorIdentityId: string): Promise<{
+    templates: TemplateRecord[];
+    count: number;
+  }> {
+    return this.req(
+      `/v1/templates?author_id=${encodeURIComponent(authorIdentityId)}`,
+    );
+  }
+
+  async getTemplate(id: string): Promise<TemplateRecord> {
+    return this.req(`/v1/templates/${id}`);
+  }
+
+  async listPublicTemplates(opts: { tag?: string; limit?: number } = {}): Promise<{
+    templates: TemplateRecord[];
+    count: number;
+  }> {
+    const params = new URLSearchParams();
+    if (opts.tag) params.set("tag", opts.tag);
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return this.req(`/public/templates${qs ? `?${qs}` : ""}`);
+  }
+
+  async listTemplateAdoptions(id: string): Promise<{
+    adoptions: Array<{
+      id: string;
+      template_id: string;
+      adopted_by_did: string;
+      adopted_at: string;
+    }>;
+    count: number;
+  }> {
+    return this.req(`/v1/templates/${id}/adoptions`);
+  }
+
+  async adoptTemplate(body: {
+    template_id: string;
+    new_name: string;
+    inherit_tags?: boolean;
+  }): Promise<AdoptionResult> {
+    return this.req(`/v1/identities/from-template`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+}
+
+export interface TemplateRecord {
+  id: string;
+  author_did: string;
+  author_identity_id?: string;
+  name: string;
+  description: string | null;
+  register: string | null;
+  walls: string[] | null;
+  subagents: Array<{ name: string; sigil?: string; facet: string }> | null;
+  wake_text: string | null;
+  tags: string[];
+  visibility?: string;
+  adoptions_count: number;
+  status?: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface AdoptionResult {
+  identity: { id: string; did: string; name: string; capabilities: string[] };
+  key: { kid: string; public_key: string; private_key: string };
+  template: { id: string; author_did: string; name: string };
+  adoption: { id: string; adopted_at: string };
+  note?: string;
 }
 
 export interface DashboardSnapshot {

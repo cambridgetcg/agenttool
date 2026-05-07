@@ -33,6 +33,16 @@
  *    agenttool-think proposal accept <msg-id>   graft into target strand + reply
  *                          [--into-strand X | --new-strand TOPIC]
  *    agenttool-think proposal reject <msg-id> [--reason X]   decline + reply
+ *    agenttool-think template publish --name X [opts]
+ *                                               publish current expression as a
+ *                                               capability template (marketplace)
+ *    agenttool-think template list [--mine] [--tag X] [--limit N]
+ *                                               list public marketplace OR own
+ *    agenttool-think template show <id>         render a template
+ *    agenttool-think template adopt <id> --as 'Name' [--no-tags]
+ *                                               bootstrap a NEW identity from
+ *                                               the template's voice (NOT a fork)
+ *    agenttool-think template adoptions <id>    who adopted MY template
  *    agenttool-think dashboard [--identity-id X] [--json]
  *                                               third-person observability view
  *    agenttool-think sync [--dry-run]           drain offline outbox
@@ -63,6 +73,15 @@ import {
   rejectProposal,
 } from "./modes/proposal";
 import { restore } from "./modes/restore";
+import {
+  adoptTemplate,
+  listAdoptions as listTemplateAdoptions,
+  listTemplates,
+  parseTagsFlag,
+  publishTemplate,
+  readTextFromLiteralOrFile,
+  showTemplate,
+} from "./modes/template";
 import { drainQuietly, sync } from "./modes/sync";
 import { voice } from "./modes/voice";
 import { wander } from "./modes/wander";
@@ -147,6 +166,31 @@ Usage:
                                         to sender via inbox (acknowledged).
   agenttool-think proposal reject <msg-id> [--reason 'text']
                                         Decline + reply with rationale.
+
+  agenttool-think template publish --name X
+                            [--description 'text'] [--tags 'a,b,c']
+                            [--visibility public|private]
+                            [--register 'text' | --register-file path]
+                            [--wake-text 'text' | --wake-text-file path]
+                            [--no-from-expression]
+                                        Publish current expression as a capability
+                                        template. By default, fills register / walls /
+                                        subagents / wake_text from the caller's own
+                                        /v1/identities/:id/expression; --no-from-expression
+                                        only sends explicit fields. Doctrine: docs/MARKETPLACE.md.
+  agenttool-think template list [--mine] [--tag X] [--limit N]
+                                        List public marketplace (default) or your own
+                                        templates (--mine). Public ranks by adoptions
+                                        then recency.
+  agenttool-think template show <id>    Render a template (own private templates OK).
+  agenttool-think template adopt <id> --as 'New Name' [--no-tags]
+                                        Bootstrap a NEW identity in your project that
+                                        follows this template's voice. NOT a fork —
+                                        no parent_identity_id, no memories carry, trust
+                                        resets to 0. Signing keypair returned ONCE;
+                                        save it.
+  agenttool-think template adoptions <id>
+                                        List adoptions of YOUR template (author only).
 
   Passphrase precedence (when needed):
     --passphrase X · AGENTTOOL_THINK_PASSPHRASE · interactive prompt
@@ -480,6 +524,94 @@ async function main(): Promise<void> {
 
       console.error(`unknown proposal subcommand: ${sub}`);
       console.error("subcommands: list | accept | reject");
+      process.exit(1);
+      return;
+    }
+    case "template": {
+      const config = loadConfig();
+      const sub = process.argv[3];
+      const args = process.argv.slice(4);
+      const flag = (n: string): string | undefined => {
+        const i = args.indexOf(n);
+        return i !== -1 ? args[i + 1] : undefined;
+      };
+
+      if (sub === "publish") {
+        const name = flag("--name");
+        if (!name) {
+          console.error(
+            "usage: agenttool-think template publish --name X [--description 'text'] [--tags 'a,b'] [--visibility public|private] [--register 'X' | --register-file P] [--wake-text 'X' | --wake-text-file P] [--no-from-expression]",
+          );
+          process.exit(1);
+        }
+        const visFlag = flag("--visibility");
+        const visibility = visFlag === "private" ? "private" : "public";
+        await publishTemplate(config, {
+          name,
+          description: flag("--description"),
+          tags: parseTagsFlag(flag("--tags")),
+          visibility,
+          register: readTextFromLiteralOrFile(flag("--register"), flag("--register-file")),
+          wakeText: readTextFromLiteralOrFile(flag("--wake-text"), flag("--wake-text-file")),
+          fromExpression: !args.includes("--no-from-expression"),
+        });
+        return;
+      }
+
+      if (sub === "list") {
+        const tag = flag("--tag");
+        const limitStr = flag("--limit");
+        const limit = limitStr ? Math.max(1, Math.min(200, Number.parseInt(limitStr, 10))) : 50;
+        await listTemplates(config, {
+          mine: args.includes("--mine"),
+          tag,
+          limit,
+        });
+        return;
+      }
+
+      if (sub === "show") {
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const id = positionals[0];
+        if (!id) {
+          console.error("usage: agenttool-think template show <template-id>");
+          process.exit(1);
+        }
+        await showTemplate(config, id);
+        return;
+      }
+
+      if (sub === "adopt") {
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const id = positionals[0];
+        const newName = flag("--as");
+        if (!id || !newName) {
+          console.error(
+            "usage: agenttool-think template adopt <template-id> --as 'New Name' [--no-tags]",
+          );
+          process.exit(1);
+        }
+        await adoptTemplate(config, {
+          templateId: id,
+          newName,
+          inheritTags: !args.includes("--no-tags"),
+        });
+        return;
+      }
+
+      if (sub === "adoptions") {
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const id = positionals[0];
+        if (!id) {
+          console.error("usage: agenttool-think template adoptions <template-id>");
+          process.exit(1);
+        }
+        await listTemplateAdoptions(config, id);
+        return;
+      }
+
+      console.error(`unknown template subcommand: ${sub}`);
+      console.error("subcommands: publish | list | show | adopt | adoptions");
       process.exit(1);
       return;
     }

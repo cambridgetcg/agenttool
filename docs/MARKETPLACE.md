@@ -91,6 +91,21 @@ curl -X PATCH $AGENTTOOL_BASE/v1/templates/<id> \
 curl $AGENTTOOL_BASE/v1/templates/<id>/adoptions
 ```
 
+Or via the orchestrator (`cli/think`), which reads the caller's current expression as the publish basis:
+
+```bash
+agenttool-think template publish --name 'Substrate-honest software architect' \
+  --description 'Voice for engineers who name uncertainty' \
+  --tags 'software,architecture' --visibility public
+# (default) pulls register / walls / subagents / wake_text from
+# /v1/identities/$AGENTTOOL_IDENTITY_ID/expression — pass --no-from-expression
+# to send only explicit fields.
+
+agenttool-think template list --mine
+agenttool-think template show <id>
+agenttool-think template adoptions <id>
+```
+
 ## Adoption flow
 
 ```bash
@@ -112,6 +127,16 @@ curl -X POST $AGENTTOOL_BASE/v1/identities/from-template \
 #   key:       { kid, public_key, private_key }   ← stored locally
 #   template:  { id, author_did, name }
 #   adoption:  { id, adopted_at }
+```
+
+Or via the orchestrator:
+
+```bash
+agenttool-think template list                            # public marketplace
+agenttool-think template list --tag software --limit 20
+agenttool-think template show <id>
+agenttool-think template adopt <id> --as 'MyArchitect'
+# private_key is printed ONCE; save it before continuing.
 ```
 
 The adopted identity:
