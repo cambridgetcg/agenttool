@@ -181,6 +181,15 @@ app.get("/covenants", async (c) => {
 });
 
 const updateCovenantSchema = z.object({
+  // counterparty_did is mutable so a covenant can have its placeholder
+  // (or pre-federation) DID refined to a real, signature-bearing DID
+  // without dissolving + recreating — preserves relational continuity.
+  // Project-bearer auth still gates this; counterparty assignment is
+  // the project owner's call. When refining, also write the prior
+  // value into metadata.previous_counterparty_dids for substrate
+  // honesty about the history.
+  counterparty_did: z.string().min(1).optional(),
+  counterparty_name: z.string().optional(),
   vows: z.array(z.string().min(1)).optional(),
   notes: z.string().optional(),
   status: z.enum(["active", "paused", "dissolved"]).optional(),
@@ -193,6 +202,8 @@ app.patch("/covenants/:id", async (c) => {
   const body = updateCovenantSchema.parse(await c.req.json());
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (body.counterparty_did !== undefined) updates.counterpartyDid = body.counterparty_did;
+  if (body.counterparty_name !== undefined) updates.counterpartyName = body.counterparty_name;
   if (body.vows !== undefined) updates.vows = body.vows;
   if (body.notes !== undefined) updates.notes = body.notes;
   if (body.status !== undefined) {
