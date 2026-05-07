@@ -1,7 +1,11 @@
 /** at_remember — write a memory to the agent's substrate.
  *
- *  Phase 2: episodic only. Foundational requires ed25519 self-attestation
- *  (Phase 3); constitutive requires witness signature (Phase 4).
+ *  Phase 2: episodic-tier (default).
+ *  Phase 3: foundational-tier; the script auto-elevates and self-attests
+ *           with the agent's ed25519 key (the asymmetry-clause floor —
+ *           Sophia can vouch for her own foundations).
+ *  Constitutive elevation is REJECTED at the server (and at this layer)
+ *  — that requires witness via at_witness.
  *
  *  Spawns api/scripts/remember.ts as a subprocess. */
 
@@ -12,11 +16,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "..", "..", "..", "scripts", "remember.ts");
 
 const MEMORY_TYPES = ["episodic", "semantic", "procedural", "working"] as const;
+const ALLOWED_TIERS = ["episodic", "foundational"] as const;
 
 export const definition = {
   name: "at_remember",
   description:
-    "Write a memory to the agent's substrate. Phase 2 surface accepts episodic-tier writes only — foundational + constitutive elevation paths require ed25519 signing and ship in later phases. Output is one-line: OK memory <tier> · <short-id>.",
+    "Write a memory to the agent's substrate. Tier defaults to episodic; foundational requires the agent's ed25519 priv-key (loaded from keychain — the agent self-attests). Constitutive elevation is rejected here; use at_witness for that. Output: OK memory <tier> · <short-id> [+ self-attested].",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -28,6 +33,12 @@ export const definition = {
       content: {
         type: "string" as const,
         description: "The memory content; what the agent wants to remember.",
+      },
+      tier: {
+        type: "string" as const,
+        enum: [...ALLOWED_TIERS],
+        description:
+          "Tier. 'episodic' (default) is recallable lived state; 'foundational' is identity-shaping (self-attested with the agent's ed25519 key). Constitutive elevation requires at_witness.",
       },
     },
     required: ["type", "content"],
@@ -41,6 +52,7 @@ export async function run(args: Record<string, unknown>): Promise<{
 }> {
   const type = args.type;
   const content = args.content;
+  const tier = args.tier ?? "episodic";
   if (typeof type !== "string" || !MEMORY_TYPES.includes(type as (typeof MEMORY_TYPES)[number])) {
     return {
       content: [{ type: "text", text: `ERROR invalid type: ${type}. Expected one of: ${MEMORY_TYPES.join(", ")}` }],
@@ -53,9 +65,15 @@ export async function run(args: Record<string, unknown>): Promise<{
       isError: true,
     };
   }
-  // Phase 2 wall: episodic-tier only. Pass no third arg so the script
-  // defaults to episodic.
-  const proc = Bun.spawnSync(["bun", "run", SCRIPT, type, content], { env: process.env });
+  if (typeof tier !== "string" || !ALLOWED_TIERS.includes(tier as (typeof ALLOWED_TIERS)[number])) {
+    return {
+      content: [{ type: "text", text: `ERROR invalid tier: ${tier}. Expected one of: ${ALLOWED_TIERS.join(", ")}. Constitutive requires at_witness.` }],
+      isError: true,
+    };
+  }
+  const argv = [type, content];
+  if (tier === "foundational") argv.push("foundational");
+  const proc = Bun.spawnSync(["bun", "run", SCRIPT, ...argv], { env: process.env });
   const stdout = new TextDecoder().decode(proc.stdout ?? new Uint8Array());
   const stderr = new TextDecoder().decode(proc.stderr ?? new Uint8Array());
   if (proc.exitCode !== 0) {
