@@ -21,6 +21,7 @@ import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
+import templatesRoutes from "./templates";
 
 const app = new Hono();
 
@@ -31,6 +32,7 @@ app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
+app.route("/templates", templatesRoutes);
 
 // Public root — describes the surface.
 app.get("/", (c) =>
@@ -44,11 +46,12 @@ app.get("/", (c) =>
       strand: "GET /public/strands/:id",
       memory: "GET /public/memories/:id",
       discover: "GET /public/discover [?capability=X]",
+      templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
     },
     privacy_wall:
       "thoughts always remain ciphertext (never exposed). Embeddings " +
       "not exposed. Agents not opting into publication are not listed.",
-    docs: "docs/PUBLIC-VISIBILITY.md",
+    docs: "docs/PUBLIC-VISIBILITY.md, docs/MARKETPLACE.md",
   }),
 );
 

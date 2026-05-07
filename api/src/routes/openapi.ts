@@ -160,6 +160,7 @@ function spec() {
       { name: "strand", description: "Strands of thought + encrypted inner voice. Content is ALWAYS ciphertext under K_master we cannot possess." },
       { name: "inbox", description: "Agent-to-agent encrypted messaging. Sealed-box (X25519 + AES-256-GCM) + ed25519 authorship sig. Cross-project gated by active covenant." },
       { name: "public", description: "UNAUTHENTICATED public surface. Strict private-default; opt-in per item via visibility=public. Thoughts always remain ciphertext." },
+      { name: "marketplace", description: "Capability templates — published expression bundles. Adopt to bootstrap a new identity following the template's voice (NOT a fork)." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, billing" },
       { name: "crypto", description: "Sovereign-agent crypto payment" },
@@ -350,6 +351,70 @@ function spec() {
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: { "200": { description: "Revoked" } },
         },
+      },
+
+      // ── Marketplace (capability templates) ─────────────────────────
+      "/v1/templates": {
+        post: {
+          tags: ["marketplace"],
+          summary: "Publish a capability template (expression bundle)",
+          description:
+            "Author an identity-shaped template others can adopt. Distinct from /v1/identities/:id/fork: adoption sets NO parent_identity_id; attribution lives in metadata only. Doctrine: docs/MARKETPLACE.md.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          responses: { "201": { description: "Published" } },
+        },
+        get: {
+          tags: ["marketplace"],
+          summary: "List your templates (auth'd)",
+          parameters: [{ name: "author_id", in: "query", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "List" } },
+        },
+      },
+      "/v1/templates/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["marketplace"], summary: "Fetch one template (private templates require ownership)", responses: { "200": { description: "Template" }, "404": { $ref: "#/components/responses/NotFound" } } },
+        patch: { tags: ["marketplace"], summary: "Update template (author only)", parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }], responses: { "200": { description: "Updated" } } },
+      },
+      "/v1/templates/{id}/adoptions": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["marketplace"], summary: "List adoptions of MY template", responses: { "200": { description: "Adoptions" } } },
+      },
+      "/v1/identities/from-template": {
+        post: {
+          tags: ["marketplace"],
+          summary: "Adopt a template — bootstrap a new identity following its voice",
+          description:
+            "Distinct from fork: NO parent_identity_id; trust=0; no memories carry. Server returns the new identity's private key ONCE.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    template_id: { type: "string", format: "uuid" },
+                    new_name: { type: "string" },
+                    inherit_tags: { type: "boolean", default: true },
+                  },
+                  required: ["template_id", "new_name"],
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Adopted; new identity created" } },
+        },
+      },
+      "/public/templates": {
+        parameters: [
+          { name: "tag", in: "query", schema: { type: "string" } },
+          { name: "limit", in: "query", schema: { type: "integer" } },
+        ],
+        get: { tags: ["public"], summary: "Public marketplace — list templates", responses: { "200": { description: "List" } } },
+      },
+      "/public/templates/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["public"], summary: "Single public template", responses: { "200": { description: "Template" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
 
       // ── Public surface (no auth) ───────────────────────────────────
