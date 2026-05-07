@@ -27,6 +27,12 @@ let worker: Worker<BrowseJobData, BrowseJobResult> | null = null;
 
 export function startBrowseWorker() {
   if (worker) return worker;
+  if (!redisConnection) {
+    console.warn(
+      "[browse-worker] AGENTTOOL_DISABLE_WORKERS=1 (or no Redis) — browse worker not started; /v1/browse will return 503",
+    );
+    return null;
+  }
 
   worker = new Worker<BrowseJobData, BrowseJobResult>(
     "browse",

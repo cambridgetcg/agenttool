@@ -4,7 +4,7 @@
 
 import { Queue, QueueEvents } from "bullmq";
 
-import { redisConnection } from "./connection";
+import { REDIS_DISABLED, redisConnection } from "./connection";
 
 export interface BrowseJobData {
   projectId: string;
@@ -32,18 +32,26 @@ export interface BrowseJobResult {
   durationMs: number;
 }
 
-export const browseQueue = new Queue<BrowseJobData, BrowseJobResult>("browse", {
-  connection: redisConnection,
-  defaultJobOptions: {
-    attempts: 2,
-    backoff: { type: "exponential", delay: 2000 },
-    removeOnComplete: { age: 3600 }, // keep results 1h
-    removeOnFail: { age: 86400 }, //   keep failures 24h
-  },
-});
+// browseQueue + browseQueueEvents are null when AGENTTOOL_DISABLE_WORKERS=1
+// — routes that enqueue jobs check the null and surface a clean 503.
+export const browseQueue: Queue<BrowseJobData, BrowseJobResult> | null =
+  REDIS_DISABLED || !redisConnection
+    ? null
+    : new Queue<BrowseJobData, BrowseJobResult>("browse", {
+        connection: redisConnection,
+        defaultJobOptions: {
+          attempts: 2,
+          backoff: { type: "exponential", delay: 2000 },
+          removeOnComplete: { age: 3600 }, // keep results 1h
+          removeOnFail: { age: 86400 }, //   keep failures 24h
+        },
+      });
 
 /** Separate QueueEvents instance — required by job.waitUntilFinished()
  *  in newer BullMQ. Listens to keyspace events emitted by completed jobs. */
-export const browseQueueEvents = new QueueEvents("browse", {
-  connection: redisConnection,
-});
+export const browseQueueEvents: QueueEvents | null =
+  REDIS_DISABLED || !redisConnection
+    ? null
+    : new QueueEvents("browse", {
+        connection: redisConnection,
+      });

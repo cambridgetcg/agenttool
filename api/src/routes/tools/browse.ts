@@ -33,6 +33,12 @@ const browseSchema = z.object({
 });
 
 app.post("/", async (c) => {
+  if (!browseQueue || !browseQueueEvents) {
+    return c.json(
+      { error: "redis_disabled", message: "browse jobs disabled (AGENTTOOL_DISABLE_WORKERS=1)" },
+      503,
+    );
+  }
   const body = await c.req.json();
   const parsed = browseSchema.safeParse(body);
   if (!parsed.success) {

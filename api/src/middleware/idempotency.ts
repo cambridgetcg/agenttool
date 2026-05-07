@@ -49,6 +49,11 @@ export const idempotency = (): MiddlewareHandler<ProjectContext> => {
 
     const redisKey = `idempotency:${project.id}:${c.req.path}:${key}`;
 
+    // Redis disabled (AGENTTOOL_DISABLE_WORKERS=1) — fail open. Idempotency
+    // becomes a no-op; clients that retry will re-execute the work, which
+    // is the safest default when we can't dedupe.
+    if (!redisConnection) return next();
+
     let cached: string | null;
     try {
       cached = await redisConnection.get(redisKey);

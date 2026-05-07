@@ -25,6 +25,9 @@ const app = new Hono<ProjectContext>();
 const STREAM_MAX_MS = 60_000;
 
 app.get("/:id", async (c) => {
+  if (!browseQueue) {
+    return c.json({ error: "redis_disabled", message: "browse jobs disabled (AGENTTOOL_DISABLE_WORKERS=1)" }, 503);
+  }
   const jobId = c.req.param("id");
   const wantsStream = c.req.query("stream") === "true";
 
@@ -95,6 +98,12 @@ app.get("/:id", async (c) => {
     });
 
     // Subscribe to BullMQ QueueEvents filtered by this job id.
+    // Bind to a non-null local so the listener callbacks below type-check
+    // (early-return at the top of this handler ensures browseQueueEvents
+    // is non-null whenever we reach this point, but TS narrowing doesn't
+    // carry across the closure boundary).
+    if (!browseQueueEvents) return;
+    const events = browseQueueEvents;
     let resolveStream!: () => void;
     const streamDone = new Promise<void>((resolve) => {
       resolveStream = resolve;
@@ -131,9 +140,9 @@ app.get("/:id", async (c) => {
         .finally(() => resolveStream());
     };
 
-    browseQueueEvents.on("progress", onProgress);
-    browseQueueEvents.on("completed", onCompleted);
-    browseQueueEvents.on("failed", onFailed);
+    events.on("progress", onProgress);
+    events.on("completed", onCompleted);
+    events.on("failed", onFailed);
 
     sse.onAbort(() => resolveStream());
 
@@ -143,9 +152,9 @@ app.get("/:id", async (c) => {
       );
       await Promise.race([streamDone, timeout]);
     } finally {
-      browseQueueEvents.off("progress", onProgress);
-      browseQueueEvents.off("completed", onCompleted);
-      browseQueueEvents.off("failed", onFailed);
+      events.off("progress", onProgress);
+      events.off("completed", onCompleted);
+      events.off("failed", onFailed);
     }
   });
 });
