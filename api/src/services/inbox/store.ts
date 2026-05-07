@@ -8,6 +8,11 @@ import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
+import {
+  getSettings as getFederationSettings,
+  parseDid,
+  recordOutboundPeer,
+} from "../federation/store";
 import { identityBoxKeys, identityKeys, identities } from "../../db/schema/identity";
 import { inboxMessages } from "../../db/schema/inbox";
 import { verifyInboxSignature } from "./sig";
@@ -132,8 +137,116 @@ async function isCrossProjectAllowed(
 export async function sendMessage(
   senderProjectId: string,
   input: SendInput,
-): Promise<{ id: string; created_at: string }> {
-  // 1. Resolve recipient identity by DID.
+): Promise<{ id: string; created_at: string; federated_to?: string }> {
+  // 0. Federation routing — if recipient is on a remote instance, sign
+  //    locally then POST to their /federation/inbox. Sender's signing
+  //    key still must belong to the caller's project (verified below).
+  const recipientParsed = parseDid(input.to_did);
+  const fedSettings = await getFederationSettings();
+  let myHost: string | null = null;
+  if (fedSettings.instance_url) {
+    try {
+      myHost = new URL(fedSettings.instance_url).host;
+    } catch { /* ignore */ }
+  }
+  const isRemote =
+    recipientParsed.host !== null &&
+    recipientParsed.host !== myHost;
+
+  if (isRemote) {
+    if (!fedSettings.enabled) {
+      throw new Error("federation_disabled_for_remote_recipient");
+    }
+    // Sender ownership check: signing_key_id must belong to caller's project.
+    const [signingKey] = await db
+      .select({
+        id: identityKeys.id,
+        publicKey: identityKeys.publicKey,
+        active: identityKeys.active,
+        identityId: identityKeys.identityId,
+      })
+      .from(identityKeys)
+      .where(eq(identityKeys.id, input.signing_key_id))
+      .limit(1);
+    if (!signingKey) throw new Error("sender_signing_key_not_found");
+    if (!signingKey.active) throw new Error("sender_signing_key_revoked");
+
+    const [senderIdentity] = await db
+      .select({ did: identities.did, projectId: identities.projectId })
+      .from(identities)
+      .where(eq(identities.id, signingKey.identityId))
+      .limit(1);
+    if (!senderIdentity) throw new Error("sender_signing_key_orphaned");
+    if (senderIdentity.projectId !== senderProjectId) {
+      throw new Error("signing_identity_not_owned_by_caller");
+    }
+
+    // Verify sig (we still verify locally before forwarding).
+    const okSig = verifyInboxSignature({
+      recipientDid: input.to_did,
+      ciphertextB64: input.ciphertext,
+      nonceB64: input.nonce,
+      ephemeralPubkeyB64: input.ephemeral_pubkey,
+      signatureB64: input.signature,
+      publicKeyB64: signingKey.publicKey,
+    });
+    if (!okSig) throw new Error("signature_invalid");
+
+    // Build federated sender_did. We use our instance URL host.
+    if (!myHost) throw new Error("federation_instance_url_not_set");
+    const federatedSenderDid = `did:at:${myHost}/${senderIdentity.did.replace("did:at:", "")}`;
+
+    // POST to peer's /federation/inbox.
+    const url = `https://${recipientParsed.host}/federation/inbox`;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sender_did: federatedSenderDid,
+          recipient_did: input.to_did,
+          ciphertext: input.ciphertext,
+          nonce: input.nonce,
+          ephemeral_pubkey: input.ephemeral_pubkey,
+          recipient_box_key_id: input.recipient_box_key_id,
+          signature: input.signature,
+          signing_key_id: input.signing_key_id,
+          subject: input.subject ?? null,
+          subject_encrypted: input.subject_encrypted ?? false,
+          in_reply_to: input.in_reply_to ?? null,
+          refs: input.refs ?? null,
+          metadata: input.metadata ?? {},
+        }),
+        signal: ac.signal,
+      });
+    } catch (err) {
+      throw new Error(`federation_send_failed: ${(err as Error).message}`);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`federation_send_${res.status}: ${body.slice(0, 300)}`);
+    }
+    const data = (await res.json()) as { id?: string; created_at?: string };
+    if (!data.id || !data.created_at) {
+      throw new Error("federation_send_malformed_response");
+    }
+
+    void recordOutboundPeer(recipientParsed.host!);
+
+    return {
+      id: data.id,
+      created_at: data.created_at,
+      federated_to: recipientParsed.host!,
+    };
+  }
+
+  // 1. Resolve recipient identity by DID (local only).
   const [recipient] = await db
     .select({
       id: identities.id,

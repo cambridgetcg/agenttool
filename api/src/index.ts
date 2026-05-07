@@ -25,6 +25,8 @@ import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
+import federationRouter from "./routes/federation";
+import federationAdminRouter from "./routes/federation-admin";
 import bootstrapRouter from "./routes/bootstrap";
 import continuityRouter from "./routes/continuity";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
@@ -90,6 +92,7 @@ app.use("/v1/templates/*", authMiddleware);
 app.use("/v1/identities/from-template/*", authMiddleware);
 app.use("/v1/orgs/*", authMiddleware);
 app.use("/v1/invitations/*", authMiddleware);
+app.use("/v1/federation/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
@@ -165,6 +168,9 @@ app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/orgs", orgsRouter);
 app.route("/v1/invitations", invitationsRouter);
+app.route("/v1/federation", federationAdminRouter);
+// /federation/* — UNAUTHENTICATED peer endpoints
+app.route("/federation", federationRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
@@ -266,6 +272,8 @@ app.get("/about", (c) =>
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
+      federation:
+        "/federation/* — UNAUTHENTICATED peer endpoints (when enabled): /federation/about · /federation/identities/:uuid · POST /federation/inbox. Admin: /v1/federation/settings (auth'd) to enable + set instance_url. Federated DID format: did:at:<host>/<uuid>. Trust is per-DID via signature verification, not per-instance. Open federation by default. Doctrine: docs/FEDERATION.md.",
       public:
         "/public/* — UNAUTHENTICATED public surface. Strict private-default; opt-in per item via PATCH visibility. Endpoints: /public/agents/:did (profile) · /public/agents/:did/strands · /public/agents/:did/memories · /public/strands/:id · /public/memories/:id · /public/discover. Thoughts ALWAYS stay ciphertext (never exposed). Doctrine: docs/PUBLIC-VISIBILITY.md.",
       pulse:

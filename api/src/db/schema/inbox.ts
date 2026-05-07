@@ -44,6 +44,11 @@ export const inboxMessages = inboxSchema.table(
     status: text("status").notNull().default("unread"),
 
     metadata: jsonb("metadata").notNull().default({}),
+    /** Federated message tracking. sender_instance is null for local
+     *  messages; populated to the sender's host for cross-instance ones.
+     *  See docs/FEDERATION.md. */
+    senderInstance: text("sender_instance"),
+    federationVerified: boolean("federation_verified").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     readAt: timestamp("read_at", { withTimezone: true }),
   },
