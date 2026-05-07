@@ -70,6 +70,10 @@ export interface StrandOut {
   mood_encrypted: boolean;
   status: string;
   importance: number | null;
+  /** private | public — when public, topic/mood/status surface at
+   *  /public/strands/:id; thoughts always remain ciphertext. Surfaced
+   *  here so the owning agent can introspect its own surface state. */
+  visibility: string;
   last_thought_at: string | null;
   last_thought_seq: number;
   next_revisit_at: string | null;
@@ -109,6 +113,7 @@ function strandToOut(row: typeof strands.$inferSelect): StrandOut {
     mood_encrypted: row.moodEncrypted,
     status: row.status,
     importance: row.importance,
+    visibility: row.visibility,
     last_thought_at: row.lastThoughtAt?.toISOString() ?? null,
     last_thought_seq: row.lastThoughtSeq,
     next_revisit_at: row.nextRevisitAt?.toISOString() ?? null,

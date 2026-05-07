@@ -33,6 +33,13 @@ export interface MemorySearchParams {
 export interface MemoryOut {
   id: string;
   type: string;
+  /** Salience tier — episodic | foundational | constitutive. Foundational +
+   *  constitutive memories survive forking and shape effective expression.
+   *  Surfaced here so the owning agent can introspect its own state without
+   *  needing the dashboard composition view. */
+  tier: string;
+  /** private | public — propagates to /public/memories/:id when public. */
+  visibility: string;
   key: string | null;
   content: string;
   agent_id: string | null;
@@ -62,6 +69,8 @@ function rowToOut(row: typeof memories.$inferSelect): MemoryOut {
   return {
     id: row.id,
     type: row.type,
+    tier: row.tier,
+    visibility: row.visibility,
     key: row.key,
     content: row.content,
     agent_id: row.agentId,
@@ -213,6 +222,8 @@ export async function search(
   const rawRows = await db.execute<{
     id: string;
     type: string;
+    tier: string;
+    visibility: string;
     key: string | null;
     content: string;
     agent_id: string | null;
@@ -225,7 +236,7 @@ export async function search(
     has_embedding: boolean;
     score: number;
   }>(sql`
-    SELECT id, type, key, content, agent_id, identity_id, metadata, importance,
+    SELECT id, type, tier, visibility, key, content, agent_id, identity_id, metadata, importance,
            accessed_at, created_at, expires_at,
            (embedding IS NOT NULL) AS has_embedding,
            1 - (embedding <=> ${queryVec}::vector) AS score
@@ -252,6 +263,8 @@ export async function search(
     ranked.push({
       id: r.id,
       type: r.type,
+      tier: r.tier,
+      visibility: r.visibility,
       key: r.key,
       content: r.content,
       agent_id: r.agent_id,
