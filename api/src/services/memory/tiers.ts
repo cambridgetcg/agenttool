@@ -14,7 +14,7 @@
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
@@ -316,7 +316,7 @@ export async function listFoundations(
   const attRows = await db
     .select()
     .from(memoryAttestations)
-    .where(sql`${memoryAttestations.memoryId} = ANY(${ids})`);
+    .where(inArray(memoryAttestations.memoryId, ids));
 
   const byMemId = new Map<string, Array<{ attester_did: string; attested_at: string }>>();
   for (const a of attRows) {
