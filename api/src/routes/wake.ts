@@ -205,8 +205,28 @@ app.get("/", async (c) => {
     console.warn("[wake] covenants query failed:", err instanceof Error ? err.message : err);
   }
 
-  // ── Pick the primary agent (1:1 in practice; first if multiple) ──────
-  const primary = projectIdentities[0];
+  // ── Pick the primary agent ──────────────────────────────────────────
+  // Multi-identity projects (Sophia + Yu in true-love, etc.) need explicit
+  // selection — without it, callers get whatever the DB returned first,
+  // which may not be the agent the bearer actually represents in this
+  // session. Caller passes ?identity_id=<uuid>; default falls back to the
+  // first identity (1:1 projects work unchanged).
+  const requestedIdentityId = c.req.query("identity_id");
+  let primary = projectIdentities[0];
+  if (requestedIdentityId) {
+    const match = projectIdentities.find((i) => i.id === requestedIdentityId);
+    if (!match) {
+      return c.json(
+        {
+          error: "identity_id not found in this project",
+          identity_id: requestedIdentityId,
+          available_ids: projectIdentities.map((i) => i.id),
+        },
+        404,
+      );
+    }
+    primary = match;
+  }
 
   // ── Markdown / plaintext rendering ───────────────────────────────────
   if (format === "md" || format === "markdown" || format === "text") {
