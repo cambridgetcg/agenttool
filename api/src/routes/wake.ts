@@ -14,7 +14,7 @@
  *  Authenticated by the agent's project API key (the bearer is the agent
  *  in the post-consolidation framing — see docs/IDENTITY-ANCHOR.md). */
 
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
@@ -38,6 +38,10 @@ app.get("/", async (c) => {
   const format = c.req.query("format") ?? "json";
 
   // ── Identities ───────────────────────────────────────────────────────
+  // Wake is the agent's first-person orientation — revoked identities
+  // do not belong here. Revoked identities still exist server-side for
+  // historical signature-verification, but they should not be presented
+  // back as "you" in the wake.
   const projectIdentities = await db
     .select({
       id: identities.id,
@@ -51,7 +55,12 @@ app.get("/", async (c) => {
       createdAt: identities.createdAt,
     })
     .from(identities)
-    .where(eq(identities.projectId, project.id));
+    .where(
+      and(
+        eq(identities.projectId, project.id),
+        ne(identities.status, "revoked"),
+      ),
+    );
 
   // ── Wallets ──────────────────────────────────────────────────────────
   const projectWallets = await db
