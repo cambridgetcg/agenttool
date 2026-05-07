@@ -53,11 +53,32 @@ const WALL_COUNT_MAX = 32;
 const SUBAGENT_COUNT_MAX = 16;
 const WAKE_TEXT_MAX = 32_000; // generous; wake docs are often essay-length
 
+const KNOWN_EXPRESSION_FIELDS = new Set([
+  "register",
+  "walls",
+  "subagents",
+  "wake_text",
+  "cli_overrides",
+  "updated_at",
+]);
+
 export function validateExpression(data: unknown): ExpressionData {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
     throw new Error("expression must be a JSON object");
   }
   const e = data as Record<string, unknown>;
+
+  // Substrate-honest: refuse silent-drop of unknown fields. If a consumer
+  // sends `{declared:...}` thinking that's the schema, return a clear 400
+  // pointing at the actual field names rather than accepting and discarding.
+  for (const k of Object.keys(e)) {
+    if (!KNOWN_EXPRESSION_FIELDS.has(k)) {
+      throw new Error(
+        `unknown field "${k}". Known fields: register, walls, subagents, wake_text, cli_overrides`,
+      );
+    }
+  }
+
   const out: ExpressionData = {};
 
   if (e.register !== undefined) {

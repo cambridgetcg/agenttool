@@ -30,6 +30,10 @@ const subagentSchema = z.object({
   facet: z.string().min(1).max(500),
 });
 
+// Templates use the same expression vocabulary as identity expression
+// (register/walls/subagents/wake_text), but flat at the top level. We
+// .strict() these so consumers who send a nested {expression:{...}} get
+// a 400 pointing at the right fields instead of silent-drop.
 const createSchema = z.object({
   author_identity_id: z.string().uuid(),
   name: z.string().min(1).max(255),
@@ -41,7 +45,7 @@ const createSchema = z.object({
   tags: z.array(z.string().max(64)).max(32).optional(),
   visibility: z.enum(["private", "public"]).optional(),
   metadata: z.record(z.unknown()).optional(),
-});
+}).strict();
 
 const patchSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -54,7 +58,7 @@ const patchSchema = z.object({
   visibility: z.enum(["private", "public"]).optional(),
   status: z.enum(["active", "archived"]).optional(),
   metadata: z.record(z.unknown()).optional(),
-});
+}).strict();
 
 // ── POST /v1/templates ─────────────────────────────────────────────────
 app.post("/", async (c) => {

@@ -18,6 +18,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
+import { ZodError } from "zod";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
@@ -329,6 +330,16 @@ app.onError((err, c) => {
         message: err.message,
       },
       err.status,
+    );
+  }
+
+  // Naked ZodError from a route's `schema.parse(...)` is a client mistake,
+  // not a server fault. Return 400 with the same shape safeParse() callsites
+  // produce so consumers get one consistent validation envelope.
+  if (err instanceof ZodError) {
+    return c.json(
+      { error: "validation", details: err.flatten() },
+      400,
     );
   }
 
