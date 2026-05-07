@@ -26,6 +26,7 @@ import {
   recordInboundPeer,
   resolveFederatedDid,
 } from "../../services/federation/store";
+import { publishArrival } from "../../services/inbox/push";
 import { verifyInboxSignature } from "../../services/inbox/sig";
 
 const app = new Hono();
@@ -176,8 +177,9 @@ app.post("/", async (c) => {
     })
     .returning({ id: inboxMessages.id, createdAt: inboxMessages.createdAt });
 
-  // 8. Log peer.
+  // 8. Log peer + notify SSE subscribers (non-fatal if notify fails).
   void recordInboundPeer(senderParsed.host);
+  void publishArrival(recipient.id, inserted!.id);
 
   return c.json(
     {

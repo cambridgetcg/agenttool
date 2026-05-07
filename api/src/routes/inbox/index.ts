@@ -9,6 +9,7 @@
  *    PATCH  /v1/inbox/:id                       — update status (read/archived/spam/deleted)
  *    DELETE /v1/inbox/:id                       — soft delete (status='deleted')
  *    GET    /v1/inbox/box-keys/:did             — resolve DID to active box pubkey
+ *    GET    /v1/inbox/voice ?identity_id=&since= — SSE push channel for new arrivals
  *
  *  Doctrine: docs/INBOX.md. Auth at /v1/inbox/* by parent app. */
 
@@ -18,11 +19,13 @@ import type { ProjectContext } from "../../auth/middleware";
 
 import lookupRoutes from "./lookup";
 import messagesRoutes from "./messages";
+import voiceRoutes from "./voice";
 
 const app = new Hono<ProjectContext>();
 
-// Order matters: /box-keys is more specific than /:id.
+// Order matters: more specific paths must mount before /:id catch-alls.
 app.route("/box-keys", lookupRoutes);
+app.route("/voice", voiceRoutes);
 app.route("/", messagesRoutes);
 
 export default app;
