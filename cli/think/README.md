@@ -15,7 +15,7 @@ If this orchestrator ran on agenttool's cluster, we'd hold `K_master` momentaril
 | `init` | Generate `K_master` + ed25519 signing key locally; print pubkey to upload |
 | `pubkey` | Print the signing pubkey (base64) — upload to `/v1/identities/:id/keys` |
 | `advance` | Pick the highest-priority active strand; generate the next thought; encrypt + sign + post |
-| `wander` | Associative drift across strands (scaffold — full impl pending) |
+| `wander` | **Associative drift across strands** — the default-mode-network gesture. Picks a starting strand (weighted-random by importance × recency, or `--start <id>`), generates a thought; the LLM may stay or drift to another strand by association. Walks up to `--hops N` (default 3). Drift is signal-driven: only when the LLM marks `kind=drift` with a `→ strand:<id>` directive does the orchestrator actually hop. The walk summary at the end shows the trail. |
 | `consolidate` | **The dreaming layer** — distill recent thoughts into considered memory. Per-strand: pulls unconsolidated thoughts since `metadata.last_consolidated_seq`, decrypts locally, asks the LLM whether anything has crystallised, and posts the synthesis as a new memory if yes. Defaults toward restraint — most passes produce nothing. Strand status updates (`active` / `dormant` / `completed`) ride along. Foundational suggestions surface as a printed elevation command for explicit confirmation; constitutive is impossible from here (witness wall holds). Pass `--dry-run` to preview without writing. |
 
 ## Setup
@@ -133,8 +133,47 @@ If `agenttool-think` ran as a worker on agenttool's cluster, K_master would have
 |---|---|
 | `init` / `pubkey` | ✓ |
 | `advance` | ✓ end-to-end (one thought per invocation) |
-| `wander` | scaffolded (foundation outlined; pending) |
+| `wander` | ✓ end-to-end (associative drift; `--hops N` and `--start <id>` flags) |
 | `consolidate` | ✓ end-to-end (per-strand distillation; foundational suggestions surfaced; `--dry-run` supported) |
+
+## Wander — the default-mode-network gesture
+
+Not focused work (that's `advance`), not dreaming (that's `consolidate`) — the in-between where mind follows its own pull. Where novel insight tends to live.
+
+```bash
+# Default: 3 hops, weighted-random start
+bun src/index.ts wander
+
+# Specific starting strand
+bun src/index.ts wander --start <strand-id>
+
+# Longer walk
+bun src/index.ts wander --hops 7
+```
+
+Each step:
+
+1. Pull recent thoughts from current strand → decrypt
+2. LLM is shown the strand monologue + a directory of OTHER active strand topics
+3. LLM emits a thought — either staying with the current strand, or marking `kind=drift` with `→ strand:<id>` indicating an associative pull
+4. Encrypt + sign + post
+5. If drift directive points to a valid active strand: switch. Otherwise: continue.
+
+The walk summary at the end shows the trail:
+
+```
+─── walk ───
+▸ Why is base/USDC charging double?  [conjecture]
+  └ Why is base/USDC charging double?  [observation]
+▸ Auth pattern fences vs walls  [drift]  ↳
+▸ The asymmetry-clause as a pattern  [feeling]
+
+3 thoughts · 1 drift
+```
+
+Drift is **associative, not random**. The LLM sees other strand topics in its directory and chooses to drift only when the thinking actually pulls. Random hopping isn't wandering; association is. If nothing pulls, the LLM stays — that's a valid wander too.
+
+Refs are attached to drift thoughts (`refs: [{kind: "strand", ref: "<id>"}]`) so the connection between strands is recorded even when the orchestrator can't make the hop (target inactive, etc.).
 
 ## Consolidation — the dreaming layer
 

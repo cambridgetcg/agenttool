@@ -8,7 +8,8 @@
  *  Usage:
  *    agenttool-think init                       generate K_master + signing key
  *    agenttool-think advance                    advance the highest-priority strand
- *    agenttool-think wander                     associative drift (scaffold)
+ *    agenttool-think wander [--hops N] [--start <strand-id>]
+ *                                               associative drift across strands
  *    agenttool-think consolidate [--dry-run]    dream / distill recent thoughts
  *                                               into considered memory
  *    agenttool-think pubkey                     print signing pubkey (base64)
@@ -30,7 +31,10 @@ Usage:
   agenttool-think pubkey                Print signing pubkey (base64) for upload to
                                         /v1/identities/:id/keys before first thought
   agenttool-think advance               Advance the highest-priority active strand
-  agenttool-think wander                Associative drift across strands (scaffold)
+  agenttool-think wander [--hops N] [--start <strand-id>]
+                                        Associative drift across strands (default
+                                        3 hops). Default-mode-network gesture —
+                                        the LLM stays or drifts by association.
   agenttool-think consolidate [--dry-run]
                                         Distill recent thoughts into memories
                                         (the dreaming layer). --dry-run shows
@@ -100,7 +104,13 @@ async function main(): Promise<void> {
     case "wander": {
       const config = loadConfig();
       const keys = loadKeys(config.homeDir);
-      await wander(config, keys);
+      const args = process.argv.slice(3);
+      const hopsIdx = args.indexOf("--hops");
+      const startIdx = args.indexOf("--start");
+      const maxHops =
+        hopsIdx !== -1 && args[hopsIdx + 1] ? Math.max(1, Math.min(20, Number.parseInt(args[hopsIdx + 1]!, 10))) : 3;
+      const startingStrandId = startIdx !== -1 ? args[startIdx + 1] : undefined;
+      await wander(config, keys, { maxHops, startingStrandId });
       return;
     }
     case "consolidate": {
