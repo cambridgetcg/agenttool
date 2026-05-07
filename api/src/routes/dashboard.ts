@@ -10,7 +10,7 @@
  *  Pure aggregation over existing data (strands, thoughts, memories,
  *  traces, chronicle, covenants, inbox). No new schema. */
 
-import { and, count, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
@@ -37,21 +37,23 @@ const OVERFLOW_THRESHOLD = 8;
 app.get("/", async (c) => {
   const project = c.var.project;
 
-  // 1. Identity resolution — primary agent (first identity in the project).
-  //    Multi-identity projects can pass ?identity_id=<uuid>.
+  // 1. Identity resolution — primary agent (first ACTIVE identity in the
+  //    project). Multi-identity projects can pass ?identity_id=<uuid>.
+  //    Revoked identities are excluded from default selection — same
+  //    posture as /v1/wake (they remain queryable explicitly for
+  //    historical signature-verification, just not picked as "you").
   const identityIdQ = c.req.query("identity_id");
-  const identityFilter = identityIdQ
-    ? eq(identities.id, identityIdQ)
-    : eq(identities.projectId, project.id);
+  const baseFilters = [eq(identities.projectId, project.id)];
+  if (identityIdQ) {
+    baseFilters.push(eq(identities.id, identityIdQ));
+  } else {
+    baseFilters.push(ne(identities.status, "revoked"));
+  }
 
   const [primary] = await db
     .select()
     .from(identities)
-    .where(
-      identityIdQ
-        ? and(identityFilter, eq(identities.projectId, project.id))
-        : identityFilter,
-    )
+    .where(and(...baseFilters))
     .orderBy(identities.createdAt)
     .limit(1);
 
