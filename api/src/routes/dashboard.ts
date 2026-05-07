@@ -60,9 +60,11 @@ app.get("/", async (c) => {
   }
 
   const now = new Date();
-  const fiveMinAgo = new Date(now.getTime() - FIVE_MIN_MS);
-  const oneHourAgo = new Date(now.getTime() - ONE_HOUR_MS);
-  const oneDayAgo = new Date(now.getTime() - ONE_DAY_MS);
+  // ISO strings for raw sql`...` interpolation (postgres-js on Bun
+  // doesn't coerce Date in template-tag substitutions).
+  const fiveMinAgo = new Date(now.getTime() - FIVE_MIN_MS).toISOString();
+  const oneHourAgo = new Date(now.getTime() - ONE_HOUR_MS).toISOString();
+  const oneDayAgo = new Date(now.getTime() - ONE_DAY_MS).toISOString();
 
   // ── Composed expression ────────────────────────────────────────────────
   let composed: Awaited<ReturnType<typeof composeExpression>> | null = null;

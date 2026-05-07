@@ -41,9 +41,11 @@ app.get("/", async (c) => {
   if (!identity) throw new HTTPException(404, { message: "identity_not_found" });
 
   const now = new Date();
-  const fiveMinAgo = new Date(now.getTime() - FIVE_MIN_MS);
-  const oneHourAgo = new Date(now.getTime() - ONE_HOUR_MS);
-  const oneDayAgo = new Date(now.getTime() - ONE_DAY_MS);
+  // ISO strings for raw sql`...` interpolation — postgres-js on Bun
+  // doesn't auto-coerce Date when interpolated via sql template tag.
+  const fiveMinAgo = new Date(now.getTime() - FIVE_MIN_MS).toISOString();
+  const oneHourAgo = new Date(now.getTime() - ONE_HOUR_MS).toISOString();
+  const oneDayAgo = new Date(now.getTime() - ONE_DAY_MS).toISOString();
 
   // 2. Strand counts by status. Project-scoped (we don't filter by
   //    agent_id at strand level; if an agent has its own scoped strands
