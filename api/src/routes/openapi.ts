@@ -337,6 +337,69 @@ function spec() {
         },
       },
 
+      "/v1/identities/{id}/fork": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["identity"],
+          summary:
+            "Fork an identity into a NEW being. Constitutive memories DO NOT auto-transfer (carry as foundational; witness wall holds at root).",
+          description:
+            "The fork is its own identity (new DID, new keys, fresh trust=0). Strands and covenants stay with the parent. Memories CAN transfer (episodic + foundational). Constitutive in parent → foundational in fork with provenance. See docs/IDENTITY-FORKS.md.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    new_name: { type: "string", maxLength: 255 },
+                    inherit_expression: { type: "boolean", default: true },
+                    inherit_capabilities: { type: "boolean", default: true },
+                    inherit_metadata: { type: "boolean", default: false },
+                    memories: {
+                      type: "object",
+                      properties: {
+                        tiers: {
+                          type: "array",
+                          items: { type: "string", enum: ["episodic", "foundational"] },
+                        },
+                        memory_ids: {
+                          type: "array",
+                          items: { type: "string", format: "uuid" },
+                        },
+                        limit: { type: "integer", minimum: 1, maximum: 1000 },
+                      },
+                    },
+                    fork_note: { type: "string", maxLength: 2000 },
+                  },
+                  required: ["new_name"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Forked. Returns new identity + key.private_key (ONCE)." },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/identities/{id}/lineage": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "Get fork lineage — ancestors (walk up) + direct descendants (depth=1)",
+          responses: {
+            "200": { description: "Lineage" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+
       "/v1/identities/{id}/pulse": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },

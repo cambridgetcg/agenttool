@@ -32,12 +32,17 @@ export const identities = identitySchema.table(
     expression: jsonb("expression").notNull().default({}),
     status: text("status").notNull().default("active"),
     trustScore: real("trust_score").notNull().default(0),
+    /** Fork lineage — non-null when this identity was created by forking
+     *  another. See docs/IDENTITY-FORKS.md. */
+    parentIdentityId: uuid("parent_identity_id"),
+    forkedAt: timestamp("forked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_identities_did").on(t.did),
     index("idx_identities_project").on(t.projectId),
+    index("idx_identities_parent").on(t.parentIdentityId),
   ],
 );
 

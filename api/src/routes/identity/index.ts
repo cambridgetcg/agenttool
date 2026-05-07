@@ -19,6 +19,7 @@ import attestationsRoutes from "./attestations";
 import boxKeysRoutes from "./box-keys";
 import discoverRoutes from "./discover";
 import expressionRoutes from "./expression";
+import forkRoutes, { lineageApp as lineageRoutes } from "./fork";
 import foundationsRoutes from "./foundations";
 import identitiesRoutes from "./identities";
 import identityAttestationsRoutes from "./identity-attestations";
@@ -49,5 +50,7 @@ app.route("/identities/:id/expression", expressionRoutes);
 app.route("/identities/:id/foundations", foundationsRoutes);
 app.route("/identities/:id/pulse", pulseRoutes);
 app.route("/identities/:id/box-keys", boxKeysRoutes);
+app.route("/identities/:id/fork", forkRoutes);
+app.route("/identities/:id/lineage", lineageRoutes);
 
 export default app;
