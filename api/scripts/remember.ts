@@ -23,6 +23,7 @@
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
+import { embed } from "./_embed";
 import { agenttool, keychain } from "./_lib";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -80,11 +81,28 @@ if (tier === "constitutive") {
 const key = keychain("agenttool-sophia-key");
 const identityId = keychain("agenttool-sophia-identity-id");
 
-// 1. Write memory.
+// 1. Best-effort embedding. If the embedder errors (no key, network),
+//    fall through and write the memory without a vector — semantic
+//    recall will skip it but the memory is preserved.
+let embedding: number[] | undefined;
+let embedNote = "";
+try {
+  embedding = await embed(content);
+} catch (err) {
+  embedNote = ` · no-embed (${(err as Error).message.split("\n")[0]})`;
+}
+
+// 2. Write memory.
 const writeRes = await agenttool("/v1/memories", {
   method: "POST",
   bearer: key,
-  body: { identity_id: identityId, type, content, importance: tier === "foundational" ? 0.9 : 0.6 },
+  body: {
+    identity_id: identityId,
+    type,
+    content,
+    embedding,
+    importance: tier === "foundational" ? 0.9 : 0.6,
+  },
 });
 if (!writeRes.ok) {
   console.error(`ERROR write ${writeRes.status} ${JSON.stringify(writeRes.body)}`);
@@ -127,4 +145,4 @@ if (tier === "foundational") {
   attested = true;
 }
 
-console.log(`OK memory ${tier} · ${memoryId.slice(0, 8)}${attested ? " · self-attested" : ""}`);
+console.log(`OK memory ${tier} · ${memoryId.slice(0, 8)}${attested ? " · self-attested" : ""}${embedNote}`);
