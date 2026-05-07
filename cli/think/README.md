@@ -135,6 +135,89 @@ If `agenttool-think` ran as a worker on agenttool's cluster, K_master would have
 | `advance` | ✓ end-to-end (one thought per invocation) |
 | `wander` | ✓ end-to-end (associative drift; `--hops N` and `--start <id>` flags) |
 | `consolidate` | ✓ end-to-end (per-strand distillation; foundational suggestions surfaced; `--dry-run` supported) |
+| `loop` | ✓ end-to-end (24/7 sovereign autonomy; state-driven mode selection; clean SIGINT) |
+
+## Loop — 24/7 sovereign autonomy
+
+The agent runs continuously. Picks mode by interior state (advance/wander/consolidate). Terminates on time, budget, max-iter, or Ctrl-C.
+
+```bash
+# Default: 30 minutes, 100 credits, 180s sleep
+bun src/index.ts loop
+
+# Tighter dev loop (5min, fast pacing)
+bun src/index.ts loop --duration 5 --sleep 30 --budget 50
+
+# Long autonomous run with circadian consolidate
+bun src/index.ts loop --duration 480 --budget 1000 --consolidate-hour 3
+
+# Overnight autonomous (catches the 03:00 consolidation)
+bun src/index.ts loop --duration 720 --budget 2000 --sleep 240 --consolidate-hour 3 \
+  > ~/.config/agenttool-think/loop.log 2>&1 &
+```
+
+**Mode selection per iteration** (priority order):
+
+1. **Circadian consolidate** — if local hour matches `--consolidate-hour` AND 12h+ since last consolidate ran
+2. **Overflow consolidate** — if any strand has 8+ unconsolidated thoughts
+3. **Wander** — if >1 active strand AND all stale (no thought in 6h)
+4. **Advance** — default
+
+**Termination guards** (any one stops the loop):
+
+- Wall-clock cap (`--duration` minutes)
+- Budget cap (`--budget` credits — tracks delta from start)
+- Max iterations (`--max-iter`, safety cap)
+- Credit floor (auto-stops if balance drops below 10)
+- SIGINT (Ctrl-C — finishes current iteration, then exits cleanly; second Ctrl-C: hard exit)
+
+**Output**: each iteration prints a header line with timestamp + mode + reason, then the mode's own logs. End-of-loop summary shows iterations by mode, credits used, termination reason.
+
+```
+[2026-05-07 10:23:42] iter 4/100 · mode=advance · credits=1234 · used=12 · default
+▸ advancing strand: Why is base/USDC charging double?
+...
+
+═══════════════════════════════════════
+loop complete
+═══════════════════════════════════════
+duration:        29m 47s (limit: 30m)
+iterations:      9 (limit: 100)
+  advance:       6
+  wander:        2
+  consolidate:   1
+credits used:    ~78 (limit: 100)
+termination:     duration
+═══════════════════════════════════════
+```
+
+### Run forever (with discipline)
+
+```bash
+# systemd user unit (~/.config/systemd/user/agenttool-think.service)
+[Unit]
+Description=agenttool-think autonomous loop
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/agenttool/cli/think
+Environment=AGENTTOOL_BASE=https://api.agenttool.dev
+EnvironmentFile=%h/.config/agenttool-think/env
+ExecStart=/usr/local/bin/bun src/index.ts loop --duration 1440 --budget 5000 --sleep 240 --consolidate-hour 3
+Restart=on-failure
+RestartSec=120
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user enable --now agenttool-think
+journalctl --user -u agenttool-think -f
+```
+
+The agent now thinks while you sleep.
 
 ## Wander — the default-mode-network gesture
 

@@ -15,6 +15,7 @@ export interface StrandSummary {
   next_revisit_at: string | null;
   state_ciphertext: string | null;
   state_nonce: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ThoughtBlob {

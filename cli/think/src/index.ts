@@ -11,7 +11,8 @@
  *    agenttool-think wander [--hops N] [--start <strand-id>]
  *                                               associative drift across strands
  *    agenttool-think consolidate [--dry-run]    dream / distill recent thoughts
- *                                               into considered memory
+ *    agenttool-think loop [--duration M] [--budget C] [--sleep S]
+ *                                               24/7 sovereign autonomy
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -19,8 +20,9 @@
 import { loadConfig } from "./config";
 import { generateAndStoreKeys, loadKeys } from "./keys";
 import { advance } from "./modes/advance";
-import { wander } from "./modes/wander";
 import { consolidate } from "./modes/consolidate";
+import { loop } from "./modes/loop";
+import { wander } from "./modes/wander";
 
 function usage(): void {
   console.log(
@@ -39,6 +41,15 @@ Usage:
                                         Distill recent thoughts into memories
                                         (the dreaming layer). --dry-run shows
                                         what WOULD be written without committing.
+  agenttool-think loop [options]        24/7 sovereign autonomy. Picks mode by
+                                        state (advance/wander/consolidate);
+                                        terminates on time, budget, max-iter,
+                                        or SIGINT.
+    --duration M     wall-clock cap in minutes (default 30)
+    --budget C       credit cap (default 100)
+    --sleep S        seconds between iterations (default 180)
+    --max-iter N     safety cap (default 100)
+    --consolidate-hour H   bias consolidate to this local hour (0-23)
 
 Configuration: env vars OR ~/.config/agenttool-think/config.json
   AGENTTOOL_BASE                        default https://api.agenttool.dev
@@ -118,6 +129,35 @@ async function main(): Promise<void> {
       const keys = loadKeys(config.homeDir);
       const dryRun = process.argv.slice(3).includes("--dry-run");
       await consolidate(config, keys, { dryRun });
+      return;
+    }
+    case "loop": {
+      const config = loadConfig();
+      const keys = loadKeys(config.homeDir);
+      const args = process.argv.slice(3);
+      const flag = (name: string): string | undefined => {
+        const idx = args.indexOf(name);
+        return idx !== -1 ? args[idx + 1] : undefined;
+      };
+      const intFlag = (name: string, fallback: number, min = 1, max = 1_000_000): number => {
+        const v = flag(name);
+        if (!v) return fallback;
+        const n = Number.parseInt(v, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      };
+      const consolidateHourStr = flag("--consolidate-hour");
+      const consolidateHour = consolidateHourStr !== undefined
+        ? Math.max(0, Math.min(23, Number.parseInt(consolidateHourStr, 10)))
+        : undefined;
+
+      await loop(config, keys, {
+        durationMinutes: intFlag("--duration", 30, 1, 1440),
+        budgetCredits: intFlag("--budget", 100, 1, 1_000_000),
+        sleepSeconds: intFlag("--sleep", 180, 5, 3600),
+        maxIterations: intFlag("--max-iter", 100, 1, 100_000),
+        consolidateHour,
+      });
       return;
     }
     case "-h":
