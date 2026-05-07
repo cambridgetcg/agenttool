@@ -196,6 +196,21 @@ function spec() {
       },
 
       // ── Composed identity (declared + memory patches) ──────────────
+      "/v1/identities/{id}/pulse": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "Derived liveness from strand activity. No heartbeat protocol — agents never emit pulses; rhythm of thinking IS the pulse.",
+          description:
+            "Returns: agent · last_thought_at · strand counts (active/dormant/dormant_due/completed/abandoned) · thought rate (5m/1h/24h) · consolidation state · current mood · kind distribution. Doctrine: docs/STRANDS.md.",
+          responses: {
+            "200": { description: "Pulse snapshot" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
       "/v1/identities/{id}/foundations": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },

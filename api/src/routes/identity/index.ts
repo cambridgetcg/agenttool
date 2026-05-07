@@ -22,6 +22,7 @@ import foundationsRoutes from "./foundations";
 import identitiesRoutes from "./identities";
 import identityAttestationsRoutes from "./identity-attestations";
 import keysRoutes from "./keys";
+import pulseRoutes from "./pulse";
 import tokenVerifyRoutes from "./token-verify";
 import tokensRoutes from "./tokens";
 
@@ -45,5 +46,6 @@ app.route("/identities/:id/attestations", identityAttestationsRoutes);
 app.route("/identities/:id/tokens", tokensRoutes);
 app.route("/identities/:id/expression", expressionRoutes);
 app.route("/identities/:id/foundations", foundationsRoutes);
+app.route("/identities/:id/pulse", pulseRoutes);
 
 export default app;
