@@ -165,4 +165,48 @@ export class AgenttoolClient {
       body: JSON.stringify(body),
     });
   }
+
+  // ── Identity backup (sealed envelopes; opaque to us) ────────────────
+  async createBackup(body: {
+    agent_id: string;
+    blob_base64: string;
+    key_derivation: string;
+    label?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    backup: { id: string; label: string; keyDerivation: string; createdAt: string };
+  }> {
+    return this.req(`/v1/identity/backup`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async listBackups(agentId?: string): Promise<{
+    backups: Array<{
+      id: string;
+      agentId: string;
+      label: string;
+      keyDerivation: string;
+      createdAt: string;
+      metadata?: Record<string, unknown>;
+    }>;
+  }> {
+    const path = agentId
+      ? `/v1/identity/backup?agent_id=${encodeURIComponent(agentId)}`
+      : `/v1/identity/backup`;
+    return this.req(path);
+  }
+
+  async getBackup(id: string): Promise<{
+    id: string;
+    agent_id: string;
+    label: string;
+    blob_base64: string;
+    key_derivation: string;
+    nonce: string | null;
+    created_at: string;
+  }> {
+    return this.req(`/v1/identity/backup/${id}`);
+  }
 }

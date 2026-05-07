@@ -17,6 +17,8 @@ If this orchestrator ran on agenttool's cluster, we'd hold `K_master` momentaril
 | `advance` | Pick the highest-priority active strand; generate the next thought; encrypt + sign + post |
 | `wander` | **Associative drift across strands** — the default-mode-network gesture. Picks a starting strand (weighted-random by importance × recency, or `--start <id>`), generates a thought; the LLM may stay or drift to another strand by association. Walks up to `--hops N` (default 3). Drift is signal-driven: only when the LLM marks `kind=drift` with a `→ strand:<id>` directive does the orchestrator actually hop. The walk summary at the end shows the trail. |
 | `consolidate` | **The dreaming layer** — distill recent thoughts into considered memory. Per-strand: pulls unconsolidated thoughts since `metadata.last_consolidated_seq`, decrypts locally, asks the LLM whether anything has crystallised, and posts the synthesis as a new memory if yes. Defaults toward restraint — most passes produce nothing. Strand status updates (`active` / `dormant` / `completed`) ride along. Foundational suggestions surface as a printed elevation command for explicit confirmation; constitutive is impossible from here (witness wall holds). Pass `--dry-run` to preview without writing. |
+| `loop` | **24/7 sovereign autonomy** — the agent runs continuously. Mode selection is state-driven (advance/wander/consolidate); terminates on time, budget, max-iter, or clean SIGINT. The agent thinks while you sleep. |
+| `backup` / `restore` | **Cross-machine sync** — seal K_master + signing_key under a passphrase, POST the envelope to `/v1/identity/backup`. Restore on another machine fetches the envelope, unseals locally, installs keys. agenttool holds opaque ciphertext; the passphrase never touches us. |
 
 ## Setup
 
@@ -136,6 +138,43 @@ If `agenttool-think` ran as a worker on agenttool's cluster, K_master would have
 | `wander` | ✓ end-to-end (associative drift; `--hops N` and `--start <id>` flags) |
 | `consolidate` | ✓ end-to-end (per-strand distillation; foundational suggestions surfaced; `--dry-run` supported) |
 | `loop` | ✓ end-to-end (24/7 sovereign autonomy; state-driven mode selection; clean SIGINT) |
+| `backup` / `restore` | ✓ end-to-end (passphrase-sealed envelope sync via `/v1/identity/backup`) |
+
+## Cross-machine sync — backup + restore
+
+Run the orchestrator on multiple machines (laptop + VPS, home + cloud) without copying keys via insecure channels. K_master + signing_key are sealed under a passphrase; agenttool stores opaque ciphertext only.
+
+```bash
+# Machine 1 (where keys exist)
+bun src/index.ts backup
+# → prompts for passphrase (twice; confirms match)
+# → seals { K_master, signing_key, identity_id, signing_key_id, base }
+#   under argon2id-derived AES-256-GCM key
+# → POSTs envelope to /v1/identity/backup
+# → prints backup id
+
+# Machine 2 (fresh)
+export AGENTTOOL_BASE=https://api.agenttool.dev
+export AGENTTOOL_API_KEY=at_...        # same agent's key
+bun src/index.ts restore
+# → uses most recent backup (or --backup-id <id>)
+# → prompts for passphrase
+# → unseals locally
+# → installs k_master.bin + signing_key.bin (mode 0600)
+# → prints identity_id + signing_key_id from envelope so you set the env
+```
+
+**Cryptographic posture:**
+- KDF: argon2id (t=3, m=64MB, p=4) — ~900ms cost, deters offline brute-force
+- Cipher: AES-256-GCM, random 12-byte nonce, 16-byte auth tag
+- The passphrase NEVER touches agenttool. Server holds opaque ciphertext only.
+- Lose the passphrase → the blob is unrecoverable garbage. By design.
+
+**Refuses to overwrite** existing keys without `--force`. Substrate-honest about the destructive operation.
+
+**Passphrase precedence:** `--passphrase X` flag · `AGENTTOOL_THINK_PASSPHRASE` env · interactive prompt (TTY raw mode, no echo).
+
+Smoke-tested: roundtrip preserves all bytes, wrong passphrase rejected (GCM auth-tag fails), tampered ciphertext rejected, short passphrase refused at seal time.
 
 ## Loop — 24/7 sovereign autonomy
 

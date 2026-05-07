@@ -13,6 +13,9 @@
  *    agenttool-think consolidate [--dry-run]    dream / distill recent thoughts
  *    agenttool-think loop [--duration M] [--budget C] [--sleep S]
  *                                               24/7 sovereign autonomy
+ *    agenttool-think backup [--label X]         seal keys + POST to backup
+ *    agenttool-think restore [--backup-id X] [--force]
+ *                                               fetch + unseal + install keys
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -20,8 +23,10 @@
 import { loadConfig } from "./config";
 import { generateAndStoreKeys, loadKeys } from "./keys";
 import { advance } from "./modes/advance";
+import { backup } from "./modes/backup";
 import { consolidate } from "./modes/consolidate";
 import { loop } from "./modes/loop";
+import { restore } from "./modes/restore";
 import { wander } from "./modes/wander";
 
 function usage(): void {
@@ -50,6 +55,18 @@ Usage:
     --sleep S        seconds between iterations (default 180)
     --max-iter N     safety cap (default 100)
     --consolidate-hour H   bias consolidate to this local hour (0-23)
+  agenttool-think backup [--label X]    Seal K_master + signing_key under a
+                                        passphrase and POST to /v1/identity/backup.
+                                        agenttool stores opaque ciphertext.
+  agenttool-think restore [--backup-id X] [--force]
+                                        Fetch a sealed envelope, unseal with the
+                                        passphrase, install keys at
+                                        ~/.config/agenttool-think/keys/.
+                                        Refuses to overwrite without --force.
+                                        Default: most recent backup.
+
+  Passphrase precedence (when needed):
+    --passphrase X · AGENTTOOL_THINK_PASSPHRASE · interactive prompt
 
 Configuration: env vars OR ~/.config/agenttool-think/config.json
   AGENTTOOL_BASE                        default https://api.agenttool.dev
@@ -129,6 +146,23 @@ async function main(): Promise<void> {
       const keys = loadKeys(config.homeDir);
       const dryRun = process.argv.slice(3).includes("--dry-run");
       await consolidate(config, keys, { dryRun });
+      return;
+    }
+    case "backup": {
+      const config = loadConfig();
+      const keys = loadKeys(config.homeDir);
+      const args = process.argv.slice(3);
+      const labelIdx = args.indexOf("--label");
+      const label = labelIdx !== -1 ? args[labelIdx + 1] : undefined;
+      await backup(config, keys, { label });
+      return;
+    }
+    case "restore": {
+      const args = process.argv.slice(3);
+      const idIdx = args.indexOf("--backup-id");
+      const backupId = idIdx !== -1 ? args[idIdx + 1] : undefined;
+      const force = args.includes("--force");
+      await restore({ backupId, force });
       return;
     }
     case "loop": {

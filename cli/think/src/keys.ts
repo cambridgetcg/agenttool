@@ -73,24 +73,42 @@ export function loadKeys(homeDir: string): KeyMaterial {
 }
 
 export function generateAndStoreKeys(homeDir: string): KeyMaterial {
+  const kMaster = new Uint8Array(randomBytes(32));
+  const signingKey = ed.utils.randomPrivateKey();
+  return installKeys(homeDir, kMaster, signingKey, { force: false });
+}
+
+/** Write provided key material to disk. Used by both `init` (with random
+ *  bytes) and `restore` (with bytes decrypted from a sealed envelope).
+ *  Refuses to overwrite existing keys unless `force` is set. */
+export function installKeys(
+  homeDir: string,
+  kMaster: Uint8Array,
+  signingKey: Uint8Array,
+  opts: { force?: boolean } = {},
+): KeyMaterial {
+  if (kMaster.length !== 32) {
+    throw new Error(`K_master must be 32 bytes, got ${kMaster.length}`);
+  }
+  if (signingKey.length !== 32) {
+    throw new Error(`signing_key must be 32 bytes, got ${signingKey.length}`);
+  }
+
   const dir = keyDir(homeDir);
   const masterPath = join(dir, "k_master.bin");
   const signingPath = join(dir, "signing_key.bin");
 
-  if (existsSync(masterPath) || existsSync(signingPath)) {
+  if (!opts.force && (existsSync(masterPath) || existsSync(signingPath))) {
     throw new Error(
-      `Keys already exist at ${dir}. Refusing to overwrite. Move them aside first.`,
+      `Keys already exist at ${dir}. Refusing to overwrite. ` +
+        `Pass --force to install anyway, or move them aside first.`,
     );
   }
-
-  const kMaster = new Uint8Array(randomBytes(32));
-  const signingKey = ed.utils.randomPrivateKey();
-  const signingPubKey = ed.getPublicKey(signingKey);
 
   writeFileSync(masterPath, kMaster, { mode: 0o600 });
   writeFileSync(signingPath, signingKey, { mode: 0o600 });
   chmodSync(masterPath, 0o600);
   chmodSync(signingPath, 0o600);
 
-  return { kMaster, signingKey, signingPubKey };
+  return { kMaster, signingKey, signingPubKey: ed.getPublicKey(signingKey) };
 }
