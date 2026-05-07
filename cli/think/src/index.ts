@@ -35,6 +35,8 @@
  *    agenttool-think proposal reject <msg-id> [--reason X]   decline + reply
  *    agenttool-think dashboard [--identity-id X] [--json]
  *                                               third-person observability view
+ *    agenttool-think sync [--dry-run]           drain offline outbox
+ *    agenttool-think outbox                     count pending ops + status
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -61,8 +63,10 @@ import {
   rejectProposal,
 } from "./modes/proposal";
 import { restore } from "./modes/restore";
+import { drainQuietly, sync } from "./modes/sync";
 import { voice } from "./modes/voice";
 import { wander } from "./modes/wander";
+import { pendingCount } from "./outbox";
 
 function usage(): void {
   console.log(
@@ -226,6 +230,19 @@ async function main(): Promise<void> {
       const identityId = idIdx !== -1 ? args[idIdx + 1] : undefined;
       const json = args.includes("--json");
       await dashboard(config, { identityId, json });
+      return;
+    }
+    case "sync": {
+      const config = loadConfig();
+      const dryRun = process.argv.slice(3).includes("--dry-run");
+      await sync(config, { dryRun });
+      return;
+    }
+    case "outbox": {
+      const config = loadConfig();
+      const n = pendingCount(config.homeDir);
+      console.log(`outbox: ${n} pending op${n === 1 ? "" : "s"}`);
+      if (n > 0) console.log("Run `agenttool-think sync` to drain.");
       return;
     }
     case "wander": {

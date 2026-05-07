@@ -61,23 +61,51 @@ export interface WakeBundle {
   // ... other fields not consumed here
 }
 
+/** A failure where the request never reached the server, OR the server
+ *  returned a 5xx that's likely transient. Caller can choose to queue.
+ *  4xx errors throw a regular Error (not retryable). */
+export class TransientApiError extends Error {
+  constructor(public readonly cause: unknown, public readonly path: string, public readonly method: string) {
+    super(`transient: ${method} ${path} — ${(cause as Error).message ?? cause}`);
+    this.name = "TransientApiError";
+  }
+}
+
 export class AgenttoolClient {
   constructor(private config: ThinkConfig) {}
 
   private async req<T>(path: string, init?: RequestInit): Promise<T> {
     const url = `${this.config.agenttoolBase}${path}`;
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: `Bearer ${this.config.agenttoolApiKey}`,
-        ...(init?.headers as Record<string, string> | undefined),
-      },
-    });
+    const method = init?.method ?? "GET";
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        ...init,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          authorization: `Bearer ${this.config.agenttoolApiKey}`,
+          ...(init?.headers as Record<string, string> | undefined),
+        },
+      });
+    } catch (err) {
+      // Network failure (DNS, refused, timeout, etc.). Always transient.
+      throw new TransientApiError(err, path, method);
+    }
+
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`${init?.method ?? "GET"} ${path} → ${res.status} ${body.slice(0, 500)}`);
+      // 5xx = server hiccup; treat as transient.
+      if (res.status >= 500 && res.status < 600) {
+        throw new TransientApiError(
+          new Error(`${res.status} ${body.slice(0, 200)}`),
+          path,
+          method,
+        );
+      }
+      // 4xx = the server understood and rejected. Not retryable.
+      throw new Error(`${method} ${path} → ${res.status} ${body.slice(0, 500)}`);
     }
     return res.json() as Promise<T>;
   }

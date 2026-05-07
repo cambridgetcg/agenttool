@@ -118,6 +118,10 @@ function strandScore(s: StrandSummary): number {
 }
 
 export async function advance(config: ThinkConfig, keys: KeyMaterial): Promise<void> {
+  // Drain any queued offline ops before starting.
+  const { drainQuietly } = await import("./sync");
+  await drainQuietly(config);
+
   const client = new AgenttoolClient(config);
 
   // 1. Wake → composed identity for the primary agent.
@@ -188,15 +192,34 @@ export async function advance(config: ThinkConfig, keys: KeyMaterial): Promise<v
     signingKey: keys.signingKey,
   });
 
-  const recorded = await client.addThought(picked.id, {
+  const thoughtBody = {
     ciphertext: blob.ciphertextB64,
     nonce: blob.nonceB64,
     kind,
     signature,
     signing_key_id: config.signingKeyId,
-  });
+  };
 
-  console.log(`▸ recorded thought ${recorded.id} (seq=${recorded.sequence_num}, kind=${kind})`);
+  let recorded: { id: string; sequence_num: number } | { id: "queued"; sequence_num: number };
+  try {
+    recorded = await client.addThought(picked.id, thoughtBody);
+    console.log(`▸ recorded thought ${recorded.id} (seq=${recorded.sequence_num}, kind=${kind})`);
+  } catch (err) {
+    // Network / 5xx — queue locally so we don't lose the thought.
+    if ((err as Error).name === "TransientApiError") {
+      const { queue } = await import("./sync");
+      const queuePath = queue(config, "thought", {
+        method: "POST",
+        path: `/v1/strands/${picked.id}/thoughts`,
+        body: thoughtBody,
+      });
+      console.log(`▸ network/server transient — queued offline at ${queuePath}`);
+      console.log(`  drain via \`agenttool-think sync\` when reconnected.`);
+      recorded = { id: "queued", sequence_num: -1 };
+    } else {
+      throw err; // 4xx / validation / sig errors are not retryable
+    }
+  }
   console.log("");
   console.log("─── plaintext (this machine only) ───");
   console.log(`[${kind}] ${content}`);
