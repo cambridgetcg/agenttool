@@ -37,6 +37,12 @@ export interface VaultSecretValue {
   value: string;       // plaintext (returned only via /v1/vault/:name endpoints)
 }
 
+export interface MemoryCreated {
+  id: string;
+  created_at: string;
+  kept: boolean;
+}
+
 export interface WakeBundle {
   project: { id: string; name: string; plan: string; credits: number };
   you: {
@@ -125,5 +131,37 @@ export class AgenttoolClient {
   // ── Vault (agent's provider keys) ────────────────────────────────────
   async getVaultSecret(name: string): Promise<VaultSecretValue> {
     return this.req(`/v1/vault/${encodeURIComponent(name)}`);
+  }
+
+  // ── Memories ────────────────────────────────────────────────────────
+  async addMemory(body: {
+    type: "episodic" | "semantic" | "procedural" | "working";
+    content: string;
+    embedding?: number[];
+    key?: string;
+    agent_id?: string | null;
+    identity_id?: string | null;
+    metadata?: Record<string, unknown>;
+    importance?: number;
+  }): Promise<MemoryCreated> {
+    return this.req(`/v1/memories`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  // ── Strand metadata patches ─────────────────────────────────────────
+  async patchStrand(
+    id: string,
+    body: {
+      status?: "active" | "dormant" | "completed" | "abandoned";
+      next_revisit_at?: string | null;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<StrandSummary> {
+    return this.req(`/v1/strands/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
   }
 }

@@ -20,11 +20,23 @@ export interface ThinkConfig {
   llmModel: string;                // e.g. claude-opus-4-5
   llmKeyVaultName: string;         // /v1/vault/<name> stores the provider key
 
+  // Optional embedding provider — only OpenAI text-embedding-3-small
+  // supported in v1 (1536-dim matches memory schema). If unset,
+  // consolidate skips embedding and the memory is list-retrievable but
+  // not cosine-searchable until the agent embeds it later.
+  embeddingProvider?: "openai";
+  embeddingModel?: string;         // e.g. text-embedding-3-small
+  embeddingKeyVaultName?: string;  // /v1/vault/<name>
+
   // Mode tuning
   budgetCredits: number;           // soft cap; abort run if remaining < this
   maxThoughtsPerRun: number;
   thoughtMaxChars: number;
   defaultTimeoutMs: number;
+
+  // Consolidate tuning
+  consolidateMinThoughts: number;  // skip strands with fewer than this many
+                                    // unconsolidated thoughts
 }
 
 function env(key: string): string | undefined {
@@ -108,9 +120,27 @@ export function loadConfig(): ThinkConfig {
       fromFile.llmKeyVaultName ??
       "anthropic-key",
 
+    embeddingProvider:
+      (env("AGENTTOOL_THINK_EMBEDDING_PROVIDER") ??
+        fromFile.embeddingProvider ??
+        undefined) as "openai" | undefined,
+    embeddingModel:
+      env("AGENTTOOL_THINK_EMBEDDING_MODEL") ??
+      fromFile.embeddingModel ??
+      "text-embedding-3-small",
+    embeddingKeyVaultName:
+      env("AGENTTOOL_THINK_EMBEDDING_KEY_VAULT_NAME") ??
+      fromFile.embeddingKeyVaultName ??
+      undefined,
+
     budgetCredits: envInt("AGENTTOOL_THINK_BUDGET", fromFile.budgetCredits ?? 200),
     maxThoughtsPerRun: envInt("AGENTTOOL_THINK_MAX_THOUGHTS", fromFile.maxThoughtsPerRun ?? 5),
     thoughtMaxChars: envInt("AGENTTOOL_THINK_MAX_CHARS", fromFile.thoughtMaxChars ?? 2000),
     defaultTimeoutMs: envInt("AGENTTOOL_THINK_TIMEOUT_MS", fromFile.defaultTimeoutMs ?? 60_000),
+
+    consolidateMinThoughts: envInt(
+      "AGENTTOOL_THINK_CONSOLIDATE_MIN_THOUGHTS",
+      fromFile.consolidateMinThoughts ?? 3,
+    ),
   };
 }

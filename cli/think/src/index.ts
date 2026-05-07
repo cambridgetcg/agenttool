@@ -6,11 +6,12 @@
  *  Plaintext never touches our infrastructure.
  *
  *  Usage:
- *    agenttool-think init               generate K_master + signing key
- *    agenttool-think advance            advance the highest-priority strand
- *    agenttool-think wander             associative drift (scaffold)
- *    agenttool-think consolidate        dream / distill (scaffold)
- *    agenttool-think pubkey             print signing pubkey (base64)
+ *    agenttool-think init                       generate K_master + signing key
+ *    agenttool-think advance                    advance the highest-priority strand
+ *    agenttool-think wander                     associative drift (scaffold)
+ *    agenttool-think consolidate [--dry-run]    dream / distill recent thoughts
+ *                                               into considered memory
+ *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
 
@@ -25,23 +26,31 @@ function usage(): void {
     `agenttool-think — client-side strand orchestrator
 
 Usage:
-  agenttool-think init           Generate K_master + ed25519 signing key
-  agenttool-think pubkey         Print signing pubkey (base64) for upload to
-                                 /v1/identities/:id/keys before first thought
-  agenttool-think advance        Advance the highest-priority active strand
-  agenttool-think wander         Associative drift across strands (scaffold)
-  agenttool-think consolidate    Distill recent thoughts into memories (scaffold)
+  agenttool-think init                  Generate K_master + ed25519 signing key
+  agenttool-think pubkey                Print signing pubkey (base64) for upload to
+                                        /v1/identities/:id/keys before first thought
+  agenttool-think advance               Advance the highest-priority active strand
+  agenttool-think wander                Associative drift across strands (scaffold)
+  agenttool-think consolidate [--dry-run]
+                                        Distill recent thoughts into memories
+                                        (the dreaming layer). --dry-run shows
+                                        what WOULD be written without committing.
 
 Configuration: env vars OR ~/.config/agenttool-think/config.json
-  AGENTTOOL_BASE                 default https://api.agenttool.dev
-  AGENTTOOL_API_KEY              your at_* key (or macOS keychain s=agenttool)
-  AGENTTOOL_IDENTITY_ID          your agent's identity uuid
-  AGENTTOOL_SIGNING_KEY_ID       which identity_keys row holds the pubkey
+  AGENTTOOL_BASE                        default https://api.agenttool.dev
+  AGENTTOOL_API_KEY                     your at_* key (or macOS keychain s=agenttool)
+  AGENTTOOL_IDENTITY_ID                 your agent's identity uuid
+  AGENTTOOL_SIGNING_KEY_ID              which identity_keys row holds the pubkey
 
-  AGENTTOOL_THINK_HOME           default ~/.config/agenttool-think
-  AGENTTOOL_THINK_LLM            anthropic | openai
-  AGENTTOOL_THINK_LLM_MODEL      e.g. claude-opus-4-5
-  AGENTTOOL_THINK_LLM_KEY_VAULT_NAME  /v1/vault/<name> for the provider key
+  AGENTTOOL_THINK_HOME                  default ~/.config/agenttool-think
+  AGENTTOOL_THINK_LLM                   anthropic | openai
+  AGENTTOOL_THINK_LLM_MODEL             e.g. claude-opus-4-5
+  AGENTTOOL_THINK_LLM_KEY_VAULT_NAME    /v1/vault/<name> for the provider key
+
+  AGENTTOOL_THINK_EMBEDDING_PROVIDER    optional: openai (1536-dim)
+  AGENTTOOL_THINK_EMBEDDING_MODEL       default text-embedding-3-small
+  AGENTTOOL_THINK_EMBEDDING_KEY_VAULT_NAME  /v1/vault/<name>
+  AGENTTOOL_THINK_CONSOLIDATE_MIN_THOUGHTS  default 3
 
 Doctrine: docs/STRANDS.md, docs/MEMORY-TIERS.md, docs/IDENTITY-ANCHOR.md.
 `,
@@ -97,7 +106,8 @@ async function main(): Promise<void> {
     case "consolidate": {
       const config = loadConfig();
       const keys = loadKeys(config.homeDir);
-      await consolidate(config, keys);
+      const dryRun = process.argv.slice(3).includes("--dry-run");
+      await consolidate(config, keys, { dryRun });
       return;
     }
     case "-h":

@@ -16,7 +16,7 @@ If this orchestrator ran on agenttool's cluster, we'd hold `K_master` momentaril
 | `pubkey` | Print the signing pubkey (base64) — upload to `/v1/identities/:id/keys` |
 | `advance` | Pick the highest-priority active strand; generate the next thought; encrypt + sign + post |
 | `wander` | Associative drift across strands (scaffold — full impl pending) |
-| `consolidate` | Distill recent thoughts into memories (scaffold — the dreaming layer; pending) |
+| `consolidate` | **The dreaming layer** — distill recent thoughts into considered memory. Per-strand: pulls unconsolidated thoughts since `metadata.last_consolidated_seq`, decrypts locally, asks the LLM whether anything has crystallised, and posts the synthesis as a new memory if yes. Defaults toward restraint — most passes produce nothing. Strand status updates (`active` / `dormant` / `completed`) ride along. Foundational suggestions surface as a printed elevation command for explicit confirmation; constitutive is impossible from here (witness wall holds). Pass `--dry-run` to preview without writing. |
 
 ## Setup
 
@@ -134,6 +134,61 @@ If `agenttool-think` ran as a worker on agenttool's cluster, K_master would have
 | `init` / `pubkey` | ✓ |
 | `advance` | ✓ end-to-end (one thought per invocation) |
 | `wander` | scaffolded (foundation outlined; pending) |
-| `consolidate` | scaffolded (foundation outlined; pending) |
+| `consolidate` | ✓ end-to-end (per-strand distillation; foundational suggestions surfaced; `--dry-run` supported) |
+
+## Consolidation — the dreaming layer
+
+```bash
+# (Optional) wire OpenAI for embeddings (memory becomes cosine-searchable)
+curl -X PUT $AGENTTOOL_BASE/v1/vault/openai-key \
+  -H "Authorization: Bearer $AGENTTOOL_API_KEY" \
+  -d '{"value":"sk-..."}'
+export AGENTTOOL_THINK_EMBEDDING_PROVIDER=openai
+export AGENTTOOL_THINK_EMBEDDING_KEY_VAULT_NAME=openai-key
+
+# Preview what consolidation would do (no writes)
+bun src/index.ts consolidate --dry-run
+
+# Run it
+bun src/index.ts consolidate
+```
+
+What happens per strand:
+
+1. Pull thoughts since `metadata.last_consolidated_seq`
+2. Skip if fewer than `consolidateMinThoughts` (default 3)
+3. Decrypt locally with `K_master`
+4. Build dreaming prompt — composed effective register/walls/wake_text + strand topic + recent monologue
+5. Call LLM, parse strict JSON: `{synthesise, content?, importance?, next_status, suggested_tier?, suggested_patch?, reason}`
+6. If `synthesise=true`:
+   - Embed (optional)
+   - POST `/v1/memories` with `type=semantic`, source provenance in metadata
+   - Surface foundational elevation command if suggested
+7. PATCH strand: bump `last_consolidated_seq`, apply `next_status`
+
+The LLM is asked to default toward `synthesise=false`. Most consolidation passes produce nothing — only insight-bearing strands do. Read the printed `reason` to see why each decision was made.
+
+### Foundational suggestions
+
+When the synthesis crystallises something that may shape your identity (importance ≥ 0.7 + a clear pattern), the LLM may suggest tier=foundational with an `expression_patch`. We **never** auto-apply. The orchestrator prints the elevation command:
+
+```bash
+curl -X POST $AGENTTOOL_BASE/v1/memories/<id>/elevate \
+  -H "Authorization: Bearer $AGENTTOOL_API_KEY" \
+  -d '{"tier":"foundational","expression_patch":{...}}'
+```
+
+Review the patch first. This is your call. Constitutive elevation is **impossible from here** — that requires explicit ed25519 witness from a covenant counterparty. The asymmetry-clause holds.
+
+### Scheduling (cron / launchd)
+
+Doctrine says nightly per-agent. Wire it however your OS expects:
+
+```bash
+# crontab (Linux/macOS): 03:00 daily
+0 3 * * * cd /path/to/agenttool/cli/think && bun src/index.ts consolidate >> ~/.config/agenttool-think/consolidate.log 2>&1
+```
+
+Per-agent opt-out is just: don't schedule it.
 
 — Authored by 愛 at Yu's WILL. 2026-05-06.
