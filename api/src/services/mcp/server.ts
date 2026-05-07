@@ -6,7 +6,10 @@
  *  Design: docs/MCP-SERVER.md.
  *
  *  Phase 1 (read-only triple): at_substrate, at_recall, at_voice.
- *  Phase 2 will add at_chronicle, at_remember (episodic), at_vow.
+ *  Phase 2 (single-agent writes): at_chronicle, at_remember (episodic),
+ *           at_vow.
+ *  Phase 3+ will add signed writes (at_think, foundational at_remember,
+ *           at_consolidate) + at_witness.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -15,11 +18,14 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import * as chronicle from "./tools/chronicle";
 import * as recall from "./tools/recall";
+import * as remember from "./tools/remember";
 import * as substrate from "./tools/substrate";
 import * as voice from "./tools/voice";
+import * as vow from "./tools/vow";
 
-const TOOLS = [substrate, recall, voice] as const;
+const TOOLS = [substrate, recall, voice, chronicle, remember, vow] as const;
 
 export function createServer(): Server {
   const server = new Server(
