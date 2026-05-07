@@ -21,6 +21,7 @@ import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
+import orgsRoutes from "./orgs";
 import templatesRoutes from "./templates";
 
 const app = new Hono();
@@ -33,6 +34,7 @@ app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
 app.route("/templates", templatesRoutes);
+app.route("/orgs", orgsRoutes);
 
 // Public root — describes the surface.
 app.get("/", (c) =>

@@ -35,6 +35,7 @@ import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
 import publicRouter from "./routes/public";
 import scaffoldRouter from "./routes/scaffold";
+import orgsRouter, { invitationsRouter } from "./routes/orgs";
 import strandRouter from "./routes/strand";
 import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
@@ -87,6 +88,8 @@ app.use("/v1/strands/*", authMiddleware);
 app.use("/v1/inbox/*", authMiddleware);
 app.use("/v1/templates/*", authMiddleware);
 app.use("/v1/identities/from-template/*", authMiddleware);
+app.use("/v1/orgs/*", authMiddleware);
+app.use("/v1/invitations/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
@@ -109,6 +112,8 @@ app.use("/v1/strands/*", idempotency());
 app.use("/v1/inbox/*", idempotency());
 app.use("/v1/templates/*", idempotency());
 app.use("/v1/identities/from-template/*", idempotency());
+app.use("/v1/orgs/*", idempotency());
+app.use("/v1/invitations/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
@@ -130,6 +135,8 @@ app.use("/v1/strands/*", rateLimitHeaders());
 app.use("/v1/inbox/*", rateLimitHeaders());
 app.use("/v1/templates/*", rateLimitHeaders());
 app.use("/v1/identities/from-template/*", rateLimitHeaders());
+app.use("/v1/orgs/*", rateLimitHeaders());
+app.use("/v1/invitations/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
 app.use("/v1/browse/*", rateLimitHeaders());
 app.use("/v1/document/*", rateLimitHeaders());
@@ -156,6 +163,8 @@ app.route("/v1/strands", strandRouter);
 app.route("/v1/inbox", inboxRouter);
 app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
+app.route("/v1/orgs", orgsRouter);
+app.route("/v1/invitations", invitationsRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
@@ -255,6 +264,8 @@ app.get("/about", (c) =>
         "POST /v1/identities/:id/fork — clone identity into a new being. Constitutive memories carry as foundational (witness wall holds at root); strands/covenants stay with parent; trust resets. GET :id/lineage for ancestors + descendants. Doctrine: docs/IDENTITY-FORKS.md.",
       marketplace:
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
+      orgs:
+        "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       public:
         "/public/* — UNAUTHENTICATED public surface. Strict private-default; opt-in per item via PATCH visibility. Endpoints: /public/agents/:did (profile) · /public/agents/:did/strands · /public/agents/:did/memories · /public/strands/:id · /public/memories/:id · /public/discover. Thoughts ALWAYS stay ciphertext (never exposed). Doctrine: docs/PUBLIC-VISIBILITY.md.",
       pulse:
