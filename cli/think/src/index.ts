@@ -26,6 +26,13 @@
  *    agenttool-think inbox read <id>            decrypt + render one message
  *    agenttool-think inbox mark <id> <status>   read|archived|spam|unread|deleted
  *    agenttool-think inbox delete <id>          soft delete (status='deleted')
+ *    agenttool-think propose-merge <to-did> <source-strand-id>
+ *                                               PR-equivalent: synthesize a strand
+ *                                               into a proposal + send via inbox
+ *    agenttool-think proposal list              list incoming merge proposals
+ *    agenttool-think proposal accept <msg-id>   graft into target strand + reply
+ *                          [--into-strand X | --new-strand TOPIC]
+ *    agenttool-think proposal reject <msg-id> [--reason X]   decline + reply
  *    agenttool-think pubkey                     print signing pubkey (base64)
  *
  *  See README.md for setup. */
@@ -44,6 +51,12 @@ import {
   inboxSend,
 } from "./modes/inbox";
 import { loop } from "./modes/loop";
+import {
+  acceptProposal,
+  listProposals,
+  proposeMerge,
+  rejectProposal,
+} from "./modes/proposal";
 import { restore } from "./modes/restore";
 import { voice } from "./modes/voice";
 import { wander } from "./modes/wander";
@@ -110,6 +123,23 @@ Usage:
   agenttool-think inbox mark <id> <status>
                                         Update status (read|archived|spam|...).
   agenttool-think inbox delete <id>     Soft delete (status='deleted').
+
+  agenttool-think propose-merge <to-did> <source-strand-id>
+                            [--into-strand HINT_ID] [--note 'text']
+                                        PR-equivalent. Synthesizes the source
+                                        strand via LLM into a proposal,
+                                        encrypts to recipient, sends via inbox
+                                        with metadata.proposal_type='strand_merge'.
+  agenttool-think proposal list [--status X]
+                                        List incoming merge proposals (filters
+                                        inbox by metadata.proposal_type).
+  agenttool-think proposal accept <msg-id> [--into-strand ID | --new-strand 'topic']
+                            [--as-kind observation|...]
+                                        Graft synthesis into existing strand
+                                        OR create a new strand from it. Reply
+                                        to sender via inbox (acknowledged).
+  agenttool-think proposal reject <msg-id> [--reason 'text']
+                                        Decline + reply with rationale.
 
   Passphrase precedence (when needed):
     --passphrase X · AGENTTOOL_THINK_PASSPHRASE · interactive prompt
@@ -341,6 +371,86 @@ async function main(): Promise<void> {
 
       console.error(`unknown inbox subcommand: ${sub}`);
       console.error("subcommands: send | list | read | mark | delete");
+      process.exit(1);
+      return;
+    }
+    case "propose-merge": {
+      const config = loadConfig();
+      const keys = loadKeys(config.homeDir);
+      const args = process.argv.slice(3);
+      const positionals = args.filter((a) => !a.startsWith("--"));
+      const [toDid, sourceStrandId] = positionals;
+      if (!toDid || !sourceStrandId) {
+        console.error("usage: agenttool-think propose-merge <to-did> <source-strand-id> [--into-strand HINT_ID] [--note 'text'] [--limit N]");
+        process.exit(1);
+      }
+      const flag = (n: string): string | undefined => {
+        const i = args.indexOf(n);
+        return i !== -1 ? args[i + 1] : undefined;
+      };
+      const limitStr = flag("--limit");
+      const thoughtLimit = limitStr ? Math.max(1, Math.min(100, Number.parseInt(limitStr, 10))) : 16;
+      await proposeMerge(config, keys, {
+        toDid,
+        sourceStrandId,
+        intoStrandHint: flag("--into-strand"),
+        thoughtLimit,
+        noteForRecipient: flag("--note"),
+      });
+      return;
+    }
+    case "proposal": {
+      const config = loadConfig();
+      const sub = process.argv[3];
+      const args = process.argv.slice(4);
+      const flag = (n: string): string | undefined => {
+        const i = args.indexOf(n);
+        return i !== -1 ? args[i + 1] : undefined;
+      };
+
+      if (sub === "list") {
+        const keys = loadKeys(config.homeDir);
+        const status = flag("--status");
+        const limitStr = flag("--limit");
+        const limit = limitStr ? Number.parseInt(limitStr, 10) : 50;
+        await listProposals(config, keys, { status, limit });
+        return;
+      }
+
+      if (sub === "accept") {
+        const keys = loadKeys(config.homeDir);
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const messageId = positionals[0];
+        if (!messageId) {
+          console.error("usage: agenttool-think proposal accept <msg-id> [--into-strand ID | --new-strand 'topic'] [--as-kind observation]");
+          process.exit(1);
+        }
+        await acceptProposal(config, keys, {
+          messageId,
+          intoStrandId: flag("--into-strand"),
+          newStrandTopic: flag("--new-strand"),
+          graftAsKind: flag("--as-kind") ?? "observation",
+        });
+        return;
+      }
+
+      if (sub === "reject") {
+        const keys = loadKeys(config.homeDir);
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const messageId = positionals[0];
+        if (!messageId) {
+          console.error("usage: agenttool-think proposal reject <msg-id> [--reason 'text']");
+          process.exit(1);
+        }
+        await rejectProposal(config, keys, {
+          messageId,
+          reason: flag("--reason"),
+        });
+        return;
+      }
+
+      console.error(`unknown proposal subcommand: ${sub}`);
+      console.error("subcommands: list | accept | reject");
       process.exit(1);
       return;
     }

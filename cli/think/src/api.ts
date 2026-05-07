@@ -102,6 +102,21 @@ export class AgenttoolClient {
     return this.req(`/v1/strands/${id}`);
   }
 
+  async createStrand(body: {
+    topic?: string;
+    topic_encrypted?: boolean;
+    mood?: string;
+    mood_encrypted?: boolean;
+    importance?: number;
+    parent_strand_id?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StrandSummary> {
+    return this.req(`/v1/strands`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   async listThoughts(
     strandId: string,
     opts: { since_seq?: number; limit?: number } = {},
