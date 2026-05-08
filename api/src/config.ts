@@ -38,3 +38,7 @@ export const config = {
   stripeSecretKey: env("STRIPE_SECRET_KEY", ""),
   stripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
 } as const;
+
+// Note: payout broadcast config + boot guard live in `services/economy/config.ts`
+// (`economyConfig.payout.{workerEnabled,network,…}`). Domain-local rather than
+// shared to keep chain-specific knobs out of the top-level surface.

@@ -283,6 +283,88 @@ export async function listPayouts(walletId: string) {
     .orderBy(desc(cryptoPayouts.requestedAt));
 }
 
+export interface CancelPayoutParams {
+  walletId: string;
+  payoutId: string;
+  projectId: string;
+}
+
+export type CancelPayoutResult =
+  | { ok: true; refunded: number; status: "cancelled" }
+  | {
+      ok: false;
+      error: "payout_not_found" | "wrong_wallet" | "not_cancellable";
+      currentStatus?: string;
+    };
+
+/** Cancel a payout still in 'requested' state and refund the credits.
+ *  Atomic: status compare-and-swap (`WHERE status='requested'`) plus balance
+ *  credit, all in one transaction — so concurrent cancel attempts can't
+ *  double-refund and a worker that has just picked up the row (status flipped
+ *  to 'broadcasting' or further) loses cleanly with `not_cancellable`.
+ *  Returns `wrong_wallet` on cross-wallet access; the route layer should
+ *  mask that as 404 to avoid payout-id enumeration. */
+export async function cancelPayout(
+  p: CancelPayoutParams,
+): Promise<CancelPayoutResult> {
+  return await db.transaction(async (tx) => {
+    const [payout] = await tx
+      .select()
+      .from(cryptoPayouts)
+      .where(eq(cryptoPayouts.id, p.payoutId))
+      .limit(1);
+
+    if (!payout) return { ok: false, error: "payout_not_found" } as const;
+    if (payout.walletId !== p.walletId) {
+      return { ok: false, error: "wrong_wallet" } as const;
+    }
+    if (payout.status !== "requested") {
+      return {
+        ok: false,
+        error: "not_cancellable",
+        currentStatus: payout.status,
+      } as const;
+    }
+
+    const amountUsdc = Number(payout.amountBase) / 1_000_000;
+    const credits = Math.ceil(amountUsdc * CREDITS_PER_USDC);
+
+    const newMetadata = {
+      ...((payout.metadata as Record<string, unknown> | null) ?? {}),
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: "user",
+    };
+
+    // Compare-and-swap on status: only the first canceller wins. A worker
+    // that has just flipped this to 'broadcasting' would also lose here.
+    const updated = await tx
+      .update(cryptoPayouts)
+      .set({
+        status: "cancelled",
+        error: "cancelled_by_user",
+        metadata: newMetadata,
+      })
+      .where(
+        and(
+          eq(cryptoPayouts.id, p.payoutId),
+          eq(cryptoPayouts.status, "requested"),
+        ),
+      )
+      .returning({ id: cryptoPayouts.id });
+
+    if (updated.length === 0) {
+      return { ok: false, error: "not_cancellable" } as const;
+    }
+
+    await tx
+      .update(wallets)
+      .set({ balance: sqlPlus(credits) })
+      .where(eq(wallets.id, payout.walletId));
+
+    return { ok: true, refunded: credits, status: "cancelled" as const };
+  });
+}
+
 const SUPPORTED_PAYOUT_TOKENS = ["USDC"] as const;
 
 // ── Inbound webhook ingestion ──────────────────────────────────────────

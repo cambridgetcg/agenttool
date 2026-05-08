@@ -201,7 +201,7 @@ export const cryptoPayouts = economySchema.table(
     // amount in token base-units (USDC has 6 decimals → 1.5 USDC = 1500000)
     amountBase: numeric("amount_base", { precision: 78, scale: 0 }).notNull(),
     destinationAddress: text("destination_address").notNull(),
-    status: text("status").notNull().default("requested"), // requested | signing | broadcast | confirmed | failed
+    status: text("status").notNull().default("requested"), // requested | signing | broadcast | confirmed | failed | cancelled
     txHash: text("tx_hash"),
     error: text("error"),
     metadata: jsonb("metadata").default({}),

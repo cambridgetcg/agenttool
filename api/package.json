@@ -22,6 +22,8 @@
     "@noble/hashes": "^2.0.1",
     "@scure/bip32": "^2.2.0",
     "@scure/bip39": "^2.2.0",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
     "bcryptjs": "^2.4.3",
     "bs58": "^6.0.0",
     "bullmq": "^5.76.6",
@@ -34,6 +36,7 @@
     "playwright": "^1.59.1",
     "postgres": "^3.4.4",
     "stripe": "^22.1.0",
+    "viem": "^2.48.11",
     "zod": "^3.24.0"
   },
   "devDependencies": {

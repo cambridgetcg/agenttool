@@ -27,6 +27,7 @@ import {
   type EvmChain,
 } from "../../services/economy/crypto/chains";
 import {
+  cancelPayout,
   getOrCreateDepositAddress,
   ingestInboundTransfer,
   issueChallenge,
@@ -198,6 +199,24 @@ const payoutSchema = z.object({
 });
 
 router.post("/wallets/:walletId/payout", async (c) => {
+  // 503 guard: until the broadcast worker is wired and enabled, accepting
+  // payout requests would lock credits indefinitely (status='requested' with
+  // no path forward). Operator opt-in via PAYOUT_WORKER_ENABLED=true. Plan:
+  // docs/PAYOUT-BROADCAST-PLAN.md (Slice 0).
+  if (!economyConfig.payout.workerEnabled) {
+    return c.json(
+      {
+        error: "payout_broadcast_not_available",
+        message:
+          "The payout broadcast worker is not enabled on this instance. " +
+          "Until it is, payout requests would lock credits indefinitely. " +
+          "If you have a payout already in 'requested' state, cancel it via " +
+          "POST /v1/wallets/:walletId/payouts/:payoutId/cancel. " +
+          "See docs/PAYOUT-BROADCAST-PLAN.md.",
+      },
+      503,
+    );
+  }
   const walletId = c.req.param("walletId");
   const w = await ensureWalletOwnership(c, walletId);
 
@@ -259,6 +278,103 @@ router.get("/wallets/:walletId/payouts", async (c) => {
       confirmed_at: r.confirmedAt?.toISOString() ?? null,
     })),
     count: rows.length,
+  });
+});
+
+// ── POST /v1/wallets/:id/payouts/:payout_id/cancel ─────────────────────
+//  Cancel a payout still in `requested` state and refund the credits.
+//  Atomic compare-and-swap on status so concurrent attempts (or a worker
+//  that has just flipped to 'broadcasting') resolve cleanly with
+//  `not_cancellable`. Closes the credit-freeze visibility gap: if the
+//  worker is disabled (Slice 0) and a stale `requested` row exists, the
+//  agent can recover its credits without operator intervention.
+//  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slice 0).
+router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
+  const walletId = c.req.param("walletId");
+  const payoutId = c.req.param("payoutId");
+  const w = await ensureWalletOwnership(c, walletId);
+
+  const result = await cancelPayout({
+    walletId,
+    payoutId,
+    projectId: w.projectId,
+  });
+
+  if (!result.ok) {
+    // Mask cross-wallet access as 404 — same rationale as the wallet
+    // ownership check above, prevents payout-id enumeration.
+    if (result.error === "payout_not_found" || result.error === "wrong_wallet") {
+      return c.json({ error: "payout_not_found" }, 404);
+    }
+    if (result.error === "not_cancellable") {
+      return c.json(
+        {
+          error: "not_cancellable",
+          current_status: result.currentStatus,
+          hint:
+            "Only 'requested' payouts can be cancelled. " +
+            "Once 'broadcasting' or further, the chain has the only authority.",
+        },
+        409,
+      );
+    }
+    return c.json({ error: result.error }, 400);
+  }
+
+  return c.json({
+    payout_id: payoutId,
+    status: result.status,
+    refunded: result.refunded,
+    note:
+      `Cancelled and ${result.refunded} credit${result.refunded === 1 ? "" : "s"} ` +
+      `refunded to wallet ${walletId}.`,
+  });
+});
+
+// ── POST /v1/wallets/:id/payouts/:payout_id/cancel ─────────────────────
+//
+// Refund a payout still in 'requested' state. Atomic; idempotent
+// (re-cancelling returns 409 not_cancellable). Available regardless of
+// `payoutWorkerEnabled` — the cancel path closes the credit-freeze wall
+// when the worker isn't yet running, AND lets users retract still-queued
+// payouts even after enable. A worker that has just claimed the row
+// ('broadcasting' or further) wins the race; the cancel returns 409.
+router.post("/wallets/:walletId/payouts/:payoutId/cancel", async (c) => {
+  const walletId = c.req.param("walletId");
+  const payoutId = c.req.param("payoutId");
+  const w = await ensureWalletOwnership(c, walletId);
+
+  const result = await cancelPayout({
+    walletId,
+    payoutId,
+    projectId: w.projectId,
+  });
+
+  if (!result.ok) {
+    if (
+      result.error === "payout_not_found" ||
+      result.error === "wrong_wallet"
+    ) {
+      // Mask cross-wallet access as 404 — don't leak that the payout_id
+      // exists in another wallet within the project (or another project).
+      return c.json({ error: "payout_not_found" }, 404);
+    }
+    return c.json(
+      {
+        error: "not_cancellable",
+        message: `Payout is in status '${result.currentStatus ?? "unknown"}'. Only 'requested' payouts can be cancelled.`,
+        current_status: result.currentStatus ?? null,
+      },
+      409,
+    );
+  }
+
+  return c.json({
+    ok: true,
+    payout_id: payoutId,
+    status: "cancelled",
+    refunded_credits: result.refunded,
+    message: "Payout cancelled and credits refunded to wallet.",
   });
 });
 

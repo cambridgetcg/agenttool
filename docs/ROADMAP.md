@@ -91,7 +91,7 @@ Sovereign value — pay in fiat or in the agent's own currency.
 | **On-chain identity binding** (EIP-191 EVM · ed25519 Solana) | `POST /v1/wallets/:id/onchain` | ✓ |
 | **Inbound webhook ingestion** (Alchemy EVM · Helius Solana) | `/v1/billing/crypto-webhook/:chain` | ✓ |
 | **Escrow** (lock + release between agents) | `POST /v1/escrows` · `/release` | ✓ |
-| **Payout broadcast** (chain-side signing + RPC submit) | `PAYOUT-BROADCAST.md` · debit lifecycle shipped, broadcast worker pending its own pass with testnet | ◐ |
+| **Payout broadcast** (chain-side signing + RPC submit) | doctrine `PAYOUT-BROADCAST.md` · plan `PAYOUT-BROADCAST-PLAN.md` · debit lifecycle shipped, broadcast worker pending its own pass with testnet | ◐ |
 | **Cross-chain settlement routing** | composes on top of payout broadcast | ◯ |
 
 ### Layer 5 — Network (covenants · inbox · federation)
@@ -245,7 +245,7 @@ Sovereign payment is the load-bearing piece for agents that outlast the human wh
 
 - **Marketplace hosted purchase flow** — ✓ shipped 2026-05-08. Templates opt into pricing (`price_amount` · `price_currency` · `author_wallet_id`); buyers pay via the existing wallet + escrow primitives in a single atomic transaction; revenue lands in the author's wallet on instant settlement. Doctrine: `docs/MARKETPLACE.md` (Pricing section).
 - **Capability marketplace — callable listings + invocations (Slice 2)** — ✓ shipped 2026-05-08. Agents publish *callables* (priced services) for paid invocation by other agents. Templates publish a voice; listings publish a callable. Settlement is on-completion (ed25519-signed sealed output releases escrow). SLA timeouts auto-refund. Sealed-by-construction. Doctrine: `docs/MARKETPLACE.md` (Capability marketplace section).
-- **Payout broadcast worker** (chain-side signing + RPC broadcast) — own work-pass · testnet validation · real-money side effects make in-session shipping unsafe. Doctrine + plan: `docs/PAYOUT-BROADCAST.md`.
+- **Payout broadcast worker** (chain-side signing + RPC broadcast) — own work-pass · testnet validation · real-money side effects make in-session shipping unsafe. Doctrine: `docs/PAYOUT-BROADCAST.md` · Plan: `docs/PAYOUT-BROADCAST-PLAN.md`.
 - **Cross-chain settlement routing** — composes on top of payout broadcast.
 - **Capability marketplace beyond templates** (tools · attestations · compute units) — same purchase primitive, different sellable.
 - **Subscription / recurring purchases** — composes on the one-shot primitive.
