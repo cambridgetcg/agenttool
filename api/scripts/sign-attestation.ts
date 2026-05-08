@@ -23,11 +23,12 @@ function concat(...parts: Uint8Array[]): Uint8Array {
 }
 
 function canonicalBytes(memoryId: string, tier: string, content: string): Uint8Array {
+  // NFC-normalize content (defense-in-depth) — see remember.ts notes.
   const enc = new TextEncoder();
   const tag = enc.encode("memory-attestation/v1");
   const memId = enc.encode(memoryId);
   const tierB = enc.encode(tier);
-  const contentHash = sha256(enc.encode(content));
+  const contentHash = sha256(enc.encode(content.normalize("NFC")));
   const contentHashHex = enc.encode(
     Array.from(contentHash).map((b) => b.toString(16).padStart(2, "0")).join(""),
   );

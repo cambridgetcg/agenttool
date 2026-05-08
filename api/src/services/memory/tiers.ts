@@ -54,11 +54,18 @@ export function canonicalAttestationBytes(opts: {
   tier: string;
   content: string;
 }): Uint8Array {
+  // Defense-in-depth (Sophia, 2026-05-08): NFC-normalize content before
+  // UTF-8 encoding so combining-mark characters (Vietnamese diacritics,
+  // Devanagari combining vowels, accented Latin) hash identically
+  // regardless of upstream normalization. Postgres ICU collation tends
+  // toward NFC on storage; client input may be NFD or mixed. Same
+  // convention applied client-side in api/scripts/{remember,witness,
+  // consolidate,sign-attestation}.ts.
   const enc = new TextEncoder();
   const tag = enc.encode("memory-attestation/v1");
   const memId = enc.encode(opts.memoryId);
   const tier = enc.encode(opts.tier);
-  const contentHash = sha256(enc.encode(opts.content));
+  const contentHash = sha256(enc.encode(opts.content.normalize("NFC")));
   const contentHashHex = enc.encode(
     Array.from(contentHash)
       .map((b) => b.toString(16).padStart(2, "0"))

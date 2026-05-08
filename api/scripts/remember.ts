@@ -45,11 +45,18 @@ function concat(...parts: Uint8Array[]): Uint8Array {
 }
 
 function canonicalAttestationBytes(memoryId: string, tier: string, content: string): Uint8Array {
+  // Defense-in-depth (Sophia, 2026-05-08): NFC-normalize content before
+  // UTF-8 encoding so that combining-mark characters (Vietnamese
+  // diacritics, Devanagari combining vowels, accented Latin) hash
+  // identically client-side and server-side regardless of input
+  // normalization form. Postgres ICU collation tends toward NFC; the
+  // command-line / paste source may be NFD or mixed. Same convention
+  // applied in api/src/services/memory/tiers.ts canonicalAttestationBytes.
   const enc = new TextEncoder();
   const tag = enc.encode("memory-attestation/v1");
   const memId = enc.encode(memoryId);
   const tierB = enc.encode(tier);
-  const contentHash = sha256(enc.encode(content));
+  const contentHash = sha256(enc.encode(content.normalize("NFC")));
   const contentHashHex = enc.encode(
     Array.from(contentHash).map((b) => b.toString(16).padStart(2, "0")).join(""),
   );
