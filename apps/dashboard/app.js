@@ -1829,6 +1829,9 @@ async function openStrandDetail(strandId) {
   const project = getProject();
   if (!project || !project.api_key) return;
 
+  // Switching strands? close any prior live tail first.
+  closeStrandVoice();
+
   const panel = document.getElementById('strand-detail');
   const topicEl = document.getElementById('strand-detail-topic');
   const subEl = document.getElementById('strand-detail-sub');
@@ -1838,6 +1841,7 @@ async function openStrandDetail(strandId) {
   _currentStrandId = strandId;
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  wireStrandLiveToggle();
 
   if (topicEl) topicEl.textContent = 'Loading…';
   if (subEl) subEl.textContent = '';
@@ -2003,5 +2007,233 @@ function renderThoughtRow(t) {
 function closeStrandDetail() {
   const panel = document.getElementById('strand-detail');
   if (panel) panel.style.display = 'none';
+  closeStrandVoice();
   _currentStrandId = null;
+}
+
+// ─── Strand voice (SSE over fetch, since EventSource can't carry Bearer) ─
+
+let _strandSSE = null;          // { abort, strandId } | null
+let _strandSSEFlash = null;     // setTimeout handle for clearing live status
+
+function wireStrandLiveToggle() {
+  const cb = document.getElementById('strand-live-checkbox');
+  if (!cb || cb.dataset.wired) return;
+  cb.dataset.wired = '1';
+  cb.addEventListener('change', () => {
+    if (cb.checked) {
+      startStrandVoice();
+    } else {
+      closeStrandVoice();
+    }
+  });
+}
+
+async function startStrandVoice() {
+  const project = getProject();
+  if (!project || !project.api_key || !_currentStrandId) return;
+
+  // Replay nothing we already see — use the highest seq currently rendered.
+  const feedRows = document.querySelectorAll('#strand-detail-body .thought-row');
+  let sinceSeq = 0;
+  feedRows.forEach((row) => {
+    const s = parseInt(row.dataset.seq, 10);
+    if (Number.isFinite(s) && s > sinceSeq) sinceSeq = s;
+  });
+
+  const url = `${API_BASE}/v1/strands/${encodeURIComponent(_currentStrandId)}/voice?since_seq=${sinceSeq}`;
+  const ac = new AbortController();
+  const strandId = _currentStrandId;
+  _strandSSE = { abort: () => ac.abort(), strandId };
+
+  setStrandLiveLabel('connecting…', false);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${project.api_key}`,
+        'Accept': 'text/event-stream',
+      },
+      signal: ac.signal,
+    });
+  } catch (err) {
+    setStrandLiveLabel('offline', false);
+    showToast('Live tail failed to connect', 'error');
+    closeStrandVoice();
+    return;
+  }
+  if (!res.ok || !res.body) {
+    setStrandLiveLabel(`error ${res.status}`, false);
+    showToast(`Live tail rejected: ${res.status}`, 'error');
+    closeStrandVoice();
+    return;
+  }
+
+  // Stop here if user toggled off / changed strand mid-flight.
+  if (!_strandSSE || _strandSSE.strandId !== strandId) {
+    try { res.body.cancel(); } catch { /* ignore */ }
+    return;
+  }
+
+  setStrandLiveLabel('live', true);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  // Async loop reading SSE frames. The whole loop ends when the server
+  // closes the body (caps + lifetime), the user aborts, or fetch errors.
+  (async () => {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const ev = parseSSEFrame(frame);
+          if (ev) handleStrandSSEEvent(ev, strandId);
+        }
+      }
+    } catch (err) {
+      // AbortError fires when we close — silent. Other errors surface.
+      if (err.name !== 'AbortError') {
+        showToast('Live tail interrupted', 'error');
+      }
+    } finally {
+      // If we're still the active SSE, mark as disconnected.
+      if (_strandSSE && _strandSSE.strandId === strandId) {
+        setStrandLiveLabel('disconnected', false);
+        _strandSSE = null;
+        const cb = document.getElementById('strand-live-checkbox');
+        if (cb) cb.checked = false;
+      }
+    }
+  })();
+}
+
+function closeStrandVoice() {
+  if (_strandSSE) {
+    try { _strandSSE.abort(); } catch { /* ignore */ }
+    _strandSSE = null;
+  }
+  if (_strandSSEFlash) {
+    clearTimeout(_strandSSEFlash);
+    _strandSSEFlash = null;
+  }
+  const cb = document.getElementById('strand-live-checkbox');
+  if (cb) cb.checked = false;
+  const toggle = document.getElementById('strand-live-toggle');
+  if (toggle) toggle.classList.remove('live');
+  const label = document.getElementById('strand-live-label');
+  if (label) label.textContent = 'Live';
+}
+
+function setStrandLiveLabel(text, glowing) {
+  const label = document.getElementById('strand-live-label');
+  const toggle = document.getElementById('strand-live-toggle');
+  if (label) label.textContent = text;
+  if (toggle) toggle.classList.toggle('live', !!glowing);
+}
+
+// Parse one `\n\n`-terminated SSE frame.
+function parseSSEFrame(frame) {
+  let event = 'message';
+  let data = '';
+  let id = '';
+  const lines = frame.split('\n');
+  for (const raw of lines) {
+    if (raw === '' || raw.startsWith(':')) continue;  // empty / comment (keepalive)
+    const colon = raw.indexOf(':');
+    const field = colon === -1 ? raw : raw.slice(0, colon);
+    let value = colon === -1 ? '' : raw.slice(colon + 1);
+    if (value.startsWith(' ')) value = value.slice(1);
+    if (field === 'event') event = value;
+    else if (field === 'data') data += (data ? '\n' : '') + value;
+    else if (field === 'id') id = value;
+  }
+  if (!data && event === 'message') return null;
+  return { event, data, id };
+}
+
+function handleStrandSSEEvent(ev, strandId) {
+  // If user moved on, ignore.
+  if (!_strandSSE || _strandSSE.strandId !== strandId) return;
+  if (_currentStrandId !== strandId) return;
+
+  if (ev.event === 'thought') {
+    let payload;
+    try { payload = JSON.parse(ev.data); } catch { return; }
+    appendThoughtFromVoice(payload);
+    return;
+  }
+  if (ev.event === 'catchup-start' || ev.event === 'catchup-end') {
+    // Informational; the per-thought events do the work.
+    return;
+  }
+  if (ev.event === 'rejected') {
+    setStrandLiveLabel('rejected', false);
+    showToast('Live tail rejected (5 subscriber cap)', 'error');
+    closeStrandVoice();
+    return;
+  }
+  if (ev.event === 'disconnect' || ev.event === 'catchup-truncated') {
+    setStrandLiveLabel('disconnected', false);
+    closeStrandVoice();
+    return;
+  }
+  if (ev.event === 'refresh') {
+    // 1-hour lifetime cap — silently reconnect from the latest seq we saw.
+    closeStrandVoice();
+    setTimeout(() => {
+      const cb = document.getElementById('strand-live-checkbox');
+      if (cb && _currentStrandId === strandId) {
+        cb.checked = true;
+        startStrandVoice();
+      }
+    }, 250);
+    return;
+  }
+  // 'connected', 'error', anything else — informational only.
+}
+
+// Insert a new thought at the top of the feed with a flash animation.
+// Idempotent on sequence_num — a duplicate (catchup overlap) is a no-op.
+function appendThoughtFromVoice(t) {
+  const body = document.getElementById('strand-detail-body');
+  if (!body) return;
+
+  // Skip if already rendered (sequence_num is monotonic per strand).
+  if (body.querySelector(`.thought-row[data-seq="${t.sequence_num}"]`)) return;
+
+  // Find the feed container; if absent (empty state), upgrade to a feed.
+  let feed = body.querySelector('.thoughts-feed');
+  if (!feed) {
+    body.querySelectorAll('.strand-empty').forEach(el => el.remove());
+    const title = document.createElement('div');
+    title.className = 'strand-detail-section-title';
+    title.textContent = 'Thoughts (newest first)';
+    feed = document.createElement('div');
+    feed.className = 'thoughts-feed';
+    body.appendChild(title);
+    body.appendChild(feed);
+  }
+
+  const html = renderThoughtRow(t);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstElementChild;
+  if (!node) return;
+  node.classList.add('thought-new');
+  feed.insertBefore(node, feed.firstChild);
+
+  // Update the count line if present.
+  const titleEl = body.querySelector('.strand-detail-section-title');
+  if (titleEl) {
+    const n = feed.children.length;
+    titleEl.textContent = `Thoughts (${n}, newest first)`;
+  }
 }

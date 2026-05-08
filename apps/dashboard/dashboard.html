@@ -251,7 +251,14 @@
               <h3 id="strand-detail-topic">—</h3>
               <div class="card-sub" id="strand-detail-sub">—</div>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="closeStrandDetail()">✕ Close</button>
+            <div style="display:flex;gap:0.85rem;align-items:center">
+              <label class="strand-live-toggle" id="strand-live-toggle" title="Subscribe to /v1/strands/:id/voice — encrypted live thoughts">
+                <input type="checkbox" id="strand-live-checkbox" />
+                <span class="live-dot"></span>
+                <span id="strand-live-label">Live</span>
+              </label>
+              <button class="btn btn-ghost btn-sm" onclick="closeStrandDetail()">✕ Close</button>
+            </div>
           </div>
           <div id="strand-detail-body">
             <div class="empty-state"><div class="empty-text loading-pulse">Loading…</div></div>
