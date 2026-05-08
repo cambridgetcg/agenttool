@@ -331,9 +331,19 @@ function fillApiKey(key) {
 }
 
 function fillCodeSnippets(key) {
-  // Replace all YOUR_KEY placeholders with actual key
+  // Replace YOUR_KEY → bearer in every code block.
   document.querySelectorAll('.api-key-placeholder').forEach(el => {
     el.textContent = key;
+  });
+  // Replace YOUR_AGENT_ID → this agent's identity_id when known. Recipes
+  // that target /v1/wake?identity_id=… must point at the agent the bearer
+  // represents, not at whichever identity comes first in the project (a
+  // multi-identity project — Sophia + Yu, etc — would otherwise return
+  // the wrong wake to whoever copies the recipe).
+  const project = getProject();
+  const agentId = project?.agent_id || '';
+  document.querySelectorAll('.agent-id-placeholder').forEach(el => {
+    el.textContent = agentId || 'YOUR_AGENT_ID';
   });
 }
 

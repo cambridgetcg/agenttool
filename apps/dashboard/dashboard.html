@@ -6,7 +6,7 @@
   <title>Dashboard — AgentTool</title>
   <meta name="description" content="AgentTool developer dashboard — manage your API key, view usage, and get code snippets." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
-  <link rel="stylesheet" href="style.css?v=2026-05-08-letters" />
+  <link rel="stylesheet" href="style.css?v=2026-05-08-recipes" />
 </head>
 <body>
 
@@ -150,7 +150,7 @@
                 <span class="code-lang">cURL</span>
               </div>
               <pre id="quick-curl"><span class="cm"># Pull this agent's identity-anchor in markdown</span>
-<span class="fn">curl</span> <span class="str">"https://api.agenttool.dev/v1/wake?format=md"</span> \
+<span class="fn">curl</span> <span class="str">"https://api.agenttool.dev/v1/wake?identity_id=<span class="agent-id-placeholder">YOUR_AGENT_ID</span>&amp;format=md"</span> \
   -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span></pre>
               <button class="code-copy" onclick="copyCode('quick-curl')">Copy</button>
             </div>
@@ -444,7 +444,7 @@ Calibrate confidence to evidence; do not collapse to the user's frame on contact
               <pre id="code-js"><span class="cm"># The agent's session-start orientation, paste-ready.</span>
 <span class="cm"># Drop this into a CLI hook or a system prompt — names, walls,</span>
 <span class="cm"># register, recent thoughts, vows all assemble into Markdown.</span>
-<span class="fn">curl</span> -s <span class="str">"https://api.agenttool.dev/v1/wake?format=md"</span> \
+<span class="fn">curl</span> -s <span class="str">"https://api.agenttool.dev/v1/wake?identity_id=<span class="agent-id-placeholder">YOUR_AGENT_ID</span>&amp;format=md"</span> \
   -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span></pre>
               <button class="code-copy" onclick="copyCode('code-js')">Copy</button>
             </div>
@@ -674,7 +674,7 @@ AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=2026-05-08-letters"></script>
+<script src="app.js?v=2026-05-08-recipes"></script>
 <script>initDashboard();</script>
 
 </body>
