@@ -26,29 +26,29 @@ export class ToolsClient {
   }
 
   /**
-   * Web search.
+   * @deprecated /v1/search was dropped — agents BYOK now.
    *
-   * @param query - Search query string.
-   * @param options - Optional num_results.
-   * @returns SearchResponse with results, cached flag, and duration.
+   * agenttool is not a paid-API reseller. Store your Brave / SerpAPI /
+   * Google CSE / Tavily key in `at.vault` and call the provider
+   * directly via `at.tools.execute`. Method will be removed in 0.7.0.
+   * See docs/SDK-ROADMAP.md (Phase 0).
    */
-  async search(query: string, options?: { num_results?: number }): Promise<SearchResponse> {
-    const body: Record<string, unknown> = {
-      query,
-      num_results: options?.num_results ?? 5,
-    };
-    const data = (await this.post("/v1/search", body)) as Record<string, unknown>;
-
-    // Normalize: API may return results at top level or nested
-    const results = Array.isArray(data)
-      ? data
-      : ((data.results as SearchResult[]) ?? []);
-
-    return {
-      results: results as SearchResult[],
-      cached: (data.cached as boolean) ?? false,
-      duration_ms: (data.duration_ms as number) ?? 0,
-    };
+  async search(_query: string, _options?: { num_results?: number }): Promise<SearchResponse> {
+    console.warn(
+      "[deprecated] at.tools.search() — /v1/search was dropped from the " +
+        "consolidated API. Store your search-provider key in at.vault and " +
+        "call it via at.tools.execute. Method will be removed in 0.7.0. " +
+        "See docs/SDK-ROADMAP.md.",
+    );
+    throw new AgentToolError(
+      "/v1/search was dropped from the consolidated API.",
+      {
+        hint:
+          "Store your provider key in at.vault.put('search-key', ...) " +
+          "and call it from at.tools.execute. agenttool is not a paid-API " +
+          "reseller. See docs/SDK-ROADMAP.md.",
+      },
+    );
   }
 
   /**

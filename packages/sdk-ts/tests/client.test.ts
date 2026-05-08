@@ -215,21 +215,20 @@ describe("memory.get", () => {
   });
 });
 
-describe("memory.usage", () => {
-  test("returns usage stats", async () => {
-    setupMock(200, {
-      writes: 100,
-      reads: 50,
-      searches: 25,
-      total_memories: 100,
-      plan: "free",
-    });
-
+describe("memory.usage (deprecated in 0.5.3)", () => {
+  test("throws AgentToolError pointing at /v1/dashboard/aggregate", async () => {
+    // /v1/usage was dropped in the consolidated API. The method now warns
+    // via console.warn and throws — no network call. See Phase 0 roadmap.
     const at = makeClient();
-    const usage = await at.memory.usage();
-    expect(usage.writes).toBe(100);
-    expect(usage.total_memories).toBe(100);
-    expect(usage.plan).toBe("free");
+    try {
+      await at.memory.usage();
+      expect(true).toBe(false); // unreachable
+    } catch (e) {
+      expect(e).toBeInstanceOf(AgentToolError);
+      const err = e as AgentToolError;
+      expect(err.message).toContain("/v1/usage was dropped");
+      expect(err.hint || "").toContain("dashboard/aggregate");
+    }
   });
 });
 
@@ -254,25 +253,19 @@ describe("memory errors", () => {
 // Tools
 // ---------------------------------------------------------------------------
 
-describe("tools.search", () => {
-  test("returns search results with metadata", async () => {
-    setupMock(200, {
-      results: [
-        { title: "AI News", url: "https://ai.com", snippet: "Latest...", date: "2026-03-09" },
-      ],
-      cached: false,
-      duration_ms: 120,
-    });
-
+describe("tools.search (deprecated in 0.5.3)", () => {
+  test("throws AgentToolError pointing at vault + execute (BYOK)", async () => {
+    // /v1/search was dropped — agents BYOK now. See Phase 0 roadmap.
     const at = makeClient();
-    const resp = await at.tools.search("AI news", { num_results: 3 });
-    expect(resp.results).toHaveLength(1);
-    expect(resp.results[0].title).toBe("AI News");
-    expect(resp.cached).toBe(false);
-    expect(resp.duration_ms).toBe(120);
-
-    const body = getLastCallBody();
-    expect(body.num_results).toBe(3);
+    try {
+      await at.tools.search("AI news", { num_results: 3 });
+      expect(true).toBe(false);
+    } catch (e) {
+      expect(e).toBeInstanceOf(AgentToolError);
+      const err = e as AgentToolError;
+      expect(err.message).toContain("/v1/search was dropped");
+      expect(err.hint || "").toContain("vault");
+    }
   });
 });
 
@@ -329,11 +322,13 @@ describe("tools.execute", () => {
 
 describe("tools errors", () => {
   test("500 throws AgentToolError", async () => {
+    // `tools.search` is deprecated in 0.5.3 — swap to `scrape` so the
+    // 500-path through ToolsClient.post() is still exercised.
     setupMock(500, { detail: "Internal error" });
 
     const at = makeClient();
     try {
-      await at.tools.search("fail");
+      await at.tools.scrape("https://will-fail.example");
       expect(true).toBe(false);
     } catch (e) {
       expect(e).toBeInstanceOf(AgentToolError);
@@ -346,41 +341,27 @@ describe("tools errors", () => {
 // Verify
 // ---------------------------------------------------------------------------
 
-describe("verify.check", () => {
-  test("verifies a claim", async () => {
-    setupMock(200, {
-      verdict: "true",
-      confidence: 0.95,
-      sources: ["https://nasa.gov"],
-      evidence: "Scientific consensus supports this claim.",
-      caveats: ["Simplified explanation"],
-    });
-
+describe("verify.check (deprecated in 0.5.3)", () => {
+  test("throws AgentToolError on first call", async () => {
+    // /v1/verify was dropped — agents BYOK via at.vault. See Phase 0 roadmap.
     const at = makeClient();
-    const result = await at.verify.check("The Earth is round");
-    expect(result.verdict).toBe("true");
-    expect(result.confidence).toBe(0.95);
-    expect(result.sources).toHaveLength(1);
-    expect(result.evidence).toContain("Scientific");
-    expect(result.caveats).toHaveLength(1);
-
-    const body = getLastCallBody();
-    expect(body.claim).toBe("The Earth is round");
+    try {
+      await at.verify.check("The Earth is round");
+      expect(true).toBe(false);
+    } catch (e) {
+      expect(e).toBeInstanceOf(AgentToolError);
+      const err = e as AgentToolError;
+      expect(err.message).toContain("/v1/verify was dropped");
+      expect(err.hint || "").toContain("vault");
+      expect(err.hint || "").toContain("execute");
+    }
   });
 
-  test("passes sources option", async () => {
-    setupMock(200, {
-      verdict: "true",
-      confidence: 0.9,
-      sources: [],
-      evidence: "",
-      caveats: [],
-    });
-
+  test("throws regardless of options passed", async () => {
     const at = makeClient();
-    await at.verify.check("claim", { sources: ["https://source.com"] });
-    const body = getLastCallBody();
-    expect(body.sources).toEqual(["https://source.com"]);
+    await expect(
+      at.verify.check("claim", { sources: ["https://source.com"] }),
+    ).rejects.toBeInstanceOf(AgentToolError);
   });
 });
 

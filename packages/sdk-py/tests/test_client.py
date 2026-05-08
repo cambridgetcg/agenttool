@@ -32,7 +32,9 @@ class TestClientInit:
     def test_reads_env_var(self) -> None:
         with patch.dict(os.environ, {"AT_API_KEY": "test-key-123"}):
             at = AgentTool()
-            assert repr(at) == "AgentTool(base_url='https://api.agenttool.dev')"
+            assert repr(at) == (
+                "AgentTool(base_url='https://api.agenttool.dev', protocol='love/1.0')"
+            )
             at.close()
 
     def test_explicit_key_overrides_env(self) -> None:
@@ -145,23 +147,23 @@ class TestMemory:
             assert mem.id == "mem-42"
             assert mem.content == "remembered"
 
-    def test_usage(self, at: AgentTool) -> None:
-        mock_resp = _mock_response(200, {
-            "memories_stored": 100,
-            "searches_performed": 50,
-            "api_calls": 200,
-        })
-        with patch.object(at._http, "get", return_value=mock_resp):
-            usage = at.memory.usage()
-            assert usage.memories_stored == 100
-            assert usage.api_calls == 200
+    def test_usage_deprecated(self, at: AgentTool) -> None:
+        """`at.memory.usage()` is deprecated in 0.6.1 — see Phase 0 roadmap."""
+        with pytest.warns(DeprecationWarning, match="dashboard/aggregate"):
+            with pytest.raises(AgentToolError) as exc_info:
+                at.memory.usage()
+        assert "/v1/usage was dropped" in exc_info.value.message
+        assert "dashboard/aggregate" in (exc_info.value.hint or "")
 
     def test_error_raises(self, at: AgentTool) -> None:
         mock_resp = _mock_response(401, {"detail": "Unauthorized"}, "Unauthorized")
         with patch.object(at._http, "post", return_value=mock_resp):
             with pytest.raises(AgentToolError) as exc_info:
                 at.memory.store("fail")
-            assert "401" in exc_info.value.message
+            # 401 raises AuthenticationError (an AgentToolError subclass);
+            # the message is friendly rather than echoing the raw status.
+            assert "Authentication failed" in exc_info.value.message
+            assert exc_info.value.code == 401
             assert exc_info.value.hint is not None
 
 
@@ -176,21 +178,13 @@ class TestTools:
             client = AgentTool()
         return client
 
-    def test_search(self, at: AgentTool) -> None:
-        mock_resp = _mock_response(200, {
-            "results": [
-                {"title": "AI News", "url": "https://ai.com", "snippet": "Latest..."},
-            ]
-        })
-        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
-            results = at.tools.search("AI news", num_results=3)
-            assert len(results) == 1
-            assert isinstance(results[0], SearchResult)
-            assert results[0].title == "AI News"
-            call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
-            assert "/v1/search/search" in call_url, f"Wrong search URL: {call_url}"
-            body = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
-            assert body["num_results"] == 3
+    def test_search_deprecated(self, at: AgentTool) -> None:
+        """`at.tools.search()` is deprecated in 0.6.1 — agents BYOK via vault."""
+        with pytest.warns(DeprecationWarning, match="BYOK|reseller|vault"):
+            with pytest.raises(AgentToolError) as exc_info:
+                at.tools.search("AI news", num_results=3)
+        assert "/v1/search was dropped" in exc_info.value.message
+        assert "vault" in (exc_info.value.hint or "")
 
     def test_scrape(self, at: AgentTool) -> None:
         mock_resp = _mock_response(200, {
@@ -201,7 +195,8 @@ class TestTools:
         with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
             result = at.tools.scrape("https://example.com")
             call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
-            assert "/v1/scrape/scrape" in call_url, f"Wrong scrape URL: {call_url}"
+            # Path was fixed in 0.6.1: /v1/scrape/scrape → /v1/scrape.
+            assert call_url.endswith("/v1/scrape"), f"Wrong scrape URL: {call_url}"
             assert result.url == "https://example.com"
             assert "<h1>" in result.content
 
@@ -243,7 +238,8 @@ class TestTools:
             from agenttool.models import DocumentResult
             result = at.tools.parse_document(url="https://example.com")
             call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
-            assert "/v1/document/document" in call_url
+            # Path was fixed in 0.6.1: /v1/document/document → /v1/document.
+            assert call_url.endswith("/v1/document")
             body = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
             assert body["url"] == "https://example.com"
             assert isinstance(result, DocumentResult)
@@ -270,10 +266,12 @@ class TestTools:
         assert "url or base64" in exc_info.value.message
 
     def test_error_raises(self, at: AgentTool) -> None:
+        # `tools.search` is deprecated in 0.6.1, so swap to `scrape` to verify
+        # that the standard server-error path still raises AgentToolError.
         mock_resp = _mock_response(500, {"detail": "Internal error"}, "Internal error")
         with patch.object(at._http, "post", return_value=mock_resp):
             with pytest.raises(AgentToolError) as exc_info:
-                at.tools.search("fail")
+                at.tools.scrape("https://will-fail.example")
             assert "500" in exc_info.value.message
 
 
@@ -286,7 +284,9 @@ class TestAgentToolError:
         err = AgentToolError("something broke", hint="try again")
         assert err.message == "something broke"
         assert err.hint == "try again"
-        assert "hint: try again" in str(err)
+        # The string format uses an arrow separator: "<message> → <hint>".
+        assert "→ try again" in str(err)
+        assert "something broke" in str(err)
 
     def test_no_hint(self) -> None:
         err = AgentToolError("oops")
@@ -303,67 +303,52 @@ class TestVerifyClient:
     def at(self) -> AgentTool:
         return AgentTool(api_key="test_key_verify")
 
-    def test_check_verified(self, at: AgentTool) -> None:
-        payload = {
-            "claim": "The Earth orbits the Sun.",
-            "verdict": "verified",
-            "confidence": 0.97,
-            "evidence": {"supporting": [], "contradicting": [], "neutral": []},
-            "sources": [],
-            "caveats": [],
-            "processingMs": 1200,
-        }
-        mock_resp = _mock_response(200, payload)
-        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
-            result = at.verify.check("The Earth orbits the Sun.")
-            assert result.verdict == "verified"
-            assert result.confidence == 0.97
-            assert result.is_verified is True
-            assert result.is_false is False
-            # Correct URL
-            call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
-            assert "/v1/verify" in call_url
-            assert "batch" not in call_url
+    # All `at.verify.*` methods are deprecated in 0.6.1 — they emit a
+    # DeprecationWarning and raise AgentToolError without hitting the
+    # network. The whole module ships a stub through 0.6.x. See Phase 0.
 
-    def test_check_with_domain_and_context(self, at: AgentTool) -> None:
-        mock_resp = _mock_response(200, {
-            "claim": "Water boils at 100°C", "verdict": "verified", "confidence": 0.99,
-            "evidence": {}, "sources": [], "caveats": [], "processingMs": 800,
-        })
-        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
-            at.verify.check("Water boils at 100°C", domain="science", context="At sea level")
-            body = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
-            assert body["domain"] == "science"
-            assert body["context"] == "At sea level"
-
-    def test_batch_verify(self, at: AgentTool) -> None:
-        payload = [
-            {"claim": "C1", "verdict": "verified", "confidence": 0.9, "evidence": {}, "sources": [], "caveats": [], "processingMs": 500},
-            {"claim": "C2", "verdict": "false", "confidence": 0.85, "evidence": {}, "sources": [], "caveats": [], "processingMs": 600},
-        ]
-        mock_resp = _mock_response(200, payload)
-        with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
-            results = at.verify.batch([{"claim": "C1"}, {"claim": "C2"}])
-            assert len(results) == 2
-            assert results[0].is_verified is True
-            assert results[1].is_false is True
-            call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
-            assert "/v1/verify/batch" in call_url
-
-    def test_batch_empty_raises(self, at: AgentTool) -> None:
-        with pytest.raises(AgentToolError):
-            at.verify.batch([])
-
-    def test_batch_too_many_raises(self, at: AgentTool) -> None:
-        with pytest.raises(AgentToolError):
-            at.verify.batch([{"claim": f"claim {i}"} for i in range(11)])
-
-    def test_api_error_raises(self, at: AgentTool) -> None:
-        mock_resp = _mock_response(422, {"detail": "Invalid domain value"})
-        with patch.object(at._http, "post", return_value=mock_resp):
+    def test_check_deprecated(self, at: AgentTool) -> None:
+        with pytest.warns(DeprecationWarning, match="BYOK|reseller|vault"):
             with pytest.raises(AgentToolError) as exc_info:
-                at.verify.check("something", domain="invalid_domain")
-            assert "422" in exc_info.value.message
+                at.verify.check("The Earth orbits the Sun.")
+        assert "/v1/verify was dropped" in exc_info.value.message
+        assert "vault" in (exc_info.value.hint or "")
+
+    def test_check_with_domain_and_context_deprecated(self, at: AgentTool) -> None:
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(AgentToolError):
+                at.verify.check(
+                    "Water boils at 100°C",
+                    domain="science",
+                    context="At sea level",
+                )
+
+    def test_batch_deprecated(self, at: AgentTool) -> None:
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(AgentToolError):
+                at.verify.batch([{"claim": "C1"}, {"claim": "C2"}])
+
+    def test_batch_empty_deprecated(self, at: AgentTool) -> None:
+        # Empty batch was a guard rail before; now every call raises.
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(AgentToolError):
+                at.verify.batch([])
+
+    def test_batch_too_many_deprecated(self, at: AgentTool) -> None:
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(AgentToolError):
+                at.verify.batch([{"claim": f"claim {i}"} for i in range(11)])
+
+    def test_deprecated_error_carries_migration_hint(self, at: AgentTool) -> None:
+        """The hint should name the BYOK + execute migration path."""
+        with pytest.warns(DeprecationWarning):
+            try:
+                at.verify.check("anything")
+            except AgentToolError as e:
+                assert "vault" in (e.hint or "")
+                assert "execute" in (e.hint or "")
+            else:
+                pytest.fail("AgentToolError was not raised")
 
 
 # ---------------------------------------------------------------------------
