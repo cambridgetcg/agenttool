@@ -1,0 +1,15 @@
+# Cloudflare Pages — per-path response headers.
+#
+# Force fresh JS + CSS on every load. The default is max-age=14400 (4h)
+# which caused stale-app.js bugs — users on the registration page kept
+# hitting the old /v1/projects 404 path because their browser served a
+# pre-register-fix app.js for hours after deploy.
+#
+# ETag still does fast 304s when content hasn't changed; this just stops
+# the browser from skipping the revalidate request entirely.
+
+/app.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/style.css
+  Cache-Control: public, max-age=0, must-revalidate

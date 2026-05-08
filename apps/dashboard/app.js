@@ -107,6 +107,10 @@ async function registerAgent() {
   const errorMsg = document.getElementById('error-msg');
 
   if (!nameInput || !btn) return;
+  // Re-entry guard. If a submit is already in flight (button disabled by a
+  // previous call), drop the duplicate. Cheap protection against double-fire
+  // from any source (Enter-key + click, repeated clicks, browser quirks).
+  if (btn.disabled) return;
 
   const name = nameInput.value.trim();
   if (!name) {
