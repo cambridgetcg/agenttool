@@ -53,4 +53,31 @@ export class VerifyClient {
       },
     );
   }
+
+  /**
+   * @deprecated /v1/verify/batch was dropped — same migration as `check()`.
+   *
+   * Mirrors py `at.verify.batch(...)`. Kept as a deprecated stub so the
+   * py↔ts surface stays at parity through the 0.6.x line. Will be
+   * removed in 0.7.0. See docs/SDK-ROADMAP.md (Phase 0).
+   */
+  async batch(_claims: { claim: string; sources?: string[] }[]): Promise<VerifyResult[]> {
+    if (!_warnedOnce) {
+      _warnedOnce = true;
+      console.warn(
+        "[deprecated] at.verify.batch() — /v1/verify/batch was dropped " +
+          "from the consolidated API. Agents BYOK via at.vault and call " +
+          "providers directly via at.tools.execute. Method will be " +
+          "removed in 0.7.0. See docs/SDK-ROADMAP.md.",
+      );
+    }
+    throw new AgentToolError(
+      "/v1/verify/batch was dropped from the consolidated API.",
+      {
+        hint:
+          "Store provider keys in at.vault and call them via at.tools.execute. " +
+          "agenttool is not a paid-API reseller. See docs/SDK-ROADMAP.md.",
+      },
+    );
+  }
 }

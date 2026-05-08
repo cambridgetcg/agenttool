@@ -72,6 +72,16 @@ export interface ExecuteResult {
   duration_ms: number;
 }
 
+/** Result of `tools.parse_document` (Mozilla Readability + plain-text fallback). */
+export interface DocumentResult {
+  title: string;
+  content: string;
+  word_count: number;
+  content_type: string;
+  metadata: Record<string, unknown>;
+  duration_ms: number;
+}
+
 /** Result of a verification request. */
 export interface VerifyResult {
   verdict: string;
@@ -81,15 +91,32 @@ export interface VerifyResult {
   caveats: string[];
 }
 
-/** A wallet object. */
+/** A wallet — the minted unit of agent-economy custody.
+ *  `api_key` is only present right after `create_wallet` (new project bootstrap). */
 export interface Wallet {
   id: string;
   name: string;
   balance: number;
-  api_key: string;
+  currency: string;
+  frozen: boolean;
+  agent_id?: string;
+  api_key?: string;
 }
 
 /** Options for creating a wallet. */
 export interface CreateWalletOptions {
   name: string;
+  agent_id?: string;
+  currency?: string;
+}
+
+/** An escrow — locks credits between creator + worker until released or refunded. */
+export interface Escrow {
+  id: string;
+  status: "pending" | "active" | "released" | "refunded" | "disputed";
+  amount: number;
+  description: string;
+  creator_wallet_id: string;
+  worker_wallet_id?: string;
+  deadline?: string;
 }

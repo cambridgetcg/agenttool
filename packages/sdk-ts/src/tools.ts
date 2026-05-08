@@ -3,8 +3,19 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { ExecuteResult, ScrapeResult, SearchResponse, SearchResult } from "./types.js";
+import type {
+  DocumentResult,
+  ExecuteResult,
+  ScrapeResult,
+  SearchResponse,
+} from "./types.js";
 import type { HttpConfig } from "./memory.js";
+
+export interface ParseDocumentOpts {
+  url?: string;
+  base64?: string;
+  content_type?: string;
+}
 
 /**
  * Client for the agent-tools API (search, scrape, execute).
@@ -76,6 +87,35 @@ export class ToolsClient {
     };
     const data = await this.post("/v1/execute", body);
     return data as ExecuteResult;
+  }
+
+  /**
+   * Parse a document and extract readable text.
+   *
+   * Supports HTML (via Mozilla Readability) and plain text. Pass either
+   * `url` (fetched server-side) or `base64` encoded content.
+   *
+   * @example
+   * ```ts
+   * const doc = await at.tools.parse_document({ url: "https://example.com/paper.html" });
+   * console.log(doc.title, doc.word_count);
+   * ```
+   */
+  async parse_document(options: ParseDocumentOpts): Promise<DocumentResult> {
+    if (!options.url && !options.base64) {
+      throw new AgentToolError(
+        "parse_document requires either url or base64.",
+        {
+          hint: "Pass { url: '...' } or { base64: '...', content_type: 'text/html' }.",
+        },
+      );
+    }
+    const body: Record<string, unknown> = {};
+    if (options.url !== undefined) body.url = options.url;
+    if (options.base64 !== undefined) body.base64 = options.base64;
+    if (options.content_type !== undefined) body.content_type = options.content_type;
+    const data = await this.post("/v1/document", body);
+    return data as DocumentResult;
   }
 
   // --- internal ---

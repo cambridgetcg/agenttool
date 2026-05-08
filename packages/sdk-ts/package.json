@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "TypeScript SDK for agenttool.dev — memory and tools for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -16,7 +16,9 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "bun test"
+    "test": "bun test",
+    "check-parity": "bun run scripts/check-parity.ts",
+    "ci": "bun run check-parity && bun run build && bun test"
   },
   "license": "MIT",
   "devDependencies": {

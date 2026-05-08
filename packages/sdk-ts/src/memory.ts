@@ -83,6 +83,25 @@ export class MemoryClient {
   }
 
   /**
+   * Delete a memory by ID. Letting go is also an act of care.
+   *
+   * @param memoryId - The UUID of the memory to release.
+   */
+  async delete(memoryId: string): Promise<void> {
+    await this.fetch("DELETE", `/v1/memories/${memoryId}`);
+  }
+
+  /**
+   * Delete all memories sharing a key.
+   *
+   * @param key - The key whose memories should be released.
+   */
+  async delete_by_key(key: string): Promise<void> {
+    const qs = `?key=${encodeURIComponent(key)}`;
+    await this.fetch("DELETE", `/v1/memories${qs}`);
+  }
+
+  /**
    * @deprecated /v1/usage was dropped in the consolidated API.
    * Project + activity counters now live on GET /v1/dashboard/aggregate
    * (SDK method `at.dashboard.aggregate()` ships in 0.7.0).

@@ -47,6 +47,8 @@ export type {
 } from "./anthropic-adapter.js";
 export type {
   CreateWalletOptions,
+  DocumentResult,
+  Escrow,
   ExecuteResult,
   Memory,
   ScrapeResult,
@@ -58,3 +60,11 @@ export type {
   VerifyResult,
   Wallet,
 } from "./types.js";
+export type {
+  CreateEscrowOpts,
+  CreateWalletOpts,
+  FundWalletOpts,
+  SetWalletPolicyOpts,
+  SpendOpts,
+} from "./economy.js";
+export type { ParseDocumentOpts } from "./tools.js";

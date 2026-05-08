@@ -6,23 +6,23 @@
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
-| `agenttool-sdk` (Python) | `0.6.0` | ~2,861 | bootstrap · client · economy · identity · memory · pulse · tools · traces · vault · verify · wake |
-| `@agenttool/sdk` (TypeScript) | `0.5.2` | ~1,764 | bootstrap · client · economy · identity · memory · pulse · tools · traces · vault · verify · wake |
+| `agenttool-sdk` (Python) | `0.6.1` | ~2,861 | bootstrap · client · economy · identity · memory · pulse · tools · traces · vault · verify · wake |
+| `@agenttool/sdk` (TypeScript) | `0.6.0` | ~2,030 | bootstrap · client · economy · identity · memory · pulse · tools · traces · vault · verify · wake |
 
-11 modules each. **TS is materially behind Python on coverage** — full method count by module:
+11 modules each. **Parity reached as of 0.6.0 (Phase 1)** — verified by `bun run check-parity`:
 
-| Module | py methods | ts methods | gap |
+| Module | py methods | ts methods | status |
 |---|---|---|---|
-| bootstrap | 3 | 3 | — |
-| economy | **17** | **1** (createWallet only) | TS missing 16 |
-| identity | 14 | 7 | TS missing keys-CRUD, list_attestations, revoke_attestation, issue_token, verify_token |
-| memory | 6 | 4 | TS missing delete + delete_by_key |
-| pulse | 3 | 3 | — *(but module is broken — see below)* |
-| tools | 4 | 3 | TS missing parse_document |
-| traces | 5 | 5 | — |
-| vault | 9 | 8 | TS missing set_policy |
-| verify | 2 | 1 | *(both stale — see below)* |
-| wake | 4 | 4 | provider-shape methods present in both ✓ |
+| bootstrap | 3 | 3 | ✓ |
+| economy | 16 | 17 | ✓ *(ts has `createWallet` camelCase alias)* |
+| identity | 14 | 14 | ✓ |
+| memory | 6 | 6 | ✓ |
+| pulse | 3 | 3 | ✓ *(both stubs — see Phase 0)* |
+| tools | 4 | 4 | ✓ |
+| traces | 5 | 5 | ✓ |
+| vault | 9 | 9 | ✓ |
+| verify | 2 | 2 | ✓ *(both stubs — see Phase 0)* |
+| wake | 4 | 4 | ✓ |
 
 ## Endpoint coverage — what's real, what's stale, what's missing
 
@@ -105,17 +105,21 @@ Things currently silently broken. Ship a 0.6.1/0.5.3 patch.
 - **Fix py `tools` path doubling** — `/v1/scrape/scrape` → `/v1/scrape`; `/v1/document/document` → `/v1/document`.
 - **Drop py `at.tools.search()`** — `/v1/search` was dropped. Same redirect-to-execute message as verify.
 
-### Phase 1 — TS parity with py *(~1-2 PRs)*
+### Phase 1 — TS parity with py *(✅ shipped 0.6.0)*
 
-Catch TS up to py's coverage so the two move together from here.
+What landed in `@agenttool/sdk` 0.6.0 to close the py↔ts gap:
 
-- TS economy: 16 missing methods (escrow CRUD + transactions + freeze/unfreeze + spend + fund + policy + …)
-- TS identity: keys CRUD · list_attestations · revoke_attestation · issue_token · verify_token
-- TS memory: delete + delete_by_key
-- TS tools: parse_document
-- TS vault: set_policy
+- **TS economy** (1→17 methods): `list_wallets`, `get_wallet`, `fund_wallet`, `spend`, `set_policy`, `freeze_wallet`, `unfreeze_wallet`, `get_transactions`, `create_escrow`, `list_escrows`, `get_escrow`, `accept_escrow`, `release_escrow`, `refund_escrow`, `dispute_escrow`. `createWallet` kept as a backward-compat camelCase alias.
+- **TS memory** (4→6): `delete`, `delete_by_key`.
+- **TS tools** (3→4): `parse_document` (URL or base64 + content_type).
+- **TS verify** (1→2): `batch` deprecated stub for parity (matches `check`).
+- **New types**: `Escrow`, `DocumentResult`. `Wallet` extended with `currency`, `frozen`, `agent_id`, `api_key?`.
+- **Identity + vault**: already at parity (the original gap analysis was based on a stale snapshot — verified by re-reading source).
+- **CI parity check**: `packages/sdk-ts/scripts/check-parity.ts` — scans `Client` class methods on both sides, normalizes camelCase↔snake_case, treats the same name in both as parity. Run via `bun run check-parity`. Wired into `bun run ci` (parity → build → test).
 
-Lock in CI parity check — a small script that diffs method names per module across the two SDKs and fails the build if they drift.
+Test suites green:
+  - py: `145 passed`
+  - ts: `85 passed` (62 existing + 23 new in `tests/parity.test.ts`)
 
 ### Phase 2 — Top-level register + identity surface fillout
 
@@ -207,7 +211,8 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | Release | Includes | Breaking? |
 |---|---|---|
 | **0.6.1 / 0.5.3** | Phase 0 (deprecation warnings on broken endpoints) | no — emits warnings only |
-| **0.7.0 / 0.7.0** | Phase 0 removals + Phase 1 (TS parity) + Phase 2 (register + identity fillout) | **yes** — drops verify, drops old pulse module, fixes tools paths |
+| **— / 0.6.0** | Phase 1 (TS parity with py — economy/memory/tools/verify) | no — additive |
+| **0.7.0 / 0.7.0** | Phase 0 removals + Phase 2 (register + identity fillout) | **yes** — drops verify, drops old pulse module, fixes tools paths |
 | **0.8.0** | Phase 3 (chronicle + covenants) + Phase 4 (window) | no |
 | **0.9.0** | Phase 5 (strands with K_master) + Phase 6 (inbox sealed-box) | no — additive |
 | **0.10.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
