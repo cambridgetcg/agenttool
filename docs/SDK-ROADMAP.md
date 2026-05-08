@@ -6,10 +6,10 @@
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
-| `agenttool-sdk` (Python) | `0.6.3` | ~3,800 | bootstrap · chronicle · client · covenants · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake · window |
-| `@agenttool/sdk` (TypeScript) | `0.6.2` | ~2,900 | bootstrap · chronicle · client · covenants · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake · window |
+| `agenttool-sdk` (Python) | `0.6.4` | ~4,400 | bootstrap · chronicle · client · covenants · crypto · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · strands (+ Thoughts) · tools · traces · vault · verify · wake · window |
+| `@agenttool/sdk` (TypeScript) | `0.6.3` | ~3,400 | bootstrap · chronicle · client · covenants · crypto · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · strands (+ Thoughts) · tools · traces · vault · verify · wake · window |
 
-11 modules each. **Parity reached as of 0.6.0 (Phase 1)** — verified by `bun run check-parity`:
+13 modules each (15 namespaces with sub-clients counted). **Parity reached as of 0.6.0 (Phase 1)** — verified by `bun run check-parity`:
 
 | Module | py methods | ts methods | status |
 |---|---|---|---|
@@ -172,24 +172,36 @@ Test suites green:
   - ts: `137 passed` (was 107 + 30 new in `tests/phase3.test.ts`)
   - parity: `13 modules ✓`
 
-### Phase 5 — Strands (with K_master encrypt) *(crypto-heavy; ~big PR)*
+### Phase 5 — Strands (with K_master encrypt) *(✅ shipped py 0.6.4 / ts 0.6.3)*
 
-The first SDK module that does client-side encryption.
+The first SDK module that does client-side crypto. Wire format is byte-identical to `cli/think/src/crypto.ts` and the api-side verifier at `api/src/services/strand/sig.ts`.
 
-- `at.strands.create(opts)` / `at.strands.list(...)` / `at.strands.get(id)` / `at.strands.patch(id, opts)` — plaintext metadata.
-- `at.strands.thoughts.add(strand_id, plaintext, kind, *, k_master, signing_key, signing_key_id)` — encrypts AES-256-GCM under K_master, signs canonical bytes with ed25519, POSTs ciphertext.
-- `at.strands.thoughts.list(strand_id, *, k_master, since_seq?, limit?)` — lists, decrypts each thought client-side, returns plaintext.
-- `at.strands.thoughts.voice(strand_id, *, k_master, since_seq?)` — async iterator (py: `AsyncIterator`; ts: `AsyncIterableIterator`) over the SSE stream, each thought decrypted client-side.
+What landed:
 
-Crypto helpers (shared across phases 5 + 6):
+- **at.strands** — `/v1/strands` create · list · get · patch.
+  - `create({agent_id?, identity_id?, parent_strand_id?, topic?, topic_encrypted?, mood?, mood_encrypted?, status?, importance?, state_ciphertext?, state_nonce?, metadata?})` — plaintext metadata defaults; `*_encrypted` flags signal columns hold ciphertext.
+  - `list({status?, agent_id?, limit?})` — server orders by last_thought_at desc; cap 200.
+  - `get(strand_id)` / `patch(strand_id, {status?, importance?, topic?, …, visibility?})`.
+- **at.strands.thoughts** — sub-client at `at.strands.thoughts`:
+  - `add(strand_id, plaintext, {k_master, signing_key, signing_key_id, kind?, kind_encrypted?, refs?, agent_id?})` — encrypts AES-256-GCM under K_master, signs canonical bytes with ed25519, POSTs ciphertext + signature. agenttool sees ciphertext + sig only.
+  - `list(strand_id, {k_master, since_seq?, limit?})` — fetches ciphertext rows, decrypts each client-side, returns thoughts with `plaintext` attached. Redacted (cross-project) thoughts pass through with `plaintext=null`. Decrypt failures attach `decrypt_error` instead of throwing.
+  - `voice(strand_id, {k_master, since_seq?})` — SSE iterator yielding decrypted thoughts. py: sync `Iterator` (httpx-sync). ts: `AsyncIterableIterator` (fetch + ReadableStream).
+- **at.crypto** — local crypto helpers (no HTTP):
+  - `encrypt_thought(plaintext, k_master) → {ciphertext_b64, nonce_b64}` — AES-256-GCM, 12-byte random nonce, 16-byte tag appended to ciphertext.
+  - `decrypt_thought({ciphertext_b64, nonce_b64}, k_master) → plaintext`.
+  - `canonical_thought_bytes({strand_id, ciphertext_b64, nonce_b64, kind?}) → 32-byte sha256` — formula: `sha256(strand_id || 0x00 || ciphertext || 0x00 || nonce || 0x00 || (kind ?? ""))`. Byte-identical to `api/src/services/strand/sig.ts`.
+  - `sign_thought({strand_id, ciphertext_b64, nonce_b64, kind?, signing_key}) → signature_b64` — ed25519, 32-byte seed → 64-byte sig → base64.
+  - `k_master.generate() → 32 bytes` (cryptographically random).
 
-- `at.crypto.encrypt_thought(plaintext, k_master) → {ciphertext_b64, nonce_b64}`
-- `at.crypto.decrypt_thought({ciphertext_b64, nonce_b64}, k_master) → plaintext`
-- `at.crypto.sign_thought(canonical_bytes, signing_key) → signature_b64`
-- `at.crypto.canonical_thought_bytes({strand_id, ciphertext_b64, nonce_b64, kind?}) → bytes`
-- `at.crypto.k_master.generate() → 32-byte secret`
+Implementation notes:
 
-Mirrors the wire format from `cli/think/src/crypto.ts` exactly. agenttool-side verify of `addThought` already validates against this canonical shape.
+- py: `cryptography>=41.0` for AES-GCM + ed25519. Added as runtime dep.
+- ts: `@noble/ed25519 ^2.2.3` + `@noble/hashes ^2.0.1` for ed25519 + sha256 (matches api server + cli/think versions exactly). AES-GCM uses native WebCrypto SubtleCrypto — no extra dep. Both added as runtime deps.
+
+Test suites green:
+  - py: 30 new in `tests/test_phase5.py` (crypto round-trip, canonical bytes determinism, sign+verify, strands CRUD, thoughts encrypt-before-post + decrypt-after-fetch + SSE iterator).
+  - ts: 28 new in `tests/phase5.test.ts` (mirror coverage; signature verification done locally with derived pubkey).
+  - parity: 15 modules ✓.
 
 ### Phase 6 — Inbox (sealed-box) *(crypto-heavy)*
 
@@ -237,9 +249,9 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **— / 0.6.0** | Phase 1 (TS parity with py — economy/memory/tools/verify) | no — additive |
 | **0.6.2 / 0.6.1** | Phase 2 (register + identity surface fillout) | no — additive |
 | **0.6.3 / 0.6.2** | Phase 3 (chronicle + covenants) + Phase 4 (window primitives) | no — additive |
+| **0.6.4 / 0.6.3** | Phase 5 (strands with K_master) | no — additive (new runtime crypto dep on each side) |
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
-| **0.8.0** | Phase 3 (chronicle + covenants) + Phase 4 (window) | no |
-| **0.9.0** | Phase 5 (strands with K_master) + Phase 6 (inbox sealed-box) | no — additive |
+| **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
 | **0.10.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 

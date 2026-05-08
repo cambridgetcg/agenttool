@@ -110,3 +110,31 @@ export type {
   WindowAgentSide,
   WindowShowResult,
 } from "./window.js";
+export {
+  CryptoClient,
+  encryptThought,
+  decryptThought,
+  canonicalThoughtBytes,
+  signThought,
+  kMaster,
+} from "./crypto.js";
+export type {
+  EncryptedBlob,
+  CanonicalThoughtOpts,
+  SignThoughtOpts,
+} from "./crypto.js";
+export { StrandsClient, ThoughtsClient } from "./strands.js";
+export type {
+  Strand,
+  StrandStatus,
+  StrandVisibility,
+  Thought,
+  ThoughtKind,
+  DecryptedThought,
+  StrandsCreateOpts,
+  StrandsListOpts,
+  StrandsPatchOpts,
+  ThoughtsAddOpts,
+  ThoughtsListOpts,
+  ThoughtsVoiceOpts,
+} from "./strands.js";

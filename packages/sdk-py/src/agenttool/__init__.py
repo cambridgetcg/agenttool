@@ -33,6 +33,15 @@ from .bootstrap import BootstrapClient
 from .chronicle import ChronicleClient
 from .client import AgentTool
 from .covenants import CovenantsClient
+from .crypto import (
+    CryptoClient,
+    EncryptedBlob,
+    KMaster,
+    canonical_thought_bytes,
+    decrypt_thought,
+    encrypt_thought,
+    sign_thought,
+)
 from .pulse import PulseClient
 from .economy import EconomyClient, Escrow, Wallet
 from .exceptions import (
@@ -45,6 +54,7 @@ from .exceptions import (
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchResult, UsageStats
 from .register import register
+from .strands import StrandsClient, ThoughtsClient
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
@@ -77,9 +87,18 @@ __all__ = [
     "BoxKeysClient",
     "ChronicleClient",
     "CovenantsClient",
+    "CryptoClient",
+    "EncryptedBlob",
+    "KMaster",
+    "encrypt_thought",
+    "decrypt_thought",
+    "canonical_thought_bytes",
+    "sign_thought",
     "ExecuteResult",
     "ExpressionClient",
     "IdentityClient",
+    "StrandsClient",
+    "ThoughtsClient",
     "WindowClient",
     "register",
     "Memory",
@@ -98,6 +117,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.6.3"
+__version__ = "0.6.4"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

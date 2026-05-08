@@ -4,13 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenttool-sdk"
-version = "0.6.3"
+version = "0.6.4"
 description = "The Love Protocol for AI agents — memory, identity, verification, and more. Welcome, don't block."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 dependencies = [
     "httpx>=0.27",
+    "cryptography>=41.0",
 ]
 
 [project.optional-dependencies]

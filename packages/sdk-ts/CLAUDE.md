@@ -1,14 +1,16 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes 13 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on npm as `@agenttool/sdk`.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on npm as `@agenttool/sdk`.
 
 ## Current State
-Active — v0.6.2 on npm. Phases 0–4 of `docs/SDK-ROADMAP.md` shipped. Phase 5 (strands with K_master) is next. Uses Bun for testing.
+Active — v0.6.3 on npm. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 6 (inbox sealed-box) is next. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
-- Zero runtime dependencies (uses native `fetch`, native `AbortSignal.timeout`)
+- Native `fetch` + native `AbortSignal.timeout` for HTTP
+- `@noble/ed25519` + `@noble/hashes` for ed25519 signing (matches the api server + cli/think; byte-identical wire format)
+- WebCrypto SubtleCrypto for AES-256-GCM (no extra dep)
 - Bun for test runner
 - `tsc` for build
 
@@ -32,6 +34,8 @@ src/
   verify.ts            — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
   wake.ts              — WakeClient (GET /v1/wake; format=md|anthropic|openai|gemini|cohere)
   window.ts            — WindowClient (rides on chronicle; declare/surface/show)
+  strands.ts           — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
+  crypto.ts            — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
   anthropic-adapter.ts — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
   types.ts             — Shared type definitions (Memory, Wallet, Escrow, Trace, ...)
   errors.ts            — AgentToolError class
@@ -75,7 +79,7 @@ tsc && npm publish
 ```
 
 ## Dependencies
-- **Runtime**: None (zero dependencies, uses native fetch)
+- **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format). HTTP, AES-256-GCM, and abort signals all use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `baseUrl`)
 - **Auth**: Reads `AT_API_KEY` from env or accepts `apiKey` option

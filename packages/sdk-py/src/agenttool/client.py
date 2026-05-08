@@ -26,11 +26,13 @@ from ._context import AmbientContext, get_ambient, reset_ambient, set_ambient
 from .bootstrap import BootstrapClient
 from .chronicle import ChronicleClient
 from .covenants import CovenantsClient
+from .crypto import CryptoClient
 from .economy import EconomyClient
 from .exceptions import AgentToolError, AuthenticationError
 from .identity import IdentityClient
 from .memory import MemoryClient
 from .pulse import PulseClient
+from .strands import StrandsClient
 from .tools import ToolsClient
 from .traces import TracesClient
 from .vault import VaultClient
@@ -40,7 +42,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.6.3"
+SDK_VERSION = "0.6.4"
 
 
 class AgentTool:
@@ -114,6 +116,8 @@ class AgentTool:
         self._chronicle: Optional[ChronicleClient] = None
         self._covenants: Optional[CovenantsClient] = None
         self._window: Optional[WindowClient] = None
+        self._strands: Optional[StrandsClient] = None
+        self._crypto: Optional[CryptoClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -207,6 +211,20 @@ class AgentTool:
         if self._window is None:
             self._window = WindowClient(self._http, self._base_url)
         return self._window
+
+    @property
+    def strands(self) -> StrandsClient:
+        """Strands — strands of thought + encrypted inner voice (K_master)."""
+        if self._strands is None:
+            self._strands = StrandsClient(self._http, self._base_url)
+        return self._strands
+
+    @property
+    def crypto(self) -> CryptoClient:
+        """Crypto helpers — encrypt/sign client-side; K_master never leaves the SDK."""
+        if self._crypto is None:
+            self._crypto = CryptoClient()
+        return self._crypto
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

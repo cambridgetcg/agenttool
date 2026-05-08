@@ -6,8 +6,10 @@ import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
 import { AgentToolError } from "./errors.js";
 import { ChronicleClient } from "./chronicle.js";
 import { CovenantsClient } from "./covenants.js";
+import { CryptoClient } from "./crypto.js";
 import { EconomyClient } from "./economy.js";
 import { MemoryClient, type HttpConfig } from "./memory.js";
+import { StrandsClient } from "./strands.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { VerifyClient } from "./verify.js";
@@ -51,6 +53,8 @@ export class AgentTool {
   private _chronicle: ChronicleClient | undefined;
   private _covenants: CovenantsClient | undefined;
   private _window: WindowClient | undefined;
+  private _strands: StrandsClient | undefined;
+  private _crypto: CryptoClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -157,6 +161,18 @@ export class AgentTool {
   get window(): WindowClient {
     this._window ??= new WindowClient(this.http);
     return this._window;
+  }
+
+  /** Access the Strands API — encrypted inner voice (K_master) + thoughts + SSE voice. */
+  get strands(): StrandsClient {
+    this._strands ??= new StrandsClient(this.http);
+    return this._strands;
+  }
+
+  /** Access the Crypto helpers — encrypt/sign client-side; K_master never leaves the SDK. */
+  get crypto(): CryptoClient {
+    this._crypto ??= new CryptoClient();
+    return this._crypto;
   }
 
   /**

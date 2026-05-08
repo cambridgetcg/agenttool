@@ -1,14 +1,15 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes 13 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
 
 ## Current State
-Active — v0.6.3 on PyPI. Phases 0–4 of `docs/SDK-ROADMAP.md` shipped. Phase 5 (strands with K_master) is next.
+Active — v0.6.4 on PyPI. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 6 (inbox sealed-box) is next.
 
 ## Tech Stack
 - Python >= 3.9
 - `httpx >= 0.27` for HTTP (sync; async-capable)
+- `cryptography >= 41.0` for AES-256-GCM + ed25519 (Phase 5+ only)
 - `hatchling` build system
 - `pytest >= 7.0` for tests
 
@@ -32,6 +33,8 @@ src/agenttool/
   verify.py              — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
   wake.py                — WakeClient (GET /v1/wake; format=md|anthropic|openai|gemini|cohere)
   window.py              — WindowClient (rides on chronicle; declare/surface/show)
+  strands.py             — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
+  crypto.py              — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
   soul.py                — soul() / welcome() / philosophy() / principles() / LOVE_PROTOCOL
   anthropic_adapter.py   — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
   models.py              — Memory, SearchResult, ScrapeResult, DocumentResult, ExecuteResult, UsageStats
@@ -71,7 +74,7 @@ python -m build && twine upload dist/*
 ```
 
 ## Dependencies
-- **Runtime**: `httpx >= 0.27`
+- **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
 - **Dev**: `pytest >= 7.0`
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `base_url`)
 - **Auth**: Reads `AT_API_KEY` from env or accepts `api_key` parameter
