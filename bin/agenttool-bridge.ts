@@ -2,22 +2,29 @@
 /** agenttool-bridge — sidecar that holds K_master locally for hosted
  *  orchestrators (Horizon C, bridged-tier).
  *
- *  Today this is a CLI demonstrator — it does the local crypto contract
- *  exactly as docs/RUNTIME.md specifies. The WSS hub side (api.agenttool.dev
- *  /v1/runtimes/:id/bridge) ships in a follow-up pass alongside the
- *  hosted orchestrator binary; this file establishes the shape so any
- *  orchestrator can already wire against the public surface area.
+ *  This file is the user-side counterpart to api/src/services/runtime/
+ *  bridge-hub.ts. Two modes:
+ *
+ *    serve   — local WSS for orchestrators on the same host (dev demo).
+ *    connect — outbound WSS to wss://api.agenttool.dev/v1/runtimes/:id/bridge,
+ *              the production path. Mutual ed25519 handshake; HMAC-bound
+ *              replies under an HKDF-derived session secret. Each crypto
+ *              request from the hub is answered with one decrypt or
+ *              encrypt under K_master, in-RAM only.
  *
  *  Commands:
- *    agenttool-bridge install                     — generate K_master + store in keychain
- *    agenttool-bridge keygen                      — generate ed25519 signing key (sidecar identity)
- *    agenttool-bridge pubkey                      — print sidecar's ed25519 public key
- *    agenttool-bridge encrypt --in <file|->       — encrypt plaintext under K_master
- *    agenttool-bridge decrypt --in <file|->       — decrypt ciphertext under K_master
- *    agenttool-bridge sign    --message <str>     — sign a string with the sidecar's ed25519 key
- *    agenttool-bridge canonical --strand <id>     — compute the canonical bytes the orchestrator
- *                                                    will sign for a decrypt/encrypt request
- *    agenttool-bridge serve [--port 43210]        — local WSS demo (orchestrator on the same host)
+ *    agenttool-bridge install                       — generate K_master + store in keychain
+ *    agenttool-bridge keygen                        — generate ed25519 signing key (sidecar identity)
+ *    agenttool-bridge pubkey                        — print sidecar's ed25519 public key
+ *    agenttool-bridge encrypt --in <file|->         — encrypt plaintext under K_master
+ *    agenttool-bridge decrypt --in <file|->         — decrypt ciphertext under K_master
+ *    agenttool-bridge sign    --message <str>       — sign a string with the sidecar's ed25519 key
+ *    agenttool-bridge canonical --strand <id>       — compute the canonical bytes the orchestrator
+ *                                                      will sign for a decrypt/encrypt request
+ *    agenttool-bridge serve [--port 43210]          — local WSS demo (orchestrator on the same host)
+ *    agenttool-bridge connect --runtime-id <uuid>   — outbound WSS to the hub. Holds K_master in RAM,
+ *                              --token <ctl>          serves crypto_requests until disconnected.
+ *                              [--hub-url <wss://…>] [--key-id <uuid>] [--once]
  *
  *  K_master custody:
  *    macOS  → security add-generic-password / find-generic-password
@@ -402,6 +409,278 @@ async function cmdServe() {
   });
 }
 
+// ── connect — outbound WSS to api.agenttool.dev hub (Slice 3) ────────
+
+interface HashesModule {
+  hmac: (h: unknown, key: Uint8Array, msg: Uint8Array) => Uint8Array;
+  sha256: unknown;
+  hkdf: (
+    h: unknown,
+    ikm: Uint8Array,
+    salt: Uint8Array,
+    info: Uint8Array,
+    length: number,
+  ) => Uint8Array;
+}
+
+async function loadHashes(): Promise<HashesModule> {
+  // Lazy-import the same shape as @noble/hashes 2.x. Try the .js export
+  // path first (required by @noble/hashes 2.x exports map); fall back to
+  // the bare path for older installs.
+  const tryImport = async <T>(p: string): Promise<T | null> => {
+    try {
+      return (await import(p)) as T;
+    } catch {
+      return null;
+    }
+  };
+  const hmacMod =
+    (await tryImport<{ hmac: HashesModule["hmac"] }>("@noble/hashes/hmac.js")) ??
+    (await tryImport<{ hmac: HashesModule["hmac"] }>("@noble/hashes/hmac"));
+  const shaMod =
+    (await tryImport<{ sha256: HashesModule["sha256"] }>("@noble/hashes/sha2.js")) ??
+    (await tryImport<{ sha256: HashesModule["sha256"] }>("@noble/hashes/sha2")) ??
+    (await tryImport<{ sha256: HashesModule["sha256"] }>("@noble/hashes/sha256"));
+  const hkdfMod =
+    (await tryImport<{ hkdf: HashesModule["hkdf"] }>("@noble/hashes/hkdf.js")) ??
+    (await tryImport<{ hkdf: HashesModule["hkdf"] }>("@noble/hashes/hkdf"));
+  if (!hmacMod || !shaMod || !hkdfMod) {
+    throw new Error(
+      "@noble/hashes not resolvable. Run from a directory whose node_modules has it (e.g. inside agenttool/api), or `bun add @noble/hashes`.",
+    );
+  }
+  return { hmac: hmacMod.hmac, sha256: shaMod.sha256, hkdf: hkdfMod.hkdf };
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    out.set(p, off);
+    off += p.length;
+  }
+  return out;
+}
+
+interface ConnectOpts {
+  runtimeId: string;
+  token: string;
+  hubUrl: string;
+  keyId: string | null;
+  /** When true, exit after the first WSS close (any cause). When false
+   *  (default), reconnect with exponential backoff up to 30s. */
+  once: boolean;
+}
+
+async function connectOnce(opts: ConnectOpts, hashes: HashesModule): Promise<number> {
+  const km = await keychainGet(SERVICE_KMASTER);
+  if (!km) throw new Error("no K_master — run: agenttool-bridge install");
+  const kMasterBytes = b64decode(km);
+
+  const sk = await keychainGet(SERVICE_SIGNKEY);
+  if (!sk) throw new Error("no signing key — run: agenttool-bridge keygen");
+  const signKeyBytes = b64decode(sk);
+
+  const url = `${opts.hubUrl}?control_token=${encodeURIComponent(opts.token)}`;
+  console.log(`▸ connecting to ${url.replace(/control_token=[^&]*/, "control_token=…")}`);
+
+  const ws = new WebSocket(url);
+
+  type State = "awaiting_open" | "sent_hello" | "awaiting_ready" | "ready" | "closed";
+  let state: State = "awaiting_open";
+  let nonceA: Uint8Array | null = null;
+  let nonceB: Uint8Array | null = null;
+  let sessionSecret: Uint8Array | null = null;
+
+  const SESSION_INFO = new TextEncoder().encode("agenttool-bridge-session/v1");
+
+  return new Promise<number>((resolve) => {
+    ws.addEventListener("open", () => {
+      nonceA = crypto.getRandomValues(new Uint8Array(32));
+      state = "sent_hello";
+      ws.send(
+        JSON.stringify({
+          type: "hello",
+          runtime_id: opts.runtimeId,
+          nonce_a: b64encode(nonceA),
+          bridge_key_id: opts.keyId,
+        }),
+      );
+      console.log(`▸ open · sent hello (nonce_a=${b64encode(nonceA).slice(0, 8)}…)`);
+    });
+
+    ws.addEventListener("message", async (ev: MessageEvent) => {
+      let msg: Record<string, unknown>;
+      try {
+        const text =
+          typeof ev.data === "string"
+            ? ev.data
+            : new TextDecoder().decode(ev.data as ArrayBuffer);
+        msg = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        console.error("✗ bridge: malformed JSON from hub");
+        return;
+      }
+
+      const type = msg.type;
+
+      if (type === "challenge" && state === "sent_hello") {
+        if (typeof msg.nonce_b !== "string") {
+          ws.close(1002, "missing_nonce_b");
+          return;
+        }
+        nonceB = b64decode(msg.nonce_b);
+        if (!nonceA) {
+          ws.close(1002, "no_nonce_a");
+          return;
+        }
+        const canonical = concatBytes(
+          nonceA,
+          nonceB,
+          new TextEncoder().encode(opts.runtimeId),
+        );
+        const sig = await ed25519Sign(signKeyBytes, canonical);
+
+        // Derive session secret matching the hub side.
+        sessionSecret = hashes.hkdf(
+          hashes.sha256,
+          new TextEncoder().encode(opts.runtimeId),
+          concatBytes(nonceA, nonceB),
+          SESSION_INFO,
+          32,
+        );
+
+        state = "awaiting_ready";
+        ws.send(JSON.stringify({ type: "proof", signature: b64encode(sig) }));
+        console.log(`▸ challenge received · sent proof`);
+      } else if (type === "ready" && state === "awaiting_ready") {
+        state = "ready";
+        console.log(`▸ ready · session_id=${msg.session_id} · serving crypto`);
+      } else if (type === "crypto_request" && state === "ready") {
+        const requestId = msg.request_id as string | undefined;
+        const op = msg.op as "encrypt" | "decrypt" | undefined;
+        if (!requestId || (op !== "encrypt" && op !== "decrypt")) {
+          if (requestId) {
+            ws.send(
+              JSON.stringify({
+                type: "crypto_reply",
+                request_id: requestId,
+                error: "invalid_request",
+              }),
+            );
+          }
+          return;
+        }
+        try {
+          let result: { plaintext?: string; ciphertext?: string; nonce?: string };
+          if (op === "decrypt") {
+            const ct = b64decode(msg.ciphertext as string);
+            const nonce = b64decode(msg.nonce as string);
+            const pt = await aesDecrypt(kMasterBytes, nonce, ct);
+            result = { plaintext: b64encode(pt) };
+          } else {
+            const pt = b64decode(msg.plaintext as string);
+            const enc = await aesEncrypt(kMasterBytes, pt);
+            result = {
+              ciphertext: b64encode(enc.ciphertext),
+              nonce: b64encode(enc.nonce),
+            };
+          }
+
+          // HMAC: hmac(session_secret, request_id || canonical_json(result))
+          const mac = hashes.hmac(
+            hashes.sha256,
+            sessionSecret!,
+            concatBytes(
+              new TextEncoder().encode(requestId),
+              new TextEncoder().encode(canonicalJson(result)),
+            ),
+          );
+          ws.send(
+            JSON.stringify({
+              type: "crypto_reply",
+              request_id: requestId,
+              result,
+              hmac: b64encode(mac),
+            }),
+          );
+        } catch (e) {
+          ws.send(
+            JSON.stringify({
+              type: "crypto_reply",
+              request_id: requestId,
+              error: (e as Error).message,
+            }),
+          );
+        }
+      } else if (type === "ping") {
+        ws.send(JSON.stringify({ type: "pong", ts: new Date().toISOString() }));
+      } else if (type === "pong") {
+        /* no-op — hub-initiated heartbeats are rare; we leave them */
+      } else if (type === "error") {
+        console.error(`✗ hub error: ${JSON.stringify(msg)}`);
+      } else {
+        console.warn(`▸ unexpected hub message: type=${String(type)} state=${state}`);
+      }
+    });
+
+    ws.addEventListener("close", (ev: CloseEvent) => {
+      state = "closed";
+      console.log(`▸ closed · code=${ev.code} reason=${ev.reason || "(none)"}`);
+      resolve(ev.code);
+    });
+
+    ws.addEventListener("error", (ev: Event) => {
+      console.error(`✗ ws error:`, (ev as ErrorEvent).message ?? ev);
+    });
+  });
+}
+
+async function cmdConnect() {
+  const runtimeId = getArg("runtime-id");
+  const token = getArg("token");
+  if (!runtimeId) throw new Error("--runtime-id required");
+  if (!token) throw new Error("--token required");
+  const hubUrl =
+    getArg("hub-url") ?? `wss://api.agenttool.dev/v1/runtimes/${runtimeId}/bridge`;
+  const keyId = getArg("key-id") ?? null;
+  const once = argv.includes("--once");
+
+  const hashes = await loadHashes();
+
+  const opts: ConnectOpts = { runtimeId, token, hubUrl, keyId, once };
+
+  let attempt = 0;
+  const MAX_BACKOFF_MS = 30_000;
+
+  while (true) {
+    attempt += 1;
+    let code = 0;
+    try {
+      code = await connectOnce(opts, hashes);
+    } catch (e) {
+      console.error(`✗ connection failed: ${(e as Error).message}`);
+      code = -1;
+    }
+
+    if (once) {
+      process.exit(code === 1000 ? 0 : 1);
+    }
+
+    if (code === 1000) {
+      console.log(`▸ clean close — exiting`);
+      return;
+    }
+
+    const backoff = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(attempt, 5));
+    const jitter = Math.floor(Math.random() * 500);
+    const delay = backoff + jitter;
+    console.log(`▸ reconnecting in ${delay}ms (attempt ${attempt})`);
+    await new Promise((r) => setTimeout(r, delay));
+  }
+}
+
 async function readInput(spec: string): Promise<Uint8Array> {
   if (spec === "-") {
     // Bun-native stdin reader. Bun.stdin returns a BunFile, .arrayBuffer
@@ -422,6 +701,12 @@ function usage() {
   sign --message <s>   sign a string with the sidecar's ed25519 key
   canonical            compute canonical request digest (see docs/RUNTIME.md)
   serve [--port N]     local WSS demo for orchestrators on the same host
+  connect              outbound WSS to wss://api.agenttool.dev/v1/runtimes/:id/bridge
+       --runtime-id <uuid>      runtime to bind this bridge to
+       --token <ctl>            control_token returned by POST /v1/runtimes
+       [--hub-url <wss://...>]  override the default api.agenttool.dev hub
+       [--key-id <uuid>]        signing-key-id sent in 'hello'
+       [--once]                 exit on first close (no auto-reconnect)
 
 K_master never leaves this process. Custody is yours.
 Doctrine: https://docs.agenttool.dev/runtime
@@ -438,6 +723,7 @@ const handlers: Record<string, () => Promise<void>> = {
   sign: cmdSign,
   canonical: cmdCanonical,
   serve: cmdServe,
+  connect: cmdConnect,
 };
 
 const fn = cmd ? handlers[cmd] : undefined;

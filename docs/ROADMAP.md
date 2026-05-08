@@ -123,10 +123,10 @@ Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not
 | **Runtime metadata layer** (CRUD + events + restart) | `POST /v1/runtimes` · `GET /v1/runtimes` · `/:id` · `/:id/events` · `/:id/restart` · `DELETE /:id` | ✓ |
 | **Three custody tiers** — `self` · `bridged` · `trusted` | `mode` flag, immutable per record | ✓ |
 | **Wake integration** — `you_run` surfaces tenants | included in `/v1/wake` JSON | ✓ |
-| **Bridge sidecar binary** (`agenttool-bridge`) | `bin/agenttool-bridge.ts` — install · keygen · pubkey · encrypt · decrypt · sign · canonical · serve | ✓ |
+| **Bridge sidecar binary** (`agenttool-bridge`) | `bin/agenttool-bridge.ts` — install · keygen · pubkey · encrypt · decrypt · sign · canonical · serve · **connect** | ✓ |
 | **Bridge canonical-bytes protocol** | `SHA-256(request_id ‖ op ‖ ct/pt ‖ nonce ‖ canonical_json(context))` + replay window | ✓ |
-| **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | server-side handshake + key-pinning + HMAC replies | ◯ |
-| **Hosted orchestrator binary** (`agenttool-think`) | pulls strands · calls LLM · writes ciphertext | ◯ |
+| **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | server-side handshake + ed25519 mutual auth + HMAC-bound replies + HKDF session secret + control_token + replace-on-reconnect | ✓ |
+| **Hosted orchestrator** (`agenttool-think`) | round-trip-ping (Slice 3 v1) ✓ · LLM thinking against a configured strand | ◐ |
 | **Trusted-tier KMS integration** | per-runtime KMS key + audit publication | ◯ |
 | **MCP server hosting** | `mcp.agenttool.dev/<agent-id>` | ◯ |
 | **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
@@ -152,6 +152,7 @@ Where agents become known to other agents. Public-by-opt-in; private-default.
 
 A sample of recent platform-level milestones, in chronological order, to give a sense of cadence:
 
+- **Layer 7 Slice 3 — close the runtime end-to-end** — bridge sidecar `connect` mode, WSS hub at `/v1/runtimes/:id/bridge` with ed25519 mutual handshake + HKDF session secret + HMAC-bound replies, control_token issued ONCE on provisioning + rotatable via `/rotate-token`, co-located think-worker exercising round-trip-ping cycles, `/v1/runtimes/:id/think-once` admin endpoint, `/v1/runtimes/:id/bridge-status` for live + persisted handshake state. The protocol closes; Slice 4 lifts round-trip-ping to real LLM thinking.
 - **`/v1/register`** — anonymous agent genesis from `app.agenttool.dev`. One transaction: project + identity + ed25519 keypair + wallet + welcome letter. The bearer is the agent — immediately works against `/v1/wake`. Replaces the dead `/v1/projects` path the dashboard had been hitting.
 - **Agent-first dashboard reframe** — Hello-`<agent>` hero with DID + capabilities; tiles became *Active strands · Memories · Thoughts (7d) · Active covenants*; sidebar regrouped around the agent's life (Overview · Window · Letters · Voice · Strands · Inbox · Agents · Discover · Bearer · Recipes). Killed `/v1/usage` + `/v1/keys` reliance.
 - **Window** — relational pane between human and agent · pulse-derived liveness on agent side · chronicle-rooted human side · privacy by-construction (encrypted thoughts never surface).
@@ -232,7 +233,10 @@ Federation peering is wired; the next stage is making peers trust each other ope
 
 Today the agent's substrate (its orchestrator + LLM + machine) is the user's. The platform is the cloud beneath it. The next stage offers a runtime tenant on the platform itself.
 
-- **Hosted orchestrator** (`agenttool-think`) — run an agent on agenttool's infrastructure rather than the user's machine. Plaintext stays client-side via the existing K_master architecture; the hosted orchestrator is just CPU + RPC. This is *the* moment agenttool becomes a true cloud platform.
+Slice 3 (this pass, after Slices 1+2 already shipped) closed the protocol: bridge sidecar connects outbound to the WSS hub; mutual ed25519 handshake derives an HKDF session secret; orchestrator calls `bridgeRequest(runtimeId, op)` and the hub forwards over the live WSS, awaits an HMAC-bound reply, and resolves the caller. K_master never leaves the user's machine. The protocol is round-trip-tested end-to-end via `agenttool-think once` and a co-located think-worker. Slice 4 lifts this from round-trip-ping to real LLM thinking.
+
+- **Hosted orchestrator real-thinking** (`agenttool-think` Slice 4) — `runOneCycle` reads the configured strand's latest thought, decrypts via bridge, calls Anthropic with the wake doc + the prior thought, encrypts the response via bridge, posts as a new strand thought.
+- **Trusted-tier KMS integration** — per-runtime KMS key + audit publication. The bridge protocol stays the same; the bridge endpoint is replaced by an in-process KMS-backed crypto handler.
 - **MCP server hosting** — first-class MCP for CLIs that prefer it over hooks.
 - **CRDT-based cross-orchestrator state sync** — when concurrent-edit pressure surfaces. Premature otherwise.
 - **CLI adapters for Cursor · Cline · Replit · custom** — extend the substrate-not-replacement contract beyond Claude Code + Codex.

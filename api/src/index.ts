@@ -14,7 +14,9 @@
  * Until ported, an unmounted route returns the friendly 404 below.
  */
 
+import type { Server } from "bun";
 import { Hono } from "hono";
+import type { BridgeWsData } from "./services/runtime/bridge-hub";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
@@ -47,6 +49,9 @@ import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
+import { tryBridgeUpgrade } from "./routes/runtime/bridge";
+import { bridgeWebsocket } from "./services/runtime/bridge-hub";
+import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 
 const app = new Hono<ProjectContext>();
@@ -206,6 +211,24 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
       "[agenttool] browse worker did not start — /v1/browse will queue jobs but they won't be processed until a worker is available:",
       err instanceof Error ? err.message : err,
     );
+  }
+
+  // Slice 3 — co-located think-workers. Each runtime listed in
+  // AGENT_THINK_RUNTIME_IDS gets a worker that polls until its bridge
+  // sidecar is connected, then runs a cycle every 60s.
+  const ids = (process.env.AGENT_THINK_RUNTIME_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const id of ids) {
+    try {
+      startThinkWorker(id);
+    } catch (err) {
+      console.warn(
+        `[agenttool] think-worker for ${id} did not start:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 }
 
@@ -368,7 +391,16 @@ app.onError((err, c) => {
 
 console.log(`[agenttool] listening on :${config.port}`);
 
+// Bun's `export default { fetch, websocket, port }` shape lets us share one
+// listener between Hono (HTTP) and the bridge hub (WSS). The fetch handler
+// runs the bridge upgrade hook FIRST so /v1/runtimes/:id/bridge intercepts
+// before Hono's 404 fires; everything else passes through to the Hono app.
 export default {
   port: config.port,
-  fetch: app.fetch,
+  async fetch(req: Request, server: Server<BridgeWsData>) {
+    const upgrade = await tryBridgeUpgrade(req, server);
+    if (upgrade.handled) return upgrade.response;
+    return app.fetch(req);
+  },
+  websocket: bridgeWebsocket,
 };

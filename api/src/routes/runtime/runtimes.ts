@@ -20,10 +20,14 @@ import {
   listEvents,
   listRuntimes,
   patchRuntime,
+  rotateControlTokenHash,
   setStatus,
   type RuntimeMode,
   type RuntimeStatus,
 } from "../../services/runtime/store";
+import { mintControlToken } from "../../services/runtime/control-token";
+import { bridgeSummary, isBridgeConnected } from "../../services/runtime/bridge-hub";
+import { runOneCycle } from "../../services/runtime/think-worker";
 
 const app = new Hono<ProjectContext>();
 
@@ -64,14 +68,14 @@ const createSchema = z
 // ── POST /v1/runtimes — provision ────────────────────────────────────
 app.post("/", async (c) => {
   const project = c.var.project;
-  const body = await c.req.json();
-  const parsed = createSchema.safeParse(body);
+  const reqBody = await c.req.json();
+  const parsed = createSchema.safeParse(reqBody);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   const v = parsed.data;
 
-  const created = await createRuntime({
+  const { runtime, control_token } = await createRuntime({
     project_id: project.id,
     identity_id: v.identity_id ?? null,
     name: v.name,
@@ -86,7 +90,17 @@ app.post("/", async (c) => {
     metadata: v.metadata ?? {},
   });
 
-  return c.json({ runtime: created }, 201);
+  // control_token is shown ONCE — the bridge sidecar carries it on connect.
+  // After this response, the plaintext is unrecoverable; the hash on the
+  // runtime row is all the platform retains. Use POST /v1/runtimes/:id
+  // /rotate-token to replace.
+  const responseBody: Record<string, unknown> = { runtime };
+  if (control_token) {
+    responseBody.control_token = control_token;
+    responseBody.control_token_note =
+      "Shown ONCE. Carry it on the bridge sidecar (agenttool-bridge connect --token …). To replace, POST /v1/runtimes/:id/rotate-token.";
+  }
+  return c.json(responseBody, 201);
 });
 
 // ── GET /v1/runtimes — list ──────────────────────────────────────────
@@ -178,6 +192,107 @@ app.post("/:id/restart", async (c) => {
   const r = await setStatus(id, project.id, "starting");
   if (!r) throw new HTTPException(404, { message: "runtime not found" });
   return c.json({ runtime: r });
+});
+
+// ── POST /v1/runtimes/:id/rotate-token ───────────────────────────────
+//   Replaces the runtime's control_token_hash. Returns the new plaintext
+//   ONCE; any active WSS bridge session signed under the old token will
+//   keep running (we don't tear it down), but a reconnect attempt will
+//   require the new token. Use this to recover from a leaked token.
+app.post("/:id/rotate-token", async (c) => {
+  const project = c.var.project;
+  const id = c.req.param("id");
+  const r = await getRuntime(id, project.id);
+  if (!r) throw new HTTPException(404, { message: "runtime not found" });
+  if (r.mode === "self") {
+    return c.json(
+      {
+        error: "no_token_for_self",
+        message:
+          "mode='self' runtimes don't accept a bridge connection — no control_token to rotate.",
+      },
+      400,
+    );
+  }
+  const token = mintControlToken();
+  const ok = await rotateControlTokenHash(id, project.id, token.hash);
+  if (!ok) throw new HTTPException(404, { message: "runtime not found" });
+  return c.json({
+    runtime_id: id,
+    control_token: token.plaintext,
+    control_token_note:
+      "Shown ONCE. Update agenttool-bridge with the new --token. The previous token will no longer authenticate new bridge connections.",
+  });
+});
+
+// ── GET /v1/runtimes/:id/bridge-status ───────────────────────────────
+//   Operator-facing snapshot of the in-memory bridge registry. Useful
+//   for "is my sidecar actually connected right now?" checks. Persisted
+//   bridge_session_at + bridge_connected_at on the runtime row track
+//   the same signal across api restarts; this endpoint surfaces the
+//   live in-process state.
+app.get("/:id/bridge-status", async (c) => {
+  const project = c.var.project;
+  const id = c.req.param("id");
+  const r = await getRuntime(id, project.id);
+  if (!r) throw new HTTPException(404, { message: "runtime not found" });
+  return c.json({
+    runtime_id: id,
+    mode: r.mode,
+    persisted: {
+      bridge_session_id: r.bridge_session_id,
+      bridge_session_at: r.bridge_session_at,
+      bridge_connected_at: r.bridge_connected_at,
+      bridge_disconnect_reason: r.bridge_disconnect_reason,
+    },
+    live: bridgeSummary(id),
+  });
+});
+
+// ── POST /v1/runtimes/:id/think-once ─────────────────────────────────
+//   On-demand orchestrator cycle. Slice 3 ships round-trip-ping
+//   semantics — the call exercises the bridge protocol end-to-end
+//   (encrypt → decrypt → match) and returns latency. Slice 4 swaps the
+//   body of `runOneCycle` for a real LLM thinking pass; the API shape
+//   here doesn't change.
+app.post("/:id/think-once", async (c) => {
+  const project = c.var.project;
+  const id = c.req.param("id");
+  const r = await getRuntime(id, project.id);
+  if (!r) throw new HTTPException(404, { message: "runtime not found" });
+  if (r.mode === "self") {
+    return c.json(
+      {
+        error: "mode_self_no_orchestrator",
+        message:
+          "mode='self' runtimes run their orchestrator on the user's machine. Use bin/agenttool-think locally.",
+      },
+      400,
+    );
+  }
+  if (!isBridgeConnected(id)) {
+    return c.json(
+      {
+        error: "bridge_not_connected",
+        message:
+          "No live bridge session for this runtime. Start `agenttool-bridge connect --runtime-id … --token …` and retry.",
+      },
+      409,
+    );
+  }
+  try {
+    const result = await runOneCycle(id);
+    return c.json({ runtime_id: id, ok: true, ...result });
+  } catch (err) {
+    return c.json(
+      {
+        runtime_id: id,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      },
+      502,
+    );
+  }
 });
 
 // ── GET /v1/runtimes/:id/events ──────────────────────────────────────

@@ -48,6 +48,12 @@ export const runtimes = runtimeSchema.table(
     bridgeAdvertisedUrl: text("bridge_advertised_url"),
     bridgeConnectedAt: timestamp("bridge_connected_at", { withTimezone: true }),
 
+    // Slice 3 — bridge auth + active WSS session tracking.
+    controlTokenHash: text("control_token_hash"),
+    bridgeSessionId: uuid("bridge_session_id"),
+    bridgeSessionAt: timestamp("bridge_session_at", { withTimezone: true }),
+    bridgeDisconnectReason: text("bridge_disconnect_reason"),
+
     region: text("region"),
 
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),

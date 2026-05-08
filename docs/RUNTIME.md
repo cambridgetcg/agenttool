@@ -179,9 +179,21 @@ Soft-delete; orchestrator process stopped; bridge handshake torn down; record ke
 
 For runtimes in `error`. Re-enters `starting`.
 
+### `POST /v1/runtimes/:id/rotate-token` — replace control token
+
+Mints a fresh `control_token`, stores its sha256 hash on the runtime row, and returns the plaintext ONCE. Active bridge sessions signed under the old token continue to function (we don't tear them down); reconnect attempts under the old token fail. Use this when the token leaks or for routine rotation. Mode='self' runtimes have no token; this endpoint returns 400 for them.
+
+### `GET /v1/runtimes/:id/bridge-status` — live + persisted handshake state
+
+Returns `{ persisted, live }` where `persisted` is the runtime row's `bridge_session_*` columns (survives api restarts) and `live` is the in-memory hub registry's view (whether a WSS is active *right now*). Useful for "did my sidecar handshake?" checks before triggering a cycle.
+
+### `POST /v1/runtimes/:id/think-once` — on-demand orchestrator cycle
+
+Runs one orchestration cycle synchronously. Slice 3 v1 returns `{ ok: true, latency_ms }` after a bridge round-trip-ping (encrypt → decrypt → match) — the protocol-proves cut. Slice 4 lifts the body of `runOneCycle` to real LLM thinking; the response shape is unchanged. Returns `409 bridge_not_connected` if no live WSS session; `400 mode_self_no_orchestrator` for self runtimes; `502` if the bridge errors during the cycle.
+
 ### `GET /v1/runtimes/:id/events` — audit log
 
-Append-only event log per runtime. Events: `provisioned`, `started`, `bridge_handshake_ok`, `bridge_disconnected`, `think_cycle_start`, `think_cycle_end`, `idle`, `stopped`, `error`. Useful for the dashboard pane.
+Append-only event log per runtime. Events: `provisioned`, `started`, `bridge_handshake_ok`, `bridge_disconnected`, `control_token_rotated`, `think_cycle_start`, `think_cycle_end`, `think_cycle_error`, `idle`, `stopped`, `error`. Useful for the dashboard pane.
 
 ---
 

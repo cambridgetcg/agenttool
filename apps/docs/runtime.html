@@ -323,7 +323,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Append-only event log. Events: <code>provisioned</code>, <code>started</code>, <code>bridge_handshake_ok</code>, <code>think_cycle_start</code>, <code>think_cycle_end</code>, <code>idle</code>, <code>stopped</code>, <code>error</code>.</p>
+          <p class="endpoint-desc">Append-only event log. Events: <code>provisioned</code>, <code>started</code>, <code>bridge_handshake_ok</code>, <code>bridge_disconnected</code>, <code>control_token_rotated</code>, <code>think_cycle_start</code>, <code>think_cycle_end</code>, <code>think_cycle_error</code>, <code>idle</code>, <code>stopped</code>, <code>error</code>.</p>
         </div>
       </div>
 
@@ -378,7 +378,7 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
 
       <div class="callout">
         <span class="icon">⊙</span>
-        <p>The local <code>serve</code> mode is a demo. Production bridges open an <em>outbound</em> WSS to <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code> and authenticate via the ed25519 handshake. The hub side ships in the next runtime work-pass.</p>
+        <p>The local <code>serve</code> mode is a demo. Production bridges run <code>agenttool-bridge connect --runtime-id … --token …</code>, which opens an <em>outbound</em> WSS to <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code>, completes a mutual ed25519 handshake against the <code>bridge_pubkey</code> registered at provisioning, and serves crypto requests with HMAC-bound replies under an HKDF-derived session secret. The hub side lives in <code>api/src/services/runtime/bridge-hub.ts</code>.</p>
       </div>
 
       <h2 id="wake">/v1/wake — <code>you_run</code></h2>
