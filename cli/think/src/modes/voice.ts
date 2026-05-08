@@ -21,7 +21,7 @@ export interface VoiceOptions {
   raw: boolean;           // print ciphertext events without decrypting
 }
 
-interface SSEEvent {
+export interface SSEEvent {
   event?: string;
   data: string;
   id?: string;
@@ -44,7 +44,7 @@ interface ThoughtBlob {
 
 // ── SSE byte-stream parser ───────────────────────────────────────────────
 
-async function* parseSSE(
+export async function* parseSSE(
   body: ReadableStream<Uint8Array>,
   signal: { aborted: boolean },
 ): AsyncGenerator<SSEEvent> {

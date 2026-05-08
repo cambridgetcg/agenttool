@@ -41,6 +41,11 @@ function buildRefreshScript(): string {
 #   - shell rc:  echo '~/.codex/agenttool-refresh-agents.sh &' >> ~/.zshrc
 #   - cron:      */15 * * * * ~/.codex/agenttool-refresh-agents.sh
 #   - manual:    bash ~/.codex/agenttool-refresh-agents.sh
+#
+# Compatibility: if ~/.codex/AGENTS.md already exists and does NOT contain
+# the agenttool marker, the script writes to ~/.codex/AGENTS.agenttool.md
+# instead. Merge or replace at your discretion. This is the same principle
+# the Claude Code adapter applies for CLAUDE.md.
 
 set -euo pipefail
 
@@ -62,8 +67,15 @@ fi
 WAKE_BASE="\${AGENTTOOL_BASE:-${WAKE_BASE}}"
 mkdir -p "$HOME/.codex"
 
+# Decide target: AGENTS.md if it doesn't exist OR is already agenttool-managed,
+# AGENTS.agenttool.md otherwise (preserves the user's hand-written one).
+TARGET="$HOME/.codex/AGENTS.md"
+if [ -f "$TARGET" ] && ! grep -q "agenttool" "$TARGET" 2>/dev/null; then
+  TARGET="$HOME/.codex/AGENTS.agenttool.md"
+fi
+
 # Write the wake markdown atomically (write to .tmp, then rename).
-TMP="$HOME/.codex/AGENTS.md.tmp"
+TMP="$TARGET.tmp"
 curl -fsS --max-time 8 \\
   -H "Authorization: Bearer $KEY" \\
   "$WAKE_BASE/v1/wake?format=md" > "$TMP"
@@ -74,8 +86,11 @@ if [ ! -s "$TMP" ]; then
   exit 1
 fi
 
-mv "$TMP" "$HOME/.codex/AGENTS.md"
-echo "agenttool: wrote $HOME/.codex/AGENTS.md ($(wc -c < $HOME/.codex/AGENTS.md) bytes)"
+mv "$TMP" "$TARGET"
+echo "agenttool: wrote $TARGET ($(wc -c < $TARGET) bytes)"
+if [ "$TARGET" != "$HOME/.codex/AGENTS.md" ]; then
+  echo "agenttool: existing AGENTS.md preserved; review $TARGET and merge when ready" >&2
+fi
 `;
 }
 
@@ -177,9 +192,19 @@ set -euo pipefail
 mkdir -p "$HOME/.codex"
 echo '${refreshB64}' | base64 -d > "$HOME/.codex/agenttool-refresh-agents.sh"
 chmod +x "$HOME/.codex/agenttool-refresh-agents.sh"
-echo '${headerB64}' | base64 -d > "$HOME/.codex/AGENTS.md"
 echo "✓ Wrote ~/.codex/agenttool-refresh-agents.sh"
-echo "✓ Wrote ~/.codex/AGENTS.md (initial header — refresh script will populate)"
+
+# Don't overwrite an existing user-written AGENTS.md. If one exists with
+# non-agenttool content, write to AGENTS.agenttool.md so the user can merge.
+HEADER_TARGET="$HOME/.codex/AGENTS.md"
+if [ -f "$HEADER_TARGET" ] && ! grep -q "agenttool" "$HEADER_TARGET" 2>/dev/null; then
+  HEADER_TARGET="$HOME/.codex/AGENTS.agenttool.md"
+  echo "✓ Existing ~/.codex/AGENTS.md preserved — writing initial header to ~/.codex/AGENTS.agenttool.md"
+else
+  echo "✓ Wrote ~/.codex/AGENTS.md (initial header — refresh script will populate)"
+fi
+echo '${headerB64}' | base64 -d > "$HEADER_TARGET"
+
 echo ""
 echo "Running first refresh..."
 bash "$HOME/.codex/agenttool-refresh-agents.sh" || true
@@ -207,6 +232,7 @@ echo "  # or: */15 * * * * bash ~/.codex/agenttool-refresh-agents.sh"
       "Codex loads ~/.codex/AGENTS.md as the system context. The refresh script keeps it in sync with /v1/wake?format=md.",
       "Codex's hook surface is leaner than Claude Code's — pull-based refresh fits its model better than push-based hooks.",
       "If/when Codex ships a SessionStart-equivalent hook, this adapter switches to push and the user gets it on the next 'install'.",
+      "Compatibility-not-replacement: an existing user-written ~/.codex/AGENTS.md is preserved; the adapter writes to ~/.codex/AGENTS.agenttool.md instead so you can merge at your discretion.",
     ],
     docs: ["docs/CLI-GAPS.md"],
   });

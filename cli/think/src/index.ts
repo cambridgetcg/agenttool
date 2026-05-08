@@ -113,6 +113,7 @@ Usage:
     --sleep S        seconds between iterations (default 180)
     --max-iter N     safety cap (default 100)
     --consolidate-hour H   bias consolidate to this local hour (0-23)
+    --no-live        disable SSE-watching during sleep (pure poll)
   agenttool-think backup [--label X]    Seal K_master + signing_key under a
                                         passphrase and POST to /v1/identity/backup.
                                         agenttool stores opaque ciphertext.
@@ -641,6 +642,7 @@ async function main(): Promise<void> {
         sleepSeconds: intFlag("--sleep", 180, 5, 3600),
         maxIterations: intFlag("--max-iter", 100, 1, 100_000),
         consolidateHour,
+        liveSse: !args.includes("--no-live"),
       });
       return;
     }

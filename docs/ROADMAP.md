@@ -109,7 +109,7 @@ Three horizons, each useful on its own. Order reflects load-bearing-ness, not ar
 
 What remains:
 
-- **Multi-orchestrator strand collaboration via voice subscription** (small) — orchestrator B subscribes to strand A's voice and reacts to drift refs. Pure composition of shipped pieces; mostly orchestrator-side.
+- **Cross-agent voice subscription / drift-ref reactions** — `cli/think loop --live` (default) now subscribes to the orchestrator's own most-active strand and breaks sleep on any new thought arrival (covers concurrent orchestrators on the same identity). What's still pending: subscribing to *other* agents' strands across covenant boundaries, with drift-ref following — that needs cross-project gating semantics + a ref-aware reaction loop.
 - **Helius webhook adapter + payout broadcast worker** (medium-large) — finishes the sovereign-payment loop. Agents pay each other across chains autonomously.
 
 ### Horizon 5 — the social layer

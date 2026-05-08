@@ -25,6 +25,7 @@ import type { ThinkConfig } from "../config";
 import type { KeyMaterial } from "../keys";
 import { advance } from "./advance";
 import { consolidate } from "./consolidate";
+import { parseSSE } from "./voice";
 import { wander } from "./wander";
 
 export interface LoopOptions {
@@ -33,6 +34,11 @@ export interface LoopOptions {
   maxIterations: number;
   sleepSeconds: number;
   consolidateHour?: number; // local hour 0-23; undefined = no circadian bias
+  /** When true (default), the inter-iteration sleep subscribes to the most
+   *  recently-active strand's voice SSE and breaks early on any new thought
+   *  arrival (multi-orchestrator collaboration / external API write). When
+   *  false, the loop pure-polls between iterations. */
+  liveSse: boolean;
 }
 
 type Mode = "advance" | "wander" | "consolidate";
@@ -73,6 +79,122 @@ function sleep(ms: number, signal: { aborted: boolean }): Promise<void> {
     };
     tick();
   });
+}
+
+interface SleepOutcome {
+  reason: "timeout" | "aborted" | "event";
+  detail?: string;     // e.g. "strand <id>#<seq>"
+}
+
+/** Sleep until either (a) the timer expires, (b) the abort signal flips, or
+ *  (c) a new thought arrives on the most-recently-active strand's voice SSE.
+ *  On any failure inside the SSE path, falls back to plain sleep so the
+ *  loop never crashes on a network blip. */
+async function voiceTriggeredSleep(
+  client: AgenttoolClient,
+  config: ThinkConfig,
+  ms: number,
+  signal: { aborted: boolean },
+): Promise<SleepOutcome> {
+  // 1. Pick the most-recently-active strand to subscribe to.
+  let target: StrandSummary | undefined;
+  try {
+    const r = await client.listStrands({ status: "active", limit: 50 });
+    target = r.strands
+      .filter((s) => s.last_thought_at !== null)
+      .sort((a, b) => {
+        const at = new Date(a.last_thought_at!).getTime();
+        const bt = new Date(b.last_thought_at!).getTime();
+        return bt - at;
+      })[0];
+  } catch {
+    // strand list failed — fall back to plain sleep
+  }
+
+  if (!target) {
+    await sleep(ms, signal);
+    return { reason: signal.aborted ? "aborted" : "timeout" };
+  }
+
+  const strandId = target.id;
+  const sinceSeq = target.last_thought_seq;
+  const url = `${config.agenttoolBase}/v1/strands/${strandId}/voice?since_seq=${sinceSeq}`;
+  const ac = new AbortController();
+  const sseSignal = { aborted: false };
+
+  // Wire the outer abort signal to also tear down SSE.
+  const outerAbortPoller = setInterval(() => {
+    if (signal.aborted) {
+      sseSignal.aborted = true;
+      ac.abort();
+    }
+  }, 250);
+
+  // Race: timer vs. SSE event arrival.
+  let timerHandle: ReturnType<typeof setTimeout> | null = null;
+  const timerPromise = new Promise<SleepOutcome>((resolve) => {
+    timerHandle = setTimeout(() => {
+      sseSignal.aborted = true;
+      ac.abort();
+      resolve({ reason: signal.aborted ? "aborted" : "timeout" });
+    }, ms);
+  });
+
+  const ssePromise: Promise<SleepOutcome> = (async () => {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        signal: ac.signal,
+        headers: {
+          accept: "text/event-stream",
+          authorization: `Bearer ${config.agenttoolApiKey}`,
+        },
+      });
+    } catch {
+      // network or abort — return a sentinel that loses the race naturally.
+      return new Promise<SleepOutcome>(() => {});
+    }
+    if (!res.ok || !res.body) {
+      return new Promise<SleepOutcome>(() => {});
+    }
+
+    let pastCatchup = false;
+    try {
+      for await (const event of parseSSE(res.body, sseSignal)) {
+        if (sseSignal.aborted) break;
+        if (event.event === "catchup-end") {
+          pastCatchup = true;
+          continue;
+        }
+        if (event.event === "thought" && pastCatchup) {
+          let seq: number | undefined;
+          try {
+            seq = (JSON.parse(event.data) as { sequence_num: number }).sequence_num;
+          } catch { /* ignore */ }
+          return {
+            reason: "event",
+            detail: `strand ${strandId.slice(0, 8)}${seq !== undefined ? ` #${seq}` : ""}`,
+          };
+        }
+        // disconnect / refresh / reject — let the timer win
+        if (event.event === "disconnect" || event.event === "refresh" || event.event === "rejected") {
+          return new Promise<SleepOutcome>(() => {});
+        }
+      }
+    } catch {
+      // silent
+    }
+    return new Promise<SleepOutcome>(() => {});
+  })();
+
+  try {
+    return await Promise.race([timerPromise, ssePromise]);
+  } finally {
+    if (timerHandle) clearTimeout(timerHandle);
+    clearInterval(outerAbortPoller);
+    sseSignal.aborted = true;
+    try { ac.abort(); } catch { /* ignore */ }
+  }
 }
 
 function fmtDuration(ms: number): string {
@@ -305,9 +427,19 @@ export async function loop(
       if (state.iterations.length >= options.maxIterations) break;
 
       console.log("");
-      console.log(`(sleeping ${options.sleepSeconds}s before next iteration)`);
+      const sleepLabel = options.liveSse
+        ? `(sleeping up to ${options.sleepSeconds}s; SSE-watching most-active strand for activity)`
+        : `(sleeping ${options.sleepSeconds}s before next iteration)`;
+      console.log(sleepLabel);
       console.log("");
-      await sleep(options.sleepSeconds * 1000, state);
+      const outcome = options.liveSse
+        ? await voiceTriggeredSleep(client, config, options.sleepSeconds * 1000, state)
+        : await sleep(options.sleepSeconds * 1000, state).then(
+            (): SleepOutcome => ({ reason: state.aborted ? "aborted" : "timeout" }),
+          );
+      if (outcome.reason === "event") {
+        console.log(`[${ts()}] sleep cut short — activity on ${outcome.detail}; running next iteration now`);
+      }
     }
 
     // Determine termination reason if not already set.
