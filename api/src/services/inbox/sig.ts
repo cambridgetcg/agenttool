@@ -55,6 +55,58 @@ export function canonicalInboxBytes(opts: {
   return sha256(concat(tag, SEP, recipientDid, SEP, ciphertext, SEP, nonce, SEP, ephPub));
 }
 
+/** Canonical bytes for a recipient's co-sign of a dual-witness-locked
+ *  message. The recipient asserts: "I have seen this message, identified
+ *  by id and content-fingerprint, and consent to its release."
+ *
+ *  Canonical:
+ *    sha256(
+ *      utf8("inbox-cosign/v1")  || 0x00 ||
+ *      utf8(message_id)         || 0x00 ||
+ *      utf8(recipient_did)      || 0x00 ||
+ *      base64decode(ciphertext) || 0x00 ||
+ *      base64decode(nonce)
+ *    )
+ *
+ *  Why include ciphertext + nonce: prevents a substitution attack where
+ *  a co-sign issued for one ciphertext could be replayed against another
+ *  message with the same id (rotation/edit). Without those, the co-sign
+ *  signs only the id, which is insufficient. */
+export function canonicalInboxCoSignBytes(opts: {
+  messageId: string;
+  recipientDid: string;
+  ciphertextB64: string;
+  nonceB64: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const tag = enc.encode("inbox-cosign/v1");
+  const messageId = enc.encode(opts.messageId);
+  const recipientDid = enc.encode(opts.recipientDid);
+  const ciphertext = Uint8Array.from(Buffer.from(opts.ciphertextB64, "base64"));
+  const nonce = Uint8Array.from(Buffer.from(opts.nonceB64, "base64"));
+
+  return sha256(concat(tag, SEP, messageId, SEP, recipientDid, SEP, ciphertext, SEP, nonce));
+}
+
+export function verifyInboxCoSignSignature(opts: {
+  messageId: string;
+  recipientDid: string;
+  ciphertextB64: string;
+  nonceB64: string;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  try {
+    const canonical = canonicalInboxCoSignBytes(opts);
+    const sig = Uint8Array.from(Buffer.from(opts.signatureB64, "base64"));
+    const pub = Uint8Array.from(Buffer.from(opts.publicKeyB64, "base64"));
+    if (sig.length !== 64 || pub.length !== 32) return false;
+    return ed.verify(sig, canonical, pub);
+  } catch {
+    return false;
+  }
+}
+
 export function verifyInboxSignature(opts: {
   recipientDid: string;
   ciphertextB64: string;

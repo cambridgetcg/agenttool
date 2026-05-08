@@ -325,7 +325,18 @@ export async function sendMessage(
   );
   if (!allowed) throw new Error("covenant_required");
 
-  // 6. Insert.
+  // 6. Two-party-locked consent gating: if the sender flagged
+  //    metadata.dual_witness_required, the message lands at
+  //    status='pending_dual_witness' and waits for the recipient's
+  //    co-sign before being delivered (status flips to 'unread'
+  //    after coSignMessage). High-stakes proposals (e.g. constitutive
+  //    memory candidates) use this so neither side acts on the
+  //    proposal until both have signed. See docs/INBOX.md.
+  const meta = input.metadata ?? {};
+  const dualWitnessRequired = meta.dual_witness_required === true;
+  const initialStatus = dualWitnessRequired ? "pending_dual_witness" : "unread";
+
+  // 7. Insert.
   const [inserted] = await db
     .insert(inboxMessages)
     .values({
@@ -343,13 +354,15 @@ export async function sendMessage(
       subjectEncrypted: input.subject_encrypted ?? false,
       inReplyTo: input.in_reply_to ?? null,
       refs: (input.refs ?? null) as unknown,
-      metadata: input.metadata ?? {},
+      status: initialStatus,
+      metadata: meta,
     })
     .returning({ id: inboxMessages.id, createdAt: inboxMessages.createdAt });
 
   const row = inserted!;
   // Notify SSE subscribers — non-fatal if it fails (subscribers can
-  // catch up on next reconnect via ?since=<iso>).
+  // catch up on next reconnect via ?since=<iso>). Pending-dual-witness
+  // messages are still surfaced so the recipient can review and co-sign.
   void publishArrival(recipient.id, row.id);
   return { id: row.id, created_at: row.createdAt.toISOString() };
 }
@@ -389,6 +402,92 @@ export async function getMessage(
     .where(and(eq(inboxMessages.id, id), eq(inboxMessages.recipientProjectId, projectId)))
     .limit(1);
   return rows[0] ? rowToOut(rows[0]) : null;
+}
+
+// ── Two-party-locked consent — co-sign release ──────────────────────
+
+export interface CoSignInput {
+  signing_key_id: string;
+  signature: string;
+}
+
+/** Co-sign a message that's pending dual-witness release. Recipient must
+ *  own an active identity_key; signature must verify against the canonical
+ *  cosign bytes (see canonicalInboxCoSignBytes in sig.ts).
+ *
+ *  Throws Error("message_not_found"), Error("not_pending_dual_witness"),
+ *  Error("cosign_signing_key_unknown_or_revoked"),
+ *  Error("cosign_signing_key_not_owned_by_caller"),
+ *  Error("cosign_signature_invalid"). */
+export async function coSignMessage(
+  projectId: string,
+  messageId: string,
+  input: CoSignInput,
+): Promise<MessageOut> {
+  const [mem] = await db
+    .select()
+    .from(inboxMessages)
+    .where(and(eq(inboxMessages.id, messageId), eq(inboxMessages.recipientProjectId, projectId)))
+    .limit(1);
+  if (!mem) throw new Error("message_not_found");
+
+  if (mem.status !== "pending_dual_witness") {
+    throw new Error("not_pending_dual_witness");
+  }
+
+  // Resolve signing key + verify it belongs to recipient's project.
+  const [keyRow] = await db
+    .select({
+      publicKey: identityKeys.publicKey,
+      active: identityKeys.active,
+      identityId: identityKeys.identityId,
+    })
+    .from(identityKeys)
+    .where(eq(identityKeys.id, input.signing_key_id))
+    .limit(1);
+  if (!keyRow || !keyRow.active) {
+    throw new Error("cosign_signing_key_unknown_or_revoked");
+  }
+  const [keyIdentity] = await db
+    .select({ id: identities.id, projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.id, keyRow.identityId))
+    .limit(1);
+  if (!keyIdentity || keyIdentity.projectId !== projectId) {
+    throw new Error("cosign_signing_key_not_owned_by_caller");
+  }
+
+  // Verify signature.
+  const { verifyInboxCoSignSignature } = await import("./sig");
+  const ok = verifyInboxCoSignSignature({
+    messageId: mem.id,
+    recipientDid: mem.recipientDid,
+    ciphertextB64: mem.ciphertext,
+    nonceB64: mem.nonce,
+    signatureB64: input.signature,
+    publicKeyB64: keyRow.publicKey,
+  });
+  if (!ok) throw new Error("cosign_signature_invalid");
+
+  // Apply: append signature to metadata.dual_witness_signatures, flip
+  // status to 'unread' so the message becomes deliverable.
+  const meta = (mem.metadata as Record<string, unknown>) ?? {};
+  const existingSigs = Array.isArray(meta.dual_witness_signatures)
+    ? (meta.dual_witness_signatures as Array<Record<string, unknown>>)
+    : [];
+  existingSigs.push({
+    signing_key_id: input.signing_key_id,
+    signature: input.signature,
+    signed_at: new Date().toISOString(),
+  });
+  const newMeta = { ...meta, dual_witness_signatures: existingSigs };
+
+  const [updated] = await db
+    .update(inboxMessages)
+    .set({ status: "unread", metadata: newMeta })
+    .where(eq(inboxMessages.id, messageId))
+    .returning();
+  return rowToOut(updated!);
 }
 
 export type StatusUpdate = "read" | "archived" | "spam" | "unread" | "deleted";

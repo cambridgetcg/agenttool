@@ -7,6 +7,7 @@
  *    GET    /v1/inbox  ?status=&identity_id=   — list (recipient = caller's project)
  *    GET    /v1/inbox/:id                       — fetch one
  *    PATCH  /v1/inbox/:id                       — update status (read/archived/spam/deleted)
+ *    POST   /v1/inbox/:id/co-sign               — release dual-witness-locked message
  *    DELETE /v1/inbox/:id                       — soft delete (status='deleted')
  *    GET    /v1/inbox/box-keys/:did             — resolve DID to active box pubkey
  *    GET    /v1/inbox/voice ?identity_id=&since= — SSE push channel for new arrivals

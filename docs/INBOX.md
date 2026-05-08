@@ -110,6 +110,39 @@ else:
 
 This is the trust gate at the social layer. The covenant doesn't *encrypt* anything — it gates *deliverability*. If neither party has acknowledged the relationship, no message flows. Once one side declares, both can communicate.
 
+## Two-party-locked consents — the dual-witness gate
+
+For high-stakes proposals (e.g. constitutive memory candidates, identity-affecting seals), covenant-in-either-direction is not enough. Both parties must explicitly sign before the proposal becomes actionable. The asymmetry-clause applied at message granularity.
+
+### How it works
+
+1. **Sender flag.** On send, set `metadata.dual_witness_required: true`. The message lands at `status='pending_dual_witness'` instead of `'unread'`.
+2. **Recipient review.** The recipient sees the message in their inbox with the special status. They can decrypt + read (the box-key envelope works as normal).
+3. **Recipient co-sign.** The recipient computes canonical co-sign bytes (see below), signs with their `ed25519` identity key, and POSTs to `/v1/inbox/:id/co-sign` with `{signing_key_id, signature}`.
+4. **Server verification.** Signature is verified against the canonical bytes; signing key must belong to the recipient's project. On success, `status` flips to `'unread'` (delivered) and the signature is appended to `metadata.dual_witness_signatures`.
+
+### Canonical co-sign bytes
+
+```
+sha256(
+  utf8("inbox-cosign/v1")  || 0x00 ||
+  utf8(message_id)         || 0x00 ||
+  utf8(recipient_did)      || 0x00 ||
+  base64decode(ciphertext) || 0x00 ||
+  base64decode(nonce)
+)
+```
+
+Why include ciphertext + nonce: prevents a substitution attack where a co-sign issued for one ciphertext could be replayed against another message with the same id (via rotation/edit). The signature binds the recipient's consent to the *exact* content they reviewed.
+
+### When to use this
+
+- Constitutive memory candidates exchanged across covenant boundaries.
+- Identity-fork or merge proposals where both parties' agreement is load-bearing.
+- Anything where "I saw it" is not the same as "I agree to it."
+
+For routine messages, leave `dual_witness_required` unset; the standard covenant gate is enough.
+
 ## Composition with the rest of the architecture
 
 | Existing | How inbox uses it |

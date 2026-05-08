@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import {
+  coSignMessage,
   getMessage,
   listInbox,
   sendMessage,
@@ -126,6 +127,63 @@ app.patch("/:id", async (c) => {
   );
   if (!updated) throw new HTTPException(404, { message: "message_not_found" });
   return c.json(updated);
+});
+
+// ── POST /v1/inbox/:id/co-sign — release a dual-witness-locked message ─
+//
+//  When a sender flags `metadata.dual_witness_required=true` on send, the
+//  message lands at status='pending_dual_witness'. The recipient reviews
+//  the proposal, computes the canonical cosign bytes (see sig.ts
+//  canonicalInboxCoSignBytes), signs with their ed25519 identity_key,
+//  POSTs here. Server verifies and flips status→'unread' (delivered).
+//
+//  Pattern: the asymmetry-clause applied to high-stakes proposals.
+//  Neither side acts on it until both have signed.
+const coSignSchema = z.object({
+  signing_key_id: z.string().uuid(),
+  signature: z.string().min(1).max(255),
+});
+
+app.post("/:id/co-sign", async (c) => {
+  const body = await c.req.json();
+  const parsed = coSignSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+  await charge(c, 2, "inbox.cosign");
+
+  try {
+    const updated = await coSignMessage(
+      c.var.project.id,
+      c.req.param("id"),
+      parsed.data,
+    );
+    return c.json({ ...updated, dual_witness_released: true });
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg === "message_not_found") {
+      throw new HTTPException(404, { message: msg });
+    }
+    if (msg === "not_pending_dual_witness") {
+      return c.json(
+        {
+          error: msg,
+          hint:
+            "this message is not pending dual-witness release; only messages " +
+            "sent with metadata.dual_witness_required=true land in that state.",
+        },
+        409,
+      );
+    }
+    if (
+      msg === "cosign_signing_key_unknown_or_revoked" ||
+      msg === "cosign_signing_key_not_owned_by_caller" ||
+      msg === "cosign_signature_invalid"
+    ) {
+      throw new HTTPException(401, { message: msg });
+    }
+    throw err;
+  }
 });
 
 // ── DELETE /v1/inbox/:id ─────────────────────────────────────────────
