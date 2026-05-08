@@ -84,6 +84,51 @@ app.post("/", async (c) => {
   );
 });
 
+/** GET /v1/identities — List identities for this project.
+ *
+ *  Project-scoped. Optionally filter by status (?status=active to hide
+ *  revoked, default returns all). Returns the same surface as
+ *  /v1/identities/:id but as an array, ordered by created_at ascending
+ *  (oldest first — matches the wake's "you" agents ordering). */
+app.get("/", async (c) => {
+  const project = c.var.project;
+  const statusFilter = c.req.query("status");
+
+  if (statusFilter && !["active", "revoked"].includes(statusFilter)) {
+    return c.json(
+      {
+        error: "invalid_status",
+        message: `status must be one of: active, revoked (got "${statusFilter.slice(0, 32)}")`,
+      },
+      400,
+    );
+  }
+
+  const filters = [eq(identities.projectId, project.id)];
+  if (statusFilter) filters.push(eq(identities.status, statusFilter));
+
+  const rows = await db
+    .select()
+    .from(identities)
+    .where(and(...filters))
+    .orderBy(identities.createdAt);
+
+  return c.json({
+    identities: rows.map((r) => ({
+      id: r.id,
+      did: r.did,
+      display_name: r.displayName,
+      capabilities: r.capabilities,
+      metadata: r.metadata,
+      status: r.status,
+      trust_score: r.trustScore,
+      created_at: r.createdAt,
+      updated_at: r.updatedAt,
+    })),
+    count: rows.length,
+  });
+});
+
 /** GET /v1/identities/:id — Fetch by UUID or DID. */
 app.get("/:id", async (c) => {
   const idParam = c.req.param("id");

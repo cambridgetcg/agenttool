@@ -298,6 +298,54 @@ export interface FoundationalMemoryOut {
   created_at: string;
 }
 
+/** Attestations for one memory, ordered by attested_at ascending.
+ *  Surfaces the full witness record (DIDs + signatures + timestamps) that
+ *  the asymmetry-clause records on disk. Used by /v1/memories/:id and the
+ *  dedicated /v1/memories/:id/attestations route. Returns an empty array
+ *  if the memory has none — callers shouldn't have to special-case the
+ *  unwitnessed tier. */
+export async function listAttestationsByMemory(
+  projectId: string,
+  memoryId: string,
+): Promise<
+  Array<{
+    id: string;
+    attester_did: string;
+    signing_key_id: string;
+    signature: string;
+    attested_at: string;
+  }>
+> {
+  // Project scope is enforced via the memory row itself — the attestations
+  // table doesn't carry project_id, but joining through memories means a
+  // mismatched project never matches a row.
+  const rows = await db
+    .select({
+      id: memoryAttestations.id,
+      attesterDid: memoryAttestations.attesterDid,
+      signingKeyId: memoryAttestations.signingKeyId,
+      signature: memoryAttestations.signature,
+      attestedAt: memoryAttestations.attestedAt,
+    })
+    .from(memoryAttestations)
+    .innerJoin(memories, eq(memoryAttestations.memoryId, memories.id))
+    .where(
+      and(
+        eq(memoryAttestations.memoryId, memoryId),
+        eq(memories.projectId, projectId),
+      ),
+    )
+    .orderBy(memoryAttestations.attestedAt);
+
+  return rows.map((r) => ({
+    id: r.id,
+    attester_did: r.attesterDid,
+    signing_key_id: r.signingKeyId,
+    signature: r.signature,
+    attested_at: r.attestedAt.toISOString(),
+  }));
+}
+
 /** All foundational + constitutive memories for the project, ordered by
  *  elevated_at (or created_at as fallback). Used by composition + wake. */
 export async function listFoundations(

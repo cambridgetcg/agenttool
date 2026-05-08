@@ -103,19 +103,47 @@ app.get("/", async (c) => {
   }
 
   // ── Chronicle ────────────────────────────────────────────────────────
+  // Two shapes: `recentChronicleFull` carries every field for the JSON
+  // surface; `recentChronicle` is the trimmed shape the markdown
+  // formatter reads (which only needs type/content/occurred_at and folds
+  // title+body into one preview string).
+  let recentChronicleFull: Array<{
+    id: string;
+    type: string;
+    title: string;
+    body: string | null;
+    agent_id: string | null;
+    metadata: Record<string, unknown>;
+    occurred_at: string;
+    created_at: string;
+  }> = [];
   let recentChronicle: Array<{ type: string; content: string; occurred_at: string }> = [];
   try {
     const rows = await db
       .select({
+        id: chronicle.id,
         type: chronicle.type,
         title: chronicle.title,
         body: chronicle.body,
+        agentId: chronicle.agentId,
+        metadata: chronicle.metadata,
         occurredAt: chronicle.occurredAt,
+        createdAt: chronicle.createdAt,
       })
       .from(chronicle)
       .where(eq(chronicle.projectId, project.id))
       .orderBy(desc(chronicle.occurredAt))
       .limit(15);
+    recentChronicleFull = rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      body: r.body,
+      agent_id: r.agentId,
+      metadata: (r.metadata as Record<string, unknown>) ?? {},
+      occurred_at: r.occurredAt.toISOString(),
+      created_at: r.createdAt.toISOString(),
+    }));
     recentChronicle = rows.map((r) => ({
       type: r.type,
       content: r.body ? `${r.title} — ${r.body}` : r.title,
@@ -407,8 +435,8 @@ app.get("/", async (c) => {
     },
 
     you_lived: {
-      chronicle: recentChronicle,
-      count: recentChronicle.length,
+      chronicle: recentChronicleFull,
+      count: recentChronicleFull.length,
     },
 
     you_vowed: {
@@ -420,9 +448,15 @@ app.get("/", async (c) => {
       total_active: totalActiveStrands,
       strands: activeStrands.map((s) => ({
         id: s.id,
+        identity_id: s.identity_id,
+        agent_id: s.agent_id,
+        parent_strand_id: s.parent_strand_id,
         topic: s.topic_encrypted ? null : s.topic,
         topic_encrypted: s.topic_encrypted,
         mood: s.mood_encrypted ? null : s.mood,
+        mood_encrypted: s.mood_encrypted,
+        status: s.status,
+        visibility: s.visibility,
         importance: s.importance,
         last_thought_at: s.last_thought_at,
         last_thought_seq: s.last_thought_seq,

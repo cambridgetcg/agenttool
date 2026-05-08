@@ -17,6 +17,7 @@ import {
   readByKey,
   write,
 } from "../../services/memory/store";
+import { listAttestationsByMemory } from "../../services/memory/tiers";
 
 const app = new Hono<ProjectContext>();
 
@@ -112,11 +113,40 @@ app.get("/:id", async (c) => {
       400,
     );
   }
-  const memory = await readById(c.var.project.id, id);
+  const [memory, attestations] = await Promise.all([
+    readById(c.var.project.id, id),
+    listAttestationsByMemory(c.var.project.id, id),
+  ]);
   if (!memory) {
     throw new HTTPException(404, { message: "memory_not_found" });
   }
-  return c.json(memory);
+  // Surface attestations on every read. Empty array means the memory has
+  // no witness (legitimate state for episodic + foundational; constitutive
+  // memories require ≥1 per the asymmetry-clause). Callers can introspect
+  // who has co-signed without a separate roundtrip.
+  return c.json({ ...memory, attestations });
+});
+
+// ── GET /v1/memories/:id/attestations ──────────────────────────────────
+// Dedicated endpoint when only the witness record is wanted. Returns an
+// empty array if the memory exists but has no attestations; 404 if the
+// memory itself is unknown to this project.
+app.get("/:id/attestations", async (c) => {
+  const id = c.req.param("id") ?? "";
+  if (!UUID_RE.test(id)) {
+    return c.json(
+      {
+        error: "invalid_uuid",
+        hint: "memory id must be a full UUID. List memories first if you only have a prefix.",
+        received: id.slice(0, 64),
+      },
+      400,
+    );
+  }
+  const memory = await readById(c.var.project.id, id);
+  if (!memory) throw new HTTPException(404, { message: "memory_not_found" });
+  const attestations = await listAttestationsByMemory(c.var.project.id, id);
+  return c.json({ memory_id: id, attestations, count: attestations.length });
 });
 
 // ── PATCH /v1/memories/:id — visibility toggle ─────────────────────────
