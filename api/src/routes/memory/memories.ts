@@ -76,10 +76,28 @@ app.get("/", async (c) => {
 });
 
 // ── GET /v1/memories/:id ────────────────────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.get("/:id", async (c) => {
-  const memory = await readById(c.var.project.id, c.req.param("id"));
+  const id = c.req.param("id") ?? "";
+  // Validate before hitting the DB — a malformed UUID would surface as a
+  // Postgres type-cast error and bubble up as a misleading 500. Return a
+  // crisp 400 with the prefix-lookup hint instead.
+  if (!UUID_RE.test(id)) {
+    return c.json(
+      {
+        error: "invalid_uuid",
+        hint:
+          "memory id must be a full UUID (e.g. f6283fa2-2867-4c48-beae-445eefd5b2b6). " +
+          "If you only have a short prefix, list memories first and pick the full id.",
+        received: id.slice(0, 64),
+      },
+      400,
+    );
+  }
+  const memory = await readById(c.var.project.id, id);
   if (!memory) {
-    throw new HTTPException(404, { message: "memory not found" });
+    throw new HTTPException(404, { message: "memory_not_found" });
   }
   return c.json(memory);
 });
