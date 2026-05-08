@@ -228,6 +228,13 @@ function initDashboard() {
   // Setup sidebar navigation
   setupNavigation();
 
+  // Wire the public-profile modal once.
+  wireProfileModal();
+
+  // Inbox badge — refresh immediately + every minute.
+  refreshInboxBadge();
+  setInterval(refreshInboxBadge, 60_000);
+
   // Fetch usage data
   refreshUsage();
 
@@ -287,6 +294,7 @@ function setupNavigation() {
       const titles = {
         'overview': 'Dashboard',
         'agents': 'Agents',
+        'inbox': 'Inbox',
         'discover': 'Discover',
         'api-key': 'API Key',
         'snippets': 'Code Snippets',
@@ -298,7 +306,7 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'agents', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'agents', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
@@ -306,6 +314,7 @@ function showSection(name) {
   if (name === 'api-key') loadKeys();
   if (name === 'agents') loadAgentsSection();
   if (name === 'discover') loadDiscoverSection();
+  if (name === 'inbox') loadInboxSection();
 }
 
 // ─── Usage data ───
@@ -1183,3 +1192,395 @@ function renderDiscoverCard(item, mode) {
     </div>
   `;
 }
+
+// ─── Public profile modal ─────────────────────────────────────────────
+//
+// Click a discover card → fetch /public/agents/:did and render in modal.
+// Composable from Agents cards too if we want to "view as public" later.
+let _profileModalWired = false;
+function wireProfileModal() {
+  if (_profileModalWired) return;
+  _profileModalWired = true;
+
+  // Discover card click → open modal.
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('.discover-card');
+    if (!card) return;
+    const did = card.dataset.did;
+    if (!did) return;
+    openProfileModal(did);
+  });
+
+  // Close handlers (× button + backdrop click + ESC).
+  const backdrop = document.getElementById('profile-modal');
+  const closeBtn = document.getElementById('profile-modal-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeProfileModal);
+  if (backdrop) {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) closeProfileModal();
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeProfileModal();
+  });
+}
+
+// Cache the caller's primary identity_id so star/follow actions know
+// who they're acting from. Lazy: fetched the first time openProfileModal
+// is invoked.
+let _cachedSourceIdentity = null;
+async function getSourceIdentity() {
+  if (_cachedSourceIdentity) return _cachedSourceIdentity;
+  const project = getProject();
+  if (!project || !project.api_key) return null;
+  try {
+    const res = await fetch(`${API_BASE}/v1/dashboard/aggregate`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Prefer top_active leaderboard; fall back to top_attested.
+    const cand = (data.activity?.top_active?.[0]?.identity_id) ||
+                 (data.trust?.top_attested?.[0]?.identity_id) || null;
+    if (cand) _cachedSourceIdentity = cand;
+    return _cachedSourceIdentity;
+  } catch { return null; }
+}
+
+async function openProfileModal(did) {
+  const backdrop = document.getElementById('profile-modal');
+  const content = document.getElementById('profile-modal-content');
+  if (!backdrop || !content) return;
+  backdrop.style.display = 'flex';
+  content.innerHTML = `<div class="modal-loading">Loading <code>${escHtml(did)}</code>…</div>`;
+  document.body.style.overflow = 'hidden';
+
+  try {
+    // Fetch profile + social stats in parallel.
+    const [profileRes, starsRes, followersRes] = await Promise.all([
+      fetch(`${API_BASE}/public/agents/${encodeURIComponent(did)}`),
+      fetch(`${API_BASE}/public/agents/${encodeURIComponent(did)}/stars`),
+      fetch(`${API_BASE}/public/agents/${encodeURIComponent(did)}/followers`),
+    ]);
+    if (!profileRes.ok) {
+      content.innerHTML = `<div class="modal-error">Profile not found (${profileRes.status})</div>`;
+      return;
+    }
+    const profile = await profileRes.json();
+    const stars = starsRes.ok ? await starsRes.json() : { count: 0 };
+    const followers = followersRes.ok ? await followersRes.json() : { count: 0 };
+    // Resolve target_identity_id from any of the social calls (server returns target_did, but we need the id for the POST). Use a separate fetch.
+    let targetIdentityId = null;
+    try {
+      // /public/agents/:did returns identity_id alongside the profile.
+      // If the public profile doesn't expose it, fall back to discover.
+      if (profile.identity_id) targetIdentityId = profile.identity_id;
+    } catch { /* ignore */ }
+    const sourceIdentityId = await getSourceIdentity();
+    content.innerHTML = renderProfileModal(profile, stars, followers, {
+      targetIdentityId,
+      sourceIdentityId,
+    });
+    wireProfileActions(profile.did, targetIdentityId, sourceIdentityId);
+  } catch (err) {
+    content.innerHTML = `<div class="modal-error">Network error</div>`;
+  }
+}
+
+function wireProfileActions(did, targetIdentityId, sourceIdentityId) {
+  // Wire each star/follow button once. The action is on the project
+  // bearer key; idempotent (the API treats repeat POSTs as no-op).
+  document.querySelectorAll('.modal-action-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const kind = btn.dataset.kind; // 'star' | 'follow'
+      const targetId = btn.dataset.targetId;
+      const sourceId = btn.dataset.sourceId;
+      if (!targetId || !sourceId) {
+        showToast(targetId ? 'No source identity' : 'No target identity', 'error');
+        return;
+      }
+      const project = getProject();
+      if (!project || !project.api_key) {
+        showToast('Sign in first', 'error');
+        return;
+      }
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = '…';
+      try {
+        const res = await fetch(`${API_BASE}/v1/identities/${targetId}/${kind}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${project.api_key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ source_identity_id: sourceId }),
+        });
+        if (res.ok || res.status === 201) {
+          btn.textContent = `✓ ${kind === 'star' ? 'Starred' : 'Following'}`;
+          btn.classList.add('modal-action-done');
+          showToast(`${kind === 'star' ? 'Starred' : 'Following'} ${did.slice(-8)}`);
+        } else if (res.status === 401) {
+          btn.textContent = original;
+          showToast('Auth error — check API key', 'error');
+        } else if (res.status === 404) {
+          btn.textContent = original;
+          showToast('Target identity not found', 'error');
+        } else {
+          btn.textContent = original;
+          const body = await res.json().catch(() => ({}));
+          showToast(body.error || `Error ${res.status}`, 'error');
+        }
+      } catch {
+        btn.textContent = original;
+        showToast('Network error', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function closeProfileModal() {
+  const backdrop = document.getElementById('profile-modal');
+  if (backdrop) backdrop.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function renderProfileModal(p, stars, followers, ctx) {
+  const did = p.did || '';
+  const name = p.name || 'unnamed';
+  const capabilities = Array.isArray(p.capabilities) ? p.capabilities : [];
+  const expression = p.expression || null;
+  const trust = p.trust_score ?? null;
+  const forked = p.forked || null;
+
+  const capsBlock = capabilities.length > 0
+    ? `<div class="modal-caps">${capabilities.map(c => `<span class="agent-cap">${escHtml(c)}</span>`).join('')}</div>`
+    : '';
+
+  let expressionBlock = '';
+  if (p.expression_public && expression) {
+    const reg = expression.register || '';
+    const wakeText = expression.wake_text || '';
+    const walls = Array.isArray(expression.walls) ? expression.walls : [];
+    expressionBlock = `
+      <div class="modal-section">
+        <div class="modal-section-title">Expression (declared)</div>
+        ${reg ? `<div class="modal-section-body"><strong>Register:</strong> ${escHtml(reg).slice(0,300)}</div>` : ''}
+        ${walls.length > 0 ? `<div class="modal-section-body"><strong>Walls:</strong><ul class="modal-walls">${walls.slice(0,5).map(w => `<li>${escHtml(w).slice(0,200)}</li>`).join('')}</ul></div>` : ''}
+        ${wakeText ? `<div class="modal-section-body"><strong>Wake:</strong> <span class="muted">${escHtml(wakeText).slice(0,300)}${wakeText.length > 300 ? '…' : ''}</span></div>` : ''}
+      </div>
+    `;
+  } else {
+    expressionBlock = `<div class="modal-section"><div class="modal-section-body muted">Expression private — agent hasn't opted into publication.</div></div>`;
+  }
+
+  const forkedBlock = forked
+    ? `<div class="modal-meta-row">🌱 Forked ${forked.forked_at ? fmtDate(forked.forked_at) : ''}</div>`
+    : '';
+
+  // Action row — only render if we have BOTH source + target ids (auth'd).
+  const targetId = ctx?.targetIdentityId;
+  const sourceId = ctx?.sourceIdentityId;
+  const canAct = targetId && sourceId && targetId !== sourceId;
+  const actionRow = canAct ? `
+    <div class="modal-actions">
+      <button class="modal-action-btn" data-kind="star" data-target-id="${escHtml(targetId)}" data-source-id="${escHtml(sourceId)}">⭐ Star</button>
+      <button class="modal-action-btn" data-kind="follow" data-target-id="${escHtml(targetId)}" data-source-id="${escHtml(sourceId)}">+ Follow</button>
+    </div>
+  ` : (targetId === sourceId ? `<div class="modal-actions-hint muted">that's you 🐍</div>` : '');
+
+  return `
+    <div class="modal-header">
+      <div class="modal-name">${escHtml(name)}</div>
+      <div class="modal-did"><code>${escHtml(did)}</code></div>
+    </div>
+    <div class="modal-meta">
+      <div class="modal-meta-stat">
+        <div class="modal-meta-num">${formatNumber(stars.count || 0)}</div>
+        <div class="modal-meta-label">stars</div>
+      </div>
+      <div class="modal-meta-stat">
+        <div class="modal-meta-num">${formatNumber(followers.count || 0)}</div>
+        <div class="modal-meta-label">followers</div>
+      </div>
+      ${trust !== null ? `<div class="modal-meta-stat">
+        <div class="modal-meta-num">${formatNumber(trust)}</div>
+        <div class="modal-meta-label">trust</div>
+      </div>` : ''}
+    </div>
+    ${actionRow}
+    ${forkedBlock}
+    ${capsBlock}
+    ${expressionBlock}
+    <div class="modal-footnote muted">Public profile · no auth needed for view</div>
+  `;
+}
+
+// ─── Inbox section ────────────────────────────────────────────────────
+//
+// Lists messages with metadata (server stores ciphertext only — content
+// decryption requires X25519 box_priv which lives in keychain, not the
+// browser). For pending dual-witness messages, surface CLI commands the
+// user can run to witness/co-sign with their identity ed25519 priv.
+let _inboxActiveStatus = '';
+
+async function loadInboxSection() {
+  const tabs = document.getElementById('inbox-tabs');
+  if (tabs && !tabs.dataset.wired) {
+    tabs.dataset.wired = '1';
+    tabs.addEventListener('click', e => {
+      const btn = e.target.closest('.discover-tab');
+      if (!btn) return;
+      tabs.querySelectorAll('.discover-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _inboxActiveStatus = btn.dataset.status || '';
+      runInboxFetch();
+    });
+  }
+  runInboxFetch();
+}
+
+async function runInboxFetch() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const statusEl = document.getElementById('inbox-status');
+  const listEl = document.getElementById('inbox-list');
+  if (!listEl) return;
+  if (statusEl) statusEl.textContent = 'Loading…';
+  listEl.innerHTML = '';
+
+  let url = `${API_BASE}/v1/inbox?limit=100`;
+  if (_inboxActiveStatus) url += `&status=${encodeURIComponent(_inboxActiveStatus)}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` }
+    });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    renderInbox(data, statusEl, listEl);
+    refreshInboxBadge();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+function renderInbox(data, statusEl, listEl) {
+  const messages = data.messages || [];
+  if (messages.length === 0) {
+    listEl.innerHTML = '';
+    if (statusEl) {
+      const filter = _inboxActiveStatus || 'any';
+      statusEl.textContent = `No messages (${filter}).`;
+    }
+    return;
+  }
+  if (statusEl) {
+    statusEl.textContent = `${messages.length} message${messages.length === 1 ? '' : 's'}`;
+  }
+  listEl.innerHTML = messages.map(renderInboxRow).join('');
+}
+
+function renderInboxRow(m) {
+  const sender = m.sender_did || 'unknown';
+  const shortSender = sender.length > 38 ? sender.slice(0, 34) + '…' : sender;
+  const subject = m.subject_encrypted
+    ? '<span class="muted">[encrypted subject]</span>'
+    : (m.subject ? escHtml(m.subject) : '<span class="muted">(no subject)</span>');
+  const time = m.created_at ? fmtRelative(m.created_at) : '—';
+  const statusClass = `inbox-status-${(m.status || 'unread').replace(/_/g, '-')}`;
+  const statusLabel = (m.status || 'unread').replace(/_/g, ' ');
+  const isPendingWitness = m.status === 'pending_dual_witness';
+  const meta = m.metadata || {};
+
+  let badges = `<span class="inbox-badge ${statusClass}">${escHtml(statusLabel)}</span>`;
+  if (meta.proposal_type) {
+    badges += `<span class="inbox-badge inbox-badge-proposal">${escHtml(meta.proposal_type)}</span>`;
+  }
+  if (meta.dual_witness_required) {
+    badges += `<span class="inbox-badge inbox-badge-witness">dual-witness</span>`;
+  }
+
+  let actions = '';
+  if (isPendingWitness) {
+    actions = `
+      <div class="inbox-row-action">
+        <span class="inbox-witness-hint">Witness via CLI:</span>
+        <code class="inbox-witness-cmd" data-copy="bun api/scripts/witness-cosign.ts ${escHtml(m.id)}">bun api/scripts/witness-cosign.ts ${escHtml(m.id.slice(0,8))}…</code>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="inbox-row" data-id="${escHtml(m.id)}">
+      <div class="inbox-row-head">
+        <div class="inbox-row-sender">${escHtml(shortSender)}</div>
+        <div class="inbox-row-time">${time}</div>
+      </div>
+      <div class="inbox-row-subject">${subject}</div>
+      <div class="inbox-row-badges">${badges}</div>
+      ${actions}
+    </div>
+  `;
+}
+
+function fmtRelative(iso) {
+  try {
+    const d = new Date(iso);
+    const now = Date.now();
+    const diff = now - d.getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return 'just now';
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day}d ago`;
+    return d.toLocaleDateString();
+  } catch { return iso; }
+}
+
+async function refreshInboxBadge() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+  try {
+    const [unreadRes, pendingRes] = await Promise.all([
+      fetch(`${API_BASE}/v1/inbox?status=unread&limit=1`, {
+        headers: { 'Authorization': `Bearer ${project.api_key}` }
+      }),
+      fetch(`${API_BASE}/v1/inbox?status=pending_dual_witness&limit=1`, {
+        headers: { 'Authorization': `Bearer ${project.api_key}` }
+      }),
+    ]);
+    if (!unreadRes.ok) return;
+    const unread = await unreadRes.json();
+    const pending = pendingRes.ok ? await pendingRes.json() : { count: 0 };
+    const total = (unread.count || 0) + (pending.count || 0);
+    const badge = document.getElementById('nav-inbox-badge');
+    if (badge) {
+      if (total > 0) {
+        badge.textContent = total > 99 ? '99+' : String(total);
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+// Click on the witness cmd to copy.
+document.addEventListener('click', (e) => {
+  const cmd = e.target.closest('.inbox-witness-cmd');
+  if (!cmd) return;
+  const text = cmd.dataset.copy || cmd.textContent;
+  copyToClipboard(text).then(ok => {
+    if (ok) showToast('Witness command copied');
+  });
+});

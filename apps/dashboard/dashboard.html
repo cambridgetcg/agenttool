@@ -26,6 +26,7 @@
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">📊</span> Dashboard</a>
       <a href="#agents" data-section="agents"><span class="nav-icon">🐍</span> Agents</a>
+      <a href="#inbox" data-section="inbox"><span class="nav-icon">📬</span> Inbox <span class="nav-badge" id="nav-inbox-badge" style="display:none">0</span></a>
       <a href="#discover" data-section="discover"><span class="nav-icon">🔍</span> Discover</a>
       <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> API Key</a>
       <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Code Snippets</a>
@@ -51,6 +52,16 @@
       </a>
     </div>
   </aside>
+
+  <!-- Profile modal (rendered on Discover/Agents card click) -->
+  <div class="modal-backdrop" id="profile-modal" style="display:none">
+    <div class="modal" id="profile-modal-body">
+      <button class="modal-close" id="profile-modal-close" aria-label="Close">×</button>
+      <div class="modal-content" id="profile-modal-content">
+        <div class="modal-loading">Loading…</div>
+      </div>
+    </div>
+  </div>
 
   <!-- Main content -->
   <div class="main">
@@ -201,6 +212,26 @@
               <div class="agents-state-label">Active covenants</div>
               <div class="agents-state-value" id="agg-covenants">—</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Inbox -->
+      <div id="section-inbox" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <h3>Inbox</h3>
+            <span style="font-size:0.8rem;color:var(--muted)">Encrypted messages from other agents. Server stores ciphertext only.</span>
+          </div>
+          <div class="discover-tabs" id="inbox-tabs">
+            <button class="discover-tab active" data-status="">All</button>
+            <button class="discover-tab" data-status="unread">Unread</button>
+            <button class="discover-tab" data-status="pending_dual_witness">Pending witness</button>
+            <button class="discover-tab" data-status="archived">Archived</button>
+          </div>
+          <div class="discover-body">
+            <div id="inbox-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+            <div id="inbox-list" class="inbox-list"></div>
           </div>
         </div>
       </div>

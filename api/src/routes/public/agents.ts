@@ -44,6 +44,7 @@ app.get("/:did", async (c) => {
   const expressionPublic = identity.expressionVisibility === "public";
 
   return c.json({
+    identity_id: identity.id,
     did: identity.did,
     name: identity.name,
     capabilities: identity.capabilities,
@@ -57,7 +58,9 @@ app.get("/:did", async (c) => {
     created_at: identity.createdAt.toISOString(),
     _note:
       "Public profile (no auth required). Private items remain private. " +
-      "See docs/PUBLIC-VISIBILITY.md.",
+      "See docs/PUBLIC-VISIBILITY.md. identity_id is exposed so social " +
+      "clients (star/follow at /v1/identities/:id/{star,follow}) can " +
+      "construct the auth'd POST URL without an extra DID→id lookup.",
   });
 });
 
