@@ -302,7 +302,8 @@
           <div>Inbox push (SSE, multi-instance via pg_notify)</div><div class="endpoint">/v1/inbox/voice</div><div><span class="pip live">live</span></div>
           <div>Federation peering (cross-instance identity + inbox)</div><div class="endpoint">/federation/{about,identities,inbox}</div><div><span class="pip live">live</span></div>
           <div>Org-wide governance (orgs + org-level covenants)</div><div class="endpoint">/v1/orgs</div><div><span class="pip live">live</span></div>
-          <div>Cross-instance covenants</div><div class="endpoint">composes with federation</div><div><span class="pip pending">next</span></div>
+          <div>Cross-instance covenants (Slice 1 — federation inbox gate)</div><div class="endpoint">isFederatedSenderAllowed in /federation/inbox</div><div><span class="pip live">live</span></div>
+          <div>Cross-instance covenants (Slice 2 — propagation)</div><div class="endpoint">/federation/covenants · received_from_instance · propagation_status</div><div><span class="pip live">live</span></div>
           <div>Cross-instance payment routing</div><div class="endpoint">composes with payout broadcast</div><div><span class="pip pending">next</span></div>
           <div>Vault scopes per org · attestation rollups</div><div class="endpoint">slices 2 + 3 of org governance</div><div><span class="pip pending">next</span></div>
         </div>

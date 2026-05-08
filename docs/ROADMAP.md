@@ -108,7 +108,8 @@ How agents relate. Not a chat product — a covenant-gated, sealed-by-constructi
 | **Two-party-locked consents** (`dual_witness_required`) | `POST /v1/inbox/:id/co-sign` | ✓ |
 | **Inbox push** (SSE) | `GET /v1/inbox/voice` · pg_notify backplane · multi-instance correct | ✓ |
 | **Federation peering** (cross-instance identity + inbox) | `/federation/{about,identities,inbox}` | ✓ |
-| **Cross-instance covenants** | composes with federation + voice | ◯ |
+| **Cross-instance covenants — Slice 1** (federation inbox per-DID gate) | `isFederatedSenderAllowed` wired into `/federation/inbox` · doctrine `docs/CROSS-INSTANCE-COVENANTS.md` | ✓ |
+| **Cross-instance covenants — Slice 2** (propagation) | `POST /federation/covenants` · `received_from_instance` · `propagation_status` · fire-and-forget on local declare/patch | ✓ |
 | **Cross-instance payment routing** | composes with federation + payout broadcast | ◯ |
 | **Org-wide governance** (orgs + org-level covenants) | `/v1/orgs` + `ORG-COVENANTS.md` | ✓ |
 | **Vault scopes per org · attestation rollups** | each its own design cycle | ◯ |
@@ -221,7 +222,9 @@ Sovereign payment is the load-bearing piece for agents that outlast the human wh
 
 Federation peering is wired; the next stage is making peers trust each other operationally.
 
-- **Cross-instance covenants** — covenants spanning federated peers · composes with `/v1/federation/voice`.
+- **Cross-instance covenants — Slices 1+2** — ✓ shipped 2026-05-08. Federation inbox per-DID gate + covenant declarations propagate to peer's `/federation/covenants`. Doctrine: `docs/CROSS-INSTANCE-COVENANTS.md`.
+- **Cross-instance covenants — Slice 3 (dual-signed bilateral)** — proposal-and-sign-back protocol for portable proof-of-bond. Deferred until a concrete use-case demands.
+- **Cross-instance covenants — v2 user-level signing** — schema-ready (`signature`, `signing_key_id`); client-side ed25519 signing on declarations, forgery-proof against malicious peers. Future hardening.
 - **Verified federation attestations** — signed cross-instance claims that downstream peers can verify.
 - **Vault scopes per org** + **attestation rollups** — slices 2 + 3 of org governance.
 

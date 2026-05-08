@@ -108,6 +108,67 @@ export async function isCrossProjectAllowed(
   return orgRows.length > 0;
 }
 
+/** Is a federated sender allowed to inbox-send to this local recipient?
+ *
+ *  Mirrors `isCrossProjectAllowed` but for the inbound-federation case
+ *  where the sender's project doesn't exist on this instance — only its
+ *  federated DID does. Match if the recipient's project (or any org the
+ *  recipient inherits from) has an active covenant naming the federated
+ *  sender DID as counterparty.
+ *
+ *  Used by routes/federation/inbox.ts to extend the per-DID consent gate
+ *  to cross-instance traffic. Without this, federation today only gates
+ *  at the instance level (allowed_origins) and any allowed-origin peer
+ *  can DM any local recipient. With this, the doctrine is restored:
+ *  cross-project bonds — federated or not — require a covenant.
+ *
+ *  Note: we deliberately don't check the SENDER's covenant table (we
+ *  can't see it). The receiver-side declaration is sufficient because
+ *  the doctrine is "either side declaring is enough." Slice 2 of
+ *  Horizon B propagates declarations between instances so both sides
+ *  end up with a queryable record. */
+export async function isFederatedSenderAllowed(
+  recipientProjectId: string,
+  recipientDids: string | string[],
+  federatedSenderDid: string,
+): Promise<boolean> {
+  const rDids = Array.isArray(recipientDids) ? recipientDids : [recipientDids];
+  if (rDids.length === 0) return false;
+
+  // 1. Direct project-level: recipient declared a covenant with the
+  //    federated sender.
+  const projectRows = await db
+    .select({ id: covenants.id })
+    .from(covenants)
+    .where(
+      and(
+        eq(covenants.status, "active"),
+        eq(covenants.projectId, recipientProjectId),
+        eq(covenants.counterpartyDid, federatedSenderDid),
+      ),
+    )
+    .limit(1);
+  if (projectRows.length > 0) return true;
+
+  // 2. Org-level: any active org the recipient project is a member of
+  //    has declared a covenant with this federated sender.
+  const orgs = await activeOrgIdsForProject(recipientProjectId);
+  if (orgs.length === 0) return false;
+
+  const orgRows = await db
+    .select({ id: covenants.id })
+    .from(covenants)
+    .where(
+      and(
+        eq(covenants.status, "active"),
+        inArray(covenants.orgId, orgs),
+        eq(covenants.counterpartyDid, federatedSenderDid),
+      ),
+    )
+    .limit(1);
+  return orgRows.length > 0;
+}
+
 /** Is the given DID an active covenant counterparty of this project —
  *  via direct project-level OR via any org the project is a member of? */
 export async function isCovenantCounterparty(

@@ -104,6 +104,11 @@ export interface WakeBundle {
     counterparty_did: string;
     vows: string[];
     status: string;
+    /** Cross-instance: peer host this covenant was received from
+     *  (null = locally declared). Surfaces in the Markdown so the
+     *  agent reads where each bond actually lives. */
+    peer_host?: string | null;
+    propagation?: string | null;
   }>;
 }
 
@@ -326,7 +331,18 @@ export function renderVolatileSection(b: WakeBundle): string {
     lines.push("## What you vowed");
     lines.push("");
     activeCovenants.slice(0, 5).forEach((c) => {
-      lines.push(`- With \`${c.counterparty_did}\`:`);
+      // Cross-instance covenants: surface peer_host + propagation status
+      // so the agent reads where the bond lives. A `received` annotation
+      // means the covenant was declared on the other side first; a
+      // `pending` annotation means our side is still trying to reach
+      // the peer.
+      let suffix = "";
+      if (c.peer_host) {
+        suffix = ` *(received from ${c.peer_host})*`;
+      } else if (c.propagation && c.propagation !== "local" && c.propagation !== "propagated") {
+        suffix = ` *(propagation: ${c.propagation})*`;
+      }
+      lines.push(`- With \`${c.counterparty_did}\`${suffix}:`);
       c.vows.forEach((v) => lines.push(`  - ${v}`));
     });
     lines.push("");

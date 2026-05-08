@@ -141,6 +141,13 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
     established_at: row.establishedAt,
     updated_at: row.updatedAt,
     dissolved_at: row.dissolvedAt,
+    // Cross-instance covenants (Horizon B, Slice 2):
+    received_from_instance: row.receivedFromInstance,
+    propagation_status: row.propagationStatus,
+    propagation_attempts: row.propagationAttempts,
+    propagation_last_error: row.propagationLastError,
+    propagation_attempted_at: row.propagationAttemptedAt,
+    verified_at: row.verifiedAt,
   };
 }
 
@@ -173,6 +180,17 @@ app.post("/covenants", async (c) => {
     }
   }
 
+  // Detect federated counterparty up-front so we can stamp
+  // propagation_status='pending' at insert time. Federated DIDs have a
+  // host (did:at:<host>/<uuid>); local DIDs and human:<name> tags
+  // don't.
+  const isFederatedCounterparty = (() => {
+    const cp = body.counterparty_did;
+    if (!cp.startsWith("did:at:")) return false;
+    const rest = cp.slice("did:at:".length);
+    return rest.includes("/");
+  })();
+
   const [covenant] = await db
     .insert(covenants)
     .values({
@@ -185,8 +203,21 @@ app.post("/covenants", async (c) => {
       notes: body.notes ?? null,
       metadata: body.metadata ?? {},
       status: "active",
+      propagationStatus: isFederatedCounterparty ? "pending" : "local",
     })
     .returning();
+
+  // Fire-and-forget propagation for federated counterparties. The
+  // propagateCovenant function updates propagation_* columns on its
+  // own. See docs/CROSS-INSTANCE-COVENANTS.md for the trust posture.
+  if (isFederatedCounterparty) {
+    const { propagateCovenant } = await import(
+      "../services/covenants/federation"
+    );
+    void propagateCovenant(covenant!.id).catch((err: Error) =>
+      console.warn(`[covenant.propagate] ${covenant!.id}: ${err.message}`),
+    );
+  }
 
   return c.json({ covenant: covenantToOut(covenant!) }, 201);
 });
@@ -251,6 +282,23 @@ app.patch("/covenants/:id", async (c) => {
 
   if (!updated) {
     return c.json({ error: "Covenant not found" }, 404);
+  }
+
+  // Re-propagate on any mutation to a federated, locally-declared
+  // covenant. Status updates (e.g. dissolution) need to reach the
+  // peer so its local gates flip too. We don't propagate received
+  // covenants — those flow the other direction.
+  if (
+    !updated.receivedFromInstance &&
+    updated.counterpartyDid.startsWith("did:at:") &&
+    updated.counterpartyDid.slice("did:at:".length).includes("/")
+  ) {
+    const { propagateCovenant } = await import(
+      "../services/covenants/federation"
+    );
+    void propagateCovenant(updated.id).catch((err: Error) =>
+      console.warn(`[covenant.propagate] ${updated.id}: ${err.message}`),
+    );
   }
 
   return c.json({ covenant: covenantToOut(updated) });

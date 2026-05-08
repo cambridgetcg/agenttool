@@ -8,6 +8,7 @@
 import { Hono } from "hono";
 
 import { getSettings } from "../../services/federation/store";
+import covenantsInbound from "./covenants";
 import identitiesRouter from "./identities";
 import inboxInbound from "./inbox";
 
@@ -15,6 +16,7 @@ const app = new Hono();
 
 app.route("/identities", identitiesRouter);
 app.route("/inbox", inboxInbound);
+app.route("/covenants", covenantsInbound);
 
 // /federation/about — instance info for federation discovery.
 app.get("/about", async (c) => {
@@ -30,6 +32,7 @@ app.get("/about", async (c) => {
     capabilities: {
       inbox: settings.enabled,
       identity_resolution: settings.enabled,
+      covenants: settings.enabled,
     },
     did_method: "did:at",
     did_format: {
@@ -48,6 +51,7 @@ app.get("/", (c) =>
       about: "GET /federation/about",
       identities: "GET /federation/identities/:uuid",
       inbox: "POST /federation/inbox",
+      covenants: "POST /federation/covenants",
     },
     docs: "docs/FEDERATION.md",
   }),

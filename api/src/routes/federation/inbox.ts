@@ -9,13 +9,18 @@
  *    6. Insert into inbox.messages with sender_instance + federation_verified=true
  *
  *  Same shape as /v1/inbox POST, minus the bearer-side ownership check
- *  (replaced by federation sig + sender-instance verification). */
+ *  (replaced by federation sig + sender-instance verification).
+ *
+ *  Covenant gate (Horizon B, Slice 1): runs at step 5 — recipient must
+ *  have an active covenant naming the federated sender DID. See
+ *  docs/CROSS-INSTANCE-COVENANTS.md. */
 
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
+import { isFederatedSenderAllowed } from "../../services/covenants/check";
 import { db } from "../../db/client";
 import { identities, identityBoxKeys } from "../../db/schema/identity";
 import { inboxMessages } from "../../db/schema/inbox";
@@ -121,7 +126,33 @@ app.post("/", async (c) => {
     throw new HTTPException(404, { message: "recipient_box_key_not_found" });
   }
 
-  // 5. Resolve sender's signing pubkey via federation.
+  // 5. Cross-instance covenant gate (Horizon B, Slice 1).
+  // Per-DID consent: the recipient's project must have an active
+  // covenant naming this federated sender. Without this, federation
+  // would only gate at instance level (allowed_origins) — any allowed
+  // peer could DM any local recipient. This restores the doctrine that
+  // every cross-project bond — federated or not — requires a covenant.
+  // Runs BEFORE the (network-bound) resolver step so misses fast-fail
+  // without a peer round-trip.
+  const allowed = await isFederatedSenderAllowed(
+    recipient.projectId,
+    [recipient.did],
+    m.sender_did,
+  );
+  if (!allowed) {
+    return c.json(
+      {
+        error: "covenant_required",
+        hint:
+          `recipient has no active covenant with this federated sender. ` +
+          `Recipient must POST /v1/covenants with counterparty_did=${m.sender_did} ` +
+          `and status='active'. See https://docs.agenttool.dev/continuity#covenants.`,
+      },
+      403,
+    );
+  }
+
+  // 6. Resolve sender's signing pubkey via federation.
   let senderResolution;
   try {
     senderResolution = await resolveFederatedDid(m.sender_did);
@@ -136,7 +167,7 @@ app.post("/", async (c) => {
     return c.json({ error: "sender_signing_key_not_found_at_origin" }, 401);
   }
 
-  // 6. Verify signature.
+  // 7. Verify signature.
   // Canonical bytes match the local /v1/inbox shape: recipient_did is
   // included verbatim as the sender originally signed it. We accept both
   // local-form and federated-form recipient_did in the canonical bytes —
@@ -153,7 +184,7 @@ app.post("/", async (c) => {
     return c.json({ error: "signature_invalid" }, 401);
   }
 
-  // 7. Insert.
+  // 8. Insert.
   const [inserted] = await db
     .insert(inboxMessages)
     .values({
@@ -177,7 +208,7 @@ app.post("/", async (c) => {
     })
     .returning({ id: inboxMessages.id, createdAt: inboxMessages.createdAt });
 
-  // 8. Log peer + notify SSE subscribers (non-fatal if notify fails).
+  // 9. Log peer + notify SSE subscribers (non-fatal if notify fails).
   void recordInboundPeer(senderParsed.host);
   void publishArrival(recipient.id, inserted!.id);
 

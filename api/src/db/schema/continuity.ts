@@ -67,11 +67,30 @@ export const covenants = continuitySchema.table(
       .notNull()
       .defaultNow(),
     dissolvedAt: timestamp("dissolved_at", { withTimezone: true }),
+
+    // ── Cross-instance covenants (Horizon B, Slice 2; 0016) ──────────
+    // Sender's ed25519 signature over canonical bytes; null for legacy
+    // pre-0016 rows.
+    signature: text("signature"),
+    signingKeyId: uuid("signing_key_id"),
+    // Null = locally declared. Populated = received via /federation/covenants
+    // from this peer host (matches federation.peer_instances.host).
+    receivedFromInstance: text("received_from_instance"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+
+    // Outbound propagation tracking — only meaningful for locally-
+    // declared covenants whose counterparty is federated.
+    propagationStatus: text("propagation_status").notNull().default("local"),
+    propagationAttempts: integer("propagation_attempts").notNull().default(0),
+    propagationLastError: text("propagation_last_error"),
+    propagationAttemptedAt: timestamp("propagation_attempted_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_covenants_agent").on(t.agentId),
     index("idx_covenants_project").on(t.projectId),
     index("idx_covenants_counterparty").on(t.counterpartyDid),
+    index("idx_covenants_received_instance").on(t.receivedFromInstance, t.status),
+    index("idx_covenants_pending_propagation").on(t.propagationStatus, t.propagationAttemptedAt),
   ],
 );
 

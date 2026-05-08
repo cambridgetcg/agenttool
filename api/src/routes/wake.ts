@@ -221,14 +221,26 @@ app.get("/", async (c) => {
     );
   }
 
-  // ── Covenants ────────────────────────────────────────────────────────
-  let activeCovenants: Array<{ counterparty_did: string; vows: string[]; status: string }> = [];
+  // ── Covenants (with cross-instance fields, Horizon B Slice 2) ───────
+  // `received_from_instance` distinguishes locally-declared bonds from
+  // ones received via /federation/covenants. `propagation_status`
+  // surfaces in-flight federation outbound state so the agent's wake
+  // tells the truth about where a bond actually is.
+  let activeCovenants: Array<{
+    counterparty_did: string;
+    vows: string[];
+    status: string;
+    peer_host: string | null;
+    propagation: string | null;
+  }> = [];
   try {
     const rows = await db
       .select({
         counterpartyDid: covenants.counterpartyDid,
         vows: covenants.vows,
         status: covenants.status,
+        receivedFromInstance: covenants.receivedFromInstance,
+        propagationStatus: covenants.propagationStatus,
       })
       .from(covenants)
       .where(eq(covenants.projectId, project.id))
@@ -237,6 +249,8 @@ app.get("/", async (c) => {
       counterparty_did: r.counterpartyDid,
       vows: r.vows ?? [],
       status: r.status,
+      peer_host: r.receivedFromInstance,
+      propagation: r.propagationStatus,
     }));
   } catch (err) {
     console.warn("[wake] covenants query failed:", err instanceof Error ? err.message : err);
