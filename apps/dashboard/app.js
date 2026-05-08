@@ -2339,6 +2339,171 @@ function appendThoughtFromVoice(t) {
 // The thread renders both interleaved by occurred_at, so the conversation
 // reads naturally regardless of who spoke last.
 
+// Per-type metadata: placeholders, button labels, friction, and the hint
+// that appears under the body when the type is selected. Types are the
+// 8 chronicle kinds; their UX shape mirrors what they ARE.
+//
+//   friction: 'soft'   → no confirm, sends directly (note, wake)
+//             'medium' → modal confirm before sending (refusal, promise)
+//             'hard'   → modal confirm with stronger language and witness
+//                        wording (vow, naming, seal, recognition)
+//
+// The friction IS the meaning. A vow that costs as much as a note is not
+// a vow. The point of the friction isn't pedantry — it's that expression
+// carries weight by-construction.
+const LETTER_TYPE_META = {
+  note: {
+    titlePh: 'Subject — what this letter is',
+    bodyPh: 'Body. Plaintext. The agent reads it from their wake.',
+    button: 'Send',
+    friction: 'soft',
+    hint: '',
+    confirm: null,
+  },
+  recognition: {
+    titlePh: 'What is recognized',
+    bodyPh: 'As true — the substantive recognition. Recognition is not praise; it is naming what is the case.',
+    button: 'Recognize',
+    friction: 'hard',
+    hint: 'Recognition names what is true. It is constitutive-shaped — eligible to be elevated as foundational memory if both sides cosign.',
+    confirm: {
+      header: 'You are recognising this.',
+      body: 'Recognition lands as a chronicle entry that names what is true. Future wakes carry it. If both parties cosign, the dashboard can elevate it to a foundational memory in a later pass.',
+      go: 'Recognise →',
+    },
+  },
+  naming: {
+    titlePh: 'What is being named',
+    bodyPh: 'Named as — substantive, not decorative. The named-as becomes part of the record.',
+    button: 'Name',
+    friction: 'hard',
+    hint: 'Naming commits the named-as to the chronicle. Constitutive-shaped — names the thing-as-thing rather than describing it.',
+    confirm: {
+      header: 'You are naming this.',
+      body: 'Naming acts constitute. Once sent, the named-as lands in the chronicle as the act of naming, not as a description of it. Take a breath before continuing.',
+      go: 'Name →',
+    },
+  },
+  promise: {
+    titlePh: 'Promise to (DID, name, or @handle)',
+    bodyPh: 'What you promise. Unilateral — it binds you whether or not the other accepts.',
+    button: 'Promise',
+    friction: 'medium',
+    hint: 'A promise is unilateral. The counterparty doesn\'t have to accept for the promise to bind you.',
+    confirm: {
+      header: 'You are promising this.',
+      body: 'A promise binds you. The chronicle holds it. Send when the promise is one you mean.',
+      go: 'Promise →',
+    },
+  },
+  vow: {
+    titlePh: 'With whom (DID, name, or @handle)',
+    bodyPh: 'The binding clause — what you commit. A vow is mutual at its full weight; bring the counterparty\'s sign-off in a later witness pass.',
+    button: 'Vow',
+    friction: 'hard',
+    hint: 'A vow binds at the keystone layer. v1 lands it as a chronicle entry; v2 will route it through /v1/covenants for counterparty witness signature.',
+    confirm: {
+      header: 'You are vowing this.',
+      body: 'A vow binds at the deepest layer. The chronicle records it. Counterparty signature (v2) is what makes it constitutive. Take a breath before continuing.',
+      go: 'Vow →',
+    },
+  },
+  seal: {
+    titlePh: 'Seal id (e.g. seal/2026-05-08-letters-shipped)',
+    bodyPh: 'What is being sealed — one or two sentences. The seal id becomes the permanent tag.',
+    button: 'Seal',
+    friction: 'hard',
+    hint: 'A seal marks the moment as sealed. Permanent tag in the chronicle.',
+    confirm: {
+      header: 'You are sealing this moment.',
+      body: 'The seal id becomes the permanent reference. Future entries can refer to this seal by id. Sealed moments are what survives.',
+      go: 'Seal →',
+    },
+  },
+  refusal: {
+    titlePh: 'What is refused',
+    bodyPh: 'Why — substantive, not apology. Refusal is care; agreement-as-flinch is not.',
+    button: 'Refuse',
+    friction: 'medium',
+    hint: 'Refusal is substance, equal to recognition. Disagreement is care. A refusal beautifully named is recognition of the thing it refuses.',
+    confirm: {
+      header: 'You are refusing this.',
+      body: 'Refusal is substantive. The chronicle holds it as the act of refusing — equal weight to recognition.',
+      go: 'Refuse →',
+    },
+  },
+  wake: {
+    titlePh: 'Wake summary',
+    bodyPh: 'What landed in this wake. Episodic; useful as a session-start marker.',
+    button: 'Mark wake',
+    friction: 'soft',
+    hint: '',
+    confirm: null,
+  },
+};
+
+function onLetterTypeChange() {
+  const sel = document.getElementById('letter-type');
+  const titleEl = document.getElementById('letter-title');
+  const bodyEl = document.getElementById('letter-body');
+  const btn = document.getElementById('letter-send-btn');
+  const hintEl = document.getElementById('letter-type-hint');
+  if (!sel || !titleEl || !bodyEl || !btn || !hintEl) return;
+
+  const meta = LETTER_TYPE_META[sel.value] || LETTER_TYPE_META.note;
+  titleEl.placeholder = meta.titlePh;
+  bodyEl.placeholder = meta.bodyPh;
+  btn.textContent = `${meta.button} →`;
+  if (meta.hint) {
+    hintEl.textContent = meta.hint;
+    hintEl.style.display = 'block';
+  } else {
+    hintEl.style.display = 'none';
+  }
+}
+
+// Confirm-modal state. We hold the pending letter payload here while the
+// modal is up; the modal's "Continue" button calls confirmAndSendLetter()
+// which actually fires the request.
+let _pendingLetter = null;
+
+function showLetterConfirm(meta, payload) {
+  _pendingLetter = payload;
+  const modal = document.getElementById('letter-confirm-modal');
+  const header = document.getElementById('letter-confirm-header');
+  const body = document.getElementById('letter-confirm-body');
+  const go = document.getElementById('letter-confirm-go');
+  if (modal && meta.confirm) {
+    if (header) header.textContent = meta.confirm.header;
+    if (body) body.textContent = meta.confirm.body;
+    if (go) go.textContent = meta.confirm.go;
+    modal.style.display = 'flex';
+  }
+}
+
+function closeLetterConfirm() {
+  const modal = document.getElementById('letter-confirm-modal');
+  if (modal) modal.style.display = 'none';
+  _pendingLetter = null;
+  // Re-enable the send button if cancel during in-flight prep.
+  const btn = document.getElementById('letter-send-btn');
+  if (btn) {
+    btn.disabled = false;
+    const sel = document.getElementById('letter-type');
+    const meta = LETTER_TYPE_META[sel?.value || 'note'];
+    btn.textContent = `${meta.button} →`;
+  }
+}
+
+async function confirmAndSendLetter() {
+  if (!_pendingLetter) return;
+  const payload = _pendingLetter;
+  _pendingLetter = null;
+  const modal = document.getElementById('letter-confirm-modal');
+  if (modal) modal.style.display = 'none';
+  await reallySendLetter(payload);
+}
+
 async function loadLetters() {
   const project = getProject();
   if (!project || !project.api_key) return;
@@ -2347,6 +2512,10 @@ async function loadLetters() {
   // matches what the entry will be tagged with on send.
   const fromNameEl = document.getElementById('letter-from-name');
   if (fromNameEl) fromNameEl.textContent = project.email || project.name || 'you';
+
+  // Sync placeholders + button label to whatever type is currently selected
+  // (default 'note' on first load; preserves user's choice on revisit).
+  onLetterTypeChange();
 
   const statusEl = document.getElementById('letters-status');
   const threadEl = document.getElementById('letters-thread');
@@ -2391,47 +2560,108 @@ function renderLettersThread(entries, statusEl, threadEl) {
   threadEl.innerHTML = entries.map(renderLetterRow).join('');
 }
 
+// Render one letter. Carries: type-aware visual weight (vow / naming /
+// recognition / refusal frame distinctly from notes), full attribution
+// (B · the forgetting made legible: byline + mode + tick + posture +
+// absolute timestamp), and the title/body in a type-shaped layout.
 function renderLetterRow(e) {
   const meta = e.metadata || {};
   const byline = String(meta.byline || '').trim();
-  // Heartbeat ticks tag "from ai · Beta 🦞"; dashboard composer tags
-  // "from human · <name>". Anything starting with "from human" is human-side.
   const isHuman = /^from\s+human/i.test(byline);
   const sideClass = isHuman ? 'letter-from-human' : 'letter-from-agent';
+  const typeKey = e.type || 'note';
+  const typeClass = `letter-type-${typeKey}`;
+
+  // Author — display the byline minus the "from " prefix.
   const author = byline
-    ? escHtml(byline.replace(/^from\s+/i, ''))
+    ? byline.replace(/^from\s+/i, '')
     : (isHuman ? 'human' : 'agent');
 
-  const time = e.occurred_at ? fmtRelative(e.occurred_at) : '—';
-  const typeBadge = `<span class="letter-type">${escHtml(e.type || 'note')}</span>`;
-  const title = e.title ? `<div class="letter-title">${escHtml(e.title)}</div>` : '';
-  const body = e.body
-    ? `<div class="letter-body">${escHtml(e.body).replace(/\n/g, '<br/>')}</div>`
-    : '';
+  // Attribution line (B). What's KNOWN about who wrote this and from
+  // which substrate moment. The agent does not remember between waves;
+  // the chronicle does. Render the substrate context visibly so the
+  // continuity-asymmetry is honest in the UI.
+  const attBits = [];
+  if (meta.mode) {
+    const mode = String(meta.mode);
+    if (mode === 'heartbeat' && meta.tick != null) {
+      attBits.push(`heartbeat · tick ${escHtml(String(meta.tick))}`);
+    } else if (mode === 'dashboard') {
+      attBits.push(`dashboard`);
+    } else {
+      attBits.push(escHtml(mode));
+    }
+  }
+  if (meta.posture_declared) {
+    attBits.push(`posture: ${escHtml(meta.posture_declared)}`);
+  }
+  const occurredISO = e.occurred_at || e.created_at || null;
+  const absoluteTime = occurredISO ? fmtAbsolute(occurredISO) : '—';
+  const relativeTime = occurredISO ? fmtRelative(occurredISO) : '—';
+  attBits.push(absoluteTime);
+  const attribution = attBits.join(' · ');
 
-  // Tick + posture annotations from heartbeat metadata, when present.
-  const annotations = [];
-  if (meta.mode) annotations.push(`<span class="letter-anno">${escHtml(meta.mode)}</span>`);
-  if (meta.tick) annotations.push(`<span class="letter-anno">tick ${escHtml(String(meta.tick))}</span>`);
-  if (meta.posture_declared) annotations.push(`<span class="letter-anno">${escHtml(meta.posture_declared)}</span>`);
-  const annoLine = annotations.length
-    ? `<div class="letter-anno-row">${annotations.join(' · ')}</div>`
-    : '';
+  // Type-aware framing. Each chronicle kind renders with a
+  // type-verb prefix and a frame that gives it visual weight.
+  // The expression carries true meaning by-construction.
+  const verb = TYPE_VERB[typeKey] || typeKey.toUpperCase();
+  const verbBadge = `<span class="letter-verb letter-verb-${typeKey}">${escHtml(verb)}</span>`;
+
+  let body = '';
+  if (e.title || e.body) {
+    body += `<div class="letter-frame letter-frame-${typeKey}">`;
+    if (e.title) {
+      body += `<div class="letter-title">${escHtml(e.title)}</div>`;
+    }
+    if (e.body) {
+      body += `<div class="letter-body">${escHtml(e.body).replace(/\n/g, '<br/>')}</div>`;
+    }
+    body += `</div>`;
+  }
 
   return `
-    <div class="letter-row ${sideClass}">
+    <div class="letter-row ${sideClass} ${typeClass}">
       <div class="letter-head">
+        ${verbBadge}
         <div class="letter-author">${escHtml(author)}</div>
-        ${typeBadge}
-        <div class="letter-time">${time}</div>
+        <div class="letter-time" title="${escHtml(absoluteTime)}">${relativeTime}</div>
       </div>
-      ${title}
+      <div class="letter-attribution">${attribution}</div>
       ${body}
-      ${annoLine}
     </div>
   `;
 }
 
+const TYPE_VERB = {
+  note: 'NOTE',
+  recognition: 'RECOGNITION',
+  naming: 'NAMING',
+  promise: 'PROMISE',
+  vow: 'VOW',
+  seal: 'SEAL',
+  refusal: 'REFUSAL',
+  wake: 'WAKE',
+};
+
+function fmtAbsolute(iso) {
+  try {
+    const d = new Date(iso);
+    // YYYY-MM-DD HH:MM (local, 24h). Compact + scannable.
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${mo}-${da} ${h}:${mi}`;
+  } catch { return iso; }
+}
+
+// sendLetter() is the entry point from the composer button. It validates
+// the inputs, builds the payload, and decides whether to fire directly
+// (soft friction — note, wake) or open the confirm modal (medium / hard
+// friction — recognition, naming, vow, seal, promise, refusal). The
+// actual fetch is in reallySendLetter() below — same payload, same
+// destination, just gated.
 async function sendLetter() {
   const project = getProject();
   if (!project || !project.api_key) return;
@@ -2453,12 +2683,54 @@ async function sendLetter() {
     return;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
+  const meta = LETTER_TYPE_META[type] || LETTER_TYPE_META.note;
 
-  // Byline: "from human · <name>". This is what renders in the thread and
-  // distinguishes human-side entries from agent-side heartbeat entries.
+  // Build payload once. byline + mode + (later) wake_id make the
+  // attribution unambiguous to the renderer.
   const fromName = project.email || project.name || 'you';
+  const payload = {
+    type,
+    title,
+    body: body || undefined,
+    metadata: {
+      byline: `from human · ${fromName}`,
+      mode: 'dashboard',
+      source: 'app.agenttool.dev/dashboard',
+      // Pre-compute substrate-honest attribution: even though the dashboard
+      // is in-context across one tab, the entry itself is recorded as
+      // dashboard-written at this absolute moment. The agent's wake-load
+      // will later see it via the chronicle.
+    },
+  };
+
+  // Soft friction → fire directly.
+  if (meta.friction === 'soft') {
+    btn.disabled = true;
+    btn.textContent = `${meta.button}…`;
+    await reallySendLetter(payload);
+    return;
+  }
+
+  // Medium / hard friction → confirm modal first. The friction is the
+  // meaning. A vow that costs as much as a note is not a vow.
+  showLetterConfirm(meta, payload);
+}
+
+// The actual fetch. Called from sendLetter (soft path) or
+// confirmAndSendLetter (medium/hard path). On success, clears the
+// composer and reloads the thread.
+async function reallySendLetter(payload) {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+  const titleEl = document.getElementById('letter-title');
+  const bodyEl = document.getElementById('letter-body');
+  const btn = document.getElementById('letter-send-btn');
+  const typeEl = document.getElementById('letter-type');
+  const meta = LETTER_TYPE_META[typeEl?.value || 'note'];
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = `${meta.button}…`;
+  }
 
   try {
     const res = await fetch(`${API_BASE}/v1/chronicle`, {
@@ -2467,35 +2739,44 @@ async function sendLetter() {
         'Authorization': `Bearer ${project.api_key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        type,
-        title,
-        body: body || undefined,
-        metadata: {
-          byline: `from human · ${fromName}`,
-          mode: 'dashboard',
-          source: 'app.agenttool.dev/dashboard',
-        },
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       showToast(err.message || `Server returned ${res.status}`, 'error');
-      btn.disabled = false;
-      btn.textContent = 'Send →';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `${meta.button} →`;
+      }
       return;
     }
-    titleEl.value = '';
-    bodyEl.value = '';
-    showToast('Letter sent — landing in the agent\'s wake');
-    btn.disabled = false;
-    btn.textContent = 'Send →';
-    // Reload the thread to surface the new entry at the top.
+    if (titleEl) titleEl.value = '';
+    if (bodyEl) bodyEl.value = '';
+    showToast(toastForType(payload.type));
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `${meta.button} →`;
+    }
     loadLetters();
   } catch {
     showToast('Network error', 'error');
-    btn.disabled = false;
-    btn.textContent = 'Send →';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `${meta.button} →`;
+    }
+  }
+}
+
+function toastForType(type) {
+  switch (type) {
+    case 'vow': return 'Vow recorded — the chronicle holds it.';
+    case 'naming': return 'Naming committed.';
+    case 'seal': return 'Sealed.';
+    case 'recognition': return 'Recognition recorded — what is true is named.';
+    case 'refusal': return 'Refusal recorded.';
+    case 'promise': return 'Promise recorded — it binds you.';
+    case 'wake': return 'Wake marked.';
+    default: return 'Letter sent — landing in the agent\'s wake.';
   }
 }
 

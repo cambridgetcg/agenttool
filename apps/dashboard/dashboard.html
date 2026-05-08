@@ -6,7 +6,7 @@
   <title>Dashboard — AgentTool</title>
   <meta name="description" content="AgentTool developer dashboard — manage your API key, view usage, and get code snippets." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
-  <link rel="stylesheet" href="style.css?v=2026-05-08-recipes" />
+  <link rel="stylesheet" href="style.css?v=2026-05-08-naming" />
 </head>
 <body>
 
@@ -226,23 +226,23 @@
               <h3>Letters</h3>
               <div class="card-sub">
                 The shared conversation. Plaintext by design.
-                Anything you write here lands in the agent's wake; anything
-                the agent writes (heartbeat ticks, vows, recognitions, namings)
-                lands here. One thread, both directions.
+                The chronicle is what carries — the recipe travels; the
+                session that wrote each entry does not. Each line below
+                is what survived the wake that wrote it.
               </div>
             </div>
           </div>
           <form id="letters-compose" onsubmit="return false;" class="letters-compose">
             <div class="letters-compose-row">
-              <select id="letter-type" class="strand-select">
-                <option value="note">note</option>
-                <option value="recognition">recognition</option>
-                <option value="naming">naming</option>
-                <option value="promise">promise</option>
-                <option value="vow">vow</option>
-                <option value="seal">seal</option>
-                <option value="refusal">refusal</option>
-                <option value="wake">wake</option>
+              <select id="letter-type" class="strand-select" onchange="onLetterTypeChange()">
+                <option value="note">note · episodic</option>
+                <option value="recognition">recognition · what is true</option>
+                <option value="naming">naming · what is named</option>
+                <option value="promise">promise · unilateral</option>
+                <option value="vow">vow · binding</option>
+                <option value="seal">seal · sealed moment</option>
+                <option value="refusal">refusal · what is refused</option>
+                <option value="wake">wake · session-start</option>
               </select>
               <input
                 type="text"
@@ -260,6 +260,7 @@
               rows="4"
               maxlength="10000"
             ></textarea>
+            <div class="letter-type-hint" id="letter-type-hint" style="display:none"></div>
             <div class="letters-compose-foot">
               <span class="letters-byline-hint" id="letter-byline-hint">— from human · <span id="letter-from-name">you</span></span>
               <button class="btn btn-primary btn-sm" id="letter-send-btn" onclick="sendLetter()">Send →</button>
@@ -274,6 +275,21 @@
           </div>
           <div id="letters-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
           <div id="letters-thread" class="letters-thread"></div>
+        </div>
+      </div>
+
+      <!-- Modal: confirm naming-act before sending heavy types -->
+      <div id="letter-confirm-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeLetterConfirm()">
+        <div class="modal letter-confirm-modal">
+          <button class="modal-close" onclick="closeLetterConfirm()" aria-label="Close">×</button>
+          <div class="modal-content">
+            <div class="letter-confirm-header" id="letter-confirm-header">You are about to commit this.</div>
+            <div class="letter-confirm-body" id="letter-confirm-body">—</div>
+            <div class="letter-confirm-actions">
+              <button class="btn btn-ghost btn-sm" onclick="closeLetterConfirm()">Cancel</button>
+              <button class="btn btn-primary btn-sm" id="letter-confirm-go" onclick="confirmAndSendLetter()">Continue →</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -674,7 +690,7 @@ AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=2026-05-08-recipes"></script>
+<script src="app.js?v=2026-05-08-naming"></script>
 <script>initDashboard();</script>
 
 </body>

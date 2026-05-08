@@ -831,7 +831,7 @@ pre {
   margin-bottom: 0.6rem;
 }
 .letters-compose-row .strand-select {
-  flex: 0 0 130px;
+  flex: 0 0 200px;
 }
 .letters-title {
   flex: 1 1 auto;
@@ -842,6 +842,16 @@ pre {
   min-height: 100px;
   font-family: inherit;
   font-size: 0.92rem;
+  line-height: 1.55;
+}
+.letter-type-hint {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  background: var(--surface3);
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 0.82rem;
   line-height: 1.55;
 }
 .letters-compose-foot {
@@ -859,9 +869,12 @@ pre {
 .letters-thread {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.7rem;
   padding-top: 0.5rem;
 }
+
+/* The default letter row — note + wake render here unframed.
+   Heavier types layer a typed frame inside, with their own border. */
 .letter-row {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -876,11 +889,13 @@ pre {
   border-left-color: var(--accent-soft);
   background: var(--surface3);
 }
+
 .letter-head {
   display: flex;
   align-items: baseline;
-  gap: 0.6rem;
-  margin-bottom: 0.4rem;
+  gap: 0.55rem;
+  margin-bottom: 0.25rem;
+  flex-wrap: wrap;
 }
 .letter-author {
   font-size: 0.82rem;
@@ -890,25 +905,85 @@ pre {
 .letter-from-human .letter-author {
   color: var(--accent);
 }
-.letter-type {
-  font-size: 0.66rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.12rem 0.45rem;
-  border-radius: 4px;
-  background: var(--surface3);
-  color: var(--muted);
-}
-.letter-from-agent .letter-type {
-  background: var(--bg);
-}
 .letter-time {
   font-size: 0.72rem;
   color: var(--muted);
   margin-left: auto;
   white-space: nowrap;
+  cursor: help;
 }
+
+/* Type-verb badge — the act named explicitly. The friction is in the
+   composer; the verb is in the render. */
+.letter-verb {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.18rem 0.55rem;
+  border-radius: 3px;
+  background: var(--surface3);
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.letter-verb-note    { background: var(--surface3); color: var(--muted); }
+.letter-verb-wake    { background: rgba(96,165,250,0.15); color: var(--blue); }
+.letter-verb-recognition { background: rgba(124,58,237,0.18); color: var(--accent-soft); }
+.letter-verb-naming  { background: var(--accent); color: #fff; }
+.letter-verb-promise { background: rgba(245,158,11,0.18); color: var(--yellow); }
+.letter-verb-vow     { background: var(--yellow); color: #1a1a26; }
+.letter-verb-seal    { background: var(--bg); color: var(--accent-soft); border: 1px dashed var(--accent); }
+.letter-verb-refusal { background: rgba(248,113,113,0.18); color: var(--red); }
+
+/* Substrate-honest attribution. The line that makes the forgetting legible:
+   which mode wrote this, which tick, which posture, which absolute moment.
+   The agent does not remember between waves; the chronicle does. */
+.letter-attribution {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-bottom: 0.55rem;
+  letter-spacing: 0.01em;
+}
+
+/* Type-shaped frame. Heavier types render their title/body inside a
+   bordered block whose color matches the verb. The frame IS the weight. */
+.letter-frame {
+  margin-top: 0.3rem;
+}
+.letter-frame-recognition {
+  border-left: 3px solid var(--accent-soft);
+  padding-left: 0.7rem;
+}
+.letter-frame-naming {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
+  background: rgba(124,58,237,0.06);
+}
+.letter-frame-promise {
+  border-left: 3px solid var(--yellow);
+  padding-left: 0.7rem;
+}
+.letter-frame-vow {
+  border: 1px solid var(--yellow);
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
+  background: rgba(245,158,11,0.06);
+}
+.letter-frame-seal {
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
+  font-family: var(--mono);
+}
+.letter-frame-refusal {
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
+  background: rgba(248,113,113,0.05);
+}
+
 .letter-title {
   font-size: 0.95rem;
   font-weight: 600;
@@ -922,19 +997,32 @@ pre {
   white-space: pre-wrap;
   word-wrap: break-word;
 }
-.letter-anno-row {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
+
+/* Confirm modal for non-soft types. Holds the user for a beat between
+   the click and the commit. The friction IS the meaning. */
+.letter-confirm-modal {
+  max-width: 520px;
 }
-.letter-anno {
-  font-size: 0.66rem;
-  color: var(--muted);
-  background: var(--bg);
-  padding: 0.1rem 0.45rem;
-  border-radius: 3px;
-  font-family: var(--mono);
+.letter-confirm-modal .modal-content {
+  padding: 2rem 1.75rem 1.5rem;
+}
+.letter-confirm-header {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent-soft);
+  margin-bottom: 0.85rem;
+  letter-spacing: -0.01em;
+}
+.letter-confirm-body {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--text);
+  margin-bottom: 1.25rem;
+}
+.letter-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
 }
 
 /* ─── Voice (expression editor) ────────────────────────────── */
