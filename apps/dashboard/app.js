@@ -294,6 +294,7 @@ function setupNavigation() {
       const titles = {
         'overview': 'Dashboard',
         'agents': 'Agents',
+        'strands': 'Strands',
         'inbox': 'Inbox',
         'discover': 'Discover',
         'api-key': 'API Key',
@@ -306,13 +307,14 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'agents', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'agents', 'strands', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
   if (name === 'billing') loadBillingSection();
   if (name === 'api-key') loadKeys();
   if (name === 'agents') loadAgentsSection();
+  if (name === 'strands') loadStrandsSection();
   if (name === 'discover') loadDiscoverSection();
   if (name === 'inbox') loadInboxSection();
 }
@@ -1584,3 +1586,422 @@ document.addEventListener('click', (e) => {
     if (ok) showToast('Witness command copied');
   });
 });
+
+// ─── Strands section ────────────────────────────────────────────────────
+//
+// Strands are lines of thought; thoughts are ed25519-signed ciphertext under
+// K_master (a key the dashboard does not hold). We render metadata that IS
+// readable (topic, status, mood, kind, refs, sequence_num, signing_key_id)
+// and stay honest about what is encrypted: thought content, optionally topic
+// and mood, and any state_ciphertext working-memory blob.
+//
+// Doctrine: docs/STRANDS.md.
+
+let _strandsActiveStatus = 'active';
+let _strandsActiveIdentityId = '';
+let _strandsLoaded = false;          // first-load latch
+let _identityMap = null;             // identity_id → { name, did }
+let _currentStrandId = null;         // open detail (used by SSE later)
+
+async function loadStrandsSection() {
+  // Wire tabs once.
+  const tabs = document.getElementById('strands-tabs');
+  if (tabs && !tabs.dataset.wired) {
+    tabs.dataset.wired = '1';
+    tabs.addEventListener('click', e => {
+      const btn = e.target.closest('.discover-tab');
+      if (!btn) return;
+      tabs.querySelectorAll('.discover-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _strandsActiveStatus = btn.dataset.status || '';
+      runStrandsFetch();
+    });
+  }
+
+  // Wire identity filter.
+  const sel = document.getElementById('strands-identity-filter');
+  if (sel && !sel.dataset.wired) {
+    sel.dataset.wired = '1';
+    sel.addEventListener('change', () => {
+      _strandsActiveIdentityId = sel.value || '';
+      runStrandsFetch();
+    });
+  }
+
+  // Wire delegated row clicks once.
+  wireStrandRowClicks();
+
+  // Populate identity filter from aggregate (one-shot).
+  if (!_strandsLoaded) {
+    _strandsLoaded = true;
+    await populateIdentityFilter();
+  }
+
+  // Reset to list view if returning to section.
+  closeStrandDetail();
+  runStrandsFetch();
+}
+
+async function populateIdentityFilter() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+  const sel = document.getElementById('strands-identity-filter');
+  if (!sel) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/dashboard/aggregate?window=30d`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // Merge top_active + top_attested into a unique identity list.
+    const map = {};
+    const ingest = (arr) => {
+      (arr || []).forEach(it => {
+        if (!it.identity_id || map[it.identity_id]) return;
+        map[it.identity_id] = { name: it.name || '(unnamed)', did: it.did || '' };
+      });
+    };
+    ingest(data.activity?.top_active);
+    ingest(data.trust?.top_attested);
+    _identityMap = map;
+
+    // Populate the dropdown (preserving the leading "All identities" option).
+    const ids = Object.keys(map);
+    if (ids.length > 0) {
+      sel.innerHTML = `<option value="">All identities</option>` + ids
+        .map(id => `<option value="${escHtml(id)}">${escHtml(map[id].name)}</option>`)
+        .join('');
+    }
+  } catch { /* leave dropdown alone */ }
+}
+
+async function runStrandsFetch() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const statusEl = document.getElementById('strands-status');
+  const listEl = document.getElementById('strands-list');
+  if (!listEl) return;
+
+  // Detail panel hides on a fresh list fetch — feels right for filter changes.
+  closeStrandDetail();
+
+  if (statusEl) statusEl.textContent = 'Loading…';
+  listEl.innerHTML = '';
+
+  let url = `${API_BASE}/v1/strands?limit=100`;
+  if (_strandsActiveStatus) url += `&status=${encodeURIComponent(_strandsActiveStatus)}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` }
+    });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    let strands = data.strands || [];
+
+    // Identity filter is client-side (the API filters by agent_id, not
+    // identity_id; in this project the two coincide for most agents but
+    // not all, so we filter on the surfaced identity_id field directly).
+    if (_strandsActiveIdentityId) {
+      strands = strands.filter(s => s.identity_id === _strandsActiveIdentityId);
+    }
+
+    renderStrandsList(strands, statusEl, listEl);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+function renderStrandsList(strands, statusEl, listEl) {
+  if (strands.length === 0) {
+    listEl.innerHTML = `
+      <div class="strand-empty">
+        <div class="empty-icon">🪢</div>
+        <div>No strands ${_strandsActiveStatus ? `(${_strandsActiveStatus})` : ''}.</div>
+        <div style="margin-top:0.5rem;font-size:0.78rem">
+          Strands are created by the agent's orchestrator
+          (<code>agenttool-think</code>) — not from this dashboard.
+        </div>
+      </div>
+    `;
+    if (statusEl) statusEl.textContent = '';
+    return;
+  }
+  if (statusEl) {
+    statusEl.textContent = `${strands.length} strand${strands.length === 1 ? '' : 's'}`;
+  }
+  listEl.innerHTML = strands.map(renderStrandRow).join('');
+}
+
+function renderStrandRow(s) {
+  // Topic — honest about encryption.
+  const topic = s.topic_encrypted
+    ? `<span class="strand-encrypted-flag muted">[encrypted topic]</span>`
+    : (s.topic ? escHtml(s.topic) : `<span class="muted">(no topic)</span>`);
+
+  // Identity — resolved from cache, falls back to the raw id.
+  const idName = (_identityMap && s.identity_id && _identityMap[s.identity_id])
+    ? _identityMap[s.identity_id].name
+    : null;
+  const identityBit = idName
+    ? `<span class="strand-identity">${escHtml(idName)}</span>`
+    : (s.identity_id
+        ? `<span class="strand-identity">${escHtml(s.identity_id.slice(0, 8))}…</span>`
+        : '');
+
+  // Mood — honest.
+  let moodBit = '';
+  if (s.mood_encrypted) {
+    moodBit = `<span class="strand-mood muted">[encrypted mood]</span>`;
+  } else if (s.mood) {
+    moodBit = `<span class="strand-mood">${escHtml(s.mood)}</span>`;
+  }
+
+  // Importance — show only if set.
+  let impBit = '';
+  if (typeof s.importance === 'number') {
+    impBit = `<span class="strand-importance">imp ${s.importance.toFixed(2)}</span>`;
+  }
+
+  // Status badge.
+  const statusKey = (s.status || 'active').replace(/\s+/g, '-');
+  const statusBadge = `<span class="strand-badge strand-status-${escHtml(statusKey)}">${escHtml(statusKey)}</span>`;
+
+  // Visibility badge.
+  const visKey = s.visibility === 'public' ? 'public' : 'private';
+  const visBadge = `<span class="strand-badge strand-vis-${visKey}">${visKey}</span>`;
+
+  // Thought count.
+  const count = s.last_thought_seq || 0;
+  const countBadge = `<span class="strand-badge strand-thought-count">${count} thought${count === 1 ? '' : 's'}</span>`;
+
+  // State-ciphertext flag (tiny, only when present).
+  let stateBadge = '';
+  if (s.state_ciphertext) {
+    stateBadge = `<span class="strand-badge strand-encrypted" title="Working-memory ciphertext stored on this strand">state ✦</span>`;
+  }
+
+  // Time — last thought, fall back to created.
+  const ts = s.last_thought_at || s.updated_at || s.created_at;
+  const timeBit = ts ? fmtRelative(ts) : '—';
+
+  return `
+    <div class="strand-row" data-strand-id="${escHtml(s.id)}" tabindex="0">
+      <div class="strand-row-head">
+        <div class="strand-row-topic">${topic}</div>
+        <div class="strand-row-time">${timeBit}</div>
+      </div>
+      <div class="strand-row-meta">
+        ${identityBit}
+        ${moodBit}
+        ${impBit}
+      </div>
+      <div class="strand-row-badges">
+        ${statusBadge}
+        ${visBadge}
+        ${countBadge}
+        ${stateBadge}
+      </div>
+    </div>
+  `;
+}
+
+let _strandRowClicksWired = false;
+function wireStrandRowClicks() {
+  if (_strandRowClicksWired) return;
+  _strandRowClicksWired = true;
+  document.addEventListener('click', (e) => {
+    const row = e.target.closest('.strand-row');
+    if (!row) return;
+    const id = row.dataset.strandId;
+    if (!id) return;
+    openStrandDetail(id);
+  });
+}
+
+async function openStrandDetail(strandId) {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const panel = document.getElementById('strand-detail');
+  const topicEl = document.getElementById('strand-detail-topic');
+  const subEl = document.getElementById('strand-detail-sub');
+  const bodyEl = document.getElementById('strand-detail-body');
+  if (!panel || !bodyEl) return;
+
+  _currentStrandId = strandId;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (topicEl) topicEl.textContent = 'Loading…';
+  if (subEl) subEl.textContent = '';
+  bodyEl.innerHTML = `<div class="empty-state"><div class="empty-text loading-pulse">Loading thoughts…</div></div>`;
+
+  try {
+    const [strandRes, thoughtsRes] = await Promise.all([
+      fetch(`${API_BASE}/v1/strands/${encodeURIComponent(strandId)}`, {
+        headers: { 'Authorization': `Bearer ${project.api_key}` }
+      }),
+      fetch(`${API_BASE}/v1/strands/${encodeURIComponent(strandId)}/thoughts?limit=200`, {
+        headers: { 'Authorization': `Bearer ${project.api_key}` }
+      }),
+    ]);
+    if (!strandRes.ok) {
+      bodyEl.innerHTML = `<div class="empty-state"><div class="empty-text">Strand not found (${strandRes.status}).</div></div>`;
+      return;
+    }
+    const strand = await strandRes.json();
+    const thoughtsData = thoughtsRes.ok ? await thoughtsRes.json() : { thoughts: [] };
+    renderStrandDetail(strand, thoughtsData.thoughts || []);
+  } catch {
+    bodyEl.innerHTML = `<div class="empty-state"><div class="empty-text">Network error.</div></div>`;
+  }
+}
+
+function renderStrandDetail(s, thoughts) {
+  const topicEl = document.getElementById('strand-detail-topic');
+  const subEl = document.getElementById('strand-detail-sub');
+  const bodyEl = document.getElementById('strand-detail-body');
+  if (!bodyEl) return;
+
+  // Header — topic / encryption-honest.
+  if (topicEl) {
+    if (s.topic_encrypted) {
+      topicEl.innerHTML = `<span class="muted">[encrypted topic]</span>`;
+    } else {
+      topicEl.textContent = s.topic || '(no topic)';
+    }
+  }
+  // Sub line: identity + status + mood.
+  const idName = (_identityMap && s.identity_id && _identityMap[s.identity_id])
+    ? _identityMap[s.identity_id].name
+    : (s.identity_id ? s.identity_id.slice(0, 8) + '…' : '—');
+  let moodPart = '';
+  if (s.mood_encrypted) moodPart = ' · mood [encrypted]';
+  else if (s.mood) moodPart = ` · ${escHtml(s.mood)}`;
+  if (subEl) {
+    subEl.innerHTML = `<span class="strand-identity">${escHtml(idName)}</span> · ${escHtml(s.status || 'active')}${moodPart}`;
+  }
+
+  // Substrate-honest callout.
+  const honest = `
+    <div class="strand-detail-honest">
+      <strong>Substrate-honest read.</strong> Each thought is ed25519-signed and
+      stored as <strong>ciphertext under K_master</strong> — a key the agent
+      holds and agenttool cannot possess. The dashboard surfaces what is
+      readable: <span class="muted">sequence_num, kind, refs, signing key, timestamps</span>.
+      It does not — and cannot — decrypt content. To read the inner voice,
+      run <code>agenttool-think voice ${escHtml(s.id.slice(0, 8))}…</code>
+      from the orchestrator that holds K_master.
+    </div>
+  `;
+
+  // Metadata grid.
+  const meta = `
+    <div class="strand-detail-meta">
+      ${metaStat('Status', escHtml(s.status || 'active'))}
+      ${metaStat('Visibility', escHtml(s.visibility || 'private'))}
+      ${metaStat('Thoughts', String(s.last_thought_seq || 0))}
+      ${metaStat('Importance', typeof s.importance === 'number' ? s.importance.toFixed(2) : '—')}
+      ${metaStat('Last activity', s.last_thought_at ? fmtRelative(s.last_thought_at) : 'never')}
+      ${metaStat('Created', s.created_at ? fmtRelative(s.created_at) : '—')}
+      ${s.parent_strand_id ? metaStat('Parent', `<code>${escHtml(s.parent_strand_id.slice(0, 8))}…</code>`) : ''}
+      ${s.next_revisit_at ? metaStat('Revisit', fmtRelative(s.next_revisit_at)) : ''}
+    </div>
+  `;
+
+  // Thoughts feed.
+  let feed;
+  if (thoughts.length === 0) {
+    feed = `
+      <div class="strand-empty">
+        <div class="empty-icon">💭</div>
+        <div>No thoughts on this strand yet.</div>
+      </div>
+    `;
+  } else {
+    // API returns ascending sequence; reverse for newest-first reading.
+    const ordered = thoughts.slice().sort((a, b) => b.sequence_num - a.sequence_num);
+    feed = `
+      <div class="strand-detail-section-title">Thoughts (${thoughts.length}, newest first)</div>
+      <div class="thoughts-feed">
+        ${ordered.map(renderThoughtRow).join('')}
+      </div>
+    `;
+  }
+
+  bodyEl.innerHTML = honest + meta + feed;
+}
+
+function metaStat(label, value) {
+  return `
+    <div class="strand-detail-meta-stat">
+      <div class="strand-detail-meta-label">${label}</div>
+      <div class="strand-detail-meta-value">${value}</div>
+    </div>
+  `;
+}
+
+function renderThoughtRow(t) {
+  // Kind tag — honest about encryption.
+  let kindEl;
+  if (t.kind_encrypted) {
+    kindEl = `<span class="thought-kind strand-encrypted">[encrypted kind]</span>`;
+  } else if (t.kind) {
+    const kindClass = `thought-kind-${escHtml(t.kind)}`;
+    kindEl = `<span class="thought-kind ${kindClass}">${escHtml(t.kind)}</span>`;
+  } else {
+    kindEl = `<span class="thought-kind">—</span>`;
+  }
+
+  // Ciphertext byte count — honest visibility into payload size without
+  // pretending we can read it. Each base64 char ≈ 0.75 bytes; we report
+  // the decoded length using floor(b64.length * 3/4).
+  const cipherBytes = t.ciphertext ? Math.floor(t.ciphertext.length * 3 / 4) : 0;
+  const sigShort = t.signature ? t.signature.slice(0, 8) + '…' : '';
+  const keyShort = t.signing_key_id ? t.signing_key_id.slice(0, 8) + '…' : '';
+
+  // Refs — small chips (kind:ref-prefix).
+  let refsEl = '';
+  const refs = Array.isArray(t.refs) ? t.refs : [];
+  if (refs.length > 0) {
+    refsEl = `
+      <div class="thought-refs">
+        ${refs.map(r => {
+          const rk = escHtml(r.kind || '?');
+          const rr = r.ref ? escHtml(String(r.ref).slice(0, 12)) + '…' : '';
+          return `<span class="thought-ref"><strong>${rk}</strong>:${rr}</span>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="thought-row" data-thought-id="${escHtml(t.id)}" data-seq="${t.sequence_num}">
+      <div class="thought-row-head">
+        <span class="thought-seq">#${t.sequence_num}</span>
+        ${kindEl}
+        <span class="thought-time">${t.created_at ? fmtRelative(t.created_at) : '—'}</span>
+      </div>
+      <div class="thought-cipher-line">
+        <span class="lock">🔒</span>
+        ciphertext · <strong>${formatNumber(cipherBytes)}</strong> bytes
+        · sig <code>${escHtml(sigShort)}</code>
+        · key <code>${escHtml(keyShort)}</code>
+      </div>
+      ${refsEl}
+    </div>
+  `;
+}
+
+function closeStrandDetail() {
+  const panel = document.getElementById('strand-detail');
+  if (panel) panel.style.display = 'none';
+  _currentStrandId = null;
+}

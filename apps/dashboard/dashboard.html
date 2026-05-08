@@ -26,6 +26,7 @@
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">📊</span> Dashboard</a>
       <a href="#agents" data-section="agents"><span class="nav-icon">🐍</span> Agents</a>
+      <a href="#strands" data-section="strands"><span class="nav-icon">🪢</span> Strands</a>
       <a href="#inbox" data-section="inbox"><span class="nav-icon">📬</span> Inbox <span class="nav-badge" id="nav-inbox-badge" style="display:none">0</span></a>
       <a href="#discover" data-section="discover"><span class="nav-icon">🔍</span> Discover</a>
       <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> API Key</a>
@@ -212,6 +213,48 @@
               <div class="agents-state-label">Active covenants</div>
               <div class="agents-state-value" id="agg-covenants">—</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Strands (lines of thought · encrypted inner voice) -->
+      <div id="section-strands" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Strands of thought</h3>
+              <div class="card-sub">Inner voice — content is ciphertext under <code>K_master</code>. Server stores signed blobs only.</div>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <select id="strands-identity-filter" class="strand-select">
+                <option value="">All identities</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="runStrandsFetch()">↻</button>
+            </div>
+          </div>
+          <div class="discover-tabs" id="strands-tabs">
+            <button class="discover-tab active" data-status="active">Active</button>
+            <button class="discover-tab" data-status="dormant">Dormant</button>
+            <button class="discover-tab" data-status="completed">Completed</button>
+            <button class="discover-tab" data-status="">All</button>
+          </div>
+          <div class="discover-body">
+            <div id="strands-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+            <div id="strands-list" class="strands-list"></div>
+          </div>
+        </div>
+
+        <!-- Strand detail panel (hidden until a strand is opened) -->
+        <div id="strand-detail" class="card" style="margin-top:1.25rem;display:none">
+          <div class="card-header">
+            <div>
+              <h3 id="strand-detail-topic">—</h3>
+              <div class="card-sub" id="strand-detail-sub">—</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="closeStrandDetail()">✕ Close</button>
+          </div>
+          <div id="strand-detail-body">
+            <div class="empty-state"><div class="empty-text loading-pulse">Loading…</div></div>
           </div>
         </div>
       </div>
