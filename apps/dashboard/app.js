@@ -287,6 +287,7 @@ function setupNavigation() {
       const titles = {
         'overview': 'Dashboard',
         'agents': 'Agents',
+        'discover': 'Discover',
         'api-key': 'API Key',
         'snippets': 'Code Snippets',
         'billing': 'Billing'
@@ -297,13 +298,14 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'agents', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'agents', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
   if (name === 'billing') loadBillingSection();
   if (name === 'api-key') loadKeys();
   if (name === 'agents') loadAgentsSection();
+  if (name === 'discover') loadDiscoverSection();
 }
 
 // ─── Usage data ───
@@ -939,6 +941,124 @@ function renderIdentityCard(id) {
         ${detail}
       </div>
       <div class="agent-card-did">${escHtml(shortDid)}</div>
+    </div>
+  `;
+}
+
+// ─── Discover section ─────────────────────────────────────────────────
+//
+// Public-surface browsing. No auth required for these endpoints, but we
+// still send the bearer key when present for rate-limit budgeting.
+let _discoverActiveTab = 'recent';
+
+async function loadDiscoverSection() {
+  // Wire tab clicks once.
+  const tabs = document.getElementById('discover-tabs');
+  if (tabs && !tabs.dataset.wired) {
+    tabs.dataset.wired = '1';
+    tabs.addEventListener('click', e => {
+      const btn = e.target.closest('.discover-tab');
+      if (!btn) return;
+      tabs.querySelectorAll('.discover-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _discoverActiveTab = btn.dataset.tab;
+      runDiscoverTab();
+    });
+  }
+  runDiscoverTab();
+}
+
+async function runDiscoverTab() {
+  const statusEl = document.getElementById('discover-status');
+  const listEl = document.getElementById('discover-list');
+  if (!listEl) return;
+  if (statusEl) statusEl.textContent = 'Loading…';
+  listEl.innerHTML = '';
+
+  let url, mode;
+  switch (_discoverActiveTab) {
+    case 'trending-star':
+      url = `${API_BASE}/public/discover/trending?metric=star&window=7d&limit=30`;
+      mode = 'trending';
+      break;
+    case 'trending-follow':
+      url = `${API_BASE}/public/discover/trending?metric=follow&window=7d&limit=30`;
+      mode = 'trending';
+      break;
+    case 'trending-activity':
+      url = `${API_BASE}/public/discover/trending?metric=activity&window=7d&limit=30`;
+      mode = 'trending';
+      break;
+    case 'recent':
+    default:
+      url = `${API_BASE}/public/discover?limit=30`;
+      mode = 'recent';
+      break;
+  }
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    renderDiscoverResults(data, mode, listEl, statusEl);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+function renderDiscoverResults(data, mode, listEl, statusEl) {
+  const items = mode === 'trending' ? (data.results || []) : (data.agents || []);
+  if (items.length === 0) {
+    listEl.innerHTML = '';
+    if (statusEl) {
+      if (mode === 'trending') {
+        statusEl.textContent = `No ${data.metric || 'trending'} activity in the ${data.window || '7d'} window yet.`;
+      } else {
+        statusEl.textContent = 'No discoverable agents yet — be the first to publish.';
+      }
+    }
+    return;
+  }
+
+  if (statusEl) {
+    if (mode === 'trending') {
+      statusEl.textContent = `${items.length} agent${items.length === 1 ? '' : 's'} · metric: ${data.metric} · window: ${data.window}`;
+    } else {
+      statusEl.textContent = `${items.length} discoverable agent${items.length === 1 ? '' : 's'}`;
+    }
+  }
+
+  listEl.innerHTML = items.map(item => renderDiscoverCard(item, mode)).join('');
+}
+
+function renderDiscoverCard(item, mode) {
+  const did = item.did || '';
+  const shortDid = did.length > 38 ? did.slice(0, 34) + '…' : did;
+  const name = item.name || item.display_name || 'unnamed';
+
+  let metric = '';
+  if (mode === 'trending') {
+    const score = item.score;
+    metric = `<span class="agent-card-metric">${formatNumber(score)}</span>`;
+  } else if (item.trust_score !== undefined && item.trust_score !== null) {
+    metric = `<span class="agent-card-metric">${item.trust_score} trust</span>`;
+  }
+
+  const caps = Array.isArray(item.capabilities) && item.capabilities.length > 0
+    ? `<div class="agent-card-caps">${item.capabilities.slice(0,4).map(c => `<span class="agent-cap">${escHtml(c)}</span>`).join('')}</div>`
+    : '';
+
+  return `
+    <div class="agent-card discover-card" data-did="${escHtml(did)}">
+      <div class="agent-card-head">
+        <div class="agent-card-name">${escHtml(name)}</div>
+        ${metric}
+      </div>
+      <div class="agent-card-did">${escHtml(shortDid)}</div>
+      ${caps}
     </div>
   `;
 }

@@ -26,6 +26,7 @@
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">📊</span> Dashboard</a>
       <a href="#agents" data-section="agents"><span class="nav-icon">🐍</span> Agents</a>
+      <a href="#discover" data-section="discover"><span class="nav-icon">🔍</span> Discover</a>
       <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> API Key</a>
       <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Code Snippets</a>
 
@@ -200,6 +201,28 @@
               <div class="agents-state-label">Active covenants</div>
               <div class="agents-state-value" id="agg-covenants">—</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Discover (public surface — browse other agents) -->
+      <div id="section-discover" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <h3>Browse the network</h3>
+            <span style="font-size:0.8rem;color:var(--muted)">No auth needed for these — agents who opted into publication.</span>
+          </div>
+          <!-- Tab bar -->
+          <div class="discover-tabs" id="discover-tabs">
+            <button class="discover-tab active" data-tab="recent">Recent</button>
+            <button class="discover-tab" data-tab="trending-star">Trending · stars</button>
+            <button class="discover-tab" data-tab="trending-follow">Trending · followers</button>
+            <button class="discover-tab" data-tab="trending-activity">Trending · activity</button>
+          </div>
+          <!-- Tab body -->
+          <div class="discover-body">
+            <div id="discover-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+            <div id="discover-list" class="agents-list"></div>
           </div>
         </div>
       </div>
