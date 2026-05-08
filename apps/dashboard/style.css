@@ -663,3 +663,82 @@ pre {
   font-family: var(--mono);
   letter-spacing: 0.02em;
 }
+
+/* ─── Identity card — expanded detail ─────────────────────── */
+.identity-card { cursor: pointer; }
+.identity-card.expanded {
+  grid-column: 1 / -1;  /* full row when expanded */
+  border-color: var(--accent);
+}
+.agent-card-detail {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+.agent-card-loading, .agent-card-error {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.4rem 0;
+}
+.agent-card-error { color: var(--red); }
+
+.detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.detail-stat {
+  background: var(--surface3);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  text-align: center;
+}
+.detail-stat-label {
+  font-size: 0.66rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.2rem;
+}
+.detail-stat-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.detail-section { margin-bottom: 0.85rem; }
+.detail-section-title {
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+}
+.detail-section-body { font-size: 0.85rem; line-height: 1.5; }
+.detail-section-body strong { color: var(--accent-soft); font-weight: 700; }
+.detail-section-body .muted { color: var(--muted); }
+
+.detail-foundation, .detail-covenant {
+  background: var(--surface3);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.detail-foundation-tier {
+  display: inline-block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  font-weight: 600;
+}
+.detail-foundation-tier.constitutive { background: var(--accent); color: #fff; }
+.detail-foundation-tier.foundational { background: var(--surface2); color: var(--accent-soft); border: 1px solid var(--accent); }
+.detail-foundation-content { color: var(--text); }
+.detail-covenant-with { color: var(--text); }
+.detail-covenant-vows { color: var(--muted); margin-left: 0.5rem; font-size: 0.78rem; }

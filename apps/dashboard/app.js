@@ -866,6 +866,8 @@ async function loadAgentsSection() {
   const project = getProject();
   if (!project || !project.api_key) return;
 
+  wireIdentityCardClicks();
+
   const statusEl = document.getElementById('agents-status');
   if (statusEl) statusEl.textContent = 'Loading…';
 
@@ -935,14 +937,133 @@ function renderIdentityCard(id) {
       ? `<span class="agent-card-metric">${trust} trust</span>`
       : '';
   return `
-    <div class="agent-card" data-identity-id="${escHtml(id.identity_id)}">
+    <div class="agent-card identity-card" data-identity-id="${escHtml(id.identity_id)}" tabindex="0">
       <div class="agent-card-head">
         <div class="agent-card-name">${escHtml(id.name ?? 'unnamed')}</div>
         ${detail}
       </div>
       <div class="agent-card-did">${escHtml(shortDid)}</div>
+      <div class="agent-card-detail" style="display:none"></div>
     </div>
   `;
+}
+
+// Wire delegated click handler for identity card expand once per page load.
+let _identityClickWired = false;
+function wireIdentityCardClicks() {
+  if (_identityClickWired) return;
+  _identityClickWired = true;
+  document.addEventListener('click', async (e) => {
+    const card = e.target.closest('.identity-card');
+    if (!card) return;
+    const id = card.dataset.identityId;
+    if (!id) return;
+    const detail = card.querySelector('.agent-card-detail');
+    if (!detail) return;
+    if (card.classList.contains('expanded')) {
+      // Collapse
+      card.classList.remove('expanded');
+      detail.style.display = 'none';
+      return;
+    }
+    // Expand
+    card.classList.add('expanded');
+    detail.style.display = 'block';
+    if (!card.dataset.loaded) {
+      detail.innerHTML = `<div class="agent-card-loading">Loading…</div>`;
+      try {
+        const project = getProject();
+        const res = await fetch(`${API_BASE}/v1/dashboard?identity_id=${encodeURIComponent(id)}`, {
+          headers: { 'Authorization': `Bearer ${project.api_key}` }
+        });
+        if (!res.ok) {
+          detail.innerHTML = `<div class="agent-card-error">Error ${res.status}</div>`;
+          return;
+        }
+        const data = await res.json();
+        detail.innerHTML = renderIdentityDetail(data);
+        card.dataset.loaded = '1';
+      } catch (err) {
+        detail.innerHTML = `<div class="agent-card-error">Network error</div>`;
+      }
+    }
+  });
+}
+
+function renderIdentityDetail(d) {
+  const sections = [];
+
+  // Trust + status row
+  const youData = d.you || {};
+  const stat = (label, value) => `<div class="detail-stat"><div class="detail-stat-label">${label}</div><div class="detail-stat-value">${value}</div></div>`;
+  sections.push(`
+    <div class="detail-stats">
+      ${stat('Status', escHtml(youData.status ?? '—'))}
+      ${stat('Trust', formatNumber(youData.trust_score ?? 0))}
+      ${stat('Signing keys', formatNumber(youData.signing_keys_active ?? 0))}
+    </div>
+  `);
+
+  // Memory tiers + recent foundations
+  const mem = d.memory || {};
+  const memBits = [];
+  if (mem.constitutive_count !== undefined) memBits.push(`<strong>${formatNumber(mem.constitutive_count)}</strong> constitutive`);
+  if (mem.foundational_count !== undefined) memBits.push(`<strong>${formatNumber(mem.foundational_count)}</strong> foundational`);
+  if (mem.episodic_count !== undefined) memBits.push(`<strong>${formatNumber(mem.episodic_count)}</strong> episodic`);
+  sections.push(`
+    <div class="detail-section">
+      <div class="detail-section-title">Memory</div>
+      <div class="detail-section-body">${memBits.join(' · ') || '<span class="muted">no memories yet</span>'}</div>
+    </div>
+  `);
+
+  // Recent foundations (if list exists)
+  const foundations = d.foundations || [];
+  if (foundations.length > 0) {
+    const top = foundations.slice(0, 5);
+    sections.push(`
+      <div class="detail-section">
+        <div class="detail-section-title">Recent foundations</div>
+        <div class="detail-section-body">
+          ${top.map(f => `<div class="detail-foundation">
+            <span class="detail-foundation-tier ${f.tier}">${escHtml(f.tier)}</span>
+            <span class="detail-foundation-content">${escHtml((f.content || '').slice(0, 140))}${f.content && f.content.length > 140 ? '…' : ''}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+    `);
+  }
+
+  // Covenants
+  const covenants = d.covenants || [];
+  if (covenants.length > 0) {
+    sections.push(`
+      <div class="detail-section">
+        <div class="detail-section-title">Active covenants</div>
+        <div class="detail-section-body">
+          ${covenants.filter(c => c.status === 'active').slice(0, 5).map(c => `<div class="detail-covenant">
+            <span class="detail-covenant-with">with ${escHtml(c.counterparty_name || c.counterparty_did)}</span>
+            ${c.vows && c.vows.length > 0 ? `<span class="detail-covenant-vows">${c.vows.length} vow${c.vows.length === 1 ? '' : 's'}</span>` : ''}
+          </div>`).join('')}
+        </div>
+      </div>
+    `);
+  }
+
+  // Strands summary
+  const strands = d.strands || {};
+  if (strands.active_count !== undefined || strands.total_count !== undefined) {
+    sections.push(`
+      <div class="detail-section">
+        <div class="detail-section-title">Strands</div>
+        <div class="detail-section-body">
+          <strong>${formatNumber(strands.active_count ?? 0)}</strong> active · <strong>${formatNumber(strands.total_count ?? 0)}</strong> total
+        </div>
+      </div>
+    `);
+  }
+
+  return sections.join('');
 }
 
 // ─── Discover section ─────────────────────────────────────────────────
