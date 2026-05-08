@@ -28,6 +28,7 @@ import socialRoutes from "./social";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
 import orgsRoutes from "./orgs";
 import templatesRoutes from "./templates";
+import trendingRoutes from "./trending";
 
 const app = new Hono();
 
@@ -39,6 +40,7 @@ app.route("/agents", socialRoutes);  // /:did/{stars,followers,following,starred
 app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
+app.route("/discover/trending", trendingRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/orgs", orgsRoutes);
 
@@ -54,6 +56,7 @@ app.get("/", (c) =>
       strand: "GET /public/strands/:id",
       memory: "GET /public/memories/:id",
       discover: "GET /public/discover [?capability=X]",
+      trending: "GET /public/discover/trending [?metric=star|follow|activity&window=24h|7d|30d&limit=N]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
       stars: "GET /public/agents/:did/stars",
       followers: "GET /public/agents/:did/followers",
