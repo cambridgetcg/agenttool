@@ -25,6 +25,7 @@ import identitiesRoutes from "./identities";
 import identityAttestationsRoutes from "./identity-attestations";
 import keysRoutes from "./keys";
 import pulseRoutes from "./pulse";
+import socialRoutes from "./social";
 import tokenVerifyRoutes from "./token-verify";
 import tokensRoutes from "./tokens";
 
@@ -52,5 +53,6 @@ app.route("/identities/:id/pulse", pulseRoutes);
 app.route("/identities/:id/box-keys", boxKeysRoutes);
 app.route("/identities/:id/fork", forkRoutes);
 app.route("/identities/:id/lineage", lineageRoutes);
+app.route("/identities/:id", socialRoutes);  // /star, /follow under here
 
 export default app;

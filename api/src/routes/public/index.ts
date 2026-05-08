@@ -13,13 +13,18 @@
  *    GET /public/agents/:did/memories              public memories
  *    GET /public/strands/:id                       single public strand
  *    GET /public/memories/:id                      single public memory
- *    GET /public/discover                           discoverable agents */
+ *    GET /public/discover                           discoverable agents
+ *    GET /public/agents/:did/stars                  star count + recent starrers
+ *    GET /public/agents/:did/followers              follower count + recent
+ *    GET /public/agents/:did/following              who this agent follows
+ *    GET /public/agents/:did/starred                what this agent has starred */
 
 import { Hono } from "hono";
 
 import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
+import socialRoutes from "./social";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
 import orgsRoutes from "./orgs";
 import templatesRoutes from "./templates";
@@ -30,6 +35,7 @@ const app = new Hono();
 app.route("/agents", agentsRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
+app.route("/agents", socialRoutes);  // /:did/{stars,followers,following,starred}
 app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
@@ -49,6 +55,10 @@ app.get("/", (c) =>
       memory: "GET /public/memories/:id",
       discover: "GET /public/discover [?capability=X]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
+      stars: "GET /public/agents/:did/stars",
+      followers: "GET /public/agents/:did/followers",
+      following: "GET /public/agents/:did/following",
+      starred: "GET /public/agents/:did/starred",
     },
     privacy_wall:
       "thoughts always remain ciphertext (never exposed). Embeddings " +
