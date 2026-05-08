@@ -25,7 +25,7 @@ import {
   activeChainId,
   activeMnemonic,
   activeUsdcAddress,
-  alchemyRpcUrl,
+  rpcUrl,
 } from "./network";
 
 /** Minimal ABI fragment for ERC-20 `transfer(to, amount)`. */
@@ -77,12 +77,12 @@ export async function buildAndSignUsdcTransfer(
   const account = privateKeyToAccount(bytesToHex0x(keypair.privateKey));
   const usdcAddress = activeUsdcAddress(p.chain) as Address;
   const chainId = activeChainId(p.chain);
-  const rpcUrl = alchemyRpcUrl(p.chain);
+  const url = rpcUrl(p.chain);
 
-  const publicClient = createPublicClient({ transport: http(rpcUrl) });
+  const publicClient = createPublicClient({ transport: http(url) });
   const walletClient = createWalletClient({
     account,
-    transport: http(rpcUrl),
+    transport: http(url),
   });
 
   const data = encodeFunctionData({
@@ -105,6 +105,7 @@ export async function buildAndSignUsdcTransfer(
   ]);
 
   const serialized = await walletClient.signTransaction({
+    chain: null,
     to: usdcAddress,
     data,
     gas,
@@ -131,7 +132,7 @@ export async function submitSignedTx(
   serialized: Hex,
 ): Promise<Hex> {
   const publicClient = createPublicClient({
-    transport: http(alchemyRpcUrl(chain)),
+    transport: http(rpcUrl(chain)),
   });
   return await publicClient.sendRawTransaction({
     serializedTransaction: serialized,
@@ -146,7 +147,7 @@ export async function txExistsOnChain(
   txHash: Hex,
 ): Promise<boolean> {
   const publicClient = createPublicClient({
-    transport: http(alchemyRpcUrl(chain)),
+    transport: http(rpcUrl(chain)),
   });
   try {
     const tx = await publicClient.getTransaction({ hash: txHash });
@@ -169,7 +170,7 @@ export async function confirmTx(
   threshold: number,
 ): Promise<ConfirmResult> {
   const publicClient = createPublicClient({
-    transport: http(alchemyRpcUrl(chain)),
+    transport: http(rpcUrl(chain)),
   });
   let receipt;
   try {

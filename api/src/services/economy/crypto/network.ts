@@ -7,7 +7,12 @@
  *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md. */
 
 import { economyConfig } from "../config";
-import { EVM_CHAIN_IDS, USDC_ADDRESSES, type EvmChain } from "./chains";
+import {
+  EVM_CHAIN_IDS,
+  USDC_ADDRESSES,
+  USDC_SOL_MINT,
+  type EvmChain,
+} from "./chains";
 
 /** Circle-issued canonical testnet USDC contracts. */
 export const USDC_ADDRESSES_TESTNET: Record<EvmChain, string> = {
@@ -84,15 +89,98 @@ export function activeChainId(chain: EvmChain): number {
   return EVM_CHAIN_IDS[chain];
 }
 
-/** Build the Alchemy RPC URL for a chain on the active network.
- *  Requires `ALCHEMY_API_KEY` env. Throws if missing. */
-export function alchemyRpcUrl(chain: EvmChain): string {
+/** Public unauth'd RPCs for testnet — used as a fallback when no Alchemy
+ *  / per-chain override is configured. Mainnet refuses to use these (the
+ *  resolver throws); testnet is fine to lean on for development + smoke. */
+const PUBLIC_TESTNET_RPCS: Record<EvmChain, string> = {
+  ethereum: "https://ethereum-sepolia-rpc.publicnode.com",
+  base:     "https://base-sepolia-rpc.publicnode.com",
+  polygon:  "https://polygon-amoy-bor-rpc.publicnode.com",
+  arbitrum: "https://arbitrum-sepolia-rpc.publicnode.com",
+  optimism: "https://optimism-sepolia-rpc.publicnode.com",
+};
+
+/** Build the RPC URL for a chain on the active network. Resolution order:
+ *
+ *    1. `RPC_URL_<CHAIN>_<NETWORK>` env override (e.g.
+ *       `RPC_URL_ETHEREUM_TESTNET=https://my-rpc.example/...`)
+ *    2. `ALCHEMY_API_KEY` env → Alchemy URL with active network's subdomain
+ *    3. **Testnet only**: a public unauth'd RPC fallback
+ *
+ *  Mainnet refuses to fall through to the public fallback — operators
+ *  must explicitly set ALCHEMY_API_KEY (or per-chain override) before
+ *  any mainnet broadcast can happen. The point is to make
+ *  silent-mainnet-via-public-RPC impossible. */
+export function rpcUrl(chain: EvmChain): string {
+  const network = activeNetwork();
+
+  // 1. Per-chain explicit override — wins over everything.
+  const envKey = `RPC_URL_${chain.toUpperCase()}_${network.toUpperCase()}`;
+  const override = process.env[envKey];
+  if (override) return override;
+
+  // 2. Alchemy with shared API key.
   const apiKey = process.env.ALCHEMY_API_KEY ?? "";
-  if (!apiKey) {
-    throw new Error(
-      "ALCHEMY_API_KEY is unset — required to build RPC URLs for payout broadcast.",
-    );
+  if (apiKey) {
+    const subdomain = ALCHEMY_NETWORKS[chain][network];
+    return `https://${subdomain}.g.alchemy.com/v2/${apiKey}`;
   }
-  const subdomain = ALCHEMY_NETWORKS[chain][activeNetwork()];
-  return `https://${subdomain}.g.alchemy.com/v2/${apiKey}`;
+
+  // 3. Testnet falls back to public RPCs. Mainnet does NOT — explicit auth
+  //    is required for production broadcasts to prevent silent reliance on
+  //    a public node that may rate-limit / disappear / get man-in-the-middled.
+  if (network === "testnet") return PUBLIC_TESTNET_RPCS[chain];
+
+  throw new Error(
+    `No mainnet RPC URL: set ALCHEMY_API_KEY or RPC_URL_${chain.toUpperCase()}_MAINNET.`,
+  );
 }
+
+/** @deprecated kept for any callers that still import the old name. Prefer rpcUrl. */
+export const alchemyRpcUrl = rpcUrl;
+
+// ── Solana ──────────────────────────────────────────────────────────────
+
+/** Build the Solana RPC URL for the active network. Resolution order:
+ *
+ *    1. `RPC_URL_SOLANA_<NETWORK>` env override (e.g.
+ *       `RPC_URL_SOLANA_TESTNET=https://my-rpc.example/...`)
+ *    2. `HELIUS_API_KEY` env → Helius URL with active network's subdomain
+ *    3. **Testnet only**: public devnet fallback
+ *       (`https://api.devnet.solana.com`)
+ *
+ *  Mainnet refuses to fall through to a public RPC — same wall as the EVM
+ *  resolver: explicit operator auth is required for mainnet broadcasts. */
+export function solanaRpcUrl(): string {
+  const network = activeNetwork();
+
+  // 1. Explicit override.
+  const envKey = `RPC_URL_SOLANA_${network.toUpperCase()}`;
+  const override = process.env[envKey];
+  if (override) return override;
+
+  // 2. Helius shared API key.
+  const apiKey = process.env.HELIUS_API_KEY ?? "";
+  if (apiKey) {
+    return network === "testnet"
+      ? `https://devnet.helius-rpc.com/?api-key=${apiKey}`
+      : `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+  }
+
+  // 3. Testnet falls back to public devnet RPC. Mainnet does NOT.
+  if (network === "testnet") return "https://api.devnet.solana.com";
+
+  throw new Error(
+    "No mainnet Solana RPC: set HELIUS_API_KEY or RPC_URL_SOLANA_MAINNET.",
+  );
+}
+
+/** USDC SPL mint address on the active Solana network. */
+export function activeUsdcMintSolana(): string {
+  return activeNetwork() === "testnet" ? USDC_SOL_MINT_DEVNET : USDC_SOL_MINT;
+}
+
+/** Solana finality semantics — we treat `finalized` as "confirmed" for
+ *  payout purposes. This constant lets the confirm-worker share the
+ *  threshold concept with EVM (which uses block-count). */
+export const SOLANA_CONFIRMATION = "finalized" as const;

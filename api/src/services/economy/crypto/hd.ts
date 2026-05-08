@@ -187,21 +187,38 @@ function deriveSlip10Ed25519(seed: Uint8Array, path: string): Slip10Node {
   return node;
 }
 
-/** Derive a Solana deposit address. Path: m/44'/501'/<walletIndex>'/0'
- *  (Phantom-compatible). Address = base58(ed25519 public key from seed). */
-export function deriveSolanaAddress(
+export interface SolanaKeypair extends DerivedAddress {
+  privateKey: Uint8Array; // 32-byte SLIP-0010 ed25519 seed
+}
+
+/** Derive a Solana keypair — private key (32-byte SLIP-0010 seed) + address
+ *  (base58 ed25519 pubkey) + path. The 32-byte seed is what
+ *  `Keypair.fromSeed()` accepts on the Solana side; `deriveSolanaAddress`
+ *  is a thin wrapper that discards the key. */
+export function deriveSolanaKeypair(
   mnemonic: string,
   walletId: string,
-): DerivedAddress {
+): SolanaKeypair {
   const seed = getSeed(mnemonic);
   const idx = walletIndex(walletId);
   const path = `m/44'/${COIN_TYPE_SOLANA}'/${idx}'/0'`;
   const { privateKey } = deriveSlip10Ed25519(seed, path);
   const publicKey = ed.getPublicKey(privateKey);
   return {
+    privateKey,
     address: bs58.encode(publicKey),
     derivation_path: path,
   };
+}
+
+/** Derive a Solana deposit address. Path: m/44'/501'/<walletIndex>'/0'
+ *  (Phantom-compatible). Address = base58(ed25519 public key from seed). */
+export function deriveSolanaAddress(
+  mnemonic: string,
+  walletId: string,
+): DerivedAddress {
+  const { address, derivation_path } = deriveSolanaKeypair(mnemonic, walletId);
+  return { address, derivation_path };
 }
 
 /** Single entry point for routes — dispatches by chain family. */

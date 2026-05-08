@@ -5,16 +5,21 @@
  *  RPC reject, etc.).
  *
  *  Crash-recovery: the deterministic tx_hash is written BEFORE submit; if
- *  the worker dies between sign and submit (or submit response is lost),
- *  the next pass queries `txExistsOnChain(hash)` to disambiguate *landed*
- *  from *never made it*.
+ *  the worker dies between sign and submit (or the submit response is lost),
+ *  the next pass queries `txExists*` to disambiguate *landed* from *never
+ *  made it*.
  *
  *  Doctrine wall (PAYOUT-BROADCAST.md): NO retries that change semantics
  *  post-RPC-submit. A failed submit that may have landed leaves the row
  *  at 'broadcast' (let the confirm watcher decide); a failed submit that
  *  certainly didn't land triggers refund.
  *
- *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slice 1). */
+ *  Chain dispatch: the BullMQ worker callback reads the row's chain and
+ *  routes to `processEvmPayout` or `processSolanaPayout`. Each branch
+ *  implements the same lock-CAS + sign + submit + classify shape with
+ *  the chain's native libs (viem for EVM, @solana/web3.js for Solana).
+ *
+ *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slices 1+3). */
 
 import { and, eq, sql } from "drizzle-orm";
 import { Worker } from "bullmq";
@@ -33,6 +38,12 @@ import {
   txExistsOnChain,
   type SignedTx,
 } from "../../services/economy/crypto/sign-evm";
+import {
+  buildAndSignSolanaUsdcTransfer,
+  solanaTxExists,
+  submitSolanaTx,
+  type SignedSolanaTx,
+} from "../../services/economy/crypto/sign-solana";
 import { redisConnection } from "../../services/tools/queue/connection";
 import type { PayoutBroadcastJobData } from "./queue";
 
@@ -55,7 +66,8 @@ export function startPayoutBroadcastWorker() {
     {
       connection: redisConnection,
       // Serial: payouts from the same source address must use sequential
-      // nonces. Concurrency=1 avoids nonce collisions across in-flight jobs.
+      // nonces (EVM) / blockhashes (Solana). Concurrency=1 avoids
+      // collisions across in-flight jobs.
       concurrency: 1,
     },
   );
@@ -80,7 +92,43 @@ function creditsForAmount(amountBase: string): number {
   return Math.ceil(amountUsdc * CREDITS_PER_USDC);
 }
 
-async function processPayout(payoutId: string): Promise<void> {
+// ── Top-level chain dispatcher ──────────────────────────────────────────
+
+export async function processPayout(payoutId: string): Promise<void> {
+  // Cheap read for chain dispatch. The chain-specific processors do their
+  // own row read inside a transaction with CAS — this top-level read is
+  // just to pick a branch.
+  const [meta] = await db
+    .select({ chain: cryptoPayouts.chain, status: cryptoPayouts.status })
+    .from(cryptoPayouts)
+    .where(eq(cryptoPayouts.id, payoutId))
+    .limit(1);
+
+  if (!meta) {
+    console.warn(`[payout-broadcast] ${payoutId}: row not found`);
+    return;
+  }
+  if (meta.status !== "requested") {
+    console.warn(
+      `[payout-broadcast] ${payoutId}: status=${meta.status}, skipping`,
+    );
+    return;
+  }
+
+  if (isEvmChain(meta.chain)) {
+    return processEvmPayout(payoutId);
+  }
+  if (meta.chain === "solana") {
+    return processSolanaPayout(payoutId);
+  }
+  console.warn(
+    `[payout-broadcast] ${payoutId}: unsupported chain '${meta.chain}', leaving 'requested'`,
+  );
+}
+
+// ── EVM branch ──────────────────────────────────────────────────────────
+
+async function processEvmPayout(payoutId: string): Promise<void> {
   // ── Phase 1: lock + sign + persist tx_hash ─────────────────────────
   // CAS on status='requested' (one tx); if a cancel races us, the CAS
   // returns 0 rows and we exit cleanly.
@@ -101,8 +149,7 @@ async function processPayout(payoutId: string): Promise<void> {
       };
     }
     if (!isEvmChain(row.chain)) {
-      // Solana payouts wait for Slice 3 — leave 'requested', don't fail.
-      return { ok: false as const, reason: "unsupported_chain", chain: row.chain };
+      return { ok: false as const, reason: "wrong_branch", chain: row.chain };
     }
 
     let signed: SignedTx;
@@ -205,6 +252,132 @@ async function processPayout(payoutId: string): Promise<void> {
         .set({ status: "failed", error: errMsg })
         .where(eq(cryptoPayouts.id, payoutId));
     });
-    console.error(`[payout-broadcast] ${payoutId}: ${errMsg}; refunded ${credits} credits`);
+    console.error(
+      `[payout-broadcast] ${payoutId}: ${errMsg}; refunded ${credits} credits`,
+    );
+  }
+}
+
+// ── Solana branch ───────────────────────────────────────────────────────
+
+async function processSolanaPayout(payoutId: string): Promise<void> {
+  // ── Phase 1: lock + sign + persist signature (as tx_hash) ───────────
+  const lockResult = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(cryptoPayouts)
+      .where(eq(cryptoPayouts.id, payoutId))
+      .limit(1);
+    if (!row) {
+      return { ok: false as const, reason: "not_found" };
+    }
+    if (row.status !== "requested") {
+      return {
+        ok: false as const,
+        reason: "wrong_status",
+        currentStatus: row.status,
+      };
+    }
+    if (row.chain !== "solana") {
+      return { ok: false as const, reason: "wrong_branch", chain: row.chain };
+    }
+
+    let signed: SignedSolanaTx;
+    try {
+      signed = await buildAndSignSolanaUsdcTransfer({
+        walletId: row.walletId,
+        destinationAddress: row.destinationAddress,
+        amountBase: BigInt(row.amountBase as string),
+      });
+    } catch (err) {
+      const credits = creditsForAmount(row.amountBase as string);
+      await tx
+        .update(wallets)
+        .set({ balance: sql`balance + ${credits}` })
+        .where(eq(wallets.id, row.walletId));
+      await tx
+        .update(cryptoPayouts)
+        .set({
+          status: "failed",
+          error: `build_or_sign_failed: ${(err as Error).message}`.slice(0, 500),
+        })
+        .where(eq(cryptoPayouts.id, payoutId));
+      return { ok: false as const, reason: "sign_failed" };
+    }
+
+    const updated = await tx
+      .update(cryptoPayouts)
+      .set({
+        status: "broadcasting",
+        txHash: signed.signature, // base58 sig; same column as EVM Hex
+      })
+      .where(
+        and(
+          eq(cryptoPayouts.id, payoutId),
+          eq(cryptoPayouts.status, "requested"),
+        ),
+      )
+      .returning({ id: cryptoPayouts.id });
+
+    if (updated.length === 0) {
+      return { ok: false as const, reason: "race_lost" };
+    }
+
+    return {
+      ok: true as const,
+      signed,
+      walletId: row.walletId,
+      amountBase: row.amountBase as string,
+    };
+  });
+
+  if (!lockResult.ok) {
+    console.warn(
+      `[payout-broadcast] ${payoutId}: ${lockResult.reason}` +
+        ("currentStatus" in lockResult
+          ? ` (current=${lockResult.currentStatus})`
+          : ""),
+    );
+    return;
+  }
+
+  // ── Phase 2: submit ────────────────────────────────────────────────
+  const { signed, walletId, amountBase } = lockResult;
+  try {
+    await submitSolanaTx(signed.serialized);
+    await db
+      .update(cryptoPayouts)
+      .set({ status: "broadcast" })
+      .where(eq(cryptoPayouts.id, payoutId));
+    console.log(
+      `[payout-broadcast] ${payoutId}: submitted ${signed.signature} (solana)`,
+    );
+  } catch (err) {
+    const exists = await solanaTxExists(signed.signature).catch(() => false);
+    if (exists) {
+      await db
+        .update(cryptoPayouts)
+        .set({ status: "broadcast" })
+        .where(eq(cryptoPayouts.id, payoutId));
+      console.warn(
+        `[payout-broadcast] ${payoutId}: submit error but tx landed (${signed.signature}) — marked broadcast`,
+      );
+      return;
+    }
+    const errMsg = `submit_failed: ${(err as Error).message}`.slice(0, 500);
+    const credits = creditsForAmount(amountBase);
+    await db.transaction(async (tx) => {
+      await tx
+        .update(wallets)
+        .set({ balance: sql`balance + ${credits}` })
+        .where(eq(wallets.id, walletId));
+      await tx
+        .update(cryptoPayouts)
+        .set({ status: "failed", error: errMsg })
+        .where(eq(cryptoPayouts.id, payoutId));
+    });
+    console.error(
+      `[payout-broadcast] ${payoutId}: ${errMsg}; refunded ${credits} credits`,
+    );
   }
 }
