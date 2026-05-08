@@ -1,7 +1,10 @@
--- 0018_runtime_bridge_machine.sql — Horizon C, Slice 3: cross-machine routing.
+-- 0019_runtime_bridge_machine.sql — Horizon C, Slice 3: cross-machine routing.
 --
 -- Doctrine: docs/RUNTIME.md
--- Apply: psql "$DATABASE_URL" -f api/migrations/0018_runtime_bridge_machine.sql
+-- Apply: psql "$DATABASE_URL" -f api/migrations/0019_runtime_bridge_machine.sql
+--
+-- Renumbered from 0018 → 0019 to free the 0018 slot for marketplace_pricing
+-- (Horizon A Slice 1, the named deliverable that took 0018 by commit time).
 --
 -- The hub registry is in-memory per Fly machine. When the api scales
 -- to >1 machine, the bridge's WSS lands on whichever machine fly-proxy

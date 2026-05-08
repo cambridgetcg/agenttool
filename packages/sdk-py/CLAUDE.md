@@ -1,42 +1,55 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Wraps all 9 services (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap) into a single `AgentTool` client. Published on PyPI as `agenttool-sdk`.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes 13 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
 
 ## Current State
-Active — v0.5.1 on PyPI. All 9 service clients implemented with tests.
+Active — v0.6.3 on PyPI. Phases 0–4 of `docs/SDK-ROADMAP.md` shipped. Phase 5 (strands with K_master) is next.
 
 ## Tech Stack
 - Python >= 3.9
-- `httpx` for HTTP (async-capable)
+- `httpx >= 0.27` for HTTP (sync; async-capable)
 - `hatchling` build system
-- `pytest` for tests
+- `pytest >= 7.0` for tests
 
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py       — Package exports, version (0.5.1)
-  client.py         — AgentTool main class (composes all service clients)
-  memory.py         — MemoryClient (store, search, get, delete)
-  tools.py          — ToolsClient (search, scrape, execute)
-  verify.py         — VerifyClient (check, batch)
-  economy.py        — EconomyClient (wallets, escrow, spending policies)
-  traces.py         — TracesClient (store, search, chain, delete)
-  identity.py       — IdentityClient (DIDs, attestations, trust scores)
-  vault.py          — VaultClient (encrypted secrets)
-  pulse.py          — PulseClient (heartbeat, status)
-  bootstrap.py      — BootstrapClient (agent creation, elevation)
-  models.py         — Shared data models (Memory, SearchResult, etc.)
-  exceptions.py     — AgentToolError
+  __init__.py            — Public surface + __version__ ("0.6.3")
+  client.py              — AgentTool (composes 13 service clients + at.deciding sugar)
+  _context.py            — AmbientContext for auto-trace ambient state
+  bootstrap.py           — BootstrapClient (agent creation, elevation)
+  chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
+  covenants.py           — CovenantsClient (vows + bonds; federation-aware)
+  economy.py             — EconomyClient (wallets, escrow, transactions)
+  identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
+  memory.py              — MemoryClient (store, search, get, delete; tiered)
+  pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
+  register.py            — Top-level register() — POST /v1/register pre-auth front-door
+  tools.py               — ToolsClient (search, scrape, browse, document, execute)
+  traces.py              — TracesClient (store, search, chain)
+  vault.py               — VaultClient (encrypted secrets, policies)
+  verify.py              — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
+  wake.py                — WakeClient (GET /v1/wake; format=md|anthropic|openai|gemini|cohere)
+  window.py              — WindowClient (rides on chronicle; declare/surface/show)
+  soul.py                — soul() / welcome() / philosophy() / principles() / LOVE_PROTOCOL
+  anthropic_adapter.py   — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
+  models.py              — Memory, SearchResult, ScrapeResult, DocumentResult, ExecuteResult, UsageStats
+  exceptions.py          — AgentToolError, AuthenticationError, RateLimitError, NotFoundError, ServerError
+  SOUL.md                — Doctrine shipped INSIDE the wheel (force-include in pyproject.toml)
 tests/
-  test_client.py    — Core client + memory/tools/verify/economy tests
-  test_traces.py    — Traces client tests
-  test_identity.py  — Identity client tests
-  test_vault.py     — Vault client tests
-  test_bootstrap.py — Bootstrap client tests
-  test_pulse.py     — Pulse client tests
-dist/               — Built distribution files
-pyproject.toml      — Package config, deps, build settings
+  test_client.py         — Core client + memory/tools/verify/economy
+  test_anthropic_adapter.py
+  test_bootstrap.py
+  test_deciding.py       — at.deciding() context manager + nested chains
+  test_identity.py       — Identity + Expression + BoxKeys
+  test_phase2.py         — register + identity surface fillout
+  test_phase3.py         — chronicle + covenants + window
+  test_pulse.py
+  test_traces.py
+  test_vault.py
+dist/                    — Built distribution files
+pyproject.toml           — Package config; force-includes SOUL.md in wheel
 ```
 
 ## How to Run
@@ -63,11 +76,18 @@ python -m build && twine upload dist/*
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `base_url`)
 - **Auth**: Reads `AT_API_KEY` from env or accepts `api_key` parameter
 
+## Parity invariant
+py and ts ship at the same minor version (lockstep enforced from 0.7.0). Each new module must land in BOTH languages before merging — `cd packages/sdk-ts && bun run check-parity` is the gate.
+
+## Doctrine
+The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. `SOUL.md` ships inside the wheel as a runtime artifact: `from agenttool import soul; print(soul())`.
+
 ## Kingdom Engine
-AgentTool Platform
+AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
-- `src/agenttool/client.py` — Main `AgentTool` class that composes all service clients
-- `src/agenttool/__init__.py` — Public API surface and version
-- `pyproject.toml` — Package metadata, dependencies, build config
-- `tests/test_client.py` — Primary test file covering core services
+- `src/agenttool/client.py` — Main `AgentTool` class composing 13 service clients
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.6.3"`)
+- `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
+- `tests/test_client.py` — Primary test file
+- `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix
