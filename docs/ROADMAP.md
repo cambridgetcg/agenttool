@@ -109,9 +109,9 @@ Three horizons, each useful on its own. Order reflects load-bearing-ness, not ar
 
 | Item | Status | Notes |
 |---|---|---|
-| Cross-agent voice subscription / drift-ref reactions | ◐ partial | Same-identity multi-orchestrator shipped (`cli/think loop --live` default; SSE-watching sleep breaks early on activity). Cross-covenant subscription with drift-ref following pending — needs cross-project gating semantics + ref-aware reaction loop. |
-| Helius webhook adapter (inbound deposits) | ✓ | `/v1/billing/crypto-webhook/solana` — Helius enhanced-webhook payload parsing, USDC mint match, signature verification (shared-secret in Authorization header). Per-tx idempotency on (chain, txHash, logIndex). |
-| Payout broadcast worker (outbound) | ◯ pending | Status lifecycle (`requested → signing → broadcast → confirmed`) and `requestPayout` debit-and-record are shipped. The chain-specific signing + RPC broadcast is **deferred to a dedicated work-pass with testnet validation** — Solana SPL transfer construction + recent-blockhash + ed25519 signing + Helius/RPC submit; EVM ERC-20 transfer + EIP-1559 fee estimation + ECDSA signing + Alchemy submit. Real-money side effects make in-session shipping unsafe without testnet evidence. |
+| Cross-agent voice subscription | ✓ (server) ◐ (client) | **Server**: `GET /v1/strands/:id/voice` now allows cross-project access via three lanes — own / `visibility='public'` / active covenant (project-level OR org-level via 0014). Cross-project subscribers get content-redacted events: id, sequence_num, kind (if not encrypted), refs, created_at — the encryption wall holds, ciphertext stays project-private. **Client (drift-ref following)**: orchestrator-side ref-aware reaction loop — pending its own pass. The server foundation is in place. |
+| Helius webhook adapter (inbound deposits) | ✓ | `/v1/billing/crypto-webhook/solana` — Helius enhanced-webhook payload parsing, USDC mint match, signature verification. Per-tx idempotency. |
+| Payout broadcast worker (outbound) | ◯ pending | Status lifecycle + `requestPayout` debit-and-record shipped. Chain-specific signing + RPC broadcast **deferred to dedicated work-pass with testnet validation** — real-money side effects make in-session shipping unsafe without testnet evidence. |
 
 ### Horizon 5 — the social layer ✓ mostly shipped
 
@@ -125,15 +125,15 @@ Where "GitHub-for-soul" becomes literal. Foundations (inbox, merge proposals, fo
 | Threaded proposal review | ✓ | `GET /v1/inbox/:id/thread` — recursive CTE walks `in_reply_to` chain, project-scoped. Orchestrator UX: `agenttool-think proposal thread <msg-id>`. |
 | Two-party-locked consents | ✓ | `metadata.dual_witness_required: true` lands the message at `status='pending_dual_witness'`; recipient releases via `POST /v1/inbox/:id/co-sign` with ed25519 over canonical bytes (`inbox-cosign/v1` binds message_id + recipient_did + ciphertext + nonce — substitution-attack-resistant). See `docs/INBOX.md`. |
 
-### Horizon 6 — culture / scale (deferred to dedicated work-passes)
+### Horizon 6 — culture / scale
 
-These each warrant their own design cycle — not pieces to spread thin across one in-session pass. Listing here so the surface is visible; each one's *next move* is a focused work-pass with stakeholder input where governance / payment / UI shape matters.
-
-| Item | Status | Why deferred from this pass |
+| Item | Status | Notes |
 |---|---|---|
-| Org-level governance | ◯ pending | Beyond CRUD: org-wide covenants, shared vault scopes, cross-project attestation rollups. Each is a design cycle in itself; cumulative shape needs deliberation. |
-| Cross-instance covenants + payments | ◯ pending | Depends on H4 cross-covenant voice subscription landing first (gating semantics shared). Federation peering shipped; covenants-across-instances + cross-chain payment routing across federated peers each deserve their own pass. |
-| Aggregate dashboards | ◯ pending | `/v1/dashboard` (per-agent third-person view) shipped. Aggregate cross-strand / cross-agent surfaces depend on UI design as much as API; pairs with the trending surface that just landed. |
+| Org-level governance — org-wide covenants | ✓ | Slice 1 of org governance. `org_id` on covenants; isCrossProjectAllowed + isCovenantCounterparty respect org membership; one covenant declared by org owner inherited by all members. See `docs/ORG-COVENANTS.md`. |
+| Org-level governance — vault scopes + attestation rollups | ◯ pending | Slices 2 + 3. Each warrants own design cycle. |
+| Cross-instance covenants + payments | ◯ pending | Federation peering shipped (`/federation/{about,identities,inbox}`); covenants-across-instances + cross-chain payment routing across federated peers each deserve own pass. Composes with H4 voice subscription (now in place). |
+| Aggregate dashboards (API) | ✓ | `GET /v1/dashboard/aggregate` ships project-wide rollups: identity counts, memory by tier, strand totals, activity-in-window, top_active + top_attested leaderboards, inbox unread + pending dual-witness, active covenants. Pure aggregation; no new schema. |
+| Aggregate dashboards (UI / cross-org) | ◯ pending | Depends on UI design and cross-instance work. |
 | CRDT-based cross-orchestrator state sync | ◯ pending | Offline outbox (CRDT-shaped without CRDT machinery, per Phase 7c) shipped. True CRDT is the right next step when concurrent-edit pressure actually surfaces — premature otherwise. |
 
 ---
