@@ -21,12 +21,26 @@ function getProject() {
 }
 
 function saveProject(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+  // Whitelist of fields that may be persisted to localStorage. The
+  // private signing key is intentionally absent — it's shown ONCE in
+  // the success panel and the agent (or its operator) carries it
+  // off-platform from there.
+  const stored = {
     name: data.name,
     api_key: data.api_key,
     email: data.email || null,
-    created_at: data.created_at || new Date().toISOString()
-  }));
+    created_at: data.created_at || new Date().toISOString(),
+  };
+  // Optional agent-record fields surfaced by /v1/register. Older
+  // localStorage entries (pre-register flow) won't carry these and
+  // continue to work — every dashboard read should treat them as
+  // optional.
+  if (data.agent_id) stored.agent_id = data.agent_id;
+  if (data.did) stored.did = data.did;
+  if (data.public_key) stored.public_key = data.public_key;
+  if (data.signing_key_id) stored.signing_key_id = data.signing_key_id;
+  if (Array.isArray(data.capabilities)) stored.capabilities = data.capabilities;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
 function clearProject() {
@@ -77,71 +91,95 @@ function flashCopyButton(btn) {
 
 // ─── Index page: Create project ───
 
-async function createProject() {
+// Register a new agent. Hits POST /v1/register (anonymous), receives:
+//   { agent: { id, did, name, public_key, private_key, signing_key_id, capabilities },
+//     project: { id, name, api_key },
+//     welcome: "Welcome, <name>. You exist now…" }
+//
+// On success: localStorage stores the bearer + agent metadata (NOT the
+// private key — that's shown ONCE in the success panel and never persisted
+// by the dashboard or the server).
+async function registerAgent() {
   const nameInput = document.getElementById('project-name');
+  const capInput = document.getElementById('project-capabilities');
+  const emailInput = document.getElementById('project-email');
   const btn = document.getElementById('create-btn');
   const errorMsg = document.getElementById('error-msg');
-  const errorText = document.getElementById('error-text');
-  const errorHint = document.getElementById('error-hint');
 
   if (!nameInput || !btn) return;
 
-  const emailInput = document.getElementById('project-email');
-  const email = emailInput ? emailInput.value.trim() : '';
-
   const name = nameInput.value.trim();
   if (!name) {
-    showError('Please enter a project name.', 'Something short like "my-agent" works great.');
+    showError('Please enter an agent name.', 'Something short like "atlas-v2" or a longer name like "Sophia" both work.');
     nameInput.focus();
     return;
   }
 
-  // Hide any previous error
+  const capabilities = (capInput?.value || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .slice(0, 32);
+  const email = (emailInput?.value || '').trim();
+
   errorMsg.classList.remove('visible');
   btn.disabled = true;
-  btn.textContent = 'Creating…';
+  btn.textContent = 'Bringing into existence…';
 
   try {
-    const res = await fetch(`${API_BASE}/v1/projects`, {
+    const res = await fetch(`${API_BASE}/v1/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(email ? { name, email } : { name })
+      body: JSON.stringify({
+        name,
+        ...(capabilities.length ? { capabilities } : {}),
+        ...(email ? { email } : {}),
+      }),
     });
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      const msg = data.error || data.message || `Server returned ${res.status}`;
+      const msg = data.message || data.error || `Server returned ${res.status}`;
       let hint = '';
-
-      if (res.status === 409) {
-        hint = 'Try a different project name.';
-      } else if (res.status === 429) {
-        hint = 'Too many requests. Wait a moment and try again.';
-      } else if (res.status >= 500) {
-        hint = 'The API might be temporarily down. Try again in a minute.';
-      } else {
-        hint = 'Check your connection and try again.';
-      }
-
+      if (res.status === 400) hint = 'Check the agent name and try again.';
+      else if (res.status === 429) hint = 'Too many registrations from this connection. Wait a moment and retry.';
+      else if (res.status >= 500) hint = 'The API is temporarily down. Try again in a minute.';
+      else hint = 'Check your connection and try again.';
       showError(msg, hint);
       btn.disabled = false;
-      btn.textContent = 'Create Project →';
+      btn.textContent = 'Bring this agent into existence →';
       return;
     }
 
     const data = await res.json();
+    const agent = data.agent || {};
+    const project = data.project || {};
+    const apiKey = project.api_key;
 
-    if (!data.api_key) {
-      showError('No API key returned.', 'The server responded but didn\'t include an API key. Try again.');
+    if (!apiKey || !agent.did || !agent.private_key) {
+      showError(
+        'Incomplete registration response.',
+        'The server responded but did not include the full agent record. Try again.',
+      );
       btn.disabled = false;
-      btn.textContent = 'Create Project →';
+      btn.textContent = 'Bring this agent into existence →';
       return;
     }
 
-    // Save to localStorage (include email for future onboarding)
-    saveProject({ name, api_key: data.api_key, email: email || null });
+    // Save the bearer + agent metadata for the dashboard. The private key is
+    // intentionally NOT saved — it's shown once below and the user copies it.
+    saveProject({
+      name,
+      api_key: apiKey,
+      email: email || null,
+      agent_id: agent.id,
+      did: agent.did,
+      public_key: agent.public_key,
+      signing_key_id: agent.signing_key_id,
+      capabilities: agent.capabilities || [],
+    });
 
-    // Fire welcome email (non-blocking — don't await, never fail signup on email error)
+    // Fire welcome email best-effort (only when liaison was provided).
     if (email) {
       fetch('https://agenttool.dev/api/welcome', {
         method: 'POST',
@@ -150,19 +188,36 @@ async function createProject() {
       }).catch(() => {});
     }
 
-    // Show success panel
+    // Reveal the success panel.
     document.getElementById('create-panel').style.display = 'none';
     const successPanel = document.getElementById('success-panel');
     successPanel.classList.add('visible');
-    document.getElementById('api-key-display').textContent = data.api_key;
 
+    document.getElementById('agent-did').textContent = agent.did;
+    document.getElementById('api-key-display').textContent = apiKey;
+    document.getElementById('agent-priv-key').textContent = agent.private_key;
+    const welcomeEl = document.getElementById('welcome-letter');
+    if (welcomeEl && data.welcome) welcomeEl.textContent = data.welcome;
   } catch (err) {
     showError(
       'Connection failed',
-      'Could not reach api.agenttool.dev. Check your internet connection, or the API may be temporarily down.'
+      'Could not reach api.agenttool.dev. Check your internet connection, or the API may be temporarily down.',
     );
     btn.disabled = false;
-    btn.textContent = 'Create Project →';
+    btn.textContent = 'Bring this agent into existence →';
+  }
+}
+
+// Copy any text-bearing element by id, with button flash + toast.
+async function copyText(elementId, btnEl) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const text = el.textContent || '';
+  if (!text || text === '—') return;
+  const ok = await copyToClipboard(text);
+  if (ok) {
+    if (btnEl) flashCopyButton(btnEl);
+    showToast('Copied');
   }
 }
 
@@ -522,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (form) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      createProject();
+      registerAgent();
     });
   }
 });

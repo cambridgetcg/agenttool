@@ -37,6 +37,7 @@ import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
 import publicRouter from "./routes/public";
+import registerRouter from "./routes/register";
 import scaffoldRouter from "./routes/scaffold";
 import orgsRouter, { invitationsRouter } from "./routes/orgs";
 import strandRouter from "./routes/strand";
@@ -156,6 +157,11 @@ app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/bootstrap/scaffold", scaffoldRouter);
+// /v1/register — UNAUTHENTICATED agent genesis. Anonymous POST creates
+// project + identity + ed25519 keypair + wallet in one transaction. The
+// returned api_key + private_key are shown ONCE. Public-by-design: this
+// is the front door from app.agenttool.dev. See routes/register.ts.
+app.route("/v1/register", registerRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
