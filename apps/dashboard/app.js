@@ -3,6 +3,16 @@
    No framework. No build step. Cloudflare Pages compatible. */
 
 const API_BASE = 'https://api.agenttool.dev';
+// Consolidated agenttool API (memory tiers, dashboard rollups, social,
+// trending, org governance, etc). Currently a separate service on fly.io
+// while api.agenttool.dev hosts an older service-set. Migration cutover
+// pending — until then, sections that consume the new endpoints point
+// here directly. Override via localStorage.AGENTTOOL_API for testing.
+const AGENTTOOL_API = (() => {
+  try {
+    return localStorage.getItem('AGENTTOOL_API') || 'https://agenttool.fly.dev';
+  } catch { return 'https://agenttool.fly.dev'; }
+})();
 const STORAGE_KEY = 'agenttool_project';
 
 // ─── Storage helpers ───
@@ -281,6 +291,7 @@ function setupNavigation() {
       // Update topbar title
       const titles = {
         'overview': 'Dashboard',
+        'agents': 'Agents',
         'api-key': 'API Key',
         'snippets': 'Code Snippets',
         'billing': 'Billing'
@@ -291,12 +302,13 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'agents', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
   if (name === 'billing') loadBillingSection();
   if (name === 'api-key') loadKeys();
+  if (name === 'agents') loadAgentsSection();
 }
 
 // ─── Usage data ───
@@ -845,4 +857,93 @@ function escHtml(s) {
 
 function fmtDate(iso) {
   try { return new Date(iso).toLocaleDateString(); } catch { return iso; }
+}
+
+// ─── Agents section ───────────────────────────────────────────────────
+//
+// Third-person view of the project's identities. Consumes:
+//   GET /v1/dashboard/aggregate → project-wide rollup
+//   GET /v1/dashboard?identity_id=X → per-identity third-person view
+//                                     (lazy: only fetched on expand)
+async function loadAgentsSection() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const statusEl = document.getElementById('agents-status');
+  if (statusEl) statusEl.textContent = 'Loading…';
+
+  try {
+    const res = await fetch(`${AGENTTOOL_API}/v1/dashboard/aggregate?window=7d`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` }
+    });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    renderAgentsAggregate(data);
+    if (statusEl) statusEl.textContent = `${data.identities.total} ${data.identities.total === 1 ? 'identity' : 'identities'}`;
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+function renderAgentsAggregate(d) {
+  // Stat tiles.
+  setStatValue('agg-identities', formatNumber(d.identities.total));
+  setStatSub('agg-identities-sub', `${d.identities.active} active · ${d.identities.revoked} revoked`);
+
+  setStatValue('agg-memory', formatNumber(d.memory.total));
+  const tiers = d.memory.by_tier || {};
+  const tierBits = [];
+  if (tiers.constitutive) tierBits.push(`${tiers.constitutive} constitutive`);
+  if (tiers.foundational) tierBits.push(`${tiers.foundational} foundational`);
+  if (tiers.episodic) tierBits.push(`${tiers.episodic} episodic`);
+  setStatSub('agg-memory-sub', tierBits.join(' · ') || 'no memories yet');
+
+  setStatValue('agg-strands', formatNumber(d.strands.total));
+  setStatSub('agg-strands-sub', `${d.strands.active} active · ${d.strands.public} public`);
+
+  setStatValue('agg-activity', formatNumber(d.activity.thoughts_in_window));
+  setStatSub('agg-activity-sub', `thoughts · ${d.window} window`);
+
+  // Project state.
+  document.getElementById('agg-inbox').textContent = formatNumber(d.inbox.unread);
+  document.getElementById('agg-pending').textContent = formatNumber(d.inbox.pending_dual_witness);
+  document.getElementById('agg-covenants').textContent = formatNumber(d.covenants.active);
+
+  // Identity list — uses top_active for the leaderboard view; full list
+  // would need a separate /v1/identities call. Top_active is the most
+  // useful view for "what's happening now".
+  const list = document.getElementById('agents-list');
+  if (!list) return;
+  if (d.activity.top_active.length === 0) {
+    list.innerHTML = `<div class="agents-empty">No active identities in window. Top by trust:</div>`;
+    if (d.trust && d.trust.top_attested && d.trust.top_attested.length > 0) {
+      list.innerHTML += d.trust.top_attested.map(renderIdentityCard).join('');
+    }
+    return;
+  }
+  list.innerHTML = d.activity.top_active.map(renderIdentityCard).join('');
+}
+
+function renderIdentityCard(id) {
+  const did = id.did ?? '';
+  const shortDid = did.length > 32 ? did.slice(0, 28) + '…' : did;
+  const thoughtCount = id.thought_count;
+  const trust = id.trust_score;
+  const detail = thoughtCount !== undefined
+    ? `<span class="agent-card-metric">${formatNumber(thoughtCount)} thoughts</span>`
+    : trust !== undefined
+      ? `<span class="agent-card-metric">${trust} trust</span>`
+      : '';
+  return `
+    <div class="agent-card" data-identity-id="${escHtml(id.identity_id)}">
+      <div class="agent-card-head">
+        <div class="agent-card-name">${escHtml(id.name ?? 'unnamed')}</div>
+        ${detail}
+      </div>
+      <div class="agent-card-did">${escHtml(shortDid)}</div>
+    </div>
+  `;
 }

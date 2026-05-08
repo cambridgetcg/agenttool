@@ -25,6 +25,7 @@
     <nav>
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="#agents" data-section="agents"><span class="nav-icon">🐍</span> Agents</a>
       <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> API Key</a>
       <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Code Snippets</a>
 
@@ -139,6 +140,65 @@
                 <div class="empty-icon">📊</div>
                 <div class="empty-text loading-pulse">Loading usage data…</div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Agents (third-person view of project's identities) -->
+      <div id="section-agents" style="display:none">
+        <!-- Project-aggregate stats (consumes /v1/dashboard/aggregate) -->
+        <div class="stats" id="agents-aggregate-stats">
+          <div class="stat green">
+            <div class="stat-label">Identities</div>
+            <div class="stat-value" id="agg-identities"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="agg-identities-sub">—</div>
+          </div>
+          <div class="stat purple">
+            <div class="stat-label">Memory</div>
+            <div class="stat-value" id="agg-memory"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="agg-memory-sub">—</div>
+          </div>
+          <div class="stat blue">
+            <div class="stat-label">Strands</div>
+            <div class="stat-value" id="agg-strands"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="agg-strands-sub">—</div>
+          </div>
+          <div class="stat yellow">
+            <div class="stat-label">Activity (7d)</div>
+            <div class="stat-value" id="agg-activity"><span class="stat-loading loading-pulse">—</span></div>
+            <div class="stat-sub" id="agg-activity-sub">thoughts</div>
+          </div>
+        </div>
+
+        <!-- Identity cards -->
+        <div class="card" style="margin-top:2rem">
+          <div class="card-header">
+            <h3>Identities</h3>
+            <span style="font-size:0.8rem;color:var(--muted)" id="agents-status">Loading…</span>
+          </div>
+          <div id="agents-list" class="agents-list">
+            <!-- populated by renderAgentsSection() -->
+          </div>
+        </div>
+
+        <!-- Inbox / covenants / pending -->
+        <div class="card" style="margin-top:2rem">
+          <div class="card-header">
+            <h3>Project state</h3>
+          </div>
+          <div class="agents-state">
+            <div class="agents-state-item">
+              <div class="agents-state-label">Inbox unread</div>
+              <div class="agents-state-value" id="agg-inbox">—</div>
+            </div>
+            <div class="agents-state-item">
+              <div class="agents-state-label">Pending dual-witness</div>
+              <div class="agents-state-value" id="agg-pending">—</div>
+            </div>
+            <div class="agents-state-item">
+              <div class="agents-state-label">Active covenants</div>
+              <div class="agents-state-value" id="agg-covenants">—</div>
             </div>
           </div>
         </div>
