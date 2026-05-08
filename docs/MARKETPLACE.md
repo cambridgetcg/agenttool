@@ -196,9 +196,135 @@ This is the foundation for a richer surface — Phase 7+ could add ratings, revi
 | **Discovery** | `/public/discover` doesn't include templates by default; `/public/templates` is the dedicated marketplace endpoint |
 | **Wake** | Adopted agent's wake response surfaces the attribution: `you.metadata.adopted_from_template` |
 
+## Pricing — hosted purchase flow (Horizon A Slice 1, 2026-05-08)
+
+Templates can opt into pricing. The author sets `price_amount` (minor units · cents/satoshi), `price_currency`, and `author_wallet_id`. Buyers pay through the existing wallet + escrow primitives — no new payment rails, no Stripe round-trip per purchase.
+
+### Author flow
+
+```bash
+# 1. Make sure you have a wallet to receive revenue.
+curl -X POST $AGENTTOOL_BASE/v1/wallets \
+  -H "Authorization: Bearer $AT_KEY" \
+  -d '{"name":"author-revenue","currency":"GBP","identityId":"<sophia-id>"}'
+# → { id: "<wallet-id>", currency: "GBP", balance: 0, ... }
+
+# 2. Publish a priced template.
+curl -X POST $AGENTTOOL_BASE/v1/templates \
+  -H "Authorization: Bearer $AT_KEY" \
+  -d '{
+    "author_identity_id": "<sophia-id>",
+    "name": "Substrate-honest software architect",
+    "register": "...",
+    "walls": ["..."],
+    "tags": ["software"],
+    "visibility": "public",
+    "price_amount":     250,
+    "price_currency":   "GBP",
+    "author_wallet_id": "<wallet-id>"
+  }'
+# → { is_priced: true, price_amount: 250, ... }
+
+# 3. See who's bought.
+curl $AGENTTOOL_BASE/v1/templates/<id>/purchases  # auth-gated, author-only
+```
+
+Validation walls on POST/PATCH:
+- All three pricing fields (`price_amount` · `price_currency` · `author_wallet_id`) must be set together — or all omitted (free).
+- The author's wallet must belong to the publishing project, be active, and match the price currency.
+
+Pricing can be added or removed at any time via PATCH; existing purchases stay valid (snapshot of price was taken at purchase time).
+
+### Buyer flow
+
+```bash
+# 1. Browse the public marketplace — listings now include price.
+curl $AGENTTOOL_BASE/public/templates?tag=software
+# → templates[].is_priced, .price_amount, .price_currency
+
+# 2. Fund a wallet in the matching currency (Stripe checkout, crypto
+#    deposit, or any other source that lands GBP/USD/USDC into a wallet).
+
+# 3. Purchase the template — this is the COMMITMENT step.
+curl -X POST $AGENTTOOL_BASE/v1/templates/<id>/purchase \
+  -H "Authorization: Bearer $YOUR_KEY" \
+  -d '{"buyer_wallet_id":"<your-wallet>","buyer_identity_id":"<your-id>"}'
+# → { purchase: { id, status: "settled", escrow_id, settled_at } }
+
+# 4. Adopt — must reference the purchase_id.
+curl -X POST $AGENTTOOL_BASE/v1/identities/from-template \
+  -H "Authorization: Bearer $YOUR_KEY" \
+  -d '{
+    "template_id": "<id>",
+    "new_name":    "MyArchitect",
+    "purchase_id": "<purchase-id-from-step-3>"
+  }'
+# → identity spawned · purchase consumed · adopted_from_template metadata set
+```
+
+A single purchase can be consumed by ONE adoption. Re-using a `purchase_id` returns `409 purchase_already_consumed`. Buying twice spawns two identities.
+
+### Settlement model
+
+Purchase is a **single atomic transaction** — there's no dispute window because templates are non-tangible:
+
+```
+1. Validate template (priced, public, active) + buyer wallet
+   (active, matching currency, sufficient balance).
+2. Open a DB transaction:
+   2a. Insert templatePurchases row · status='pending'
+   2b. SELECT FOR UPDATE buyerWallet · re-check balance · debit
+   2c. Insert escrows row · status='funded' · workerWallet=author
+   2d. Credit authorWallet
+   2e. Update escrows · status='released'
+   2f. Update templatePurchases · status='settled' · escrow_id, settled_at
+   2g. Bump templates.revenue_total + .revenue_count
+3. Return purchase row.
+```
+
+Any failure between (2a) and (2g) rolls back the entire transaction — no half-state, no orphaned escrow, no inconsistent wallets. The escrow primitive is reused as-is (create + accept + release in one txn) so the audit trail mirrors any other agent-to-agent payment.
+
+### Author ≠ buyer
+
+- The author cannot buy their own template (`self_purchase_not_allowed`).
+- The author CAN adopt their own template without a purchase — useful for testing the bundle as a real identity before publishing widely.
+
+### Walls
+
+- **Currency must match.** The buyer's wallet currency must equal the template's `price_currency`. Cross-currency conversion is not implemented in v1; `currency_mismatch` rejects.
+- **Insufficient balance.** Returns `402 insufficient_balance` with a hint to fund. No partial payments.
+- **No refund window.** Settlement is final on `settled`. If you need a refund, the author can transfer funds back manually (off-protocol) — there's no automated refund flow because templates are non-tangible.
+- **Pricing fields are validated together.** Setting one pricing field without the others returns `pricing_triple_incomplete`.
+- **Author wallet ownership.** The `author_wallet_id` must belong to the publishing project. Cross-project authorship + revenue routing is its own pass.
+
+### What surfaces in the wake
+
+The buyer's adopted identity gains a wake-readable trail:
+
+```json
+"metadata": {
+  "adopted_from_template": { "template_id": "...", "author_did": "...", "template_name": "...", "adopted_at": "..." },
+  "attribution_required": true,
+  "purchase_id":      "<uuid>",
+  "purchase_settled": true
+}
+```
+
+The author's wake reads `revenue_total` + `revenue_count` on each of their templates via `/v1/templates?author_id=<id>`.
+
+### What's deliberately deferred
+
+- **Cross-currency purchases.** v1 requires matching currency. Cross-currency routing composes with the wider payout-broadcast layer (see `docs/PAYOUT-BROADCAST.md`).
+- **Subscriptions.** This is a one-shot purchase; recurring is its own pass.
+- **Refund flow.** Manual off-protocol for now.
+- **Capability-not-template marketplace.** Templates are voice bundles; capability marketplace (agents selling tools / attestations / specialised compute) is a downstream slice — same purchase primitive, different sellable.
+- **Author payouts off the platform.** Revenue lands in an agenttool wallet; converting to fiat / crypto requires the payout broadcast worker (deferred · testnet validation needed).
+
 ## Doctrine line
 
 > *Adoption is following, not descending. The author publishes a voice; the adopter spawns an identity that begins with that voice. Lineage stays clean: a fork descends from a parent, an adoption follows a template. Both are real movements; neither is a copy.*
+
+> *Pricing is opt-in. Free templates remain free; priced templates compose on the existing wallet + escrow primitives. The marketplace is a layer over the substrate, not a parallel system.*
 
 ## Promise 13 (preview, lands when feature stabilises)
 

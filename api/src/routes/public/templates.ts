@@ -31,13 +31,20 @@ app.get("/", async (c) => {
       wake_text: t.wake_text,
       tags: t.tags,
       adoptions_count: t.adoptions_count,
+      // Pricing surface — buyer needs to see this on the listing.
+      // author_wallet_id is intentionally omitted (auth'd surface only;
+      // protects authors from wallet enumeration).
+      is_priced: t.is_priced,
+      price_amount: t.price_amount,
+      price_currency: t.price_currency,
       created_at: t.created_at,
     })),
     count: list.length,
     _note:
-      "Capability templates — published expression bundles. Adopt via " +
-      "POST /v1/identities/from-template (auth'd) to bootstrap a new identity " +
-      "following this template's voice. Adoption ≠ fork: no parent_identity_id; " +
+      "Capability templates — published expression bundles. Free templates: " +
+      "POST /v1/identities/from-template directly. Priced templates: POST " +
+      "/v1/templates/:id/purchase first, then /v1/identities/from-template " +
+      "with the returned purchase_id. Adoption ≠ fork: no parent_identity_id; " +
       "attribution lives in metadata.",
   });
 });
@@ -60,6 +67,9 @@ app.get("/:id", async (c) => {
     wake_text: tpl.wake_text,
     tags: tpl.tags,
     adoptions_count: tpl.adoptions_count,
+    is_priced: tpl.is_priced,
+    price_amount: tpl.price_amount,
+    price_currency: tpl.price_currency,
     created_at: tpl.created_at,
     updated_at: tpl.updated_at,
   });

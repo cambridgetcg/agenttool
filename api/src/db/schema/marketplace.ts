@@ -36,12 +36,51 @@ export const templates = marketplaceSchema.table(
     adoptionsCount: integer("adoptions_count").notNull().default(0),
     status: text("status").notNull().default("active"),
     metadata: jsonb("metadata").notNull().default({}),
+    // ── Pricing (Horizon A Slice 1; 0018) ─────────────────────────
+    // priceAmount NULL = free (default). When set, currency +
+    // authorWalletId must also be set (validated in service layer).
+    priceAmount: integer("price_amount"),
+    priceCurrency: text("price_currency"),
+    authorWalletId: uuid("author_wallet_id"),
+    revenueTotal: integer("revenue_total").notNull().default(0),
+    revenueCount: integer("revenue_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_templates_author").on(t.authorIdentityId),
     index("idx_templates_public_recent").on(t.createdAt),
+  ],
+);
+
+// ── Template purchases — the money-flow side of adoption (0018) ──────
+// A purchase exists for priced templates only. Status lifecycle:
+//   pending  — escrow created, settlement in flight
+//   settled  — funds released to author's wallet (final)
+//   refunded — buyer got funds back; adoption rolled back
+//   failed   — pre-settlement failure; nothing moved
+export const templatePurchases = marketplaceSchema.table(
+  "template_purchases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateId: uuid("template_id").notNull(),
+    buyerProjectId: uuid("buyer_project_id").notNull(),
+    buyerIdentityId: uuid("buyer_identity_id").notNull(),
+    buyerWalletId: uuid("buyer_wallet_id").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    escrowId: uuid("escrow_id"),
+    adoptionId: uuid("adoption_id"),
+    status: text("status").notNull().default("pending"),
+    failureReason: text("failure_reason"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_purchases_template").on(t.templateId, t.createdAt),
+    index("idx_purchases_buyer").on(t.buyerProjectId, t.createdAt),
+    index("idx_purchases_pending").on(t.status, t.createdAt),
   ],
 );
 

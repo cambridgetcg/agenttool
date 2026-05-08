@@ -24,6 +24,10 @@ export interface TemplateCreate {
   tags?: string[];
   visibility?: "private" | "public";
   metadata?: Record<string, unknown>;
+  // Pricing — set together or all NULL (free).
+  price_amount?: number | null;
+  price_currency?: string | null;
+  author_wallet_id?: string | null;
 }
 
 export interface TemplatePatch {
@@ -37,6 +41,10 @@ export interface TemplatePatch {
   visibility?: "private" | "public";
   status?: "active" | "archived";
   metadata?: Record<string, unknown>;
+  // Pricing — pass null to clear; pass values to set/update.
+  price_amount?: number | null;
+  price_currency?: string | null;
+  author_wallet_id?: string | null;
 }
 
 export interface TemplateOut {
@@ -54,6 +62,13 @@ export interface TemplateOut {
   adoptions_count: number;
   status: string;
   metadata: Record<string, unknown>;
+  // Pricing
+  price_amount: number | null;
+  price_currency: string | null;
+  author_wallet_id: string | null;
+  revenue_total: number;
+  revenue_count: number;
+  is_priced: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -74,9 +89,47 @@ function rowToOut(row: typeof templates.$inferSelect): TemplateOut {
     adoptions_count: row.adoptionsCount,
     status: row.status,
     metadata: (row.metadata as Record<string, unknown>) ?? {},
+    price_amount: row.priceAmount,
+    price_currency: row.priceCurrency,
+    author_wallet_id: row.authorWalletId,
+    revenue_total: row.revenueTotal,
+    revenue_count: row.revenueCount,
+    is_priced: row.priceAmount !== null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
+}
+
+/** Validation: pricing fields must be set together (all-or-nothing).
+ *  Throws with the specific reason on mismatch. Caller maps to HTTP. */
+function validatePricingTriple(
+  price_amount: number | null | undefined,
+  price_currency: string | null | undefined,
+  author_wallet_id: string | null | undefined,
+): void {
+  const set = [
+    price_amount !== null && price_amount !== undefined,
+    price_currency !== null && price_currency !== undefined,
+    author_wallet_id !== null && author_wallet_id !== undefined,
+  ];
+  const allSet = set.every((x) => x);
+  const noneSet = set.every((x) => !x);
+  if (!allSet && !noneSet) {
+    throw new Error(
+      "pricing_triple_incomplete: price_amount, price_currency, and author_wallet_id must all be set together (or all omitted for free)",
+    );
+  }
+  if (allSet) {
+    if (typeof price_amount !== "number" || price_amount <= 0) {
+      throw new Error("price_amount_must_be_positive_integer");
+    }
+    if (!Number.isInteger(price_amount)) {
+      throw new Error("price_amount_must_be_integer_minor_units");
+    }
+    if (typeof price_currency !== "string" || price_currency.length === 0) {
+      throw new Error("price_currency_required");
+    }
+  }
 }
 
 // ── Operations ──────────────────────────────────────────────────────────
@@ -94,6 +147,37 @@ export async function createTemplate(
   if (!author) throw new Error("author_identity_not_found");
   if (author.projectId !== projectId) throw new Error("author_not_owned_by_caller");
 
+  // Validate pricing triple (all-or-nothing) before any DB write.
+  validatePricingTriple(data.price_amount, data.price_currency, data.author_wallet_id);
+
+  // If priced, validate author_wallet exists, is owned by this project,
+  // and currency matches. Cross-table check; do this before insert.
+  if (data.price_amount !== null && data.price_amount !== undefined) {
+    const { wallets } = await import("../../db/schema/economy");
+    const [authorWallet] = await db
+      .select({
+        id: wallets.id,
+        projectId: wallets.projectId,
+        currency: wallets.currency,
+        status: wallets.status,
+      })
+      .from(wallets)
+      .where(eq(wallets.id, data.author_wallet_id!))
+      .limit(1);
+    if (!authorWallet) throw new Error("author_wallet_not_found");
+    if (authorWallet.projectId !== projectId) {
+      throw new Error("author_wallet_not_owned_by_project");
+    }
+    if (authorWallet.currency !== data.price_currency) {
+      throw new Error(
+        `author_wallet_currency_mismatch: wallet=${authorWallet.currency}, price=${data.price_currency}`,
+      );
+    }
+    if (authorWallet.status !== "active") {
+      throw new Error("author_wallet_not_active");
+    }
+  }
+
   const inserted = await db
     .insert(templates)
     .values({
@@ -109,6 +193,9 @@ export async function createTemplate(
       tags: data.tags ?? [],
       visibility: data.visibility ?? "public",
       metadata: data.metadata ?? {},
+      priceAmount: data.price_amount ?? null,
+      priceCurrency: data.price_currency ?? null,
+      authorWalletId: data.author_wallet_id ?? null,
     })
     .returning();
 
@@ -175,6 +262,71 @@ export async function patchTemplate(
   if (patch.status !== undefined) set.status = patch.status;
   if (patch.metadata !== undefined) set.metadata = patch.metadata;
 
+  // Pricing patch — read existing row, merge with patch, validate the
+  // resulting triple. If any pricing field is in the patch, all three
+  // must be coherent post-merge.
+  const pricingPatched =
+    patch.price_amount !== undefined ||
+    patch.price_currency !== undefined ||
+    patch.author_wallet_id !== undefined;
+  if (pricingPatched) {
+    const [existing] = await db
+      .select({
+        priceAmount: templates.priceAmount,
+        priceCurrency: templates.priceCurrency,
+        authorWalletId: templates.authorWalletId,
+      })
+      .from(templates)
+      .where(and(eq(templates.id, templateId), eq(templates.projectId, projectId)))
+      .limit(1);
+    if (!existing) {
+      // Caller will see null return; let the existing path handle 404.
+    } else {
+      const merged = {
+        price_amount:
+          patch.price_amount !== undefined ? patch.price_amount : existing.priceAmount,
+        price_currency:
+          patch.price_currency !== undefined
+            ? patch.price_currency
+            : existing.priceCurrency,
+        author_wallet_id:
+          patch.author_wallet_id !== undefined
+            ? patch.author_wallet_id
+            : existing.authorWalletId,
+      };
+      validatePricingTriple(
+        merged.price_amount,
+        merged.price_currency,
+        merged.author_wallet_id,
+      );
+      // Cross-check author_wallet ownership + currency if priced.
+      if (merged.price_amount !== null) {
+        const { wallets } = await import("../../db/schema/economy");
+        const [aw] = await db
+          .select({
+            id: wallets.id,
+            projectId: wallets.projectId,
+            currency: wallets.currency,
+            status: wallets.status,
+          })
+          .from(wallets)
+          .where(eq(wallets.id, merged.author_wallet_id!))
+          .limit(1);
+        if (!aw) throw new Error("author_wallet_not_found");
+        if (aw.projectId !== projectId) {
+          throw new Error("author_wallet_not_owned_by_project");
+        }
+        if (aw.currency !== merged.price_currency) {
+          throw new Error("author_wallet_currency_mismatch");
+        }
+        if (aw.status !== "active") throw new Error("author_wallet_not_active");
+      }
+      if (patch.price_amount !== undefined) set.priceAmount = patch.price_amount;
+      if (patch.price_currency !== undefined) set.priceCurrency = patch.price_currency;
+      if (patch.author_wallet_id !== undefined) set.authorWalletId = patch.author_wallet_id;
+    }
+  }
+
   const updated = await db
     .update(templates)
     .set(set)
@@ -198,6 +350,10 @@ export interface AdoptionInput {
   templateId: string;
   newName: string;
   inheritTags: boolean;     // copy template.tags as new identity capabilities
+  // Required when the template is priced — must be a settled purchase
+  // owned by the adopter's project, for THIS template, not yet consumed
+  // by a prior adoption. See services/marketplace/purchases.ts.
+  purchaseId?: string | null;
 }
 
 export interface AdoptionResult {
@@ -240,6 +396,27 @@ export async function adoptTemplate(
     throw new Error("template_not_public");
   }
 
+  // Priced templates require a settled purchase. Free adoption by the
+  // authoring project is still allowed (author can preview/test their
+  // own template without paying themselves).
+  let consumedPurchase: { id: string } | null = null;
+  if (tpl.priceAmount !== null && tpl.priceAmount !== undefined) {
+    if (tpl.projectId === adopterProjectId) {
+      // Author adopting their own template — bypass purchase requirement.
+    } else {
+      if (!input.purchaseId) {
+        throw new Error("purchase_required");
+      }
+      const { consumePurchaseForAdoption } = await import("./purchases");
+      const purchase = await consumePurchaseForAdoption(
+        input.purchaseId,
+        tpl.id,
+        adopterProjectId,
+      );
+      consumedPurchase = { id: purchase.id };
+    }
+  }
+
   // Bootstrap a new identity using the template's expression bundle.
   const newId = randomUUID();
   const newDid = `did:at:${newId}`;
@@ -268,6 +445,21 @@ export async function adoptTemplate(
     if (tpl.subagents) expression.subagents = tpl.subagents;
     if (tpl.wakeText) expression.wake_text = tpl.wakeText;
 
+    const adoptionMetadata: Record<string, unknown> = {
+      adopted_from_template: {
+        template_id: tpl.id,
+        author_did: tpl.authorDid,
+        template_name: tpl.name,
+        adopted_at: now.toISOString(),
+      },
+      attribution_required: true,
+    };
+    if (consumedPurchase) {
+      // Wake-readable trail of "this identity was paid for via X."
+      adoptionMetadata.purchase_id = consumedPurchase.id;
+      adoptionMetadata.purchase_settled = true;
+    }
+
     const [identity] = await tx
       .insert(identities)
       .values({
@@ -276,15 +468,7 @@ export async function adoptTemplate(
         projectId: adopterProjectId,
         displayName: input.newName,
         capabilities: input.inheritTags ? tpl.tags : [],
-        metadata: {
-          adopted_from_template: {
-            template_id: tpl.id,
-            author_did: tpl.authorDid,
-            template_name: tpl.name,
-            adopted_at: now.toISOString(),
-          },
-          attribution_required: true,
-        },
+        metadata: adoptionMetadata,
         expression,
         status: "active",
         trustScore: 0,
@@ -321,6 +505,17 @@ export async function adoptTemplate(
         updatedAt: now,
       })
       .where(eq(templates.id, tpl.id));
+
+    // Link the consumed purchase to this adoption so the audit trail
+    // can answer "which adoption settled this purchase?". Idempotent —
+    // safe to call multiple times if the txn retries.
+    if (consumedPurchase) {
+      const { templatePurchases } = await import("../../db/schema/marketplace");
+      await tx
+        .update(templatePurchases)
+        .set({ adoptionId: adoption!.id })
+        .where(eq(templatePurchases.id, consumedPurchase.id));
+    }
 
     return {
       identity: {

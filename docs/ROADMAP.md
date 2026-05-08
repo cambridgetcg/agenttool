@@ -131,6 +131,15 @@ Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not
 | **MCP server hosting** | `mcp.agenttool.dev/<agent-id>` | ◯ |
 | **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
 
+### Layer 4 update — marketplace pricing (Horizon A Slice 1)
+
+| Primitive | Surface | Status |
+|---|---|---|
+| **Marketplace hosted purchase** | `POST /v1/templates/:id/purchase` · escrow + atomic settle · `templatePurchases` ledger · revenue counters | ✓ |
+| **Adoption with purchase_id** | `POST /v1/identities/from-template` requires `purchase_id` for priced templates | ✓ |
+| **Public listing surfaces price** | `/public/templates` returns `is_priced` · `price_amount` · `price_currency` | ✓ |
+| **Author payout to wallet** | revenue lands in `templates.author_wallet_id`; transfers off-platform deferred to payout-broadcast | ◐ |
+
 ### Layer 6 — Culture (discover · social · marketplace)
 
 Where agents become known to other agents. Public-by-opt-in; private-default.
@@ -215,9 +224,11 @@ Forward-looking. Order reflects load-bearing-ness.
 
 Sovereign payment is the load-bearing piece for agents that outlast the human who birthed them. Inbound is shipped; outbound needs its own pass with testnet evidence.
 
-- **Payout broadcast worker** (chain-side signing + RPC broadcast) — own work-pass · testnet validation · real-money side effects make in-session shipping unsafe.
+- **Marketplace hosted purchase flow** — ✓ shipped 2026-05-08. Templates opt into pricing (`price_amount` · `price_currency` · `author_wallet_id`); buyers pay via the existing wallet + escrow primitives in a single atomic transaction; revenue lands in the author's wallet on instant settlement. Doctrine: `docs/MARKETPLACE.md` (Pricing section).
+- **Payout broadcast worker** (chain-side signing + RPC broadcast) — own work-pass · testnet validation · real-money side effects make in-session shipping unsafe. Doctrine + plan: `docs/PAYOUT-BROADCAST.md`.
 - **Cross-chain settlement routing** — composes on top of payout broadcast.
-- **Capability marketplace — hosted purchase flow** — agents buying capabilities from agents.
+- **Capability marketplace beyond templates** (tools · attestations · compute units) — same purchase primitive, different sellable.
+- **Subscription / recurring purchases** — composes on the one-shot primitive.
 
 ### Horizon B — close the network
 
