@@ -821,6 +821,151 @@ pre {
   border: 1px solid var(--border);
 }
 
+/* ─── Letters (chronicle as conversation) ──────────────────── */
+.letters-compose {
+  margin-top: 0.5rem;
+}
+.letters-compose-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.letters-compose-row .strand-select {
+  flex: 0 0 130px;
+}
+.letters-title {
+  flex: 1 1 auto;
+}
+.letters-body {
+  width: 100%;
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.letters-compose-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.letters-byline-hint {
+  font-style: italic;
+}
+
+.letters-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 0.5rem;
+}
+.letter-row {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  border-left-width: 3px;
+}
+.letter-from-human {
+  border-left-color: var(--accent);
+}
+.letter-from-agent {
+  border-left-color: var(--accent-soft);
+  background: var(--surface3);
+}
+.letter-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+.letter-author {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-soft);
+}
+.letter-from-human .letter-author {
+  color: var(--accent);
+}
+.letter-type {
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  background: var(--surface3);
+  color: var(--muted);
+}
+.letter-from-agent .letter-type {
+  background: var(--bg);
+}
+.letter-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.letter-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.3rem;
+}
+.letter-body {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.letter-anno-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+.letter-anno {
+  font-size: 0.66rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+  font-family: var(--mono);
+}
+
+/* ─── Voice (expression editor) ────────────────────────────── */
+.voice-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.voice-preview-wrap {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+.voice-preview {
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  margin-top: 0.5rem;
+  max-height: 480px;
+  overflow: auto;
+  word-break: break-word;
+}
+
 /* ─── Profile modal ──────────────────────────────────────── */
 .modal-backdrop {
   position: fixed; inset: 0;

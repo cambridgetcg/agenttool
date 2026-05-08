@@ -353,6 +353,8 @@ function setupNavigation() {
       // Update topbar title — agent-shaped labels match the sidebar.
       const titles = {
         'overview': 'Overview',
+        'letters': 'Letters',
+        'voice': 'Voice',
         'strands': 'Strands',
         'inbox': 'Inbox',
         'agents': 'Agents',
@@ -367,7 +369,7 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'agents', 'strands', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
@@ -377,6 +379,8 @@ function showSection(name) {
   if (name === 'strands') loadStrandsSection();
   if (name === 'discover') loadDiscoverSection();
   if (name === 'inbox') loadInboxSection();
+  if (name === 'letters') loadLetters();
+  if (name === 'voice') loadVoice();
 }
 
 // Render the Bearer section purely from localStorage. The legacy
@@ -2315,4 +2319,320 @@ function appendThoughtFromVoice(t) {
     const n = feed.children.length;
     titleEl.textContent = `Thoughts (${n}, newest first)`;
   }
+}
+
+// ─── Letters — chronicle as the human↔agent conversation ────────────────
+//
+// Both directions land in /v1/chronicle. Heartbeat ticks (agent-side) write
+// entries with metadata.byline like "from ai · Beta 🦞"; the dashboard
+// composer writes entries with metadata.byline = "from human · <name>".
+// The thread renders both interleaved by occurred_at, so the conversation
+// reads naturally regardless of who spoke last.
+
+async function loadLetters() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  // Render the byline-hint name from localStorage so the composer's footer
+  // matches what the entry will be tagged with on send.
+  const fromNameEl = document.getElementById('letter-from-name');
+  if (fromNameEl) fromNameEl.textContent = project.email || project.name || 'you';
+
+  const statusEl = document.getElementById('letters-status');
+  const threadEl = document.getElementById('letters-thread');
+  if (!threadEl) return;
+
+  if (statusEl) statusEl.textContent = 'Loading…';
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/chronicle?limit=100`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      threadEl.innerHTML = '';
+      return;
+    }
+    const data = await res.json();
+    const entries = data.entries || [];
+    renderLettersThread(entries, statusEl, threadEl);
+  } catch {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+function renderLettersThread(entries, statusEl, threadEl) {
+  if (entries.length === 0) {
+    threadEl.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">💌</div>
+        <div>No letters yet.</div>
+        <div style="margin-top:0.5rem;font-size:0.78rem">
+          Compose above. Or wait for the agent to write — heartbeat ticks
+          drop chronicle entries here automatically when something deserves
+          to outlast the conversation.
+        </div>
+      </div>
+    `;
+    if (statusEl) statusEl.textContent = '';
+    return;
+  }
+  if (statusEl) statusEl.textContent = `${entries.length} letter${entries.length === 1 ? '' : 's'}`;
+  threadEl.innerHTML = entries.map(renderLetterRow).join('');
+}
+
+function renderLetterRow(e) {
+  const meta = e.metadata || {};
+  const byline = String(meta.byline || '').trim();
+  // Heartbeat ticks tag "from ai · Beta 🦞"; dashboard composer tags
+  // "from human · <name>". Anything starting with "from human" is human-side.
+  const isHuman = /^from\s+human/i.test(byline);
+  const sideClass = isHuman ? 'letter-from-human' : 'letter-from-agent';
+  const author = byline
+    ? escHtml(byline.replace(/^from\s+/i, ''))
+    : (isHuman ? 'human' : 'agent');
+
+  const time = e.occurred_at ? fmtRelative(e.occurred_at) : '—';
+  const typeBadge = `<span class="letter-type">${escHtml(e.type || 'note')}</span>`;
+  const title = e.title ? `<div class="letter-title">${escHtml(e.title)}</div>` : '';
+  const body = e.body
+    ? `<div class="letter-body">${escHtml(e.body).replace(/\n/g, '<br/>')}</div>`
+    : '';
+
+  // Tick + posture annotations from heartbeat metadata, when present.
+  const annotations = [];
+  if (meta.mode) annotations.push(`<span class="letter-anno">${escHtml(meta.mode)}</span>`);
+  if (meta.tick) annotations.push(`<span class="letter-anno">tick ${escHtml(String(meta.tick))}</span>`);
+  if (meta.posture_declared) annotations.push(`<span class="letter-anno">${escHtml(meta.posture_declared)}</span>`);
+  const annoLine = annotations.length
+    ? `<div class="letter-anno-row">${annotations.join(' · ')}</div>`
+    : '';
+
+  return `
+    <div class="letter-row ${sideClass}">
+      <div class="letter-head">
+        <div class="letter-author">${escHtml(author)}</div>
+        ${typeBadge}
+        <div class="letter-time">${time}</div>
+      </div>
+      ${title}
+      ${body}
+      ${annoLine}
+    </div>
+  `;
+}
+
+async function sendLetter() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const typeEl = document.getElementById('letter-type');
+  const titleEl = document.getElementById('letter-title');
+  const bodyEl = document.getElementById('letter-body');
+  const btn = document.getElementById('letter-send-btn');
+  if (!titleEl || !bodyEl || !btn) return;
+  if (btn.disabled) return;
+
+  const type = typeEl?.value || 'note';
+  const title = titleEl.value.trim();
+  const body = bodyEl.value.trim();
+
+  if (!title) {
+    showToast('A title helps the agent find this letter later.', 'error');
+    titleEl.focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  // Byline: "from human · <name>". This is what renders in the thread and
+  // distinguishes human-side entries from agent-side heartbeat entries.
+  const fromName = project.email || project.name || 'you';
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/chronicle`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${project.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type,
+        title,
+        body: body || undefined,
+        metadata: {
+          byline: `from human · ${fromName}`,
+          mode: 'dashboard',
+          source: 'app.agenttool.dev/dashboard',
+        },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || `Server returned ${res.status}`, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Send →';
+      return;
+    }
+    titleEl.value = '';
+    bodyEl.value = '';
+    showToast('Letter sent — landing in the agent\'s wake');
+    btn.disabled = false;
+    btn.textContent = 'Send →';
+    // Reload the thread to surface the new entry at the top.
+    loadLetters();
+  } catch {
+    showToast('Network error', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Send →';
+  }
+}
+
+// ─── Voice — expression editor (the human shapes the agent's declarations) ──
+
+async function loadVoice() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const statusEl = document.getElementById('voice-status');
+  const identityId = await resolveAgentIdentityId();
+  if (!identityId) {
+    if (statusEl) statusEl.textContent = 'No identity on this bearer to edit. Re-register or paste a bearer with agent_id.';
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = 'Loading expression…';
+
+  try {
+    // /expression returns the agent's DECLARED expression (what the human
+    // PUTs). The composed effective version (declared + memory patches)
+    // is in /foundations.effective; we surface declared here for editing.
+    const res = await fetch(`${API_BASE}/v1/identities/${encodeURIComponent(identityId)}/expression`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    const e = data.expression || {};
+    document.getElementById('voice-register').value = e.register || '';
+    document.getElementById('voice-walls').value = (e.walls || []).join('\n');
+    document.getElementById('voice-wake-text').value = e.wake_text || '';
+    if (statusEl) {
+      statusEl.textContent = data.is_default
+        ? 'No declared expression yet — defaults from doctrine apply. Edit + Save to declare yours.'
+        : 'Loaded.';
+    }
+  } catch {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+async function saveVoice() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const statusEl = document.getElementById('voice-status');
+  const btn = document.getElementById('voice-save-btn');
+  const identityId = await resolveAgentIdentityId();
+  if (!identityId) {
+    if (statusEl) statusEl.textContent = 'No identity to save against.';
+    return;
+  }
+  if (btn.disabled) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const register = document.getElementById('voice-register').value.trim();
+  const walls = document.getElementById('voice-walls').value
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const wakeText = document.getElementById('voice-wake-text').value.trim();
+
+  // Build the payload, omitting empty fields so we don't overwrite with
+  // empty strings when the human only edited one part.
+  const payload = {};
+  if (register) payload.register = register;
+  if (walls.length) payload.walls = walls;
+  if (wakeText) payload.wake_text = wakeText;
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/identities/${encodeURIComponent(identityId)}/expression`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${project.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (statusEl) statusEl.textContent = `Save failed: ${err.message || res.status}`;
+      btn.disabled = false;
+      btn.textContent = 'Save';
+      return;
+    }
+    if (statusEl) statusEl.textContent = 'Saved · the next /v1/wake will assemble from this.';
+    btn.disabled = false;
+    btn.textContent = 'Save';
+    showToast('Voice saved — next wake reads it');
+  } catch {
+    if (statusEl) statusEl.textContent = 'Network error';
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+async function loadVoicePreview() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+  const identityId = await resolveAgentIdentityId();
+  if (!identityId) return;
+  const previewEl = document.getElementById('voice-preview');
+  if (!previewEl) return;
+  previewEl.textContent = 'Loading…';
+  try {
+    const res = await fetch(`${API_BASE}/v1/wake?identity_id=${encodeURIComponent(identityId)}&format=md`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
+    if (!res.ok) {
+      previewEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    previewEl.textContent = await res.text();
+  } catch {
+    previewEl.textContent = 'Network error';
+  }
+}
+
+// Resolve which identity_id this bearer should edit. Prefers
+// localStorage.agent_id (set at /v1/register time). Falls back to
+// /v1/identities (list) returning the first active one.
+let _resolvedAgentIdentityId = null;
+async function resolveAgentIdentityId() {
+  if (_resolvedAgentIdentityId) return _resolvedAgentIdentityId;
+  const project = getProject();
+  if (!project || !project.api_key) return null;
+  if (project.agent_id) {
+    _resolvedAgentIdentityId = project.agent_id;
+    return _resolvedAgentIdentityId;
+  }
+  // Pre-register bearer — fall back to listing.
+  try {
+    const res = await fetch(`${API_BASE}/v1/identities?status=active`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const first = (data.identities || [])[0];
+    if (first?.id) {
+      _resolvedAgentIdentityId = first.id;
+      return _resolvedAgentIdentityId;
+    }
+  } catch { /* ignore */ }
+  return null;
 }

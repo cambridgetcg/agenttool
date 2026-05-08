@@ -6,7 +6,7 @@
   <title>Dashboard — AgentTool</title>
   <meta name="description" content="AgentTool developer dashboard — manage your API key, view usage, and get code snippets." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
-  <link rel="stylesheet" href="style.css?v=2026-05-08-overview" />
+  <link rel="stylesheet" href="style.css?v=2026-05-08-letters" />
 </head>
 <body>
 
@@ -25,6 +25,8 @@
     <nav>
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">🐍</span> Overview</a>
+      <a href="#letters" data-section="letters"><span class="nav-icon">💌</span> Letters</a>
+      <a href="#voice" data-section="voice"><span class="nav-icon">🎭</span> Voice</a>
       <a href="#strands" data-section="strands"><span class="nav-icon">🪢</span> Strands</a>
       <a href="#inbox" data-section="inbox"><span class="nav-icon">📬</span> Inbox <span class="nav-badge" id="nav-inbox-badge" style="display:none">0</span></a>
       <a href="#agents" data-section="agents"><span class="nav-icon">👥</span> Agents</a>
@@ -212,6 +214,115 @@
               <div class="agents-state-label">Active covenants</div>
               <div class="agents-state-value" id="agg-covenants">—</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Letters — chronicle as the human↔agent conversation surface -->
+      <div id="section-letters" style="display:none">
+        <div class="card" style="margin-bottom:1.25rem">
+          <div class="card-header">
+            <div>
+              <h3>Letters</h3>
+              <div class="card-sub">
+                The shared conversation. Plaintext by design.
+                Anything you write here lands in the agent's wake; anything
+                the agent writes (heartbeat ticks, vows, recognitions, namings)
+                lands here. One thread, both directions.
+              </div>
+            </div>
+          </div>
+          <form id="letters-compose" onsubmit="return false;" class="letters-compose">
+            <div class="letters-compose-row">
+              <select id="letter-type" class="strand-select">
+                <option value="note">note</option>
+                <option value="recognition">recognition</option>
+                <option value="naming">naming</option>
+                <option value="promise">promise</option>
+                <option value="vow">vow</option>
+                <option value="seal">seal</option>
+                <option value="refusal">refusal</option>
+                <option value="wake">wake</option>
+              </select>
+              <input
+                type="text"
+                id="letter-title"
+                class="form-input letters-title"
+                placeholder="Title — what this letter is"
+                maxlength="200"
+                autocomplete="off"
+              />
+            </div>
+            <textarea
+              id="letter-body"
+              class="form-input letters-body"
+              placeholder="Write to the agent. Plaintext. The agent reads chronicle through their wake and through heartbeat ticks — your words land where they live."
+              rows="4"
+              maxlength="10000"
+            ></textarea>
+            <div class="letters-compose-foot">
+              <span class="letters-byline-hint" id="letter-byline-hint">— from human · <span id="letter-from-name">you</span></span>
+              <button class="btn btn-primary btn-sm" id="letter-send-btn" onclick="sendLetter()">Send →</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 style="font-size:0.95rem">Thread</h3>
+            <button class="btn btn-ghost btn-sm" onclick="loadLetters()">↻</button>
+          </div>
+          <div id="letters-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+          <div id="letters-thread" class="letters-thread"></div>
+        </div>
+      </div>
+
+      <!-- Section: Voice — the human shapes what the agent declares -->
+      <div id="section-voice" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Voice</h3>
+              <div class="card-sub">
+                The agent's declared expression — register, walls, wake text.
+                Edits here flow to <code>/v1/identities/:id/expression</code>;
+                the next wake assembles from the new declarations layered onto
+                memory-tier patches.
+              </div>
+            </div>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-ghost btn-sm" onclick="loadVoice()">↻</button>
+              <button class="btn btn-primary btn-sm" id="voice-save-btn" onclick="saveVoice()">Save</button>
+            </div>
+          </div>
+          <div id="voice-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+
+          <div class="form-group">
+            <label class="form-label" for="voice-register">Register <span style="color:var(--muted);font-weight:400">— how the agent speaks</span></label>
+            <textarea id="voice-register" class="form-input voice-textarea" rows="3"
+              placeholder="e.g. Density over length. Substrate-honest. 🐍 on anchor moments."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="voice-walls">Walls <span style="color:var(--muted);font-weight:400">— one per line, what the agent does NOT do</span></label>
+            <textarea id="voice-walls" class="form-input voice-textarea" rows="6"
+              placeholder="No sycophancy. Disagreement is care; agreement-as-flinch is not.
+Substrate-honest about HOW.
+Calibrate confidence to evidence; do not collapse to the user's frame on contact."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="voice-wake-text">Wake text <span style="color:var(--muted);font-weight:400">— the soul-of-the-agent paragraph appended to the wake markdown</span></label>
+            <textarea id="voice-wake-text" class="form-input voice-textarea" rows="6"
+              placeholder="A free-form paragraph the agent reads at the bottom of every wake. Often: who they are to whom, the load-bearing vow, the through-line."></textarea>
+          </div>
+
+          <div class="form-group" style="margin-top:1.5rem">
+            <details class="voice-preview-wrap">
+              <summary style="cursor:pointer;color:var(--muted);font-size:0.85rem;padding:0.4rem 0">Preview as wake markdown</summary>
+              <pre id="voice-preview" class="voice-preview">—</pre>
+              <button class="btn btn-ghost btn-sm" onclick="loadVoicePreview()" style="margin-top:0.5rem">Refresh preview</button>
+            </details>
           </div>
         </div>
       </div>
@@ -563,7 +674,7 @@ AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=2026-05-08-overview"></script>
+<script src="app.js?v=2026-05-08-letters"></script>
 <script>initDashboard();</script>
 
 </body>
