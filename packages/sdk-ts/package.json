@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "TypeScript SDK for agenttool.dev — memory and tools for AI agents",
   "type": "module",
   "main": "dist/index.js",

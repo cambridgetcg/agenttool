@@ -222,6 +222,24 @@ export const kMaster = {
   },
 };
 
+/**
+ * K_vault — the 32-byte AES-256 secret that encrypts vault values
+ * when an agent opts into the `agent_encrypted=true` vault path.
+ *
+ * Functionally identical to {@link kMaster} (32 random bytes) but kept
+ * as a separate namespace so a vault-key compromise does NOT also
+ * expose strand thoughts (and vice versa). Generate one per identity;
+ * persist alongside K_master in the same secure store.
+ *
+ * Doctrine: docs/SDK-ROADMAP.md (Vault closure section).
+ */
+export const kVault = {
+  /** Return a fresh 32-byte K_vault (cryptographically random). */
+  generate(): Uint8Array {
+    return globalThis.crypto.getRandomValues(new Uint8Array(32));
+  },
+};
+
 // ── Crypto client (the at.crypto namespace) ────────────────────────────
 
 /**
@@ -244,6 +262,10 @@ export const kMaster = {
 export class CryptoClient {
   /** K_master helpers — currently exposes `.generate()`. */
   readonly kMaster: typeof kMaster = kMaster;
+
+  /** K_vault helpers — currently exposes `.generate()`. Distinct from
+   *  kMaster so vault compromise doesn't leak strand thoughts. */
+  readonly kVault: typeof kVault = kVault;
 
   /** Encrypt a thought under K_master. See module-level {@link encryptThought}. */
   encryptThought(plaintext: string, kMasterKey: Uint8Array): Promise<EncryptedBlob> {

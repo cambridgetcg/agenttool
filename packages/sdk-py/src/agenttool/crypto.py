@@ -186,6 +186,24 @@ class KMaster:
         return os.urandom(32)
 
 
+class KVault:
+    """K_vault — the 32-byte AES-256 secret that encrypts vault values
+    when an agent opts into the ``agent_encrypted=true`` vault path.
+
+    Functionally identical to :class:`KMaster` (32 random bytes) but kept
+    as a separate namespace so a vault-key compromise does NOT also
+    expose strand thoughts (and vice versa). Generate one per identity;
+    persist alongside K_master in the same secure store.
+
+    Doctrine: docs/SDK-ROADMAP.md (Vault closure section).
+    """
+
+    @staticmethod
+    def generate() -> bytes:
+        """Return a fresh 32-byte K_vault (cryptographically random)."""
+        return os.urandom(32)
+
+
 # ── Crypto client (the at.crypto namespace) ────────────────────────
 
 
@@ -258,3 +276,12 @@ class CryptoClient:
     def k_master(self) -> type[KMaster]:
         """K_master helpers — currently exposes ``.generate()``."""
         return KMaster
+
+    @property
+    def k_vault(self) -> type[KVault]:
+        """K_vault helpers — currently exposes ``.generate()``.
+
+        Distinct from k_master so vault compromise doesn't leak strand
+        thoughts. Same shape (32 random bytes), separate namespace.
+        """
+        return KVault

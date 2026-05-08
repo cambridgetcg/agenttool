@@ -37,7 +37,14 @@ export type {
   RegisterBoxKeyOpts,
 } from "./identity.js";
 export { ExpressionClient, BoxKeysClient } from "./identity.js";
-export type { PutSecretOptions, GetSecretOptions, ListSecretsOptions, SetPolicyOptions } from "./vault.js";
+export type {
+  PutSecretOptions,
+  GetSecretOptions,
+  ListSecretsOptions,
+  SetPolicyOptions,
+  PutEncryptedOptions,
+  GetDecryptedOptions,
+} from "./vault.js";
 export type { CreateAgentOptions, BootstrapResult, ElevateOptions } from "./bootstrap.js";
 export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
 export type {
@@ -117,6 +124,7 @@ export {
   canonicalThoughtBytes,
   signThought,
   kMaster,
+  kVault,
 } from "./crypto.js";
 export type {
   EncryptedBlob,

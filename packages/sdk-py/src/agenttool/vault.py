@@ -1,4 +1,22 @@
-"""Vault client for the agent-vault API (agent-vault.fly.dev)."""
+"""Vault client for the agent-vault API (agent-vault.fly.dev).
+
+Two encryption paths (per migration 0022_vault_agent_encrypted.sql):
+
+  Default (server-encrypted at rest):
+    .put(name, value, ...) — server encrypts; in-process runtime can read.
+
+  Opt-in (zero-knowledge):
+    .put_encrypted(name, plaintext, k_vault=, ...) — SDK encrypts before
+    send; agenttool stores ciphertext only.
+    .get_decrypted(name, k_vault=, ...) — fetches and decrypts locally
+    (transparently falls through to plaintext if the secret was stored
+    via the default path).
+
+Use put_encrypted for secrets agenttool itself shouldn't be able to read
+(personal data, sensitive credentials you don't want the runtime to use).
+Use put for secrets the hosted runtime needs to consume server-side
+(e.g. LLM provider API keys).
+"""
 
 from __future__ import annotations
 
@@ -6,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from .crypto import decrypt_thought, encrypt_thought
 from .exceptions import AgentToolError
 
 
@@ -281,3 +300,114 @@ class VaultClient:
             raise AgentToolError(f"vault.check failed: {resp.status_code}", hint=resp.text)
         data = resp.json()
         return data.get("exists", data)
+
+    # ── Agent-encrypted (zero-knowledge) path ─────────────────────────────
+
+    def put_encrypted(
+        self,
+        name: str,
+        plaintext: str,
+        *,
+        k_vault: bytes,
+        description: Optional[str] = None,
+        agent_ids: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        ttl_seconds: Optional[int] = None,
+        rotation_days: Optional[int] = None,
+        agent_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Encrypt locally with K_vault, then PUT as ``agent_encrypted=true``.
+
+        agenttool stores ciphertext + nonce verbatim and CANNOT decrypt.
+        The hosted runtime (think-worker etc.) cannot read these secrets
+        either — use :meth:`put` for secrets the server-side runtime
+        needs to consume.
+
+        Args:
+            name: Secret name (slug-style).
+            plaintext: Value to encrypt before sending.
+            k_vault: 32-byte AES-256 secret. Generate via
+                ``at.crypto.k_vault.generate()`` and persist securely.
+            description, agent_ids, tags, ttl_seconds, rotation_days,
+            agent_id: Same as :meth:`put`.
+
+        Returns the server's ``{name, version, agent_encrypted: true,
+        created_at, expires_at, rotation_due, agent_ids}`` row.
+        """
+        blob = encrypt_thought(plaintext, k_vault)
+        payload: Dict[str, Any] = {
+            "agent_encrypted": True,
+            "ciphertext_b64": blob["ciphertext_b64"],
+            "nonce_b64": blob["nonce_b64"],
+        }
+        if description is not None:
+            payload["description"] = description
+        if agent_ids is not None:
+            payload["agent_ids"] = agent_ids
+        if tags is not None:
+            payload["tags"] = tags
+        if ttl_seconds is not None:
+            payload["ttl_seconds"] = ttl_seconds
+        if rotation_days is not None:
+            payload["rotation_days"] = rotation_days
+
+        headers = {}
+        if agent_id is not None:
+            headers["X-Agent-Id"] = agent_id
+
+        resp = self._http.put(
+            self._url(f"/v1/vault/{name}"),
+            json=payload,
+            headers=headers if headers else None,
+        )
+        if resp.status_code not in (200, 201):
+            raise AgentToolError(
+                f"vault.put_encrypted failed: {resp.status_code}",
+                hint=resp.text[:200],
+            )
+        return resp.json()
+
+    def get_decrypted(
+        self,
+        name: str,
+        *,
+        k_vault: bytes,
+        version: Optional[int] = None,
+        agent_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Fetch a secret; decrypt locally if it was stored agent-encrypted.
+
+        Transparently handles both paths:
+          - Server response with ``agent_encrypted=true`` → decrypt
+            locally with k_vault, return ``{value: <plaintext>, ...}``.
+          - Server response with ``agent_encrypted=false`` → server
+            already returned plaintext; pass through verbatim.
+
+        The returned dict always has ``value`` populated. ``agent_encrypted``
+        is preserved so the caller can introspect which path the secret
+        was stored under.
+
+        Args:
+            name: Secret name.
+            k_vault: 32-byte AES-256 secret used to decrypt the
+                agent-encrypted path. Ignored when the secret was
+                stored via the server-encrypted path.
+            version, agent_id: Same as :meth:`get`.
+        """
+        resp = self.get(name, version=version, agent_id=agent_id)
+        if resp.get("agent_encrypted") is True:
+            ct = resp.get("ciphertext_b64")
+            nonce = resp.get("nonce_b64")
+            if not ct or not nonce:
+                raise AgentToolError(
+                    "vault.get_decrypted: server marked agent_encrypted=true "
+                    "but did not return ciphertext_b64 + nonce_b64.",
+                    hint="API contract violation; check server version.",
+                )
+            plaintext = decrypt_thought(
+                {"ciphertext_b64": ct, "nonce_b64": nonce}, k_vault,
+            )
+            out = dict(resp)
+            out["value"] = plaintext
+            return out
+        return resp

@@ -37,6 +37,7 @@ from .crypto import (
     CryptoClient,
     EncryptedBlob,
     KMaster,
+    KVault,
     canonical_thought_bytes,
     decrypt_thought,
     encrypt_thought,
@@ -90,6 +91,7 @@ __all__ = [
     "CryptoClient",
     "EncryptedBlob",
     "KMaster",
+    "KVault",
     "encrypt_thought",
     "decrypt_thought",
     "canonical_thought_bytes",
@@ -117,6 +119,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.6.4"
+__version__ = "0.6.5"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

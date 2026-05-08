@@ -6,8 +6,8 @@
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
-| `agenttool-sdk` (Python) | `0.6.4` | ~4,400 | bootstrap · chronicle · client · covenants · crypto · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · strands (+ Thoughts) · tools · traces · vault · verify · wake · window |
-| `@agenttool/sdk` (TypeScript) | `0.6.3` | ~3,400 | bootstrap · chronicle · client · covenants · crypto · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · strands (+ Thoughts) · tools · traces · vault · verify · wake · window |
+| `agenttool-sdk` (Python) | `0.6.5` | ~4,600 | bootstrap · chronicle · client · covenants · crypto (+ KMaster + KVault) · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · strands (+ Thoughts) · tools · traces · vault (+ encrypted path) · verify · wake · window |
+| `@agenttool/sdk` (TypeScript) | `0.6.4` | ~3,600 | bootstrap · chronicle · client · covenants · crypto (+ kMaster + kVault) · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · strands (+ Thoughts) · tools · traces · vault (+ encrypted path) · verify · wake · window |
 
 13 modules each (15 namespaces with sub-clients counted). **Parity reached as of 0.6.0 (Phase 1)** — verified by `bun run check-parity`:
 
@@ -203,15 +203,20 @@ Test suites green:
   - ts: 28 new in `tests/phase5.test.ts` (mirror coverage; signature verification done locally with derived pubkey).
   - parity: 15 modules ✓.
 
-### Vault — `at.vault.put_encrypted(...)` *(crypto-light, follows Phase 5)*
+### Vault closure — `at.vault.put_encrypted(...)` *(✅ shipped py 0.6.5 / ts 0.6.4)*
 
-Phase 5 introduced `at.crypto` (AES-256-GCM + ed25519). The vault Option C path (api migration `0022_vault_agent_encrypted.sql`) lets agents encrypt secrets before they leave the SDK; server stores ciphertext + nonce verbatim and cannot decrypt. Adding the SDK ergonomic for it is a small follow-up — same crypto primitives, different endpoint:
+Phase 5 introduced `at.crypto` (AES-256-GCM + ed25519). The vault Option C path (api migration `0022_vault_agent_encrypted.sql`, commit `c302c20`) opened the agent-encrypted opt-in on the api side. This release adds the SDK ergonomics so agents can actually USE that path:
 
-- `at.vault.put_encrypted(name, plaintext, *, k_vault, **opts)` — encrypt locally, POST `{agent_encrypted: true, ciphertext_b64, nonce_b64, ...}`. The new `k_vault` separates from `k_master` (strands) so a vault compromise doesn't leak strand thoughts.
-- `at.vault.get_decrypted(name, *, k_vault)` — fetch, branch on `agent_encrypted` in the response, decrypt locally if true; if false (server-encrypted secret), return the plaintext the server already gave us.
-- `at.crypto.k_vault.generate()` — 32-byte AES-256 secret; conventionally distinct from `k_master`.
+- **at.vault.put_encrypted(name, plaintext, *, k_vault, **opts)** — encrypts locally with K_vault (re-using the Phase 5 `encrypt_thought` helper), POSTs `{agent_encrypted: true, ciphertext_b64, nonce_b64, ...}`. agenttool stores ciphertext verbatim and cannot decrypt. Returns the server's `{name, version, agent_encrypted: true, ...}`.
+- **at.vault.get_decrypted(name, *, k_vault)** — fetches, branches on `agent_encrypted` in the response, decrypts locally if true; if false (the secret was stored via the default server-encrypted path), returns the plaintext the server already gave us. Transparent dual-path read.
+- **at.crypto.k_vault.generate()** — 32-byte AES-256 secret. Conventionally distinct from `k_master` so a vault-key compromise does NOT leak strand thoughts (and vice versa).
 
-Constraint to document at SDK level: `agent_encrypted=true` secrets are SDK-readable only. The hosted runtime (think-worker) consuming a secret server-side requires the default server-encrypted path.
+Constraint at SDK level: `agent_encrypted=true` secrets are SDK-readable only. The hosted runtime (think-worker etc.) consuming a secret server-side requires the default server-encrypted `.put()` path. Documented in the `put_encrypted` docstring.
+
+Test suites green:
+  - py: 30 new in `tests/test_phase5_vault.py` (kVault generation, put_encrypted encrypts before send, get_decrypted decrypts agent-encrypted responses, falls through for server-encrypted, mismatched keys fail).
+  - ts: 28 new in `tests/phase5_vault.test.ts` (mirror coverage).
+  - parity: 15 modules ✓ (crypto +1 method, vault +2 methods).
 
 ### Phase 6 — Inbox (sealed-box) *(crypto-heavy)*
 
@@ -260,6 +265,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.6.2 / 0.6.1** | Phase 2 (register + identity surface fillout) | no — additive |
 | **0.6.3 / 0.6.2** | Phase 3 (chronicle + covenants) + Phase 4 (window primitives) | no — additive |
 | **0.6.4 / 0.6.3** | Phase 5 (strands with K_master) | no — additive (new runtime crypto dep on each side) |
+| **0.6.5 / 0.6.4** | Vault closure (put_encrypted / get_decrypted + kVault) | no — additive (re-uses Phase 5 crypto) |
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
 | **0.10.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |

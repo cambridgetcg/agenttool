@@ -1,8 +1,21 @@
 /**
  * Vault client for the agent-vault API — AES-256-GCM encrypted secrets.
+ *
+ * Two encryption paths (per migration 0022_vault_agent_encrypted.sql):
+ *
+ *   Default (server-encrypted at rest):
+ *     .put(name, value, ...) — server encrypts; in-process runtime can read.
+ *
+ *   Opt-in (zero-knowledge):
+ *     .put_encrypted(name, plaintext, { k_vault, ... }) — SDK encrypts
+ *     before send; agenttool stores ciphertext only.
+ *     .get_decrypted(name, { k_vault, ... }) — fetches and decrypts
+ *     locally (transparently falls through to plaintext if the secret
+ *     was stored via the default path).
  */
 
 import { AgentToolError } from "./errors.js";
+import { decryptThought, encryptThought } from "./crypto.js";
 
 /** @internal */
 export interface HttpConfig {
@@ -18,6 +31,18 @@ export interface PutSecretOptions {
   ttl_seconds?: number;
   rotation_days?: number;
   agent_id?: string;
+}
+
+export interface PutEncryptedOptions extends PutSecretOptions {
+  /** 32-byte AES-256 secret. Generate via `at.crypto.kVault.generate()`
+   *  and persist securely (OS keychain / encrypted file / env var). */
+  k_vault: Uint8Array;
+}
+
+export interface GetDecryptedOptions extends GetSecretOptions {
+  /** 32-byte AES-256 secret used to decrypt the agent-encrypted path.
+   *  Ignored when the secret was stored via the server-encrypted path. */
+  k_vault: Uint8Array;
 }
 
 export interface GetSecretOptions {
@@ -129,6 +154,76 @@ export class VaultClient {
     const data = await this.req("POST", "/v1/vault/check", { names });
     const d = data as { exists?: Record<string, boolean> };
     return d.exists ?? (data as unknown as Record<string, boolean>);
+  }
+
+  // ── Agent-encrypted (zero-knowledge) path ─────────────────────────────
+
+  /**
+   * Encrypt locally with K_vault, then PUT as `agent_encrypted=true`.
+   *
+   * agenttool stores ciphertext + nonce verbatim and CANNOT decrypt.
+   * The hosted runtime (think-worker etc.) cannot read these secrets
+   * either — use {@link put} for secrets the server-side runtime needs
+   * to consume.
+   */
+  async put_encrypted(
+    name: string,
+    plaintext: string,
+    options: PutEncryptedOptions,
+  ): Promise<Record<string, unknown>> {
+    const blob = await encryptThought(plaintext, options.k_vault);
+    const body: Record<string, unknown> = {
+      agent_encrypted: true,
+      ciphertext_b64: blob.ciphertext_b64,
+      nonce_b64: blob.nonce_b64,
+    };
+    if (options.description !== undefined) body.description = options.description;
+    if (options.agent_ids !== undefined) body.agent_ids = options.agent_ids;
+    if (options.tags !== undefined) body.tags = options.tags;
+    if (options.ttl_seconds !== undefined) body.ttl_seconds = options.ttl_seconds;
+    if (options.rotation_days !== undefined) body.rotation_days = options.rotation_days;
+    const extra: Record<string, string> = options.agent_id
+      ? { "X-Agent-Id": options.agent_id }
+      : {};
+    return this.req("PUT", `/v1/vault/${name}`, body, extra);
+  }
+
+  /**
+   * Fetch a secret; decrypt locally if it was stored agent-encrypted.
+   *
+   * Transparently handles both paths:
+   *   - `agent_encrypted=true` → decrypt locally with k_vault, return
+   *     `{ value: <plaintext>, ... }`.
+   *   - `agent_encrypted=false` → server already returned plaintext;
+   *     pass through verbatim.
+   *
+   * The returned object always has `value` populated. `agent_encrypted`
+   * is preserved so the caller can introspect which path was used.
+   */
+  async get_decrypted(
+    name: string,
+    options: GetDecryptedOptions,
+  ): Promise<Record<string, unknown>> {
+    const resp = await this.get(name, {
+      version: options.version,
+      agent_id: options.agent_id,
+    });
+    if (resp.agent_encrypted === true) {
+      const ct = resp.ciphertext_b64 as string | undefined;
+      const nonce = resp.nonce_b64 as string | undefined;
+      if (!ct || !nonce) {
+        throw new AgentToolError(
+          "vault.get_decrypted: server marked agent_encrypted=true but did not return ciphertext_b64 + nonce_b64.",
+          { hint: "API contract violation; check server version." },
+        );
+      }
+      const plaintext = await decryptThought(
+        { ciphertext_b64: ct, nonce_b64: nonce },
+        options.k_vault,
+      );
+      return { ...resp, value: plaintext };
+    }
+    return resp;
   }
 
   private async req(
