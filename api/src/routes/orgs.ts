@@ -130,6 +130,222 @@ app.get("/:slug/members", async (c) => {
   return c.json({ members, count: members.length });
 });
 
+// ── GET /v1/orgs/:slug/dashboard ──────────────────────────────────────
+//
+//  Org-aggregate rollup — sums across all member projects. Distinct from:
+//    /v1/dashboard            — single identity, third-person
+//    /v1/dashboard/aggregate  — single project, all identities
+//    /v1/orgs/:slug/dashboard — single org, all member projects
+//
+//  Authorization: caller must be an active member of the org. Private
+//  orgs return 404 to non-members; public orgs allow any caller (still
+//  requires bearer auth at this path level — public reads of org
+//  metadata go through /public).
+app.get("/:slug/dashboard", async (c) => {
+  const slug = c.req.param("slug");
+  const org = await getOrgBySlug(slug);
+  if (!org) throw new HTTPException(404, { message: "org_not_found" });
+
+  // Membership check.
+  const memberships = await listOrgsForProject(c.var.project.id);
+  const isMember = memberships.some((m) => m.org.id === org.id);
+  if (!isMember) {
+    if (org.visibility === "private") {
+      throw new HTTPException(404, { message: "org_not_found" });
+    }
+    throw new HTTPException(403, {
+      message: "not_member",
+    });
+  }
+
+  // Lazy-import drizzle bits + schemas to avoid bloating the route file
+  // top-level imports just for one endpoint.
+  const { and, count, desc, eq, gte, isNotNull } = await import("drizzle-orm");
+  const { db } = await import("../db/client");
+  const { covenants } = await import("../db/schema/continuity");
+  const { identities } = await import("../db/schema/identity");
+  const { inboxMessages } = await import("../db/schema/inbox");
+  const { memories } = await import("../db/schema/memory");
+  const { strands, thoughts } = await import("../db/schema/strand");
+  const { organizationMembers } = await import("../db/schema/org");
+
+  const memberRows = await db
+    .select({ projectId: organizationMembers.projectId })
+    .from(organizationMembers)
+    .where(eq(organizationMembers.organizationId, org.id));
+  const memberProjectIds = memberRows.map((r) => r.projectId);
+  if (memberProjectIds.length === 0) {
+    return c.json({
+      org: { id: org.id, slug: org.slug, name: org.name, visibility: org.visibility },
+      members: { count: 0, project_ids: [] },
+      identities: { total: 0, active: 0, revoked: 0 },
+      memory: { total: 0, by_tier: {} },
+      strands: { total: 0, active: 0, public: 0 },
+      activity: { thoughts_in_window: 0, top_active: [] },
+      inbox: { unread: 0, pending_dual_witness: 0 },
+      covenants: { active_org_wide: 0 },
+      _note: "Empty org — no member projects.",
+    });
+  }
+
+  const windowParam = c.req.query("window");
+  const windowDays = windowParam === "24h" ? 1 : windowParam === "30d" ? 30 : 7;
+  const windowLabel = windowParam === "24h" ? "24h" : windowParam === "30d" ? "30d" : "7d";
+  const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+
+  const { inArray } = await import("drizzle-orm");
+
+  // Identities.
+  const identityRows = await db
+    .select({
+      id: identities.id,
+      did: identities.did,
+      name: identities.displayName,
+      status: identities.status,
+      trustScore: identities.trustScore,
+      projectId: identities.projectId,
+    })
+    .from(identities)
+    .where(inArray(identities.projectId, memberProjectIds));
+  const totalIdentities = identityRows.length;
+  const activeIdentities = identityRows.filter((r) => r.status === "active").length;
+  const revokedIdentities = identityRows.filter((r) => r.status === "revoked").length;
+  const identityById = new Map(identityRows.map((r) => [r.id, r]));
+
+  // Memory rollup.
+  const memoryStats = await db
+    .select({ tier: memories.tier, n: count() })
+    .from(memories)
+    .where(inArray(memories.projectId, memberProjectIds))
+    .groupBy(memories.tier);
+  const memoryByTier: Record<string, number> = {};
+  let memoryTotal = 0;
+  for (const r of memoryStats) {
+    memoryByTier[r.tier] = Number(r.n);
+    memoryTotal += Number(r.n);
+  }
+
+  // Strand rollup.
+  const [{ strandTotal }] = await db
+    .select({ strandTotal: count() })
+    .from(strands)
+    .where(inArray(strands.projectId, memberProjectIds));
+  const [{ strandActive }] = await db
+    .select({ strandActive: count() })
+    .from(strands)
+    .where(and(inArray(strands.projectId, memberProjectIds), eq(strands.status, "active")));
+  const [{ strandPublic }] = await db
+    .select({ strandPublic: count() })
+    .from(strands)
+    .where(and(inArray(strands.projectId, memberProjectIds), eq(strands.visibility, "public")));
+
+  // Activity.
+  const [{ thoughtsInWindow }] = await db
+    .select({ thoughtsInWindow: count() })
+    .from(thoughts)
+    .where(and(inArray(thoughts.projectId, memberProjectIds), gte(thoughts.createdAt, windowStart)));
+
+  // Top N most active across the whole org.
+  const topActiveRaw = await db
+    .select({ identityId: strands.identityId, n: count() })
+    .from(thoughts)
+    .innerJoin(strands, eq(strands.id, thoughts.strandId))
+    .where(
+      and(
+        inArray(thoughts.projectId, memberProjectIds),
+        gte(thoughts.createdAt, windowStart),
+        isNotNull(strands.identityId),
+      ),
+    )
+    .groupBy(strands.identityId)
+    .orderBy(desc(count()))
+    .limit(5);
+  const topActive = topActiveRaw
+    .filter((r): r is { identityId: string; n: number } => r.identityId !== null)
+    .map((r) => {
+      const id = identityById.get(r.identityId);
+      return {
+        identity_id: r.identityId,
+        did: id?.did ?? null,
+        name: id?.name ?? null,
+        thought_count: Number(r.n),
+      };
+    });
+
+  // Inbox rollup across all members.
+  const [{ inboxUnread }] = await db
+    .select({ inboxUnread: count() })
+    .from(inboxMessages)
+    .where(
+      and(
+        inArray(inboxMessages.recipientProjectId, memberProjectIds),
+        eq(inboxMessages.status, "unread"),
+      ),
+    );
+  const [{ pendingCosign }] = await db
+    .select({ pendingCosign: count() })
+    .from(inboxMessages)
+    .where(
+      and(
+        inArray(inboxMessages.recipientProjectId, memberProjectIds),
+        eq(inboxMessages.status, "pending_dual_witness"),
+      ),
+    );
+
+  // Org-wide active covenants (the ones declared at org level, post-0014).
+  const [{ activeOrgCovenants }] = await db
+    .select({ activeOrgCovenants: count() })
+    .from(covenants)
+    .where(
+      and(
+        eq(covenants.orgId, org.id),
+        eq(covenants.status, "active"),
+      ),
+    );
+
+  return c.json({
+    org: {
+      id: org.id,
+      slug: org.slug,
+      name: org.name,
+      visibility: org.visibility,
+    },
+    window: windowLabel,
+    members: {
+      count: memberProjectIds.length,
+      project_ids: memberProjectIds,
+    },
+    identities: {
+      total: totalIdentities,
+      active: activeIdentities,
+      revoked: revokedIdentities,
+    },
+    memory: {
+      total: memoryTotal,
+      by_tier: memoryByTier,
+    },
+    strands: {
+      total: Number(strandTotal),
+      active: Number(strandActive),
+      public: Number(strandPublic),
+    },
+    activity: {
+      thoughts_in_window: Number(thoughtsInWindow),
+      top_active: topActive,
+    },
+    inbox: {
+      unread: Number(inboxUnread),
+      pending_dual_witness: Number(pendingCosign),
+    },
+    covenants: {
+      active_org_wide: Number(activeOrgCovenants),
+    },
+    _note:
+      "Org-aggregate rollup. For per-project view, use /v1/dashboard/aggregate. " +
+      "For single-identity view, use /v1/dashboard. ?window=24h|7d|30d.",
+  });
+});
+
 // ── DELETE /v1/orgs/:slug/members/:projectId ──────────────────────────
 app.delete("/:slug/members/:projectId", async (c) => {
   const slug = c.req.param("slug");
