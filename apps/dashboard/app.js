@@ -2,17 +2,12 @@
    Static JS for project creation, key management, usage display.
    No framework. No build step. Cloudflare Pages compatible. */
 
+// Single unified API base. Post-migration (DNS cutover 2026-05-08),
+// api.agenttool.dev points at the consolidated agenttool service on fly
+// (66.241.124.149 / 2a09:8280:1::112:5036:0). All endpoints — legacy
+// surface and new (memory tiers, dashboard rollups, social, trending,
+// org governance, dual-witness) — share this base.
 const API_BASE = 'https://api.agenttool.dev';
-// Consolidated agenttool API (memory tiers, dashboard rollups, social,
-// trending, org governance, etc). Currently a separate service on fly.io
-// while api.agenttool.dev hosts an older service-set. Migration cutover
-// pending — until then, sections that consume the new endpoints point
-// here directly. Override via localStorage.AGENTTOOL_API for testing.
-const AGENTTOOL_API = (() => {
-  try {
-    return localStorage.getItem('AGENTTOOL_API') || 'https://agenttool.fly.dev';
-  } catch { return 'https://agenttool.fly.dev'; }
-})();
 const STORAGE_KEY = 'agenttool_project';
 
 // ─── Storage helpers ───
@@ -873,7 +868,7 @@ async function loadAgentsSection() {
   if (statusEl) statusEl.textContent = 'Loading…';
 
   try {
-    const res = await fetch(`${AGENTTOOL_API}/v1/dashboard/aggregate?window=7d`, {
+    const res = await fetch(`${API_BASE}/v1/dashboard/aggregate?window=7d`, {
       headers: { 'Authorization': `Bearer ${project.api_key}` }
     });
     if (!res.ok) {
