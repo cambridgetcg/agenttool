@@ -87,14 +87,17 @@ export interface DerivedAddress {
   derivation_path: string;
 }
 
-/** Derive an EVM deposit address for (mnemonic, walletId). The address is
- *  the same on every EVM chain (Ethereum, Base, Polygon, Arbitrum, Optimism)
- *  — the wallet's native account, with USDC tokens read by chain-specific
- *  webhooks. */
-export function deriveEvmAddress(
+export interface EvmKeypair extends DerivedAddress {
+  privateKey: Uint8Array; // 32 bytes
+}
+
+/** Derive an EVM keypair — private key + address + path. The private key
+ *  is required for transaction signing (payout broadcast); the address-only
+ *  `deriveEvmAddress` is a thin wrapper that discards it. */
+export function deriveEvmKeypair(
   mnemonic: string,
   walletId: string,
-): DerivedAddress {
+): EvmKeypair {
   const seed = getSeed(mnemonic);
   const idx = walletIndex(walletId);
   const path = `m/44'/${COIN_TYPE_EVM}'/0'/0/${idx}`;
@@ -106,9 +109,22 @@ export function deriveEvmAddress(
   const pub = secp256k1.getPublicKey(child.privateKey, false); // 65 bytes uncompressed
   const addr = keccak_256(pub.slice(1)).slice(-20);
   return {
+    privateKey: child.privateKey,
     address: toChecksumAddress("0x" + bytesToHex(addr)),
     derivation_path: path,
   };
+}
+
+/** Derive an EVM deposit address for (mnemonic, walletId). The address is
+ *  the same on every EVM chain (Ethereum, Base, Polygon, Arbitrum, Optimism)
+ *  — the wallet's native account, with USDC tokens read by chain-specific
+ *  webhooks. */
+export function deriveEvmAddress(
+  mnemonic: string,
+  walletId: string,
+): DerivedAddress {
+  const { address, derivation_path } = deriveEvmKeypair(mnemonic, walletId);
+  return { address, derivation_path };
 }
 
 // ── SLIP-0010 ed25519 (Solana) ──────────────────────────────────────────

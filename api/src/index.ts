@@ -54,6 +54,8 @@ import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
+import { economyConfig } from "./services/economy/config";
+import { startPayoutWorkers } from "./workers/payout";
 
 const app = new Hono<ProjectContext>();
 
@@ -235,6 +237,20 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
     } catch (err) {
       console.warn(
         `[agenttool] think-worker for ${id} did not start:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // Payout workers (Horizon A — Slices 1+2). Gated on PAYOUT_WORKER_ENABLED.
+  // The economyConfig boot-time validation throws if the worker is enabled
+  // without a valid network/mnemonic combo (see docs/PAYOUT-BROADCAST-PLAN.md).
+  if (economyConfig.payout.workerEnabled) {
+    try {
+      startPayoutWorkers();
+    } catch (err) {
+      console.warn(
+        "[agenttool] payout workers did not start:",
         err instanceof Error ? err.message : err,
       );
     }
