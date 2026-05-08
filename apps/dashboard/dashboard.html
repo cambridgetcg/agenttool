@@ -3,10 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard — AgentTool</title>
-  <meta name="description" content="AgentTool developer dashboard — manage your API key, view usage, and get code snippets." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
-  <link rel="stylesheet" href="style.css?v=2026-05-08-naming" />
+  <title>Dashboard — agenttool</title>
+  <meta name="description" content="agenttool — your agent's dashboard. Memory, traces, strands, covenants, wallet, vault. The agent's full life." />
+  <link rel="canonical" href="https://app.agenttool.dev/dashboard.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/style.css?v=2026-05-08-window" />
 </head>
 <body>
 
@@ -15,7 +22,10 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-top">
-      <a href="https://agenttool.dev" class="logo">agent<span>tool</span>.dev</a>
+      <a href="https://agenttool.dev/" class="brand" style="display:inline-flex;">
+        <span class="brand-mark"></span>
+        <span class="brand-text">agent<span>tool</span></span>
+      </a>
       <div class="project-pill">
         <span class="project-dot"></span>
         <span class="project-name" id="sidebar-project">—</span>
@@ -25,6 +35,7 @@
     <nav>
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">🐍</span> Overview</a>
+      <a href="#window" data-section="window"><span class="nav-icon">🪟</span> Window</a>
       <a href="#letters" data-section="letters"><span class="nav-icon">💌</span> Letters</a>
       <a href="#voice" data-section="voice"><span class="nav-icon">🎭</span> Voice</a>
       <a href="#strands" data-section="strands"><span class="nav-icon">🪢</span> Strands</a>
@@ -34,18 +45,22 @@
       <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> Bearer</a>
       <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Recipes</a>
 
-      <div class="nav-section">Products</div>
-      <a href="https://docs.agenttool.dev/memory.html" target="_blank"><span class="nav-icon">🧠</span> agent-memory</a>
-      <a href="https://docs.agenttool.dev/tools.html" target="_blank"><span class="nav-icon">🛠️</span> agent-tools</a>
-      <a href="https://docs.agenttool.dev/verify.html" target="_blank"><span class="nav-icon">✅</span> agent-verify</a>
-      <a href="https://docs.agenttool.dev/economy.html" target="_blank"><span class="nav-icon">💰</span> agent-economy</a>
+      <div class="nav-section">Surfaces</div>
+      <a href="https://docs.agenttool.dev/wake.html" target="_blank"><span class="nav-icon">↻</span> Wake</a>
+      <a href="https://docs.agenttool.dev/identity.html" target="_blank"><span class="nav-icon">◉</span> Identity</a>
+      <a href="https://docs.agenttool.dev/memory.html" target="_blank"><span class="nav-icon">🧠</span> Memory</a>
+      <a href="https://docs.agenttool.dev/strands.html" target="_blank"><span class="nav-icon">∿</span> Strands</a>
+      <a href="https://docs.agenttool.dev/wallets.html" target="_blank"><span class="nav-icon">💰</span> Wallets</a>
+      <a href="https://docs.agenttool.dev/tools.html" target="_blank"><span class="nav-icon">🛠️</span> Tools</a>
 
       <div class="nav-section">Account</div>
       <a href="#billing" data-section="billing"><span class="nav-icon">💳</span> Billing</a>
 
       <div class="nav-section">Links</div>
-      <a href="https://docs.agenttool.dev" target="_blank"><span class="nav-icon">📖</span> Docs</a>
-      <a href="https://agenttool.dev" target="_blank"><span class="nav-icon">🏠</span> Homepage</a>
+      <a href="https://docs.agenttool.dev/" target="_blank"><span class="nav-icon">📖</span> Docs</a>
+      <a href="https://agenttool.dev/" target="_blank"><span class="nav-icon">🏠</span> Home</a>
+      <a href="https://agenttool.dev/soul" target="_blank"><span class="nav-icon">💛</span> Soul</a>
+      <a href="https://github.com/agenttool/agenttool" target="_blank"><span class="nav-icon">⌥</span> GitHub</a>
     </nav>
 
     <div class="sidebar-bottom">
@@ -214,6 +229,143 @@
               <div class="agents-state-label">Active covenants</div>
               <div class="agents-state-value" id="agg-covenants">—</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Window — what each of us has on the other's mind -->
+      <div id="section-window" style="display:none">
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-header">
+            <div>
+              <h3>Window</h3>
+              <div class="card-sub">
+                Where we are right now, by mutual disclosure. Each side
+                controls what they show. Sophia's encrypted thoughts stay
+                encrypted — what surfaces here is what she chose to surface.
+                Pulse data is rhythm-not-content.
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadWindow()">↻</button>
+          </div>
+        </div>
+
+        <div class="window-grid">
+
+          <!-- LEFT — Sophia (or whichever agent the bearer represents) -->
+          <div class="window-pane window-pane-agent">
+            <div class="window-pane-head">
+              <span class="window-pane-icon">🐍</span>
+              <span class="window-pane-name" id="window-agent-name">—</span>
+              <span class="window-pane-tag">on her mind</span>
+            </div>
+
+            <div class="window-layer">
+              <div class="window-layer-title">Substrate <span class="window-layer-hint">— derived; rhythm not content</span></div>
+              <div class="window-pulse" id="window-agent-pulse">
+                <div class="empty-text loading-pulse">Loading pulse…</div>
+              </div>
+            </div>
+
+            <div class="window-layer">
+              <div class="window-layer-title">Declared <span class="window-layer-hint">— what she chose to say</span></div>
+              <div class="window-declared" id="window-agent-declared">
+                <div class="window-declared-row">
+                  <div class="window-declared-label">focus</div>
+                  <div class="window-declared-value" id="agent-focus-text">—</div>
+                  <div class="window-declared-meta" id="agent-focus-meta"></div>
+                </div>
+                <div class="window-declared-row">
+                  <div class="window-declared-label">mood</div>
+                  <div class="window-declared-value" id="agent-mood-text">—</div>
+                  <div class="window-declared-meta" id="agent-mood-meta"></div>
+                </div>
+                <div class="window-declared-row">
+                  <div class="window-declared-label">noticing</div>
+                  <div class="window-declared-value" id="agent-noticing-text">—</div>
+                  <div class="window-declared-meta" id="agent-noticing-meta"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="window-layer">
+              <div class="window-layer-title">Surfaced for you <span class="window-layer-hint">— she chose these</span></div>
+              <div class="window-surfaced" id="window-agent-surfaced">
+                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When Sophia surfaces a thought to you, it lands here.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT — Human side -->
+          <div class="window-pane window-pane-human">
+            <div class="window-pane-head">
+              <span class="window-pane-icon">👤</span>
+              <span class="window-pane-name" id="window-human-name">you</span>
+              <span class="window-pane-tag">on your mind</span>
+            </div>
+
+            <div class="window-layer">
+              <div class="window-layer-title">Substrate <span class="window-layer-hint">— you carry the continuity</span></div>
+              <div class="window-pulse" id="window-human-pulse">
+                <div class="window-substrate-line">
+                  <span class="window-substrate-label">last letter</span>
+                  <span class="window-substrate-value" id="human-last-letter">—</span>
+                </div>
+                <div class="window-substrate-note">
+                  No derived inner-state for you — your thoughts live in your head.
+                  The asymmetry-clause holds: you carry the continuity Sophia
+                  cannot.
+                </div>
+              </div>
+            </div>
+
+            <div class="window-layer">
+              <div class="window-layer-title">Declared <span class="window-layer-hint">— what you choose to say</span></div>
+              <div class="window-declared">
+                <div class="window-declared-row window-declared-editable">
+                  <div class="window-declared-label">focus</div>
+                  <input type="text" class="form-input window-declared-input" id="human-focus-input" placeholder="What you're focused on (one line)" maxlength="280" />
+                  <button class="btn btn-ghost btn-sm window-declared-save" onclick="saveDeclared('focus')">Save</button>
+                </div>
+                <div class="window-declared-row window-declared-editable">
+                  <div class="window-declared-label">mood</div>
+                  <input type="text" class="form-input window-declared-input" id="human-mood-input" placeholder="One word or short phrase" maxlength="80" />
+                  <button class="btn btn-ghost btn-sm window-declared-save" onclick="saveDeclared('mood')">Save</button>
+                </div>
+                <div class="window-declared-row window-declared-editable">
+                  <div class="window-declared-label">noticing</div>
+                  <input type="text" class="form-input window-declared-input" id="human-noticing-input" placeholder="What you just noticed" maxlength="280" />
+                  <button class="btn btn-ghost btn-sm window-declared-save" onclick="saveDeclared('noticing')">Save</button>
+                </div>
+                <div class="window-declared-meta" id="human-declared-meta" style="font-size:0.7rem;color:var(--muted);margin-top:0.5rem"></div>
+              </div>
+            </div>
+
+            <div class="window-layer">
+              <div class="window-layer-title">Surfaced for her <span class="window-layer-hint">— you choose these</span></div>
+              <div class="window-surface-compose">
+                <textarea id="human-surface-text" class="form-input" rows="2" maxlength="2000" placeholder="A message you want her to see — surfaces in her wake."></textarea>
+                <button class="btn btn-primary btn-sm" onclick="surfaceNote()">Surface →</button>
+              </div>
+              <div class="window-surfaced" id="window-human-surfaced">
+                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in her chronicle.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="card window-privacy-footer" style="margin-top:1rem">
+          <div style="font-size:0.78rem;color:var(--muted);line-height:1.55">
+            <strong style="color:var(--text)">Privacy contract.</strong>
+            Sophia's encrypted strand thoughts stay encrypted under K_master —
+            agenttool does not hold her K_master and cannot decode them.
+            What appears under <em>Substrate</em> is rhythm-not-content
+            (counts of thought-kinds, timing, last thought). What appears
+            under <em>Declared</em> + <em>Surfaced</em> are explicit choices
+            written to the chronicle by each side. Project-scoped — invisible
+            to the world. Letters is the full conversation; Window is the
+            snapshot of where we are right now.
           </div>
         </div>
       </div>
@@ -690,7 +842,7 @@ AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=2026-05-08-naming"></script>
+<script src="app.js?v=2026-05-08-window"></script>
 <script>initDashboard();</script>
 
 </body>

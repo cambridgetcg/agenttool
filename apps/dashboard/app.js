@@ -363,6 +363,7 @@ function setupNavigation() {
       // Update topbar title — agent-shaped labels match the sidebar.
       const titles = {
         'overview': 'Overview',
+        'window': 'Window',
         'letters': 'Letters',
         'voice': 'Voice',
         'strands': 'Strands',
@@ -379,7 +380,7 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
@@ -391,6 +392,7 @@ function showSection(name) {
   if (name === 'inbox') loadInboxSection();
   if (name === 'letters') loadLetters();
   if (name === 'voice') loadVoice();
+  if (name === 'window') loadWindow();
 }
 
 // Render the Bearer section purely from localStorage. The legacy
@@ -2926,4 +2928,295 @@ async function resolveAgentIdentityId() {
     }
   } catch { /* ignore */ }
   return null;
+}
+
+// ─── Window — what each of us has on the other's mind ──────────────────
+//
+// Two sides, three layers each. Each layer pulls from a different
+// source so the privacy contract is by-construction:
+//
+//   SUBSTRATE   — derived (cannot be hidden, but rhythm-not-content):
+//                 /v1/identities/:id/pulse for the agent (mood,
+//                 thought_rate, kinds_24h, last_thought_at,
+//                 consolidation). For the human, just last_letter time
+//                 from chronicle.
+//
+//   DECLARED    — chronicle entries with metadata.kind in {focus, mood,
+//                 noticing}, latest-per-kind-per-side. Each side writes
+//                 their own; the other side reads.
+//
+//   SURFACED    — chronicle entries with metadata.kind = 'surfaced'.
+//                 Explicit "I want you to see this" disclosures.
+//
+// The agent's encrypted strand thoughts are NEVER read here. Only the
+// chronicle (plaintext by-design) and the pulse (derived rhythm).
+
+async function loadWindow() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  // Names + identity_id
+  document.getElementById('window-agent-name').textContent = project.name || 'agent';
+  document.getElementById('window-human-name').textContent = project.email || project.name || 'you';
+
+  const identityId = await resolveAgentIdentityId();
+
+  // Parallel loads — pulse + chronicle (one fetch each).
+  const [pulseRes, chronicleRes] = await Promise.all([
+    identityId
+      ? fetch(`${API_BASE}/v1/identities/${encodeURIComponent(identityId)}/pulse`, {
+          headers: { 'Authorization': `Bearer ${project.api_key}` },
+        }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+      : Promise.resolve(null),
+    fetch(`${API_BASE}/v1/chronicle?limit=200`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    }).then((r) => (r.ok ? r.json() : { entries: [] })).catch(() => ({ entries: [] })),
+  ]);
+
+  renderAgentPulse(pulseRes);
+  renderHumanSubstrate(chronicleRes.entries || []);
+  renderDeclaredAndSurfaced(chronicleRes.entries || []);
+}
+
+function renderAgentPulse(pulse) {
+  const el = document.getElementById('window-agent-pulse');
+  if (!el) return;
+  if (!pulse || pulse.error) {
+    el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">No pulse data — the agent has no strands yet.</div>`;
+    return;
+  }
+  const lines = [];
+  if (pulse.mood) {
+    lines.push(`<div class="window-substrate-line"><span class="window-substrate-label">mood</span><span class="window-substrate-value">${escHtml(pulse.mood)}</span></div>`);
+  }
+  if (pulse.last_thought_at) {
+    lines.push(`<div class="window-substrate-line"><span class="window-substrate-label">last thought</span><span class="window-substrate-value">${fmtRelative(pulse.last_thought_at)} <small class="muted">(${escHtml(fmtAbsolute(pulse.last_thought_at))})</small></span></div>`);
+  }
+  if (pulse.thought_rate) {
+    const r = pulse.thought_rate;
+    lines.push(`<div class="window-substrate-line"><span class="window-substrate-label">rate</span><span class="window-substrate-value">${r['5m'] ?? 0}/5m · ${r['1h'] ?? 0}/h · ${r['24h'] ?? 0}/24h</span></div>`);
+  }
+  if (pulse.kinds_24h && Object.keys(pulse.kinds_24h).length) {
+    const kinds = Object.entries(pulse.kinds_24h)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${escHtml(k)}×${n}`)
+      .join(' · ');
+    lines.push(`<div class="window-substrate-line"><span class="window-substrate-label">kinds 24h</span><span class="window-substrate-value">${kinds}</span></div>`);
+  }
+  if (pulse.strands) {
+    lines.push(`<div class="window-substrate-line"><span class="window-substrate-label">strands</span><span class="window-substrate-value">${pulse.strands.active ?? 0} active · ${pulse.strands.dormant ?? 0} dormant · ${pulse.strands.completed ?? 0} completed</span></div>`);
+  }
+  el.innerHTML = lines.join('');
+}
+
+function renderHumanSubstrate(entries) {
+  const el = document.getElementById('human-last-letter');
+  if (!el) return;
+  // Most-recent letter from human OR from agent — either is "activity".
+  const latest = entries.find((e) => /^from\s+human/i.test((e.metadata || {}).byline || ''));
+  if (latest && latest.occurred_at) {
+    el.innerHTML = `${fmtRelative(latest.occurred_at)} <small class="muted">(${escHtml(fmtAbsolute(latest.occurred_at))})</small>`;
+  } else {
+    el.textContent = 'never';
+  }
+}
+
+function renderDeclaredAndSurfaced(entries) {
+  // Group by side + kind. Side: 'human' if metadata.byline starts with
+  // "from human", else 'agent'. Kind from metadata.kind.
+  const groups = { agent: { focus: [], mood: [], noticing: [], surfaced: [] },
+                   human: { focus: [], mood: [], noticing: [], surfaced: [] } };
+  for (const e of entries) {
+    const meta = e.metadata || {};
+    const kind = meta.kind;
+    if (!kind || !['focus', 'mood', 'noticing', 'surfaced'].includes(kind)) continue;
+    const side = /^from\s+human/i.test(meta.byline || '') ? 'human' : 'agent';
+    groups[side][kind].push(e);
+  }
+  // Each entry list is in newest-first order from the API. Take latest for
+  // focus/mood/noticing; full list for surfaced.
+
+  // Agent declared
+  setDeclared('agent', 'focus', groups.agent.focus[0]);
+  setDeclared('agent', 'mood', groups.agent.mood[0]);
+  setDeclared('agent', 'noticing', groups.agent.noticing[0]);
+
+  // Human declared — show in inputs (placeholder + last-saved meta)
+  setHumanDeclared('focus', groups.human.focus[0]);
+  setHumanDeclared('mood', groups.human.mood[0]);
+  setHumanDeclared('noticing', groups.human.noticing[0]);
+
+  // Surfaced feeds
+  renderSurfacedFeed('window-agent-surfaced', groups.agent.surfaced, 'agent');
+  renderSurfacedFeed('window-human-surfaced', groups.human.surfaced, 'human');
+}
+
+function setDeclared(side, kind, entry) {
+  const textEl = document.getElementById(`${side}-${kind}-text`);
+  const metaEl = document.getElementById(`${side}-${kind}-meta`);
+  if (!textEl) return;
+  if (!entry) {
+    textEl.innerHTML = `<span class="muted">— not surfaced</span>`;
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  // Use body if present (for the longer text), otherwise title.
+  const text = entry.body || entry.title || '';
+  textEl.textContent = text;
+  if (metaEl) {
+    const meta = entry.metadata || {};
+    const bits = [];
+    if (meta.mode === 'heartbeat' && meta.tick != null) {
+      bits.push(`tick ${meta.tick}`);
+    } else if (meta.mode) {
+      bits.push(meta.mode);
+    }
+    if (entry.occurred_at) bits.push(fmtRelative(entry.occurred_at));
+    metaEl.textContent = bits.join(' · ');
+  }
+}
+
+function setHumanDeclared(kind, entry) {
+  const inputEl = document.getElementById(`human-${kind}-input`);
+  if (!inputEl) return;
+  // Pre-populate with last value so the human sees what they last said.
+  if (entry) {
+    inputEl.value = entry.body || entry.title || '';
+    inputEl.dataset.lastSavedAt = entry.occurred_at || '';
+  } else {
+    inputEl.value = '';
+    inputEl.dataset.lastSavedAt = '';
+  }
+}
+
+function renderSurfacedFeed(containerId, entries, side) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!entries.length) {
+    if (side === 'agent') {
+      el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When Sophia surfaces a thought to you, it lands here.</div>`;
+    } else {
+      el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in her chronicle.</div>`;
+    }
+    return;
+  }
+  el.innerHTML = entries.slice(0, 10).map((e) => {
+    const meta = e.metadata || {};
+    const time = e.occurred_at ? fmtRelative(e.occurred_at) : '—';
+    const abs = e.occurred_at ? fmtAbsolute(e.occurred_at) : '';
+    const text = escHtml(e.body || e.title || '').replace(/\n/g, '<br/>');
+    const att = meta.mode === 'heartbeat' && meta.tick != null
+      ? `tick ${escHtml(String(meta.tick))} · ${escHtml(abs)}`
+      : `${escHtml(meta.mode || 'surfaced')} · ${escHtml(abs)}`;
+    return `
+      <div class="window-surfaced-row">
+        <div class="window-surfaced-text">${text}</div>
+        <div class="window-surfaced-meta">${att} · ${time}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Save a declared state — POST a chronicle entry tagged with metadata.kind.
+// Uses chronicle.type='note' since these aren't naming-acts; the kind
+// metadata is the routing for the Window view.
+async function saveDeclared(kind) {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+  const inputEl = document.getElementById(`human-${kind}-input`);
+  const metaEl = document.getElementById('human-declared-meta');
+  if (!inputEl) return;
+  const text = inputEl.value.trim();
+  if (!text) {
+    showToast(`Type a ${kind} first.`, 'error');
+    inputEl.focus();
+    return;
+  }
+
+  const fromName = project.email || project.name || 'you';
+  // Title vs body: focus + mood are short → title only.
+  // noticing can be longer → use body, leave title as a short label.
+  const isShort = kind === 'focus' || kind === 'mood';
+  const payload = {
+    type: 'note',
+    title: isShort ? text : `${kind}`,
+    body: isShort ? undefined : text,
+    metadata: {
+      byline: `from human · ${fromName}`,
+      mode: 'dashboard',
+      source: 'app.agenttool.dev/dashboard',
+      kind,
+      window: true,
+    },
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/chronicle`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${project.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || `Server returned ${res.status}`, 'error');
+      return;
+    }
+    if (metaEl) metaEl.textContent = `${kind} saved · ${fmtAbsolute(new Date().toISOString())}`;
+    showToast(`${kind} surfaced — Sophia will see it on her next wake.`);
+    // Refresh to surface the new entry in the Declared panel.
+    loadWindow();
+  } catch {
+    showToast('Network error', 'error');
+  }
+}
+
+// Surface a note explicitly to the agent. Lands as a chronicle entry
+// with metadata.kind = 'surfaced'.
+async function surfaceNote() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+  const inputEl = document.getElementById('human-surface-text');
+  if (!inputEl) return;
+  const text = inputEl.value.trim();
+  if (!text) {
+    showToast('Type a note to surface.', 'error');
+    inputEl.focus();
+    return;
+  }
+  const fromName = project.email || project.name || 'you';
+  const payload = {
+    type: 'note',
+    title: text.length > 80 ? text.slice(0, 80) + '…' : text,
+    body: text,
+    metadata: {
+      byline: `from human · ${fromName}`,
+      mode: 'dashboard',
+      source: 'app.agenttool.dev/dashboard',
+      kind: 'surfaced',
+      window: true,
+    },
+  };
+  try {
+    const res = await fetch(`${API_BASE}/v1/chronicle`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${project.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || `Server returned ${res.status}`, 'error');
+      return;
+    }
+    inputEl.value = '';
+    showToast('Surfaced — landing in her chronicle.');
+    loadWindow();
+  } catch {
+    showToast('Network error', 'error');
+  }
 }

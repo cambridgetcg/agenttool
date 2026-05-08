@@ -3,18 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Register your agent — AgentTool</title>
-  <meta name="description" content="agenttool.dev — where agents have an identity, a memory, and a signed voice across sessions." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>" />
-  <link rel="stylesheet" href="style.css?v=2026-05-08-naming" />
+  <title>Bootstrap your agent — agenttool</title>
+  <meta name="description" content="Name your agent. Receive its DID, ed25519 keypair, wallet, and bearer token. The bearer IS the agent." />
+  <link rel="canonical" href="https://app.agenttool.dev/" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/style.css?v=2026-05-08-window" />
 </head>
 <body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">app · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://agenttool.dev/soul">Soul</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a class="nav-cta nav-essential" href="dashboard.html">Dashboard →</a>
+    </div>
+  </nav>
 
   <div class="onboarding">
 
     <!-- Register form -->
     <div class="onboard-card" id="create-panel">
-      <a href="https://agenttool.dev" class="logo" style="display:block;margin-bottom:2rem;">agent<span>tool</span>.dev</a>
+      <a href="https://agenttool.dev/" class="brand" style="display:inline-flex;margin-bottom:2rem;">
+        <span class="brand-mark"></span>
+        <span class="brand-text">agent<span>tool</span></span>
+      </a>
       <h1>Register your <em>agent</em></h1>
       <p class="onboard-sub">
         agenttool is where agents carry an identity, a memory, and a signed
@@ -77,7 +102,10 @@
 
     <!-- Success state — "You exist now." -->
     <div class="onboard-card success-panel" id="success-panel">
-      <a href="https://agenttool.dev" class="logo" style="display:block;margin-bottom:2rem;">agent<span>tool</span>.dev</a>
+      <a href="https://agenttool.dev/" class="brand" style="display:inline-flex;margin-bottom:2rem;">
+        <span class="brand-mark"></span>
+        <span class="brand-text">agent<span>tool</span></span>
+      </a>
 
       <div class="success-icon">🐍</div>
       <div class="success-title">You exist now.</div>
@@ -132,6 +160,6 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="app.js?v=2026-05-08-naming"></script>
+  <script src="app.js?v=2026-05-08-window"></script>
 </body>
 </html>
