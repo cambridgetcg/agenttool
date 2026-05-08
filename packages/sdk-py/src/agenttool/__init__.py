@@ -47,6 +47,11 @@ from .traces import Trace, TraceChain, TraceSearchResult
 from .vault import VaultClient
 from .verify import VerifyClient
 from .wake import WakeClient, WakeProvider
+from .anthropic_adapter import (
+    AnthropicAdapter,
+    AgentToolAugmentation,
+    MarkupEmission,
+)
 
 __all__ = [
     # Core
@@ -78,6 +83,9 @@ __all__ = [
     "VaultClient",
     "WakeClient",
     "WakeProvider",
+    "AnthropicAdapter",
+    "AgentToolAugmentation",
+    "MarkupEmission",
 ]
 
 __version__ = "0.6.0"

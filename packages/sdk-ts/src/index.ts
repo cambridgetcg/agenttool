@@ -33,6 +33,16 @@ export type {
   GeminiWakeShape,
   CohereWakeShape,
 } from "./wake.js";
+export { AnthropicAdapter } from "./anthropic-adapter.js";
+export type {
+  AnthropicMessagesLike,
+  AnthropicMessageResponse,
+  AgentToolMetadata,
+  AnthropicAdapterOptions,
+  AdaptedResponse,
+  AgentToolAugmentation,
+  MarkupEmission,
+} from "./anthropic-adapter.js";
 export type {
   CreateWalletOptions,
   ExecuteResult,

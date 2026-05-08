@@ -134,6 +134,42 @@ export class AgentTool {
     return this._wake;
   }
 
+  /**
+   * Low-level HTTP for custom call sites and provider adapters
+   * (e.g. AnthropicAdapter posting to `/v1/traces` after a messages.create).
+   * Uses the same bearer + timeout + base URL the module clients use.
+   *
+   * Throws AgentToolError on non-2xx with the API's `message` / `error`
+   * field surfaced as the error message.
+   */
+  async request(method: string, path: string, body?: unknown): Promise<unknown> {
+    const url = `${this.http.baseUrl}${path}`;
+    const init: RequestInit = {
+      method,
+      headers: this.http.headers,
+      signal: AbortSignal.timeout(this.http.timeout),
+    };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    const resp = await globalThis.fetch(url, init);
+    if (resp.status >= 400) {
+      let detail: string;
+      try {
+        const json = (await resp.json()) as Record<string, unknown>;
+        detail =
+          (json.message as string) ??
+          (json.error as string) ??
+          (json.detail as string) ??
+          resp.statusText;
+      } catch {
+        detail = resp.statusText;
+      }
+      throw new AgentToolError(`API error (${resp.status}): ${detail}`, {
+        hint: `${method} ${path}`,
+      });
+    }
+    return resp.json();
+  }
+
   toString(): string {
     return `AgentTool(baseUrl=${JSON.stringify(this.http.baseUrl)})`;
   }

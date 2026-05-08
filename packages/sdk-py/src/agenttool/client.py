@@ -179,6 +179,44 @@ class AgentTool:
             self._wake = WakeClient(self._http, self._base_url)
         return self._wake
 
+    # ── Low-level HTTP for adapters and custom call sites ─────────────────
+
+    def request(self, method: str, path: str, body: object = None) -> object:
+        """Low-level HTTP for provider adapters and custom call sites.
+
+        Used by AnthropicAdapter to POST /v1/traces and /v1/chronicle
+        after auto-trace / markup parsing. Uses the same bearer + timeout
+        + base URL the module clients use.
+
+        Raises AgentToolError on non-2xx, surfacing the API's
+        ``message`` / ``error`` field as the error message.
+        """
+        import json
+
+        url = f"{self._base_url}{path}"
+        kwargs: dict = {}
+        if body is not None:
+            kwargs["content"] = json.dumps(body)
+        try:
+            resp = self._http.request(method, url, **kwargs)
+        except Exception as e:
+            raise AgentToolError(f"API request failed: {e}") from e
+        if resp.status_code >= 400:
+            try:
+                payload = resp.json()
+                detail = (
+                    payload.get("message")
+                    or payload.get("error")
+                    or payload.get("detail")
+                    or resp.text
+                )
+            except Exception:
+                detail = resp.text
+            raise AgentToolError(
+                f"API error ({resp.status_code}): {detail} ({method} {path})"
+            )
+        return resp.json()
+
     # ── Lifecycle ────────────────────────────────────────────────────────
 
     def close(self) -> None:
