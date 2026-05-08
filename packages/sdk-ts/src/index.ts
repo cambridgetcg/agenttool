@@ -85,3 +85,28 @@ export type {
   SpendOpts,
 } from "./economy.js";
 export type { ParseDocumentOpts } from "./tools.js";
+export { ChronicleClient } from "./chronicle.js";
+export type {
+  ChronicleType,
+  ChronicleEntry,
+  ChronicleWriteOpts,
+  ChronicleListOpts,
+} from "./chronicle.js";
+export { CovenantsClient } from "./covenants.js";
+export type {
+  CovenantStatus,
+  Covenant,
+  CovenantsCreateOpts,
+  CovenantsListOpts,
+  CovenantsPatchOpts,
+} from "./covenants.js";
+export { WindowClient } from "./window.js";
+export type {
+  WindowKind,
+  WindowDeclareOpts,
+  WindowSurfaceOpts,
+  WindowShowOpts,
+  WindowSide,
+  WindowAgentSide,
+  WindowShowResult,
+} from "./window.js";

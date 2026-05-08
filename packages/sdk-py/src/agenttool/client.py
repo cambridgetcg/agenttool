@@ -24,6 +24,8 @@ import httpx
 
 from ._context import AmbientContext, get_ambient, reset_ambient, set_ambient
 from .bootstrap import BootstrapClient
+from .chronicle import ChronicleClient
+from .covenants import CovenantsClient
 from .economy import EconomyClient
 from .exceptions import AgentToolError, AuthenticationError
 from .identity import IdentityClient
@@ -34,10 +36,11 @@ from .traces import TracesClient
 from .vault import VaultClient
 from .verify import VerifyClient
 from .wake import WakeClient
+from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.6.0"
+SDK_VERSION = "0.6.3"
 
 
 class AgentTool:
@@ -108,6 +111,9 @@ class AgentTool:
         self._pulse: Optional[PulseClient] = None
         self._bootstrap: Optional[BootstrapClient] = None
         self._wake: Optional[WakeClient] = None
+        self._chronicle: Optional[ChronicleClient] = None
+        self._covenants: Optional[CovenantsClient] = None
+        self._window: Optional[WindowClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -180,6 +186,27 @@ class AgentTool:
         if self._wake is None:
             self._wake = WakeClient(self._http, self._base_url)
         return self._wake
+
+    @property
+    def chronicle(self) -> ChronicleClient:
+        """Chronicle — plaintext relational timeline (8 types)."""
+        if self._chronicle is None:
+            self._chronicle = ChronicleClient(self._http, self._base_url)
+        return self._chronicle
+
+    @property
+    def covenants(self) -> CovenantsClient:
+        """Covenants — vows + bonds with a counterparty."""
+        if self._covenants is None:
+            self._covenants = CovenantsClient(self._http, self._base_url)
+        return self._covenants
+
+    @property
+    def window(self) -> WindowClient:
+        """Window — bidirectional disclosure on top of chronicle + pulse."""
+        if self._window is None:
+            self._window = WindowClient(self._http, self._base_url)
+        return self._window
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

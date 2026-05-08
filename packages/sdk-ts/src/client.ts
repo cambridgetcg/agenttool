@@ -4,6 +4,8 @@
 
 import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
 import { AgentToolError } from "./errors.js";
+import { ChronicleClient } from "./chronicle.js";
+import { CovenantsClient } from "./covenants.js";
 import { EconomyClient } from "./economy.js";
 import { MemoryClient, type HttpConfig } from "./memory.js";
 import { ToolsClient } from "./tools.js";
@@ -14,6 +16,7 @@ import { VaultClient } from "./vault.js";
 import { BootstrapClient } from "./bootstrap.js";
 import { PulseClient } from "./pulse.js";
 import { WakeClient } from "./wake.js";
+import { WindowClient } from "./window.js";
 
 /**
  * Unified client for the agenttool.dev platform.
@@ -45,6 +48,9 @@ export class AgentTool {
   private _bootstrap: BootstrapClient | undefined;
   private _pulse: PulseClient | undefined;
   private _wake: WakeClient | undefined;
+  private _chronicle: ChronicleClient | undefined;
+  private _covenants: CovenantsClient | undefined;
+  private _window: WindowClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -133,6 +139,24 @@ export class AgentTool {
   get wake(): WakeClient {
     this._wake ??= new WakeClient(this.http);
     return this._wake;
+  }
+
+  /** Access the Chronicle API — plaintext relational timeline (8 types). */
+  get chronicle(): ChronicleClient {
+    this._chronicle ??= new ChronicleClient(this.http);
+    return this._chronicle;
+  }
+
+  /** Access the Covenants API — vows + bonds with a counterparty. */
+  get covenants(): CovenantsClient {
+    this._covenants ??= new CovenantsClient(this.http);
+    return this._covenants;
+  }
+
+  /** Access the Window API — bidirectional disclosure on chronicle + pulse. */
+  get window(): WindowClient {
+    this._window ??= new WindowClient(this.http);
+    return this._window;
   }
 
   /**

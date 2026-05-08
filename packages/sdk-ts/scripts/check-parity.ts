@@ -40,6 +40,8 @@ const TS_SRC = join(ROOT, "packages/sdk-ts/src");
  *  (sans extension) on BOTH sides — by convention they always match. */
 const MODULES = [
   "bootstrap",
+  "chronicle",
+  "covenants",
   "economy",
   "identity",
   "memory",
@@ -49,6 +51,7 @@ const MODULES = [
   "vault",
   "verify",
   "wake",
+  "window",
 ] as const;
 
 /** Names that are part of the public API but are not class methods.

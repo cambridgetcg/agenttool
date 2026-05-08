@@ -33,6 +33,7 @@ export interface RuntimeRow {
   bridge_connected_at: string | null;
   bridge_session_id: string | null;
   bridge_session_at: string | null;
+  bridge_session_machine: string | null;
   bridge_disconnect_reason: string | null;
   region: string | null;
   last_seen_at: string | null;
@@ -78,6 +79,7 @@ function toRow(r: typeof runtimes.$inferSelect): RuntimeRow {
     bridge_connected_at: r.bridgeConnectedAt?.toISOString() ?? null,
     bridge_session_id: r.bridgeSessionId,
     bridge_session_at: r.bridgeSessionAt?.toISOString() ?? null,
+    bridge_session_machine: r.bridgeSessionMachine,
     bridge_disconnect_reason: r.bridgeDisconnectReason,
     region: r.region,
     last_seen_at: r.lastSeenAt?.toISOString() ?? null,
@@ -331,12 +333,14 @@ export async function findRuntimeForBridge(id: string): Promise<BridgeAuthRow | 
 export async function setBridgeSession(
   id: string,
   sessionId: string,
+  machineId: string | null,
 ): Promise<void> {
   await db
     .update(runtimes)
     .set({
       bridgeSessionId: sessionId,
       bridgeSessionAt: new Date(),
+      bridgeSessionMachine: machineId,
       bridgeConnectedAt: new Date(),
       bridgeDisconnectReason: null,
       status: "running",
@@ -344,7 +348,10 @@ export async function setBridgeSession(
       updatedAt: new Date(),
     })
     .where(eq(runtimes.id, id));
-  await logEvent(id, "bridge_handshake_ok", { session_id: sessionId });
+  await logEvent(id, "bridge_handshake_ok", {
+    session_id: sessionId,
+    ...(machineId ? { machine: machineId } : {}),
+  });
 }
 
 export async function clearBridgeSession(
@@ -355,12 +362,22 @@ export async function clearBridgeSession(
     .update(runtimes)
     .set({
       bridgeSessionId: null,
+      bridgeSessionMachine: null,
       bridgeDisconnectReason: reason.slice(0, 500),
       status: "idle",
       updatedAt: new Date(),
     })
     .where(eq(runtimes.id, id));
   await logEvent(id, "bridge_disconnected", { reason });
+}
+
+export async function getBridgeMachine(id: string): Promise<string | null> {
+  const [row] = await db
+    .select({ machine: runtimes.bridgeSessionMachine })
+    .from(runtimes)
+    .where(and(eq(runtimes.id, id), isNull(runtimes.deletedAt)))
+    .limit(1);
+  return row?.machine ?? null;
 }
 
 export async function bumpHeartbeat(id: string): Promise<void> {

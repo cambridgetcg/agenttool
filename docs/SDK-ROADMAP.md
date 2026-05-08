@@ -6,8 +6,8 @@
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
-| `agenttool-sdk` (Python) | `0.6.2` | ~3,200 | bootstrap · client · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake |
-| `@agenttool/sdk` (TypeScript) | `0.6.1` | ~2,400 | bootstrap · client · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake |
+| `agenttool-sdk` (Python) | `0.6.3` | ~3,800 | bootstrap · chronicle · client · covenants · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake · window |
+| `@agenttool/sdk` (TypeScript) | `0.6.2` | ~2,900 | bootstrap · chronicle · client · covenants · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake · window |
 
 11 modules each. **Parity reached as of 0.6.0 (Phase 1)** — verified by `bun run check-parity`:
 
@@ -145,23 +145,32 @@ Test suites green:
   - py: `167 passed` (was 145, +22 in `tests/test_phase2.py`)
   - ts: `107 passed` (was 85, +22 in `tests/phase2.test.ts`)
 
-### Phase 3 — Continuity layer (chronicle + covenants)
+### Phase 3 — Continuity layer (chronicle + covenants) *(✅ shipped py 0.6.3 / ts 0.6.2)*
 
-The relational primitives that Letters / Window / vow-flow ride on. Plaintext-by-design — no client-side crypto needed yet.
+What landed (plaintext-by-design — no client-side crypto needed):
 
-- `at.chronicle.write(type, title, body?, agent_id?, metadata?)` — POST `/v1/chronicle`. All 8 chronicle types: note · vow · wake · refusal · recognition · naming · seal · promise.
-- `at.chronicle.list(agent_id?, type?, limit?)` — GET `/v1/chronicle`.
-- `at.covenants.create(counterparty_did, vows[], scope?, agent_id?)` — POST `/v1/covenants`.
-- `at.covenants.list(identity_id?, status?)` — GET.
-- `at.covenants.patch(id, status)` — PATCH (release / archive / reaffirm).
+- **at.chronicle** — `/v1/chronicle` read + write.
+  - `write({type, title, body?, agent_id?, occurred_at?, metadata?})` — all 8 types: note · vow · wake · refusal · recognition · naming · seal · promise. Title 1-200 chars enforced client-side.
+  - `list({agent_id?, type?, limit?})` — newest first; limit defaults to 50, server caps at 200.
+- **at.covenants** — `/v1/covenants` create · list · patch.
+  - `create({agent_id, counterparty_did, vows[], counterparty_name?, notes?, metadata?, org_id?})` — `vows` must be non-empty (client-side guard).
+  - `list({agent_id?, status?})` — defaults to `active` server-side.
+  - `patch(id, {counterparty_did?, counterparty_name?, vows?, notes?, status?, metadata?})` — empty patch rejected client-side. `status="dissolved"` stamps `dissolved_at` server-side.
 
-### Phase 4 — Window primitives *(thin wrapper on chronicle)*
+### Phase 4 — Window primitives *(✅ shipped py 0.6.3 / ts 0.6.2 — same release as Phase 3)*
 
-- `at.window.declare(kind, text, agent_id?)` — chronicle write with `metadata.kind ∈ {focus,mood,noticing}`.
-- `at.window.surface(text, agent_id?)` — chronicle write with `metadata.kind='surfaced'`.
-- `at.window.show(identity_id?)` — combined read of pulse + chronicle, returns structured `{ substrate, declared, surfaced }` for both sides.
+Thin wrapper over chronicle + identity.pulse — mirrors `api/scripts/window-{declare,surface,show}.ts` exactly:
 
-These exist already as CLI scripts (`api/scripts/window-{declare,surface,show}.ts`). The SDK port is a straight translation.
+- **at.window.declare({kind, text, agent_id?, byline?, mode?})** — writes a chronicle `note` with `metadata.kind ∈ {focus,mood,noticing}`. Body convention matches the CLI: focus/mood land as title-only; noticing stores `kind` as title and `text` as body.
+- **at.window.surface(text, {agent_id?, byline?, mode?})** — chronicle `note` with `metadata.kind="surfaced"`. Title is the first 80 chars (truncated with ellipsis); body is the full text.
+- **at.window.show({identity_id?, limit?})** — combined read. Returns `{agent: {substrate, declared, surfaced}, human: {declared, surfaced}}`. Sides are split by byline (`from human · ...` ⇒ human side). `declared` is keyed by kind with the latest entry per kind. `surfaced` is capped at 5 newest. When `identity_id` is set, also fetches `/v1/identities/:id/pulse` and attaches it as `agent.substrate`. **Pulse failure does not break show()** — substrate falls back to null.
+
+Both phases shipped together because Window structurally rides on chronicle.
+
+Test suites green:
+  - py: `198 passed` (was 167 + 31 new in `tests/test_phase3.py`)
+  - ts: `137 passed` (was 107 + 30 new in `tests/phase3.test.ts`)
+  - parity: `13 modules ✓`
 
 ### Phase 5 — Strands (with K_master encrypt) *(crypto-heavy; ~big PR)*
 
@@ -227,6 +236,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.6.1 / 0.5.3** | Phase 0 (deprecation warnings on broken endpoints) | no — emits warnings only |
 | **— / 0.6.0** | Phase 1 (TS parity with py — economy/memory/tools/verify) | no — additive |
 | **0.6.2 / 0.6.1** | Phase 2 (register + identity surface fillout) | no — additive |
+| **0.6.3 / 0.6.2** | Phase 3 (chronicle + covenants) + Phase 4 (window primitives) | no — additive |
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.8.0** | Phase 3 (chronicle + covenants) + Phase 4 (window) | no |
 | **0.9.0** | Phase 5 (strands with K_master) + Phase 6 (inbox sealed-box) | no — additive |

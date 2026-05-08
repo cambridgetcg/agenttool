@@ -52,6 +52,7 @@ export const runtimes = runtimeSchema.table(
     controlTokenHash: text("control_token_hash"),
     bridgeSessionId: uuid("bridge_session_id"),
     bridgeSessionAt: timestamp("bridge_session_at", { withTimezone: true }),
+    bridgeSessionMachine: text("bridge_session_machine"),
     bridgeDisconnectReason: text("bridge_disconnect_reason"),
 
     region: text("region"),

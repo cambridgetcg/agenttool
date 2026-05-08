@@ -30,7 +30,9 @@ Soul: https://agenttool.dev/soul
 """
 
 from .bootstrap import BootstrapClient
+from .chronicle import ChronicleClient
 from .client import AgentTool
+from .covenants import CovenantsClient
 from .pulse import PulseClient
 from .economy import EconomyClient, Escrow, Wallet
 from .exceptions import (
@@ -43,6 +45,7 @@ from .exceptions import (
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchResult, UsageStats
 from .register import register
+from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
 from .vault import VaultClient
@@ -72,9 +75,12 @@ __all__ = [
     # Services
     "BootstrapClient",
     "BoxKeysClient",
+    "ChronicleClient",
+    "CovenantsClient",
     "ExecuteResult",
     "ExpressionClient",
     "IdentityClient",
+    "WindowClient",
     "register",
     "Memory",
     "PulseClient",
@@ -92,6 +98,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

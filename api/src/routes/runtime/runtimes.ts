@@ -16,6 +16,7 @@ import {
   countRuntimes,
   createRuntime,
   deprovisionRuntime,
+  getBridgeMachine,
   getRuntime,
   listEvents,
   listRuntimes,
@@ -28,6 +29,20 @@ import {
 import { mintControlToken } from "../../services/runtime/control-token";
 import { bridgeSummary, isBridgeConnected } from "../../services/runtime/bridge-hub";
 import { runOneCycle } from "../../services/runtime/think-worker";
+
+// fly-replay: when the bridge isn't in this machine's in-memory registry,
+// check the DB for which machine has it. If different, ask Fly to replay
+// the request to that machine. Returns null if we should handle locally.
+function maybeFlyReplay(
+  c: { header: (k: string, v: string) => void; body: (b: string, status: number) => Response },
+  bridgeMachineId: string | null,
+): Response | null {
+  if (!bridgeMachineId) return null;
+  const ours = process.env.FLY_MACHINE_ID;
+  if (!ours || bridgeMachineId === ours) return null;
+  c.header("fly-replay", `instance=${bridgeMachineId}`);
+  return c.body("", 200);
+}
 
 const app = new Hono<ProjectContext>();
 
@@ -242,10 +257,12 @@ app.get("/:id/bridge-status", async (c) => {
     persisted: {
       bridge_session_id: r.bridge_session_id,
       bridge_session_at: r.bridge_session_at,
+      bridge_session_machine: r.bridge_session_machine ?? null,
       bridge_connected_at: r.bridge_connected_at,
       bridge_disconnect_reason: r.bridge_disconnect_reason,
     },
     live: bridgeSummary(id),
+    this_machine: process.env.FLY_MACHINE_ID ?? null,
   });
 });
 
@@ -271,6 +288,10 @@ app.post("/:id/think-once", async (c) => {
     );
   }
   if (!isBridgeConnected(id)) {
+    // Bridge might be on another Fly machine in this app — replay there.
+    const machine = await getBridgeMachine(id);
+    const replay = maybeFlyReplay(c, machine);
+    if (replay) return replay;
     return c.json(
       {
         error: "bridge_not_connected",

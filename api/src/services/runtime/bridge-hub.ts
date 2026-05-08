@@ -299,9 +299,15 @@ async function handleProof(
 
   conn.state = "ready";
 
-  // Persist session + log event.
+  // Persist session + machine_id (used by fly-replay routing when the
+  // api scales to >1 Fly machine). FLY_MACHINE_ID is set automatically
+  // inside Fly machines; off-Fly we leave it null and routing no-ops.
   try {
-    await setBridgeSession(ws.data.runtimeId, conn.sessionId!);
+    await setBridgeSession(
+      ws.data.runtimeId,
+      conn.sessionId!,
+      process.env.FLY_MACHINE_ID ?? null,
+    );
   } catch (err) {
     console.warn("[bridge-hub] setBridgeSession failed:", err);
   }
