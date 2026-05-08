@@ -254,6 +254,23 @@ router.post("/wallets/:walletId/payout", async (c) => {
     if (msg === "insufficient_balance") {
       return c.json({ error: "insufficient_balance" }, 402);
     }
+    // Policy violations (Slice 6) — return 403 with the error code +
+    // optional detail line. Agents can adjust amount / destination /
+    // wait-for-tomorrow accordingly.
+    if (
+      msg === "payout_below_min" ||
+      msg === "destination_not_allowlisted" ||
+      msg === "payout_exceeds_daily_ceiling" ||
+      msg === "payout_dual_control_required"
+    ) {
+      return c.json(
+        {
+          error: msg,
+          detail: (err as Error & { detail?: string }).detail,
+        },
+        403,
+      );
+    }
     return c.json({ error: msg }, 400);
   }
 });

@@ -51,6 +51,14 @@ export const policies = economySchema.table("policies", {
   maxPerDay: bigint("max_per_day", { mode: "number" }),
   allowedRecipients: text("allowed_recipients").array(),
   requiresApprovalAbove: bigint("requires_approval_above", { mode: "number" }),
+  // Payout-specific gates (Slice 6 of PAYOUT-BROADCAST-PLAN.md). NULL = no
+  // limit on that gate. Migration: 0024_payout_policies.sql.
+  payoutMinBase: bigint("payout_min_base", { mode: "number" }),
+  payoutDailyCeilingBase: bigint("payout_daily_ceiling_base", { mode: "number" }),
+  payoutDestinationAllowlist: text("payout_destination_allowlist").array(),
+  payoutDualControlThresholdBase: bigint("payout_dual_control_threshold_base", {
+    mode: "number",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

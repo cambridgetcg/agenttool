@@ -14,6 +14,7 @@ import {
   cryptoWebhookEvents,
   depositAddresses,
   onchainIdentities,
+  policies,
   wallets,
 } from "../../../db/schema/economy";
 import { economyConfig } from "../config";
@@ -227,9 +228,90 @@ export interface PayoutRequest {
   metadata?: Record<string, unknown>;
 }
 
-/** Record a payout intent. The actual signing + broadcast lands in Phase 3c
- *  — for the foundation we lock the equivalent credits and surface a
- *  pending request the agent can poll. */
+export type PayoutPolicyDecision =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "payout_below_min"
+        | "destination_not_allowlisted"
+        | "payout_exceeds_daily_ceiling"
+        | "payout_dual_control_required";
+      detail?: string;
+    };
+
+/** Per-wallet payout policy check (Slice 6). Returns ok=true if no policy
+ *  is set or all gates pass. Caller throws the error string on ok=false;
+ *  the route layer maps the message to HTTP 403. */
+export async function checkPayoutPolicy(p: {
+  walletId: string;
+  destinationAddress: string;
+  amountBase: bigint;
+}): Promise<PayoutPolicyDecision> {
+  const [policy] = await db
+    .select()
+    .from(policies)
+    .where(eq(policies.walletId, p.walletId));
+  if (!policy) return { ok: true };
+
+  if (
+    policy.payoutMinBase !== null &&
+    p.amountBase < BigInt(policy.payoutMinBase)
+  ) {
+    return {
+      ok: false,
+      error: "payout_below_min",
+      detail: `min ${policy.payoutMinBase} base units; got ${p.amountBase}`,
+    };
+  }
+
+  if (
+    policy.payoutDestinationAllowlist &&
+    policy.payoutDestinationAllowlist.length > 0 &&
+    !policy.payoutDestinationAllowlist.includes(p.destinationAddress)
+  ) {
+    return { ok: false, error: "destination_not_allowlisted" };
+  }
+
+  if (policy.payoutDailyCeilingBase !== null) {
+    // Sum across non-terminal-failure rows on the rolling UTC day.
+    const result = await db.execute<{ total: string }>(sql`
+      SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
+      FROM economy.crypto_payouts
+      WHERE wallet_id = ${p.walletId}
+        AND status NOT IN ('failed', 'cancelled')
+        AND requested_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+    `);
+    const rows = (result as unknown as { rows?: Array<{ total: string }> }).rows ?? [];
+    const todaySum = BigInt(rows[0]?.total ?? "0");
+    const ceiling = BigInt(policy.payoutDailyCeilingBase);
+    if (todaySum + p.amountBase > ceiling) {
+      return {
+        ok: false,
+        error: "payout_exceeds_daily_ceiling",
+        detail: `today_used=${todaySum} new=${p.amountBase} ceiling=${ceiling}`,
+      };
+    }
+  }
+
+  if (
+    policy.payoutDualControlThresholdBase !== null &&
+    p.amountBase >= BigInt(policy.payoutDualControlThresholdBase)
+  ) {
+    return {
+      ok: false,
+      error: "payout_dual_control_required",
+      detail:
+        "dual-control flow not yet implemented; below-threshold payouts only",
+    };
+  }
+
+  return { ok: true };
+}
+
+/** Record a payout intent. The actual signing + broadcast happens in the
+ *  payout-broadcast worker; this function locks the equivalent credits
+ *  and surfaces a pending request the agent can poll. */
 export async function requestPayout(
   p: PayoutRequest,
 ): Promise<{ id: string; status: string; broadcast_pending: true }> {
@@ -242,6 +324,19 @@ export async function requestPayout(
     throw new Error("amount_base must be a positive integer (token base units)");
   }
   const creditsRequired = Math.ceil(amountUsdc * CREDITS_PER_USDC);
+
+  // Policy check BEFORE debit. Throws the typed error string; the route
+  // layer maps it to HTTP 403 with a `detail` field.
+  const decision = await checkPayoutPolicy({
+    walletId: p.walletId,
+    destinationAddress: p.destinationAddress,
+    amountBase: BigInt(p.amountBase),
+  });
+  if (!decision.ok) {
+    const err = new Error(decision.error);
+    if (decision.detail) (err as Error & { detail?: string }).detail = decision.detail;
+    throw err;
+  }
 
   // Atomic debit — fails if insufficient balance.
   const debit = await db

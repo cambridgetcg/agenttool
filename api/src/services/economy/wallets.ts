@@ -294,6 +294,11 @@ export async function setPolicy(
     maxPerDay?: number | null;
     allowedRecipients?: string[] | null;
     requiresApprovalAbove?: number | null;
+    // Payout-specific gates (Slice 6 of PAYOUT-BROADCAST-PLAN.md).
+    payoutMinBase?: number | null;
+    payoutDailyCeilingBase?: number | null;
+    payoutDestinationAllowlist?: string[] | null;
+    payoutDualControlThresholdBase?: number | null;
   },
 ) {
   const [existing] = await db

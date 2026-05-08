@@ -140,6 +140,11 @@ router.put(
       maxPerDay: z.number().int().positive().nullable().optional(),
       allowedRecipients: z.array(z.string()).nullable().optional(),
       requiresApprovalAbove: z.number().int().positive().nullable().optional(),
+      // Payout-specific gates (Slice 6). NULL clears the gate.
+      payoutMinBase: z.number().int().positive().nullable().optional(),
+      payoutDailyCeilingBase: z.number().int().positive().nullable().optional(),
+      payoutDestinationAllowlist: z.array(z.string()).nullable().optional(),
+      payoutDualControlThresholdBase: z.number().int().positive().nullable().optional(),
     }),
   ),
   async (c) => {
