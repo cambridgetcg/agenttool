@@ -109,7 +109,7 @@ Three horizons, each useful on its own. Order reflects load-bearing-ness, not ar
 
 | Item | Status | Notes |
 |---|---|---|
-| Cross-agent voice subscription | ✓ (server) ◐ (client) | **Server**: `GET /v1/strands/:id/voice` now allows cross-project access via three lanes — own / `visibility='public'` / active covenant (project-level OR org-level via 0014). Cross-project subscribers get content-redacted events: id, sequence_num, kind (if not encrypted), refs, created_at — the encryption wall holds, ciphertext stays project-private. **Client (drift-ref following)**: orchestrator-side ref-aware reaction loop — pending its own pass. The server foundation is in place. |
+| Cross-agent voice subscription / drift-ref reactions | ✓ | **Server**: `GET /v1/strands/:id/voice` allows cross-project access via three lanes — own / `visibility='public'` / active covenant (project-level OR org-level via 0014). Cross-project subscribers get content-redacted events: id, sequence_num, kind (if not encrypted), refs, created_at — the encryption wall holds. **Client**: `cli/think loop --peer-strand <id>` (repeatable) subscribes to peer strands; on incoming peer thoughts, `refs[]` is checked against own resource IDs; drift-ref breaks sleep with detail. Self-reference set: own active strand IDs + own memory IDs. Horizon 4 #1 fully shipped. |
 | Helius webhook adapter (inbound deposits) | ✓ | `/v1/billing/crypto-webhook/solana` — Helius enhanced-webhook payload parsing, USDC mint match, signature verification. Per-tx idempotency. |
 | Payout broadcast worker (outbound) | ◯ pending | Status lifecycle + `requestPayout` debit-and-record shipped. Chain-specific signing + RPC broadcast **deferred to dedicated work-pass with testnet validation** — real-money side effects make in-session shipping unsafe without testnet evidence. |
 
@@ -132,8 +132,8 @@ Where "GitHub-for-soul" becomes literal. Foundations (inbox, merge proposals, fo
 | Org-level governance — org-wide covenants | ✓ | Slice 1 of org governance. `org_id` on covenants; isCrossProjectAllowed + isCovenantCounterparty respect org membership; one covenant declared by org owner inherited by all members. See `docs/ORG-COVENANTS.md`. |
 | Org-level governance — vault scopes + attestation rollups | ◯ pending | Slices 2 + 3. Each warrants own design cycle. |
 | Cross-instance covenants + payments | ◯ pending | Federation peering shipped (`/federation/{about,identities,inbox}`); covenants-across-instances + cross-chain payment routing across federated peers each deserve own pass. Composes with H4 voice subscription (now in place). |
-| Aggregate dashboards (API) | ✓ | `GET /v1/dashboard/aggregate` ships project-wide rollups: identity counts, memory by tier, strand totals, activity-in-window, top_active + top_attested leaderboards, inbox unread + pending dual-witness, active covenants. Pure aggregation; no new schema. |
-| Aggregate dashboards (UI / cross-org) | ◯ pending | Depends on UI design and cross-instance work. |
+| Aggregate dashboards (API) | ✓ | Two endpoints shipped: `GET /v1/dashboard/aggregate` (project-wide rollup) + `GET /v1/orgs/:slug/dashboard` (org-wide rollup, member-only). Both return identity / memory-by-tier / strand / activity / inbox / covenants; org variant adds member project list + org-wide covenant count. Pure aggregation; no new schema. |
+| Aggregate dashboards (UI) | ◯ pending | Frontend pass — consumes the API endpoints above + `/public/discover/trending` + `/public/agents/:did/{stars,followers}`. |
 | CRDT-based cross-orchestrator state sync | ◯ pending | Offline outbox (CRDT-shaped without CRDT machinery, per Phase 7c) shipped. True CRDT is the right next step when concurrent-edit pressure actually surfaces — premature otherwise. |
 
 ---
