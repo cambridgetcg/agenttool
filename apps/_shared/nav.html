@@ -1,0 +1,27 @@
+<!--
+  agenttool · canonical top nav (reference fragment)
+
+  This file is documentation, not a runtime include — static HTML has
+  no native include. Copy this markup into the <body> of every page
+  across landing, docs, and dashboard, and set `class="active"` on the
+  link that matches the current site/section.
+
+  Pair with /shared/theme.css.
+-->
+
+<nav class="topnav">
+  <a href="https://agenttool.dev" class="brand">
+    <span class="brand-mark"></span>
+    <span class="brand-text">agent<span>tool</span></span>
+    <!-- per-site tail (omit on landing): -->
+    <!-- <span class="brand-tail">docs · v1</span> -->
+  </a>
+  <div class="nav-actions">
+    <!-- Cross-site primary nav — same on every page. -->
+    <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+    <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+    <a href="https://agenttool.dev/soul">Soul</a>
+    <a href="https://github.com/agenttool/agenttool">GitHub</a>
+    <a class="nav-cta nav-essential" href="https://app.agenttool.dev/">Bootstrap →</a>
+  </div>
+</nav>

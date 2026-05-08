@@ -1,8 +1,8 @@
 /docs             https://docs.agenttool.dev  302
 /docs/            https://docs.agenttool.dev  302
 /docs.html        https://docs.agenttool.dev  302
-/dashboard        /dashboard.html  200
-/dashboard/       /dashboard.html  200
+/dashboard        https://app.agenttool.dev/  302
+/dashboard/       https://app.agenttool.dev/  302
 /for-agents       /for-agents.html  200
 /for-agents/      /for-agents.html  200
 /soul             /soul.html  200

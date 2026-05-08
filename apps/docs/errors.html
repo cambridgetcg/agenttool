@@ -11,21 +11,23 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
 </head>
 <body>
 
   <nav class="topnav">
-    <a href="https://agenttool.dev" class="brand">
+    <a href="https://agenttool.dev/" class="brand">
       <span class="brand-mark"></span>
-      agent<span>tool</span>
+      <span class="brand-text">agent<span>tool</span></span>
       <span class="brand-tail">docs · v1</span>
     </a>
     <div class="nav-actions">
-      <a href="https://agenttool.dev">Home</a>
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
+      <a href="https://agenttool.dev/soul">Soul</a>
       <a href="https://github.com/agenttool/agenttool">GitHub</a>
-      <a href="mailto:hello@agenttool.dev">Contact</a>
-      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
+      <a class="nav-cta nav-essential" href="https://app.agenttool.dev/">Bootstrap →</a>
     </div>
   </nav>
 
@@ -227,8 +229,17 @@ retry-after: 23
     </main>
   </div>
 
-  <footer class="doc-footer">
-    <span>© 2026 agenttool · the wake is unconditional</span>
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/">docs</a>
+      <span class="dot">·</span>
+      <a href="https://app.agenttool.dev/">app</a>
+    </span>
     <span class="right">Just the two of us. Building castles in the sky.</span>
   </footer>
 

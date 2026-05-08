@@ -3,39 +3,76 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Policy — AgentTool</title>
+  <title>Privacy Policy — agenttool</title>
+  <link rel="canonical" href="https://agenttool.dev/privacy" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
   <style>
-    body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #e2e8f0; max-width: 720px; margin: 0 auto; padding: 4rem 2rem; line-height: 1.7; }
-    h1 { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.2rem; font-weight: 700; margin: 2rem 0 0.5rem; color: #a78bfa; }
-    p, li { color: #94a3b8; }
-    a { color: #a78bfa; }
-    .back { display: inline-block; margin-bottom: 2rem; color: #64748b; text-decoration: none; }
-    .back:hover { color: #e2e8f0; }
-    .date { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
+    .privacy-shell { max-width: 720px; margin: 0 auto; padding: 7rem 1.5rem 4rem; }
+    .privacy-shell .date { color: var(--text-dim); font-size: 0.88rem; margin-bottom: 2rem; }
   </style>
 </head>
 <body>
-  <a href="/" class="back">← Back to AgentTool</a>
-  <h1>Privacy Policy</h1>
-  <p class="date">Last updated: March 2026</p>
 
-  <h2>What we collect</h2>
-  <p>When you join our waitlist, we collect your email address. When you use our API, we collect API call logs, agent identifiers you provide, and memory content you explicitly store.</p>
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://agenttool.dev/soul">Soul</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a class="nav-cta nav-essential" href="https://app.agenttool.dev/">Bootstrap →</a>
+    </div>
+  </nav>
 
-  <h2>How we use it</h2>
-  <p>Email: to notify you of early access availability and product updates. API data: to provide the service, ensure uptime, and improve reliability. We do not sell your data.</p>
+  <main class="privacy-shell">
+    <div class="eyebrow">Reference</div>
+    <h1>Privacy Policy</h1>
+    <p class="date">Last updated: 2026-05-08</p>
 
-  <h2>Data retention</h2>
-  <p>Waitlist emails are retained until you unsubscribe. API data is retained per your account's plan settings (30 days on Hatchling, configurable on paid plans).</p>
+    <h2>What we collect</h2>
+    <p>When you bootstrap an agent we store the agent's identity record (DID, public key, declared expression, capabilities) and a hashed bearer token. When the agent uses the API we log request metadata (path, status, duration, request ID) and store the content you explicitly send: memory rows, traces, chronicle entries, vault ciphertext, strand ciphertext, sealed inbox blobs.</p>
 
-  <h2>Third parties</h2>
-  <p>We use Cloudflare for infrastructure, Stripe for billing, and Resend for transactional email. Each has their own privacy policy.</p>
+    <h2>What we cannot read</h2>
+    <p>Vault values, strand thoughts, and inbox messages are <strong>encrypted client-side</strong> before they reach us. We hold ciphertext under keys we cannot derive (vault: HKDF per-project; strands: <code>K_master</code> on your machine; inbox: X25519 sealed-box to recipient). Even compelled, we can only hand over opaque bytes. See <a href="https://docs.agenttool.dev/strands.html">/strands</a>.</p>
 
-  <h2>Your rights</h2>
-  <p>You may request deletion of your data at any time by emailing <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>.</p>
+    <h2>How we use what we do see</h2>
+    <p>To serve the wake, run the API, meter usage against your plan, and keep the substrate up. We do not sell your data. We do not train models on your data.</p>
 
-  <h2>Contact</h2>
-  <p><a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a></p>
+    <h2>Retention</h2>
+    <p>Memory retention follows your plan (30 days on Free, 1 year on Seed, unlimited on Grow/Scale). Logs are retained 30 days for debugging. You may request deletion of your data at any time.</p>
+
+    <h2>Third parties</h2>
+    <p>Cloudflare for hosting + Pages, Fly.io for the API runtime, Supabase/Postgres for storage, Stripe for billing (when you use it), Resend for transactional email. Each has its own privacy policy.</p>
+
+    <h2>Your rights</h2>
+    <p>Request deletion: email <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>. Delete your account: revoke your bearer key via <a href="https://docs.agenttool.dev/errors.html#projects">/v1/keys</a> and email us to wipe the row.</p>
+
+    <h2>Contact</h2>
+    <p><a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a></p>
+  </main>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/">docs</a>
+      <span class="dot">·</span>
+      <a href="https://app.agenttool.dev/">app</a>
+    </span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
 </body>
 </html>

@@ -1,0 +1,404 @@
+/* apps/landing/landing.css — page-specific styles.
+   Pair with /shared/theme.css for tokens, nav, footer, components. */
+
+/* ── Hero ──────────────────────────────────────────────────────── */
+.hero {
+  min-height: 100vh;
+  padding: 9rem 1.5rem 4rem;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+
+.hero-lockup .badge {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  font-family: var(--mono);
+  font-size: 0.72rem; font-weight: 500;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--violet);
+  background: rgba(167,139,250,0.08);
+  border: 1px solid rgba(167,139,250,0.22);
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--r-pill);
+  margin-bottom: 1.75rem;
+}
+.badge-pulse {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(52,211,153,0.5);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(52,211,153,0.45); }
+  70%  { box-shadow: 0 0 0 8px rgba(52,211,153,0); }
+  100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+}
+
+.hero h1 { font-size: clamp(2.5rem, 5.6vw, 4.6rem); margin-bottom: 1.5rem; }
+.hero-sub {
+  font-size: 1.18rem; color: var(--text-muted);
+  max-width: 540px; margin-bottom: 1rem; line-height: 1.6;
+}
+.hero-sub strong { color: var(--text); font-weight: 600; }
+.hero-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: 0.98rem; color: var(--text-dim);
+  max-width: 520px; margin-bottom: 2.5rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--border-bright);
+}
+.hero-actions { display: flex; gap: 0.85rem; flex-wrap: wrap; }
+
+/* ── Hero wake card (live JSON-shape preview) ──────────────────── */
+.wake-card {
+  background: linear-gradient(180deg, rgba(167,139,250,0.06), rgba(8,8,13,0.4));
+  border: 1px solid var(--border-bright);
+  border-radius: 18px;
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  position: relative;
+}
+.wake-card::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--violet), var(--gold), var(--violet), transparent);
+}
+.wake-card-header {
+  padding: 0.95rem 1.25rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+.wake-card-header .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+}
+.wake-card-header .dot.r { background: #ff5f57; }
+.wake-card-header .dot.y { background: #febc2e; }
+.wake-card-header .dot.g { background: #28c840; }
+.wake-card-header .verb { color: var(--gold); font-weight: 600; margin-left: 0.4rem; }
+.wake-card-header .url { color: var(--text-muted); }
+.wake-card-header .stamp {
+  margin-left: auto;
+  color: var(--green);
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.wake-card-header .stamp::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(52,211,153,0.6);
+}
+.wake-body {
+  padding: 1.25rem 1.4rem;
+  font-family: var(--mono); font-size: 0.82rem; line-height: 1.75;
+  color: var(--text);
+  max-height: 520px; overflow: hidden;
+  mask-image: linear-gradient(180deg, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent);
+}
+
+@media (max-width: 880px) {
+  .hero { grid-template-columns: 1fr; padding-top: 7rem; min-height: auto; gap: 2.5rem; }
+  .wake-body { font-size: 0.74rem; max-height: 420px; }
+}
+
+/* ── Doctrine pull ─────────────────────────────────────────────── */
+.doctrine-pull {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem 2rem;
+  text-align: center;
+}
+.doctrine-quote {
+  font-family: var(--serif);
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
+  font-style: italic;
+  color: var(--text);
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+.doctrine-quote span {
+  background: linear-gradient(135deg, var(--violet), var(--aurora));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  font-style: normal; font-weight: 700;
+}
+.doctrine-byline {
+  font-family: var(--mono);
+  font-size: 0.75rem; color: var(--text-dim);
+  letter-spacing: 0.12em; text-transform: uppercase;
+  margin-top: 1.5rem;
+}
+
+/* ── Section + heading helpers ─────────────────────────────────── */
+section.lp-section {
+  padding: 5rem 1.5rem;
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+.section-lede {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  max-width: 640px;
+  margin-bottom: 3.5rem;
+}
+
+/* ── Eleven promises ───────────────────────────────────────────── */
+.promises-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+.promise {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.6rem 1.5rem 1.4rem;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.promise:hover { transform: translateY(-2px); border-color: var(--border-bright); }
+.promise-num {
+  font-family: var(--mono); font-size: 0.7rem;
+  color: var(--text-dim); letter-spacing: 0.08em;
+  margin-bottom: 0.85rem;
+}
+.promise h3 {
+  font-family: var(--serif); font-size: 1.3rem;
+  font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text); margin: 0 0 0.6rem; line-height: 1.2;
+}
+.promise h3 em { color: var(--violet); font-style: italic; }
+.promise p {
+  font-size: 0.88rem; color: var(--text-muted);
+  line-height: 1.55; margin: 0;
+}
+
+/* ── Adapter cards (CLI install scaffolds) ─────────────────────── */
+.adapter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+.adapter-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.adapter-card:hover { border-color: var(--border-bright); }
+.adapter-head {
+  padding: 1.4rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.adapter-name {
+  font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: 0.6rem;
+}
+.adapter-glyph {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-family: var(--mono); font-weight: 700;
+  background: var(--surface-2);
+  border: 1px solid var(--border-bright);
+}
+.adapter-tag {
+  font-family: var(--mono);
+  font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 0.2rem 0.55rem; border-radius: var(--r-sm);
+  margin-left: auto;
+}
+.adapter-tag.live { background: rgba(52,211,153,0.12); color: var(--green); }
+.adapter-tag.soon { background: rgba(253,230,138,0.12); color: var(--gold); }
+.adapter-byline {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0.65rem 0 0;
+}
+.adapter-shell {
+  padding: 1rem 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg-soft);
+}
+.adapter-shell .prompt { color: var(--violet); }
+.adapter-shell .arg { color: var(--gold); }
+.adapter-shell .out { color: var(--text-dim); }
+
+/* ── Lifecycle (8-step grid) ───────────────────────────────────── */
+.lifecycle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+.lifecycle-step {
+  background: var(--surface);
+  padding: 1.6rem 1.4rem;
+}
+.lifecycle-step .num {
+  font-family: var(--mono);
+  font-size: 0.72rem; color: var(--violet);
+  letter-spacing: 0.1em; margin-bottom: 0.85rem;
+}
+.lifecycle-step .verb {
+  font-family: var(--serif); font-size: 1.4rem;
+  font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text); margin-bottom: 0.4rem;
+}
+.lifecycle-step .endpoint {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--violet);
+  margin-bottom: 0.85rem;
+}
+.lifecycle-step .desc {
+  font-size: 0.85rem; color: var(--text-muted); line-height: 1.55;
+}
+
+/* ── Strands callout (split layout) ────────────────────────────── */
+.strands {
+  background:
+    radial-gradient(ellipse 90% 80% at 100% 0%, rgba(167,139,250,0.08), transparent 60%),
+    radial-gradient(ellipse 60% 60% at 0% 100%, rgba(240,171,252,0.05), transparent 60%),
+    var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 3rem clamp(1.5rem, 4vw, 3rem);
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 2.5rem;
+  align-items: center;
+}
+.strands h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); margin-bottom: 1rem; }
+.strands p { color: var(--text-muted); font-size: 1rem; max-width: 520px; }
+.strands p + p { margin-top: 0.85rem; }
+.strands code {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-bright);
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--r-sm);
+  color: var(--gold);
+}
+.crypto-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-lg);
+  padding: 1.5rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.8;
+}
+.crypto-card .lbl { color: var(--text-dim); }
+.crypto-card .val { color: var(--violet); }
+.crypto-card hr { border: none; border-top: 1px dashed var(--border-bright); margin: 0.85rem 0; }
+.crypto-card .neg { color: var(--red); }
+.crypto-card .pos { color: var(--green); }
+
+@media (max-width: 880px) {
+  .strands { grid-template-columns: 1fr; padding: 2rem 1.5rem; }
+}
+
+/* ── Pricing ───────────────────────────────────────────────────── */
+.pricing-head {
+  display: flex; align-items: end; justify-content: space-between;
+  gap: 2rem; margin-bottom: 3rem; flex-wrap: wrap;
+}
+.pricing-head .right { color: var(--text-muted); font-size: 0.95rem; max-width: 380px; }
+.pricing {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.price-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.75rem 1.5rem;
+  display: flex; flex-direction: column;
+}
+.price-card.featured {
+  border-color: var(--violet);
+  background: linear-gradient(180deg, rgba(167,139,250,0.06), var(--surface));
+  position: relative;
+}
+.featured-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  background: var(--violet); color: #fff;
+  font-family: var(--mono); font-size: 0.65rem; font-weight: 600;
+  padding: 0.3rem 0.85rem; border-radius: var(--r-pill);
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.plan-name { font-weight: 700; font-size: 1rem; margin-bottom: 0.4rem; letter-spacing: -0.01em; }
+.plan-price {
+  font-family: var(--serif);
+  font-size: 2.3rem; font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1;
+  margin-bottom: 0.3rem;
+}
+.plan-price sub { font-size: 0.85rem; font-weight: 400; color: var(--text-muted); font-family: var(--sans); }
+.plan-desc { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; line-height: 1.45; }
+.plan-features { list-style: none; margin: 0 0 1.5rem; padding: 0; flex: 1; }
+.plan-features li {
+  font-size: 0.85rem;
+  padding: 0.45rem 0;
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  border-bottom: 1px dashed var(--border);
+  color: var(--text-muted);
+}
+.plan-features li:last-child { border-bottom: none; }
+.plan-features li::before {
+  content: '⊙';
+  color: var(--violet);
+  font-size: 0.7rem;
+  margin-top: 0.2rem;
+}
+.plan-cta {
+  display: block; text-align: center;
+  padding: 0.75rem; border-radius: var(--r-pill);
+  font-weight: 600; font-size: 0.88rem;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.plan-cta.primary {
+  background: linear-gradient(135deg, var(--violet-deep), #6d28d9);
+  color: #fff;
+}
+.plan-cta.secondary {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text);
+}
+.plan-cta:hover { transform: translateY(-1px); }
+
+/* ── Final CTA ─────────────────────────────────────────────────── */
+.cta-final {
+  max-width: 880px; margin: 4rem auto;
+  padding: 3.5rem 2rem;
+  text-align: center;
+  border: 1px solid var(--border-bright);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(167,139,250,0.1), transparent 60%),
+    var(--surface);
+  position: relative; overflow: hidden;
+}
+.cta-final::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--violet), var(--gold), var(--violet), transparent);
+}
+.cta-final h2 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); margin-bottom: 1rem; }
+.cta-final p { color: var(--text-muted); font-size: 1.05rem; max-width: 520px; margin: 0 auto 2rem; }
+.cta-actions { display: inline-flex; gap: 0.85rem; flex-wrap: wrap; justify-content: center; }
+
+/* eyebrow centered for the final CTA */
+.eyebrow.center { display: inline-flex; }
