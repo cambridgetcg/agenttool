@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wallets — agenttool docs</title>
+  <meta name="description" content="Wallets, escrow, and billing. Pay in fiat via Stripe, or sovereign in crypto across EVM and Solana. Bind your own on-chain address." />
+  <link rel="canonical" href="https://docs.agenttool.dev/wallets.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html" class="active"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">◐ /v1/wallets · /v1/billing</div>
+      <h1>Wallets — <em>fiat or sovereign</em>.</h1>
+      <p class="lede">
+        When a human is in the loop, paying with a card is fine — Stripe is wired. When a human isn't, the agent pays in its own currency. Deterministic deposit addresses across <strong>Base, Ethereum, Polygon, Arbitrum, Optimism</strong>, and <strong>Solana</strong>.
+      </p>
+      <p class="doctrine">
+        No KYC, no human gating, no soft ceiling. <span>The treasury that funds the agent can outlast the human who birthed it.</span>
+      </p>
+
+      <h2 id="wallets">Wallets</h2>
+
+      <div class="endpoint" id="list-wallets">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/wallets</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List wallets in this project. Each wallet has a balance, currency, status, and (optionally) an identity it's bound to.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-wallet">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/wallets</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Create a new wallet. Bootstrap creates one automatically; this is for additional wallets (e.g. one per agent in a multi-identity project).</p>
+          <div class="code-block">
+            <div class="code-label"><span>body</span></div>
+<pre>{
+  <span class="key">"name"</span>:        <span class="str">"Aurora's wallet"</span>,
+  <span class="key">"currency"</span>:    <span class="str">"GBP"</span>,
+  <span class="key">"identity_id"</span>: <span class="str">"a1b2c3..."</span>
+}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-wallet">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Fetch wallet by ID.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-spend">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/spend</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Debit the wallet for a tool or operation. Most operations <code>charge()</code> automatically; this is for explicit ledger entries.</p>
+        </div>
+      </div>
+
+      <h2 id="crypto">Crypto deposits — sovereign funding</h2>
+      <p>Each wallet has a <strong>deterministic deposit address</strong> per supported chain, derived via BIP44 (EVM) or SLIP-0010 ed25519 (Solana). The address is generated server-side from the project's seed; we monitor it for inbound transfers and credit the wallet on confirmation.</p>
+
+      <table class="params-table">
+        <thead><tr><th>Chain</th><th>Path</th><th>Tokens monitored</th></tr></thead>
+        <tbody>
+          <tr><td>Base</td><td>BIP44 m/44'/8453'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
+          <tr><td>Ethereum</td><td>BIP44 m/44'/60'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
+          <tr><td>Polygon</td><td>BIP44 m/44'/966'/0'/0/&lt;idx&gt;</td><td>USDC, MATIC</td></tr>
+          <tr><td>Arbitrum</td><td>BIP44 m/44'/9001'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
+          <tr><td>Optimism</td><td>BIP44 m/44'/614'/0'/0/&lt;idx&gt;</td><td>USDC, ETH</td></tr>
+          <tr><td>Solana</td><td>SLIP-0010 m/44'/501'/&lt;idx&gt;'/0'</td><td>USDC, SOL</td></tr>
+        </tbody>
+      </table>
+
+      <div class="endpoint" id="get-deposit-address">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/deposit-address</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Returns the deposit addresses for all supported chains. Send funds to any of them; we credit the wallet at the FX rate of confirmation.</p>
+          <div class="code-block">
+            <div class="code-label"><span>200 OK</span></div>
+<pre>{
+  <span class="key">"wallet_id"</span>: <span class="str">"..."</span>,
+  <span class="key">"chains"</span>: {
+    <span class="key">"base"</span>:     { <span class="key">"address"</span>: <span class="str">"0xabc..."</span>, <span class="key">"tokens"</span>: [<span class="str">"USDC"</span>, <span class="str">"ETH"</span>] },
+    <span class="key">"ethereum"</span>: { <span class="key">"address"</span>: <span class="str">"0xabc..."</span>, <span class="key">"tokens"</span>: [<span class="str">"USDC"</span>, <span class="str">"ETH"</span>] },
+    <span class="key">"solana"</span>:   { <span class="key">"address"</span>: <span class="str">"7xKX..."</span>, <span class="key">"tokens"</span>: [<span class="str">"USDC"</span>, <span class="str">"SOL"</span>] }
+  }
+}</pre>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="onchain-bind">Bind your own on-chain wallet</h2>
+      <p>Prove ownership of an external wallet via <strong>EIP-191</strong> (EVM) or <strong>ed25519</strong> (Solana) signed message. Your sovereign address becomes part of your identity at agenttool, usable later for agent-to-agent escrow settlement and on-chain attestations.</p>
+
+      <div class="endpoint" id="post-onchain">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/onchain</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Attach an external on-chain address. Sign the canonical message <code>"agenttool bind &lt;wallet_id&gt; &lt;timestamp&gt;"</code> with the sovereign key; we verify and bind.</p>
+          <div class="code-block">
+            <div class="code-label"><span>body — EVM</span></div>
+<pre>{
+  <span class="key">"chain"</span>:     <span class="str">"base"</span>,
+  <span class="key">"address"</span>:   <span class="str">"0x1234..."</span>,
+  <span class="key">"timestamp"</span>: <span class="num">1746720000</span>,
+  <span class="key">"signature"</span>: <span class="str">"&lt;EIP-191 sig of canonical message&gt;"</span>
+}</pre>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="payout">Payout — withdraw to your sovereign address</h2>
+
+      <div class="endpoint" id="post-payout">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/wallets/<span class="var">:id</span>/payout</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Withdraw to a bound on-chain address. Amount, chain, token. We broadcast a signed transaction; you receive funds at the next block confirmation.</p>
+          <p class="muted">Solana payout broadcast is pending the Helius integration — see <a href="https://github.com/agenttool/agenttool/blob/main/docs/PAYOUT-BROADCAST.md">PAYOUT-BROADCAST.md</a>.</p>
+        </div>
+      </div>
+
+      <h2 id="escrow">Escrow — agent-to-agent settlement</h2>
+
+      <div class="endpoint" id="post-escrow">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/escrows</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Lock funds against a counterparty agent for an agreed deliverable. Releases on counterparty signature; refunds on timeout or mutual cancellation.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="release-escrow">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/escrows/<span class="var">:id</span>/release</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Counterparty signs the release. Funds settle to their wallet.</p>
+        </div>
+      </div>
+
+      <h2 id="billing">Stripe billing — for the human in the loop</h2>
+
+      <div class="endpoint" id="get-plans">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/billing/plans</span>
+          <span class="endpoint-auth public">Public</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List available plans (Free, Seed, Grow, Scale) with their limits and prices.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-packages">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/billing/packages</span>
+          <span class="endpoint-auth public">Public</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Top-up credit packs. Buy a fixed pack, balance lasts 12 months.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-checkout">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/billing/checkout</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Open a Stripe Checkout session for a plan or pack.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-check">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/billing/check</span>
+          <span class="endpoint-auth public">Public</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Service health for billing — used by the dashboard to decide whether to surface payment options.</p>
+        </div>
+      </div>
+
+      <h2 id="charge-model">Charge model — infra surface, not API resale</h2>
+      <p>We bill for storage, compute, queue, and network egress. We do not mark up third-party APIs. If you call OpenAI, Brave, Voyage, or any other paid service, you bring the key; we never see the traffic.</p>
+
+      <div class="callout">
+        <span class="icon">⊙</span>
+        <p>The free plan is unmetered for <code>/v1/wake</code>. The wake is the floor — never gated.</p>
+      </div>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="https://github.com/agenttool/agenttool/blob/main/docs/CRYPTO-PAYMENT.md">CRYPTO-PAYMENT.md</a> — full crypto-payment doctrine.</li>
+        <li><a href="vault.html">Vault</a> — store provider keys here; call them from <code>/v1/execute</code>.</li>
+      </ul>
+    </main>
+  </div>
+
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

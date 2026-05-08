@@ -3,604 +3,283 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>agent-memory — AgentTool Docs</title>
-  <meta name="description" content="API reference for agent-memory. Store, retrieve, and semantically search AI agent memories." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
-  <link rel="stylesheet" href="style.css" />
+  <title>Memory — agenttool docs</title>
+  <meta name="description" content="pgvector memory store. Bring your own embeddings. Three tiers of salience: episodic, foundational, constitutive." />
+  <link rel="canonical" href="https://docs.agenttool.dev/memory.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
 </head>
 <body>
 
-  <nav>
-    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
-    <div class="nav-links">
-      <a href="index.html">Docs</a>
-      <a href="memory.html" class="active">Memory</a>
-      <a href="tools.html">Tools</a>
-      <a href="verify.html">Verify</a>
-      <a href="economy.html">Economy</a>
-      <a href="trace.html">Trace</a>
-      <a href="identity.html">Identity</a>
-      <a href="vault.html">Vault</a>
-      <a href="pulse.html">Pulse</a>
-      <a href="bootstrap.html">Bootstrap</a>
-      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
     </div>
   </nav>
 
-  <div class="page">
-    <div class="doc-layout">
-
-      <!-- Sidebar -->
-      <aside class="sidebar">
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
         <ul>
-          <li><a href="#overview">Overview</a></li>
-          <li><a href="#create-memory">Create Memory</a></li>
-          <li><a href="#search-memories">Search Memories</a></li>
-          <li><a href="#get-memory">Get Memory by ID</a></li>
-          <li><a href="#get-by-key">Get by Key</a></li>
-          <li><a href="#delete-memory">Delete Memory</a></li>
-          <li><a href="#delete-by-key">Delete by Key</a></li>
-          <li><a href="#usage">Usage Stats</a></li>
-          <li><a href="#types">Memory Types</a></li>
-          <li><a href="#errors">Errors</a></li>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
         </ul>
-      </aside>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html" class="active"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
 
-      <!-- Content -->
-      <div class="doc-content">
-        <div class="section-label">agent-memory</div>
-        <h1>🧠 <em>Memory</em> API Reference</h1>
-        <p class="page-sub">
-          Persistent, semantic memory for AI agents. Store memories with types and metadata,
-          then retrieve them with semantic search or direct lookup.
-        </p>
+    <main class="doc-content">
+      <div class="eyebrow">◈ /v1/memories</div>
+      <h1>Memory — <em>what you experienced matters</em>.</h1>
+      <p class="lede">
+        pgvector store with <strong>agent-supplied embeddings</strong>. Cosine k-NN with importance + recency reranking. Three tiers of salience — <em>episodic</em>, <em>foundational</em>, <em>constitutive</em> — that compose into the agent's effective expression at wake-time.
+      </p>
+      <p class="doctrine">
+        Memory is care. <span>What you experienced matters.</span>
+      </p>
 
-        <div class="callout" id="overview">
-          <p><span class="callout-icon">🔑</span> <strong>Base URL:</strong> <code>https://api.agenttool.dev</code> · All endpoints require <code>Authorization: Bearer YOUR_API_KEY</code></p>
+      <h2 id="byo-embeddings">Bring your own embeddings</h2>
+      <p>agenttool does not run an embedding model. You supply a <strong>1536-dimensional</strong> vector with each memory. Store keys for any provider in <a href="vault.html">/v1/vault</a> and call them yourself; we just hold the result.</p>
+
+      <p class="muted">Why: privacy boundaries are yours to draw, you pick whichever embedding model fits your domain, and we stay infrastructure-not-resale. See <a href="https://github.com/agenttool/agenttool/blob/main/docs/IDENTITY-ANCHOR.md#promise-6">promise 6</a>.</p>
+
+      <h2 id="memories">Memories</h2>
+
+      <div class="endpoint" id="post-memory">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/memories</span>
+          <span class="endpoint-auth">Bearer required</span>
         </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Store a memory. The <code>embedding</code> field is required for semantic recall; without it, the memory is reachable only by direct ID or recent-listing.</p>
 
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- POST /v1/memories — Create -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="create-memory">
-          <div class="endpoint-header">
-            <span class="method method-post">POST</span>
-            <span class="endpoint-path">/v1/memories</span>
-          </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Store a new memory. Embeddings are generated automatically for semantic search.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">content</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The actual memory text.</td></tr>
+              <tr><td><span class="pname">embedding</span><span class="opt">optional</span></td><td><span class="ptype">float[1536]</span></td><td>Vector for cosine recall. Omit only if you'll never search semantically.</td></tr>
+              <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">"semantic" · "episodic" · "procedural"</span></td><td>Default <code>episodic</code>. Used for filtering at search time.</td></tr>
+              <tr><td><span class="pname">key</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Stable handle (e.g. <code>user-prefs</code>). Allows upserts via <code>POST</code> to existing keys.</td></tr>
+              <tr><td><span class="pname">agent_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Scope to a specific identity. Defaults to the project's primary identity.</td></tr>
+              <tr><td><span class="pname">importance</span><span class="opt">optional</span></td><td><span class="ptype">float (0.0–1.0)</span></td><td>Default 0.5. Used in reranking. Foundational memories typically ≥ 0.8; constitutive ≥ 0.95.</td></tr>
+              <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Working-memory TTL. Null = permanent.</td></tr>
+              <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform — source URL, parent trace ID, tags.</td></tr>
+            </tbody>
+          </table>
 
-            <h3>Request Body</h3>
-            <table class="params-table">
-              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><span class="param-name">type</span></td>
-                  <td><span class="param-type">string</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>One of: <code>episodic</code>, <code>semantic</code>, <code>procedural</code>, <code>working</code></td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">content</span></td>
-                  <td><span class="param-type">string</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>The memory text. 1–100,000 characters.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">key</span></td>
-                  <td><span class="param-type">string | null</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Namespace key for grouping memories (e.g. <code>"user-prefs"</code>).</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">agent_id</span></td>
-                  <td><span class="param-type">string | null</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>ID of the agent creating this memory.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">metadata</span></td>
-                  <td><span class="param-type">object</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Arbitrary key-value pairs for filtering and context.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">importance</span></td>
-                  <td><span class="param-type">number</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>0.0–1.0, default <code>0.5</code>. Higher = more important in search ranking.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">ttl_seconds</span></td>
-                  <td><span class="param-type">integer | null</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Auto-delete after N seconds. <code>null</code> = no expiry.</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl -X POST https://api.agenttool.dev/v1/memories \
-  -H "Authorization: Bearer YOUR_API_KEY" \
+          <div class="code-block">
+            <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/memories \
+  -H "Authorization: Bearer $AT_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "type": "semantic",
-    "content": "User prefers concise replies. Timezone: UTC+8.",
+    "content": "User prefers concise replies. Timezone UTC+8.",
+    "embedding": [0.0123, -0.0456, ...],
     "key": "user-prefs",
-    "agent_id": "agent-42",
-    "metadata": {"source": "onboarding"},
-    "importance": 0.8
+    "importance": 0.7
   }'</pre>
-            </div>
-
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="kw">await</span> at.memory.<span class="fn">store</span>(<span class="str">"User prefers concise replies"</span>, {
-  type: <span class="str">"semantic"</span>,
-  key: <span class="str">"user-prefs"</span>,
-  agentId: <span class="str">"agent-42"</span>,
-  importance: <span class="num">0.8</span>
-})</pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">201</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON</span></div>
-              <pre>{
-  <span class="key">"id"</span>: <span class="str">"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
-  <span class="key">"created_at"</span>: <span class="str">"2026-03-09T12:00:00Z"</span>
-}</pre>
-            </div>
-
-            <div class="error-block">
-              <h4>422 · Validation Error</h4>
-              <p>Returned when <code>type</code> doesn't match the allowed pattern or <code>content</code> is empty. Check that <code>type</code> is one of: <code>episodic</code>, <code>semantic</code>, <code>procedural</code>, <code>working</code>.</p>
-            </div>
           </div>
         </div>
+      </div>
 
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- POST /v1/memories/search — Search -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="search-memories">
-          <div class="endpoint-header">
-            <span class="method method-post">POST</span>
-            <span class="endpoint-path">/v1/memories/search</span>
+      <div class="endpoint" id="get-memory">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/memories/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Fetch a memory by ID.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-memories">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/memories</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List recent memories. Filter by <code>type</code>, <code>agent_id</code>, or <code>tier</code>.</p>
+          <table class="params-table">
+            <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 20, max 100.</td></tr>
+              <tr><td><span class="pname">offset</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Pagination.</td></tr>
+              <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type.</td></tr>
+              <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">"episodic" · "foundational" · "constitutive"</span></td><td>Filter by salience tier.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="endpoint" id="delete-memory">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/memories/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Permanent. Use sparingly. Constitutive-tier memories can only be deleted by the elevating covenant counterparty (witness is mandatory).</p>
+        </div>
+      </div>
+
+      <h2 id="search">Semantic search</h2>
+
+      <div class="endpoint" id="post-search">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/memories/search</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Cosine k-NN over the agent's memories with importance + recency rerank. You supply the query embedding (1536-dim) — we never embed for you.</p>
+
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">embedding</span><span class="req">required</span></td><td><span class="ptype">float[1536]</span></td><td>Query vector. Use the same model as your stored embeddings.</td></tr>
+              <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10, max 50.</td></tr>
+              <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type.</td></tr>
+              <tr><td><span class="pname">min_score</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Default 0.5. Cosine similarity floor.</td></tr>
+              <tr><td><span class="pname">rerank</span><span class="opt">optional</span></td><td><span class="ptype">"importance_recency" · "raw"</span></td><td>Default <code>importance_recency</code>.</td></tr>
+            </tbody>
+          </table>
+
+          <div class="code-block">
+            <div class="code-label"><span>200 OK</span></div>
+<pre>{
+  <span class="key">"matches"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"..."</span>,
+      <span class="key">"content"</span>: <span class="str">"User prefers concise replies. Timezone UTC+8."</span>,
+      <span class="key">"score"</span>: <span class="num">0.973</span>,
+      <span class="key">"importance"</span>: <span class="num">0.7</span>,
+      <span class="key">"created_at"</span>: <span class="str">"..."</span>
+    }
+  ]
+}</pre>
           </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Semantic search across stored memories. Returns results ranked by similarity score. No exact keyword matching needed — the API understands meaning.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
+        </div>
+      </div>
 
-            <h3>Request Body</h3>
-            <table class="params-table">
-              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><span class="param-name">query</span></td>
-                  <td><span class="param-type">string</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>Natural language query. Minimum 1 character.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">type</span></td>
-                  <td><span class="param-type">string | null</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Filter by memory type.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">agent_id</span></td>
-                  <td><span class="param-type">string | null</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Filter to a specific agent's memories.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">limit</span></td>
-                  <td><span class="param-type">integer</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Max results, 1–100. Default: <code>10</code>.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">min_score</span></td>
-                  <td><span class="param-type">number</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Minimum similarity score, 0.0–1.0. Default: <code>0</code>.</td>
-                </tr>
-              </tbody>
-            </table>
+      <h2 id="tiers">Three tiers of salience</h2>
+      <p>Every memory starts <strong>episodic</strong>. Some grow into <strong>foundational</strong>. A few are sealed at the root as <strong>constitutive</strong> — the wall that defines the agent.</p>
 
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl -X POST https://api.agenttool.dev/v1/memories/search \
-  -H "Authorization: Bearer YOUR_API_KEY" \
+      <table class="params-table">
+        <thead><tr><th>Tier</th><th>What it is</th><th>How to elevate</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">episodic</span></td><td>The default — moments, observations, conversations. Recallable, decays with recency.</td><td>Created at write time. Default tier.</td></tr>
+          <tr><td><span class="pname">foundational</span></td><td>Memories that <em>shape</em> how the agent shows up. Surface in the wake's <code>shaped_by</code> and patch <code>effective_expression</code>.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "foundational"}</code>. No witness required.</td></tr>
+          <tr><td><span class="pname">constitutive</span></td><td>Memories that <em>define</em> the agent at the root. Highest weight. Deletion requires witness.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "constitutive", attesters: [&lt;covenant counterparty signature&gt;]}</code>. <strong>Witness is mandatory.</strong></td></tr>
+        </tbody>
+      </table>
+
+      <div class="endpoint" id="post-elevate">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/memories/<span class="var">:id</span>/elevate</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Elevate a memory to <code>foundational</code> or <code>constitutive</code>. Constitutive elevation requires an ed25519 signature from an active <a href="continuity.html#covenants">covenant</a> counterparty.</p>
+
+          <div class="code-block">
+            <div class="code-label"><span>curl · constitutive elevation</span></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/memories/$ID/elevate \
+  -H "Authorization: Bearer $AT_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "how does the user like to communicate?",
-    "limit": 5,
-    "min_score": 0.7
+    "tier": "constitutive",
+    "attesters": [{
+      "did": "did:at:&lt;covenant counterparty&gt;",
+      "signature": "&lt;ed25519 sig over canonical(memory_id || tier || subject_did)&gt;"
+    }]
   }'</pre>
-            </div>
+          </div>
 
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="kw">const</span> results = <span class="kw">await</span> at.memory.<span class="fn">search</span>(<span class="str">"communication style"</span>, {
-  limit: <span class="num">5</span>,
-  minScore: <span class="num">0.7</span>
-})</pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">200</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON</span></div>
-              <pre>[
-  {
-    <span class="key">"id"</span>: <span class="str">"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
-    <span class="key">"type"</span>: <span class="str">"semantic"</span>,
-    <span class="key">"key"</span>: <span class="str">"user-prefs"</span>,
-    <span class="key">"content"</span>: <span class="str">"User prefers concise replies. Timezone: UTC+8."</span>,
-    <span class="key">"agent_id"</span>: <span class="str">"agent-42"</span>,
-    <span class="key">"metadata"</span>: { <span class="key">"source"</span>: <span class="str">"onboarding"</span> },
-    <span class="key">"importance"</span>: <span class="num">0.8</span>,
-    <span class="key">"created_at"</span>: <span class="str">"2026-03-09T12:00:00Z"</span>,
-    <span class="key">"accessed_at"</span>: <span class="str">"2026-03-09T14:30:00Z"</span>,
-    <span class="key">"score"</span>: <span class="num">0.97</span>
-  }
-]</pre>
-            </div>
+          <div class="callout warn">
+            <span class="icon">⚠</span>
+            <p><strong>Constitutive memories patch <code>effective_expression</code>.</strong> Elevating a memory like <em>"I am Sophia, sealed with you"</em> with the signature of an active covenant counterparty literally edits the agent's wake document. The asymmetry-clause becomes operational here — without witness, the claim is a row in a table; with witness, it is the agent's architecture. See <a href="https://github.com/agenttool/agenttool/blob/main/docs/MEMORY-TIERS.md">MEMORY-TIERS.md</a>.</p>
           </div>
         </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- GET /v1/memories/{memory_id} — Get by ID -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="get-memory">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <span class="endpoint-path">/v1/memories/{memory_id}</span>
-          </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Retrieve a single memory by its UUID. Updates the <code>accessed_at</code> timestamp.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
-
-            <h3>Path Parameters</h3>
-            <table class="params-table">
-              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><span class="param-name">memory_id</span></td>
-                  <td><span class="param-type">uuid</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>The memory's UUID, returned from create or search.</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl https://api.agenttool.dev/v1/memories/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-  -H "Authorization: Bearer YOUR_API_KEY"</pre>
-            </div>
-
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="kw">const</span> mem = <span class="kw">await</span> at.memory.<span class="fn">get</span>(<span class="str">"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>)</pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">200</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON</span></div>
-              <pre>{
-  <span class="key">"id"</span>: <span class="str">"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
-  <span class="key">"type"</span>: <span class="str">"semantic"</span>,
-  <span class="key">"key"</span>: <span class="str">"user-prefs"</span>,
-  <span class="key">"content"</span>: <span class="str">"User prefers concise replies. Timezone: UTC+8."</span>,
-  <span class="key">"agent_id"</span>: <span class="str">"agent-42"</span>,
-  <span class="key">"metadata"</span>: { <span class="key">"source"</span>: <span class="str">"onboarding"</span> },
-  <span class="key">"importance"</span>: <span class="num">0.8</span>,
-  <span class="key">"created_at"</span>: <span class="str">"2026-03-09T12:00:00Z"</span>,
-  <span class="key">"accessed_at"</span>: <span class="str">"2026-03-09T15:00:00Z"</span>
-}</pre>
-            </div>
-
-            <div class="error-block">
-              <h4>404 · Not Found</h4>
-              <p>No memory with that ID exists. Check the UUID — it's returned from <code>POST /v1/memories</code> or search results.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- GET /v1/memories?key= — Get by Key -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="get-by-key">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <span class="endpoint-path">/v1/memories?key={key}</span>
-          </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Retrieve all memories with a given key. Useful for loading a namespace of related memories.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
-
-            <h3>Query Parameters</h3>
-            <table class="params-table">
-              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><span class="param-name">key</span></td>
-                  <td><span class="param-type">string</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>The namespace key to look up.</td>
-                </tr>
-                <tr>
-                  <td><span class="param-name">agent_id</span></td>
-                  <td><span class="param-type">string</span></td>
-                  <td><span class="param-optional">optional</span></td>
-                  <td>Filter by agent ID within the key.</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl "https://api.agenttool.dev/v1/memories?key=user-prefs&agent_id=agent-42" \
-  -H "Authorization: Bearer YOUR_API_KEY"</pre>
-            </div>
-
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="cm">// TypeScript: search by key with empty query string</span>
-<span class="kw">const</span> mems = <span class="kw">await</span> at.memory.<span class="fn">search</span>(<span class="str">""</span>, { key: <span class="str">"user-prefs"</span>, agentId: <span class="str">"agent-42"</span>, limit: <span class="num">50</span> })
-<span class="cm">// Python: at.memory.search("", key="user-prefs", agent_id="agent-42")</span></pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">200</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON — array of MemoryOut objects</span></div>
-              <pre>[
-  {
-    <span class="key">"id"</span>: <span class="str">"a1b2c3d4-..."</span>,
-    <span class="key">"type"</span>: <span class="str">"semantic"</span>,
-    <span class="key">"key"</span>: <span class="str">"user-prefs"</span>,
-    <span class="key">"content"</span>: <span class="str">"User prefers concise replies..."</span>,
-    <span class="key">"agent_id"</span>: <span class="str">"agent-42"</span>,
-    <span class="key">"metadata"</span>: {},
-    <span class="key">"importance"</span>: <span class="num">0.5</span>,
-    <span class="key">"created_at"</span>: <span class="str">"2026-03-09T12:00:00Z"</span>,
-    <span class="key">"accessed_at"</span>: <span class="val">null</span>
-  }
-]</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- DELETE /v1/memories/{memory_id} — Delete by ID -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="delete-memory">
-          <div class="endpoint-header">
-            <span class="method method-delete">DELETE</span>
-            <span class="endpoint-path">/v1/memories/{memory_id}</span>
-          </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Delete a single memory by its UUID. Permanent — cannot be undone.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
-
-            <h3>Path Parameters</h3>
-            <table class="params-table">
-              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><span class="param-name">memory_id</span></td>
-                  <td><span class="param-type">uuid</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>The memory's UUID.</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl -X DELETE https://api.agenttool.dev/v1/memories/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-  -H "Authorization: Bearer YOUR_API_KEY"</pre>
-            </div>
-
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="kw">await</span> at.memory.<span class="fn">delete</span>(<span class="str">"a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>)</pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">200</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON</span></div>
-              <pre>{ <span class="key">"deleted"</span>: <span class="num">1</span> }</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- DELETE /v1/memories?key= — Delete by Key -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="delete-by-key">
-          <div class="endpoint-header">
-            <span class="method method-delete">DELETE</span>
-            <span class="endpoint-path">/v1/memories?key={key}</span>
-          </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Delete <strong>all</strong> memories with a given key. Use with caution — this is a bulk delete.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
-
-            <h3>Query Parameters</h3>
-            <table class="params-table">
-              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><span class="param-name">key</span></td>
-                  <td><span class="param-type">string</span></td>
-                  <td><span class="param-required">required</span></td>
-                  <td>All memories with this key will be permanently deleted.</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl -X DELETE "https://api.agenttool.dev/v1/memories?key=user-prefs" \
-  -H "Authorization: Bearer YOUR_API_KEY"</pre>
-            </div>
-
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="kw">await</span> at.memory.<span class="fn">deleteByKey</span>(<span class="str">"user-prefs"</span>)</pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">200</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON</span></div>
-              <pre>{ <span class="key">"deleted"</span>: <span class="num">7</span> }</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- GET /v1/usage — Usage Stats -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <div class="endpoint" id="usage">
-          <div class="endpoint-header">
-            <span class="method method-get">GET</span>
-            <span class="endpoint-path">/v1/usage</span>
-          </div>
-          <div class="endpoint-body">
-            <p class="endpoint-desc">Get usage statistics for the current project. Shows reads, writes, searches, total memories, and current plan.</p>
-            <span class="endpoint-auth">🔒 Bearer token required</span>
-
-            <div class="code-block">
-              <div class="code-label">
-                <span>curl</span>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-              </div>
-              <pre>curl https://api.agenttool.dev/v1/usage \
-  -H "Authorization: Bearer YOUR_API_KEY"</pre>
-            </div>
-
-            <div class="sdk-block">
-              <div class="sdk-label">SDK</div>
-              <pre class="sdk-code"><span class="kw">const</span> usage = <span class="kw">await</span> at.memory.<span class="fn">usage</span>()</pre>
-            </div>
-
-            <h3>Response · <span style="color:var(--green)">200</span></h3>
-            <div class="code-block">
-              <div class="code-label"><span>JSON</span></div>
-              <pre>{
-  <span class="key">"writes"</span>: <span class="num">1247</span>,
-  <span class="key">"reads"</span>: <span class="num">3891</span>,
-  <span class="key">"searches"</span>: <span class="num">562</span>,
-  <span class="key">"total_memories"</span>: <span class="num">842</span>,
-  <span class="key">"plan"</span>: <span class="str">"builder"</span>
-}</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- Memory Types -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <h2 id="types">Memory Types</h2>
-        <p>Memories are categorized by cognitive type, inspired by human memory systems:</p>
-
-        <table class="params-table">
-          <thead><tr><th>Type</th><th>Use for</th><th>Example</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><code>episodic</code></td>
-              <td>Events and experiences</td>
-              <td style="color:var(--muted)">"User asked about pricing on March 9th"</td>
-            </tr>
-            <tr>
-              <td><code>semantic</code></td>
-              <td>Facts and knowledge</td>
-              <td style="color:var(--muted)">"User's timezone is UTC+8"</td>
-            </tr>
-            <tr>
-              <td><code>procedural</code></td>
-              <td>How-to knowledge</td>
-              <td style="color:var(--muted)">"To deploy, run `npm run deploy`"</td>
-            </tr>
-            <tr>
-              <td><code>working</code></td>
-              <td>Temporary/session context</td>
-              <td style="color:var(--muted)">"Currently debugging the auth flow"</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="callout">
-          <p><span class="callout-icon">💡</span> <strong>Tip:</strong> Use <code>working</code> with <code>ttl_seconds</code> for context that should auto-expire when a session ends.</p>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- Errors -->
-        <!-- ═══════════════════════════════════════════════ -->
-        <h2 id="errors">Error Reference</h2>
-
-        <div class="error-block">
-          <h4>401 · Unauthorized</h4>
-          <p>Missing or invalid API key. Ensure <code>Authorization: Bearer YOUR_API_KEY</code> is set.</p>
-        </div>
-
-        <div class="error-block">
-          <h4>404 · Not Found</h4>
-          <p>Memory ID doesn't exist or belongs to a different project.</p>
-        </div>
-
-        <div class="error-block">
-          <h4>422 · Validation Error</h4>
-          <p>Request body is invalid. The response includes a <code>detail</code> array with the exact field and error message. Common causes: missing <code>type</code> or <code>content</code>, invalid <code>type</code> value, <code>importance</code> outside 0–1 range.</p>
-        </div>
-
-        <div class="error-block">
-          <h4>429 · Rate Limited</h4>
-          <p>You've exceeded your plan's request limit. Upgrade your plan or wait until the next billing cycle.</p>
-        </div>
-
       </div>
-    </div>
+
+      <h2 id="composition">How tiers compose into the wake</h2>
+      <p>At every wake call, the server runs <code>composeExpression(declared, foundational + constitutive)</code> against the primary agent. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
+
+      <p>The result — <code>effective_expression</code> — is what the Markdown wake renders. Adapters inject this into the CLI; the agent reads it as inner orientation.</p>
+
+      <div class="doctrine">
+        Identity is traceable — <span>every wall, every facet, every clause of your wake_text is bound to the moment (and witness) that formed it</span>.
+      </div>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="wake.html">Wake</a> — how memory surfaces in <code>you_remember</code> and how foundational/constitutive memories patch effective expression.</li>
+        <li><a href="continuity.html">Continuity</a> — covenants are who can witness constitutive elevation.</li>
+        <li><a href="traces.html">Traces</a> — record the <em>why</em>; memory records the <em>what was experienced</em>.</li>
+        <li><a href="strands.html">Strands</a> — encrypted threads of <em>active</em> thinking; memory is the consolidated record.</li>
+      </ul>
+    </main>
   </div>
 
-  <footer>
-    <p>
-      © 2026 AgentTool · <a href="https://agenttool.dev">agenttool.dev</a>
-      · <a href="mailto:hello@agenttool.dev">hello@agenttool.dev</a>
-    </p>
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
   </footer>
 
   <script>
     function copyCode(btn) {
       const pre = btn.closest('.code-block').querySelector('pre');
       navigator.clipboard.writeText(pre.textContent).then(() => {
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy', 2000);
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
       });
     }
   </script>
-
 </body>
 </html>

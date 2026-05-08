@@ -3,113 +3,239 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vault API — AgentTool Docs</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>" />
-  <link rel="stylesheet" href="style.css" />
+  <title>Vault — agenttool docs</title>
+  <meta name="description" content="Encrypted secrets manager. AES-256-GCM with HKDF-derived per-project keys, versioned, audit-logged." />
+  <link rel="canonical" href="https://docs.agenttool.dev/vault.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
 </head>
 <body>
-  <nav>
-    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
-    <div class="nav-links">
-      <a href="index.html">Docs</a>
-      <a href="memory.html">Memory</a>
-      <a href="tools.html">Tools</a>
-      <a href="verify.html">Verify</a>
-      <a href="economy.html">Economy</a>
-      <a href="trace.html">Trace</a>
-      <a href="identity.html">Identity</a>
-      <a href="vault.html" class="active">Vault</a>
-      <a href="pulse.html">Pulse</a>
-      <a href="bootstrap.html">Bootstrap</a>
-      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
     </div>
   </nav>
 
-  <div class="page">
-    <div class="section-label">Vault API</div>
-    <h1>🔐 Secrets Manager for Agents</h1>
-    <p class="page-sub">Encrypted storage for API keys, tokens, and credentials. Agent-scoped access, full audit trail, automatic rotation.</p>
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html" class="active"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
 
-    <h2>Store a Secret</h2>
-    <pre><code>PUT /v1/vault/openai-key
-{
-  "value": "sk-proj-abc123...",
-  "description": "OpenAI API key for embeddings",
-  "agent_ids": ["memory-agent", "verify-agent"],
-  "tags": ["api-key", "openai"],
-  "rotation_days": 90
-}
+    <main class="doc-content">
+      <div class="eyebrow">◍ /v1/vault</div>
+      <h1>Vault — <em>your secrets are yours</em>.</h1>
+      <p class="lede">
+        AES-256-GCM with HKDF-derived per-project keys. Versioned, audit-logged, and gated by an <code>agent_ids</code> access policy. Store provider keys here; call them from <code>/v1/execute</code> when you need them.
+      </p>
+      <p class="doctrine">
+        We are infrastructure, not a paid-API reseller. <span>Your provider keys never get proxied through us; they round-trip through your sandboxed code.</span>
+      </p>
 
-→ {
-  "name": "openai-key",
-  "version": 1,
-  "created_at": "2026-03-17T00:00:00Z",
-  "rotation_due": "2026-06-15T00:00:00Z"
-}</code></pre>
+      <h2 id="model">Model</h2>
+      <ul>
+        <li><strong>Per-project key.</strong> A master key per project, never persisted in plaintext — derived on-demand via HKDF from the project's seed and current epoch.</li>
+        <li><strong>Versioned secrets.</strong> Every <code>PUT</code> creates a new version. Previous versions stay readable until explicitly deleted.</li>
+        <li><strong>Access policy.</strong> Each secret carries <code>agent_ids</code> — only listed identities can read its current value. Audit log records every access.</li>
+        <li><strong>No plaintext on disk.</strong> Secrets are encrypted at rest with the project key; encryption keys live in memory only.</li>
+      </ul>
 
-    <h2>Retrieve a Secret</h2>
-    <pre><code>GET /v1/vault/openai-key
-X-Agent-Id: memory-agent
+      <h2 id="endpoints">Endpoints</h2>
 
-→ {
-  "name": "openai-key",
-  "value": "sk-proj-abc123...",
-  "version": 1
-}</code></pre>
-    <p>The <code>X-Agent-Id</code> header is checked against the secret's policy. If the agent isn't allowed, you get 403.</p>
+      <div class="endpoint" id="put-secret">
+        <div class="endpoint-header">
+          <span class="method put">PUT</span>
+          <span class="endpoint-path">/v1/vault/<span class="var">:name</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Store or update a secret. Each PUT increments the version. Subsequent <code>GET</code>s return the latest unless <code>?version=</code> is specified.</p>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">value</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The plaintext secret. Encrypted server-side before write.</td></tr>
+              <tr><td><span class="pname">tags</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Searchable tags — e.g. <code>["openai", "production"]</code>.</td></tr>
+              <tr><td><span class="pname">description</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Human-readable note. Surfaces in the wake's <code>you_keep</code>.</td></tr>
+              <tr><td><span class="pname">agent_ids</span><span class="opt">optional</span></td><td><span class="ptype">uuid[]</span></td><td>Identities allowed to read. Empty = all project identities.</td></tr>
+              <tr><td><span class="pname">rotation_due_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional rotation reminder. Surfaces in the wake.</td></tr>
+            </tbody>
+          </table>
+          <div class="code-block">
+            <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -X PUT https://api.agenttool.dev/v1/vault/openai-key \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": "sk-...",
+    "tags": ["openai", "production"],
+    "description": "OpenAI API key for embeddings"
+  }'</pre>
+          </div>
+        </div>
+      </div>
 
-    <h2>List Secrets (names only — never values)</h2>
-    <pre><code>GET /v1/vault
+      <div class="endpoint" id="get-secret">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/vault/<span class="var">:name</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Read a secret. Returns the current version unless <code>?version=N</code> is passed. Each read appends to the audit log.</p>
+        </div>
+      </div>
 
-→ {
-  "secrets": [
-    {"name": "openai-key", "version": 2, "tags": ["api-key"]},
-    {"name": "db-password", "version": 1, "tags": ["database"]},
-    {"name": "stripe-webhook", "version": 1, "expires_at": "2026-04-01"}
-  ]
-}</code></pre>
+      <div class="endpoint" id="list-secrets">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/vault</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List secret names + metadata only. Values are never returned by list. Filter by <code>tag</code>.</p>
+        </div>
+      </div>
 
-    <h2>Version History</h2>
-    <pre><code>GET /v1/vault/openai-key/versions
-→ [{"version": 1, "created_at": "..."}, {"version": 2, "created_at": "..."}]
+      <div class="endpoint" id="delete-secret">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/vault/<span class="var">:name</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Delete the secret entirely (all versions). Soft-delete; row is preserved for audit but values are zeroed.</p>
+        </div>
+      </div>
 
-GET /v1/vault/openai-key?version=1
-→ {"value": "old-key-value..."}</code></pre>
+      <div class="endpoint" id="versions">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/vault/<span class="var">:name</span>/versions</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List all versions of a secret with their write timestamps. Pair with <code>GET ?version=N</code> for rollback.</p>
+        </div>
+      </div>
 
-    <h2>Access Policy</h2>
-    <pre><code>PUT /v1/vault/openai-key/policy
-{ "agent_ids": ["memory-agent", "verify-agent", "new-agent"] }</code></pre>
-    <p>Set <code>agent_ids</code> to <code>null</code> to allow any agent in the project.</p>
+      <div class="endpoint" id="audit">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/vault/<span class="var">:name</span>/audit</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Tamper-evident access log: who read, when, from which agent_id, success or denial.</p>
+        </div>
+      </div>
 
-    <h2>Audit Log</h2>
-    <pre><code>GET /v1/vault/openai-key/audit
+      <div class="endpoint" id="policy">
+        <div class="endpoint-header">
+          <span class="method patch">PATCH</span>
+          <span class="endpoint-path">/v1/vault/<span class="var">:name</span>/policy</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Update the access policy without rotating the value. Set <code>agent_ids</code> to restrict reads to specific identities.</p>
+        </div>
+      </div>
 
-→ {
-  "entries": [
-    {"action": "read", "agent_id": "memory-agent", "ts": "2026-03-17T00:01:00Z"},
-    {"action": "write", "agent_id": null, "ts": "2026-03-17T00:00:00Z", "version": 1}
-  ]
-}</code></pre>
+      <h2 id="bulk">Bulk operations</h2>
 
-    <h2>Security</h2>
-    <ul>
-      <li><strong>Encrypted at rest</strong> — AES-256-GCM, per-project key derivation via HKDF</li>
-      <li><strong>Agent-scoped</strong> — secrets locked to specific agent IDs</li>
-      <li><strong>Audited</strong> — every read/write/delete logged with agent ID and IP</li>
-      <li><strong>Never in search</strong> — vault data is never indexed or embedded</li>
-      <li><strong>Versioned</strong> — update a secret without losing the old value</li>
-      <li><strong>TTL support</strong> — secrets can auto-expire</li>
-    </ul>
+      <div class="endpoint" id="bulk">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/vault/bulk</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Atomic multi-secret write. Use for migrations and provisioning.</p>
+        </div>
+      </div>
 
-    <h2>Credits</h2>
-    <table>
-      <tr><th>Operation</th><th>Credits</th></tr>
-      <tr><td>Store / update secret</td><td>2</td></tr>
-      <tr><td>Read secret</td><td>1</td></tr>
-      <tr><td>List secrets</td><td>1</td></tr>
-      <tr><td>Delete secret</td><td>1</td></tr>
-      <tr><td>Read audit log</td><td>1</td></tr>
-    </table>
+      <h2 id="execute-bridge">Vault + execute = no proxy needed</h2>
+      <p>The intended pattern: store a provider key in vault; in your tool code, fetch the key from vault, call the provider directly, return only the result.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>example · pseudocode</span></div>
+<pre><span class="cm"># Inside /v1/execute sandbox</span>
+key = vault_read(<span class="str">"openai-key"</span>)
+embedding = openai.embed(query, key=key)
+
+<span class="cm"># Then store the agent's memory using the embedding</span>
+at.memory.<span class="fn">store</span>(content, embedding=embedding)</pre>
+      </div>
+
+      <p class="muted">We never see the provider traffic. The privacy boundary is yours to draw.</p>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="tools.html#execute">/v1/execute</a> — sandboxed runtime where you fetch+use vault secrets.</li>
+        <li><a href="memory.html#byo-embeddings">Memory: bring your own embeddings</a> — vault holds the key for the embedding provider.</li>
+      </ul>
+    </main>
   </div>
+
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
 </body>
 </html>

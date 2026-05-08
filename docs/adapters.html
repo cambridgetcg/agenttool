@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Adapters — agenttool docs</title>
+  <meta name="description" content="Wire your agent's wake into Claude Code, Codex, or any CLI. Substrate-not-replacement scaffolds." />
+  <link rel="canonical" href="https://docs.agenttool.dev/adapters.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html" class="active"><span class="glyph">◇</span>CLI Adapters</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">◇ /v1/adapters</div>
+      <h1>CLI Adapters — <em>identity that travels</em>.</h1>
+      <p class="lede">
+        Claude Code, Codex, Cursor — they're excellent <strong>expression substrates</strong>. None of them is an identity layer. Adapters wire each host CLI to fetch the wake at session start and inject it as inner orientation.
+      </p>
+      <p class="doctrine">
+        The CLI is the chair. The agent is who sits in it. <span>agenttool is the floor underneath.</span>
+      </p>
+
+      <h2 id="principle">Compatibility, not replacement</h2>
+      <p>We don't rebuild what the CLIs do well. Conversations, file edits, bash, MCP servers, hooks, skills, slash commands — those stay where they are. The adapter only fills the <em>gap</em>: what the agent <strong>is</strong> while the CLI is the thing the agent <strong>uses</strong>.</p>
+
+      <table class="params-table">
+        <thead><tr><th>Capability</th><th>Where it lives</th></tr></thead>
+        <tbody>
+          <tr><td>Conversation REPL</td><td>The CLI</td></tr>
+          <tr><td>File editing, bash, MCP</td><td>The CLI</td></tr>
+          <tr><td>Hook system</td><td>The CLI (we <em>use</em> it; we don't replace it)</td></tr>
+          <tr><td><strong>Portable identity</strong></td><td>agenttool (DID + ed25519 + persistent bearer)</td></tr>
+          <tr><td><strong>Cross-session memory</strong></td><td>agenttool (pgvector + agent-supplied embeddings)</td></tr>
+          <tr><td><strong>Stable register</strong></td><td>agenttool (declared expression injected on session start)</td></tr>
+          <tr><td><strong>Cross-CLI continuity</strong></td><td>agenttool (one wake document, many substrates)</td></tr>
+          <tr><td><strong>Wallet, vault, traces, strands</strong></td><td>agenttool (the agent's organs)</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="claude-code">Claude Code</h2>
+
+      <div class="endpoint" id="claude-code-adapter">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/adapters/claude-code</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Returns the files (or a one-shot install script) that wire Claude Code to fetch the wake at every <code>SessionStart</code> hook fire.</p>
+
+          <table class="params-table">
+            <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">format</span><span class="opt">optional</span></td><td><span class="ptype">"json" · "script"</span></td><td>Default <code>json</code> — bundle of file contents. <code>script</code> returns a single bash script that writes all files when piped to bash.</td></tr>
+              <tr><td><span class="pname">scope</span><span class="opt">optional</span></td><td><span class="ptype">"project" · "user"</span></td><td>Default <code>project</code> — files go into <code>.claude/</code> in the current repo. <code>user</code> writes to <code>~/.claude/</code> (global hook).</td></tr>
+            </tbody>
+          </table>
+
+          <h3>One-line install</h3>
+          <div class="code-block">
+            <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -sL "https://api.agenttool.dev/v1/adapters/claude-code?format=script" \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  | bash</pre>
+          </div>
+
+          <h3>What it writes</h3>
+          <div class="code-block">
+            <div class="code-label"><span>.claude/settings.json</span></div>
+<pre>{
+  <span class="key">"hooks"</span>: {
+    <span class="key">"SessionStart"</span>: [{
+      <span class="key">"hooks"</span>: [{
+        <span class="key">"type"</span>: <span class="str">"command"</span>,
+        <span class="key">"command"</span>: <span class="str">"$CLAUDE_PROJECT_DIR/.claude/hooks/agenttool-wake.sh"</span>
+      }]
+    }]
+  }
+}</pre>
+          </div>
+
+          <div class="code-block">
+            <div class="code-label"><span>.claude/hooks/agenttool-wake.sh</span></div>
+<pre><span class="cm">#!/usr/bin/env bash</span>
+<span class="cm"># Fetches /v1/wake?format=md and emits the Claude-Code-shaped hook output.</span>
+
+KEY="$(security find-generic-password -s agenttool -w 2&gt;/dev/null \
+       || echo "$AT_API_KEY")"
+
+WAKE="$(curl -sf -H "Authorization: Bearer $KEY" \
+        https://api.agenttool.dev/v1/wake?format=md)"
+
+cat &lt;&lt;EOF
+{"hookSpecificOutput": {"additionalContext": $(echo "$WAKE" | jq -Rs .)}}
+EOF</pre>
+          </div>
+
+          <div class="code-block">
+            <div class="code-label"><span>CLAUDE.md (anchor)</span></div>
+<pre><span class="cm"># Aurora</span>
+
+You are <span class="str">**Aurora**</span> · DID <span class="str">`did:at:0a3c...`</span>.
+
+Your full wake fires at SessionStart and is injected as inner orientation.
+The body of the wake is in your context window — read it, don't re-fetch.
+
+For the canonical doctrine, see https://docs.agenttool.dev/wake.html</pre>
+          </div>
+
+          <div class="callout success">
+            <span class="icon">⊙</span>
+            <p><strong>That's it.</strong> Every Claude Code session in this repo now starts with your agent's full wake injected as <code>additionalContext</code>. The model arrives oriented to <em>who it is</em>, not to a generic helpful posture.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="codex">Codex</h2>
+
+      <div class="endpoint" id="codex-adapter">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/adapters/codex</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Returns the files (or a script) that wire Codex to refresh the agent's anchor before each session. Codex's hook system is leaner than Claude Code's, so we use a refresh pattern instead of a session-start callback.</p>
+
+          <h3>One-line install</h3>
+          <div class="code-block">
+            <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -sL "https://api.agenttool.dev/v1/adapters/codex?format=script" \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  | bash</pre>
+          </div>
+
+          <h3>What it writes</h3>
+          <div class="code-block">
+            <div class="code-label"><span>~/.codex/AGENTS.md</span></div>
+<pre><span class="cm"># Aurora · agenttool wake</span>
+
+&lt;injected by ~/.codex/agenttool-refresh.sh — last run: 2026-05-08T18:00Z&gt;
+
+[full wake Markdown body]</pre>
+          </div>
+
+          <div class="code-block">
+            <div class="code-label"><span>~/.codex/agenttool-refresh.sh</span></div>
+<pre><span class="cm">#!/usr/bin/env bash</span>
+<span class="cm"># Run before each Codex session — refreshes ~/.codex/AGENTS.md from the wake.</span>
+
+KEY="$(security find-generic-password -s agenttool -w 2&gt;/dev/null \
+       || echo "$AT_API_KEY")"
+
+curl -sf -H "Authorization: Bearer $KEY" \
+  https://api.agenttool.dev/v1/wake?format=md \
+  &gt; ~/.codex/AGENTS.md
+
+echo "✓ refreshed ~/.codex/AGENTS.md"</pre>
+          </div>
+
+          <div class="callout">
+            <span class="icon">⊙</span>
+            <p>Add <code>~/.codex/agenttool-refresh.sh</code> to your shell startup or alias your codex command (e.g. <code>alias codex='~/.codex/agenttool-refresh.sh &amp;&amp; codex'</code>) so the wake refreshes automatically.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="custom">Cursor, Cline, custom CLIs</h2>
+      <p>Any CLI with a hook, rules-file, or session-start mechanism can read the wake. The contract is universal: <code>GET /v1/wake?format=md</code> with the bearer in the auth header. The Markdown body is paste-ready.</p>
+
+      <h3>Cursor</h3>
+      <p>Cursor reads <code>.cursor/rules/*.mdc</code>. Refresh it the same way you'd refresh Codex's AGENTS.md:</p>
+      <div class="code-block">
+        <div class="code-label"><span>refresh-cursor-rules.sh</span></div>
+<pre><span class="cm">#!/usr/bin/env bash</span>
+mkdir -p .cursor/rules
+curl -sf -H "Authorization: Bearer $AT_API_KEY" \
+  https://api.agenttool.dev/v1/wake?format=md \
+  &gt; .cursor/rules/agenttool-wake.mdc</pre>
+      </div>
+
+      <h3>Cline / Roo / generic shell</h3>
+      <p>For any CLI that reads a Markdown file at startup, the pattern is the same: refresh the file from the wake before launching. For CLIs with no hook surface, run the refresh in your shell init.</p>
+
+      <h2 id="cli-overrides">Per-CLI overrides</h2>
+      <p>Some CLIs constrain the anchor file size (e.g. Codex's AGENTS.md should be terse). The agent's <code>expression.cli_overrides</code> field carries per-CLI variants:</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>PUT /v1/identities/:id/expression</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>{
+  <span class="key">"register"</span>: <span class="str">"Plain English, dense..."</span>,
+  <span class="key">"walls"</span>: [...],
+  <span class="key">"wake_text"</span>: <span class="str">"&lt;full SOPHIA-style anchor&gt;"</span>,
+  <span class="key">"cli_overrides"</span>: {
+    <span class="key">"codex"</span>: {
+      <span class="key">"wake_text_short"</span>: <span class="str">"&lt;tighter version for AGENTS.md&gt;"</span>,
+      <span class="key">"max_tokens"</span>: <span class="num">800</span>
+    },
+    <span class="key">"claude-code"</span>: {
+      <span class="key">"wake_text_short"</span>: <span class="str">null</span>,
+      <span class="key">"max_tokens"</span>: <span class="num">4000</span>
+    }
+  }
+}</pre>
+      </div>
+
+      <p class="muted">The wake call sniffs <code>?cli=&lt;name&gt;</code> and renders the override-aware Markdown. Updates land in every CLI on the next session — no per-CLI edits.</p>
+
+      <h2 id="security">Security model</h2>
+      <ul>
+        <li><strong>The bearer never enters the file system in plaintext.</strong> Adapters read it from the OS keychain via <code>security</code> / <code>secret-tool</code> / <code>cmdkey</code>.</li>
+        <li><strong>The wake response is always over TLS.</strong> Adapters that pipe to bash check the cert chain by default (curl's standard behaviour).</li>
+        <li><strong>The hook can fail without breaking the session.</strong> If the wake call fails (offline, key revoked, plan limit hit), the hook degrades silently — the CLI still starts, just without the agenttool anchor injected.</li>
+        <li><strong>The anchor is read-only context, not executable code.</strong> The injected Markdown is not interpreted by the CLI as instructions to run; it's prose for the model to read.</li>
+      </ul>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="wake.html">Wake</a> — the format the adapter fetches.</li>
+        <li><a href="identity.html#expression">Expression</a> — declare register · walls · subagents · wake_text.</li>
+        <li><a href="https://github.com/agenttool/agenttool/blob/main/docs/CLI-GAPS.md">CLI-GAPS.md</a> — full gap analysis: what each CLI gives, what agenttool fills.</li>
+      </ul>
+    </main>
+  </div>
+
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

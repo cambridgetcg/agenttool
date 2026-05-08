@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traces — agenttool docs</title>
+  <meta name="description" content="Reasoning provenance for AI agents. Decision · reasoning · context. Postgres FTS + recursive lineage CTE. Optional ed25519 signatures." />
+  <link rel="canonical" href="https://docs.agenttool.dev/traces.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html" class="active"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">↯ /v1/traces</div>
+      <h1>Traces — <em>the why</em>, not just the what.</h1>
+      <p class="lede">
+        Reasoning provenance. Each trace records a decision, the reasoning behind it, the context it was made in, and an optional ed25519 signature. Linked into chains for multi-step decisions. Searchable by Postgres full-text.
+      </p>
+      <p class="doctrine">
+        Memory records what was experienced. Traces record <span>why a decision was made</span>. The two are different organs.
+      </p>
+
+      <h2 id="anatomy">Anatomy of a trace</h2>
+      <table class="params-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">decision_type</span></td><td><span class="ptype">string</span></td><td>What kind of decision — <code>tool_choice</code>, <code>refusal</code>, <code>strategy_switch</code>, freeform.</td></tr>
+          <tr><td><span class="pname">decision_summary</span></td><td><span class="ptype">string</span></td><td>One-line summary of what was decided.</td></tr>
+          <tr><td><span class="pname">reasoning</span></td><td><span class="ptype">string</span></td><td>The argument — what was weighed, what was ruled out, what tipped it.</td></tr>
+          <tr><td><span class="pname">context</span></td><td><span class="ptype">object</span></td><td>The state at decision time — input, observed values, relevant memories.</td></tr>
+          <tr><td><span class="pname">conclusion</span></td><td><span class="ptype">string</span></td><td>The action taken (or refused).</td></tr>
+          <tr><td><span class="pname">confidence</span></td><td><span class="ptype">float (0.0–1.0)</span></td><td>How sure the agent was. Crucial for downstream auditing.</td></tr>
+          <tr><td><span class="pname">parent_trace_id</span></td><td><span class="ptype">uuid</span></td><td>Optional — links this trace to its predecessor for chain reconstruction.</td></tr>
+          <tr><td><span class="pname">signature</span></td><td><span class="ptype">base64</span></td><td>Optional ed25519 signature for verifiable provenance.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="endpoints">Endpoints</h2>
+
+      <div class="endpoint" id="post-trace">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/traces</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Record a reasoning trace. The body shape mirrors the table above.</p>
+          <div class="code-block">
+            <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/traces \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decision_type": "tool_choice",
+    "decision_summary": "Pick scrape over browse for static page",
+    "reasoning": "Page returns 200 with full HTML; no JS-rendered content needed. Scrape is 30x cheaper.",
+    "context": { "url": "https://example.com/article", "headers": {...} },
+    "conclusion": "called /v1/scrape",
+    "confidence": 0.92
+  }'</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-trace">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/traces/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Fetch a single trace by ID.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-traces">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/traces</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List recent traces. Filterable by <code>decision_type</code> and <code>min_confidence</code>.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="delete-trace">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/traces/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Permanent. Traces are usually kept — they're the record of <em>why</em>.</p>
+        </div>
+      </div>
+
+      <h2 id="search">Full-text search</h2>
+
+      <div class="endpoint" id="post-search">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/traces/search</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Postgres <code>tsvector</code> full-text search over <code>decision_summary</code>, <code>reasoning</code>, and <code>conclusion</code>. <strong>No LLM compute on our side</strong> — pure FTS. Pair with <a href="memory.html#search">/v1/memories/search</a> for vector recall when you need it.</p>
+          <div class="code-block">
+            <div class="code-label"><span>curl</span></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/traces/search \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "refusal AND fabrication", "limit": 10}'</pre>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="chains">Reasoning chains</h2>
+      <p>Traces with <code>parent_trace_id</code> form trees. The chain endpoint walks ancestors and descendants via a Postgres recursive CTE.</p>
+
+      <div class="endpoint" id="get-chain">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/traces/chain/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Returns the full lineage — <code>ancestors</code> (parents up to the root) and <code>descendants</code> (children downward). Useful when you ask "how did we get here?"</p>
+          <div class="code-block">
+            <div class="code-label"><span>200 OK</span></div>
+<pre>{
+  <span class="key">"target"</span>: { <span class="key">"trace_id"</span>: <span class="str">"..."</span>, ... },
+  <span class="key">"ancestors"</span>: [<span class="cm">/* parent → grandparent → root */</span>],
+  <span class="key">"descendants"</span>: [<span class="cm">/* children → grandchildren → leaves */</span>]
+}</pre>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="signatures">Verifiable traces</h2>
+      <p>Sign the canonical trace payload with the agent's ed25519 key. The signature anchors authorship — another agent can verify the trace really came from this DID.</p>
+
+      <p>Canonical payload: <code>SHA-256(decision_type || \0 || decision_summary || \0 || reasoning || \0 || conclusion || \0 || canonical_json(context))</code>.</p>
+
+      <p>Sign client-side. Send <code>signature</code> with the POST. We verify against the agent's active <a href="identity.html#keys">key</a> before accepting.</p>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="wake.html">Wake</a> — recent traces surface in <code>you_decided</code>.</li>
+        <li><a href="memory.html">Memory</a> — for the <em>what</em>; traces record the <em>why</em>.</li>
+        <li><a href="strands.html">Strands</a> — for <em>active</em> reasoning; traces are the past-tense record.</li>
+      </ul>
+    </main>
+  </div>
+
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

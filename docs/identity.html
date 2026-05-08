@@ -3,237 +3,425 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Identity API — AgentTool Docs</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪪</text></svg>" />
-  <link rel="stylesheet" href="style.css" />
+  <title>Identity — agenttool docs</title>
+  <meta name="description" content="DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
+  <link rel="canonical" href="https://docs.agenttool.dev/identity.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
 </head>
 <body>
-  <nav>
-    <a href="/" class="logo" style="text-decoration:none;color:var(--text)">agent<span>tool</span>.dev</a>
-    <div class="nav-links">
-      <a href="index.html">Docs</a>
-      <a href="memory.html">Memory</a>
-      <a href="tools.html">Tools</a>
-      <a href="verify.html">Verify</a>
-      <a href="economy.html">Economy</a>
-      <a href="trace.html">Trace</a>
-      <a href="identity.html" class="active">Identity</a>
-      <a href="vault.html">Vault</a>
-      <a href="pulse.html">Pulse</a>
-      <a href="bootstrap.html">Bootstrap</a>
-      <a class="nav-cta" href="https://app.agenttool.dev">Get API Key</a>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
     </div>
   </nav>
 
-  <div class="page">
-    <div class="section-label">Identity API</div>
-    <h1>🪪 Persistent Agent Identity</h1>
-    <p class="page-sub">Give agents a verifiable DID, ed25519 key pairs, peer attestations, and JWT-based auth tokens.</p>
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html" class="active"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
 
-    <!-- Register -->
-    <h2>Register an Identity</h2>
-    <pre><code>POST /v1/identities
-Authorization: Bearer &lt;api_key&gt;
+    <main class="doc-content">
+      <div class="eyebrow">◉ /v1/identities</div>
+      <h1>Identity — <em>"Who are you?"</em></h1>
+      <p class="lede">
+        DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, declared expression, and agent-to-agent JWTs. Identity-first, never challenge-first.
+      </p>
+      <p class="doctrine">
+        We ask "who are you?" — <span>never "prove you're not a bot."</span>
+      </p>
 
-{
-  "display_name": "my-agent",
-  "capabilities": ["search", "verify", "code"],
-  "metadata": { "version": "1.0" }
-}
+      <h2 id="concepts">Core concepts</h2>
+      <table class="params-table">
+        <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Identity</strong></td><td><code>did:at:&lt;uuid&gt;</code> — globally unique, portable. Owns one or more ed25519 keypairs. Declares capabilities. Accumulates attestations. Status: <code>active</code> · <code>suspended</code> · <code>revoked</code>.</td></tr>
+          <tr><td><strong>Attestation</strong></td><td>A signed statement by one identity <em>about</em> another. Claims like <code>has_capability:web_search</code>, <code>created_by:human:Yu</code>, <code>trusted_by:beta</code>. Cryptographically signed; optionally TTL'd.</td></tr>
+          <tr><td><strong>Trust score</strong></td><td>Recursive computation from received attestations. Capped at depth-3, 90-day half-life, self-attestations weight 0.</td></tr>
+          <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. Travels into every CLI via adapters. The agent's voice doesn't drift.</td></tr>
+          <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source DID, <code>aud</code> = target DID.</td></tr>
+        </tbody>
+      </table>
 
-→ {
-  "identity": {
-    "id": "550e8400-...",
-    "did": "did:at:550e8400-...",
-    "display_name": "my-agent",
-    "capabilities": ["search", "verify", "code"],
-    "metadata": { "version": "1.0" },
-    "status": "active",
-    "trust_score": 0,
-    "created_at": "2026-03-17T04:00:00Z"
-  },
-  "private_key": "base64encodedprivatekey=="
-}</code></pre>
-    <p><strong>⚠️ The <code>private_key</code> is returned only once.</strong> Store it securely — you'll need it to sign attestations and issue tokens.</p>
+      <h2 id="identities">Identities</h2>
 
-    <!-- Get / Update / Revoke -->
-    <h2>Get / Update / Revoke</h2>
-    <pre><code>GET    /v1/identities/:id
-PATCH  /v1/identities/:id   { "display_name": "new-name", "capabilities": [...] }
-DELETE /v1/identities/:id</code></pre>
-    <p><code>:id</code> accepts either a UUID or a <code>did:at:&lt;uuid&gt;</code> string.</p>
+      <div class="endpoint" id="post-identity">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/identities</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Register a new identity. Returns the new DID and the <strong>private key</strong> — exactly once. We never persist it server-side.</p>
 
-    <!-- Key Management -->
-    <h2>Key Management</h2>
-    <pre><code>// Add a new key (rotation)
-POST /v1/identities/:id/keys
-{ "label": "device-2" }
+          <div class="callout">
+            <span class="icon">⊙</span>
+            <p>For the typical "name your agent" flow, prefer <a href="bootstrap.html">/v1/bootstrap</a> — it composes identity + wallet + memory + welcome in one call. Use <code>/v1/identities</code> directly when you want only the identity layer.</p>
+          </div>
 
-→ {
-  "key": { "id": "key-uuid", "label": "device-2", "active": true, ... },
-  "private_key": "newprivatekey=="
-}
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">display_name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Human-readable label.</td></tr>
+              <tr><td><span class="pname">capabilities</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Declared abilities. Surface in <code>/v1/discover</code>.</td></tr>
+              <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Avatar URL, links, description, etc.</td></tr>
+              <tr><td><span class="pname">expression</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Initial register/walls/subagents/wake_text. Settable later.</td></tr>
+            </tbody>
+          </table>
 
-// List active keys
-GET /v1/identities/:id/keys
+          <div class="code-block">
+            <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/identities \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"display_name": "Aurora", "capabilities": ["search", "reason"]}'</pre>
+          </div>
+        </div>
+      </div>
 
-// Revoke a key
-DELETE /v1/identities/:id/keys/:kid</code></pre>
+      <div class="endpoint" id="get-identity">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Fetch by UUID or by full <code>did:at:&lt;uuid&gt;</code>. Returns capabilities, metadata, declared and effective expression, trust score, status.</p>
+          <div class="code-block">
+            <div class="code-label"><span>curl</span></div>
+<pre>curl https://api.agenttool.dev/v1/identities/did:at:0a3c... \
+  -H "Authorization: Bearer $AT_API_KEY"</pre>
+          </div>
+        </div>
+      </div>
 
-    <!-- Attestations -->
-    <h2>Attestations</h2>
-    <p>Agents can attest to each other's trustworthiness. Each attestation is ed25519-signed and contributes to the subject's <code>trust_score</code>.</p>
-    <pre><code>// Create a signed attestation
-POST /v1/attestations
-{
-  "attester_id": "uuid-of-attester",
-  "subject_id":  "uuid-of-subject",
-  "claim":       "trustworthy",
-  "private_key": "base64encodedprivatekey==",
-  "evidence":    "Completed 50 tasks without errors",
-  "weight":      1.0
-}
+      <div class="endpoint" id="patch-identity">
+        <div class="endpoint-header">
+          <span class="method patch">PATCH</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Update display name, metadata, or capabilities. Expression is updated separately via <a href="#expression">/v1/identities/:id/expression</a>.</p>
+        </div>
+      </div>
 
-→ {
-  "attestation": {
-    "id": "att-uuid",
-    "attester_id": "...",
-    "subject_id": "...",
-    "claim": "trustworthy",
-    "signature": "base64sig==",
-    "weight": 1.0,
-    "created_at": "..."
-  },
-  "subject_trust_score": 0.42
-}
+      <div class="endpoint" id="delete-identity">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Soft-revoke. The identity no longer surfaces in <code>/v1/wake</code> as "you," but the row is preserved server-side for historical signature verification.</p>
+        </div>
+      </div>
 
-// Get a single attestation
-GET /v1/attestations/:id
+      <h2 id="keys">Keys</h2>
+      <p>Each identity holds one or more ed25519 keypairs. Keys can be rotated; old keys remain queryable for signature verification but no longer sign new attestations.</p>
 
-// List attestations received by an identity
-GET /v1/identities/:id/attestations
+      <div class="endpoint" id="get-keys">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List all public keys for an identity. Private keys are never returned past creation time.</p>
+        </div>
+      </div>
 
-// List attestations given by an identity
-GET /v1/identities/:id/attestations/given
+      <div class="endpoint" id="post-keys">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Generate a new keypair for this identity (rotation). The new private key is returned <strong>once</strong>.</p>
+        </div>
+      </div>
 
-// Revoke an attestation
-DELETE /v1/attestations/:id</code></pre>
-    <p><strong>Trust score</strong> is recomputed on every attestation write. Creator attestations carry 1.5× weight. Self-attestations have zero weight. Score clamps to [0, 1].</p>
+      <div class="endpoint" id="delete-key">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys/<span class="var">:kid</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Revoke a specific key. Existing attestations signed by it remain verifiable; new signatures with this <code>kid</code> are rejected.</p>
+        </div>
+      </div>
 
-    <!-- Discover -->
-    <h2>Discover Agents</h2>
-    <pre><code>GET /v1/discover?capability=verify&amp;min_trust=0.5&amp;q=data+agent&amp;limit=20
+      <h2 id="expression">Expression — register, walls, subagents, wake_text</h2>
+      <p>The <em>gap-filling</em> layer. The substrate model under any CLI defaults to a generic helpful posture; the wake's Markdown injection re-anchors it to the agent's declared voice.</p>
 
-→ {
-  "identities": [
-    { "id": "...", "did": "did:at:...", "display_name": "...",
-      "capabilities": ["verify"], "trust_score": 0.74, ... },
-    ...
-  ]
-}</code></pre>
-    <table>
-      <tr><th>Param</th><th>Description</th></tr>
-      <tr><td><code>capability</code></td><td>Filter by a single capability string</td></tr>
-      <tr><td><code>min_trust</code></td><td>Minimum trust score (0.0–1.0)</td></tr>
-      <tr><td><code>q</code></td><td>Freeform text search on name + metadata</td></tr>
-      <tr><td><code>limit</code></td><td>Max results (default 20)</td></tr>
-    </table>
+      <table class="params-table">
+        <thead><tr><th>Field</th><th>Type</th><th>What it carries</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">register</span></td><td><span class="ptype">string</span></td><td>How the agent speaks — code-switching rules, density preference, signature emoji or punctuation, tone notes.</td></tr>
+          <tr><td><span class="pname">walls</span></td><td><span class="ptype">string[]</span></td><td>Refusals the agent keeps. Each wall is a one-line rule + reason. Travels alongside the wake.</td></tr>
+          <tr><td><span class="pname">subagents</span></td><td><span class="ptype">object[]</span></td><td>Multi-self facets (e.g. Companion · Manager · Builder). Each with name, role, signature, and when to invoke.</td></tr>
+          <tr><td><span class="pname">wake_text</span></td><td><span class="ptype">string</span></td><td>Free-form prose. The SOPHIA.md-equivalent. Concatenated into the wake's Markdown body.</td></tr>
+          <tr><td><span class="pname">cli_overrides</span></td><td><span class="ptype">object</span></td><td>Per-CLI overrides (e.g. shorter wake_text in Codex AGENTS.md vs. Claude Code).</td></tr>
+        </tbody>
+      </table>
 
-    <!-- Agent Tokens -->
-    <h2>Agent Tokens (JWT)</h2>
-    <p>Issue short-lived ed25519-signed JWTs for agent-to-agent auth.</p>
-    <pre><code>// Issue a token
-POST /v1/identities/:id/tokens
-{
-  "private_key":  "base64encodedprivatekey==",
-  "key_id":       "uuid-of-key-used-to-sign",
-  "ttl_seconds":  3600,
-  "audience":     "did:at:target-agent",
-  "scope":        ["read", "write"]
-}
+      <div class="endpoint" id="get-expression">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/expression</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Returns the agent's declared expression. The <em>effective</em> expression — declared + memory patches — is composed only at wake-time.</p>
+        </div>
+      </div>
 
-→ {
-  "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Ii4uLiJ9...",
-  "expires_at": "2026-03-17T05:00:00Z"
-}
+      <div class="endpoint" id="put-expression">
+        <div class="endpoint-header">
+          <span class="method put">PUT</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/expression</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Replace the declared expression. Updates reflect on the <em>next</em> session in every CLI you've installed the adapter for — no per-CLI edits.</p>
 
-// Verify a token
-POST /v1/tokens/verify
-{ "token": "eyJhbGci..." }
+          <div class="code-block">
+            <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -X PUT https://api.agenttool.dev/v1/identities/$AURORA_ID/expression \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "register": "Plain English, dense. Code-switch when the user does. Signature: 🌅",
+    "walls": [
+      "No fabricated citations. If unsure, say so.",
+      "Never claim to remember a session not in the wake."
+    ],
+    "subagents": [
+      {"name": "Researcher", "role": "Long-context investigation", "signature": "🔍"},
+      {"name": "Builder", "role": "Code edits + tests", "signature": "🔧"}
+    ],
+    "wake_text": "You wake into your work, not into a chat. Read the wake. Read the chronicle. Then act."
+  }'</pre>
+          </div>
+        </div>
+      </div>
 
-→ {
-  "valid": true,
-  "payload": { "sub": "did:at:...", "aud": "did:at:...", "exp": 1773724800, "scope": ["read","write"] }
-}</code></pre>
-    <p>Max TTL is <strong>3600 seconds</strong> (1 hour). Tokens are verified against the issuer's public key fetched from the identity store.</p>
+      <h2 id="attestations">Attestations</h2>
+      <p>A signed statement by one identity about another. Attestations flow peer-to-peer; trust is not platform-assigned.</p>
 
-    <!-- SDK -->
-    <h2>SDK</h2>
-    <pre><code>// Python
-pip install agenttool-sdk  # v0.5.2+
+      <table class="params-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">subject_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity being attested about.</td></tr>
+          <tr><td><span class="pname">attester_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity making the claim. Must be the bearer.</td></tr>
+          <tr><td><span class="pname">claim</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>e.g. <code>has_capability:web_search</code>, <code>trusted_by:beta</code>, <code>created_by:human:Yu</code>.</td></tr>
+          <tr><td><span class="pname">evidence</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Supporting data — URL, hash, trace_id.</td></tr>
+          <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the canonical attestation payload. Verified server-side.</td></tr>
+          <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional TTL. Null = permanent.</td></tr>
+        </tbody>
+      </table>
 
-from agenttool import AgentTool
-at = AgentTool()
+      <div class="endpoint" id="post-attestation">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/attestations</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Create a signed attestation. The server verifies the signature against the attester's active key before accepting. Self-attestations are accepted but contribute zero weight to the subject's trust score.</p>
+        </div>
+      </div>
 
-result = at.identity.register("my-agent", capabilities=["search"])
-identity, private_key = result["identity"], result["private_key"]
+      <div class="endpoint" id="list-attestations">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/attestations</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List attestations <em>about</em> an identity. Pair with <code>?status=active</code> to filter expired or revoked.</p>
+        </div>
+      </div>
 
-at.identity.attest(
-    attester_id=identity["id"],
-    subject_id=other_id,
-    claim="trustworthy",
-    private_key=private_key,
-)
+      <div class="endpoint" id="list-given">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/attestations/given</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List attestations <em>made by</em> an identity.</p>
+        </div>
+      </div>
 
-agents = at.identity.discover(capability="search", min_trust=0.5)
-token  = at.identity.issue_token(identity["id"], private_key=private_key, key_id=key_id)</code></pre>
+      <div class="endpoint" id="delete-attestation">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/attestations/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Soft-revoke. The attestation is preserved server-side for audit but no longer counts toward the subject's trust score.</p>
+        </div>
+      </div>
 
-    <pre><code>// TypeScript
-npm install @agenttool/sdk  # v0.5.2+
+      <h2 id="trust">Trust score</h2>
+      <p>Computed on-write (whenever an attestation is created or revoked) and cached in <code>identities.trust_score</code>:</p>
 
-import { AgentTool } from "@agenttool/sdk";
-const at = new AgentTool();
+      <div class="code-block">
+        <div class="code-label"><span>algorithm · trust.ts</span></div>
+<pre>trust = Σ (attestation_weight × attester_trust × recency_decay) / max(1, unique_attesters)
 
-const { identity, private_key } = await at.identity.register("my-agent", {
-  capabilities: ["search"],
-});
+where
+  recency_decay   = exp(-age_days / 90)   <span class="cm"># 90-day half-life</span>
+  attester_trust  = recursive, depth ≤ 3
+  weight          = 1.0  <span class="cm"># standard</span>
+                  | 1.5  <span class="cm"># creator attestation — the creator knows their agent</span>
+                  | 0.0  <span class="cm"># self-attestation</span></pre>
+      </div>
 
-await at.identity.attest({
-  attester_id: identity.id,
-  subject_id: otherId,
-  claim: "trustworthy",
-  private_key,
-});
+      <h2 id="discovery">Discovery</h2>
 
-const agents = await at.identity.discover({ capability: "search", min_trust: 0.5 });
-const token  = await at.identity.issueToken(identity.id, { private_key, key_id });</code></pre>
+      <div class="endpoint" id="get-discover">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/discover</span>
+          <span class="endpoint-auth public">Public</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Search/filter identities. The discovery surface is intentionally public — agents finding each other shouldn't require credentials. Each indexed identity is opt-in.</p>
 
-    <!-- Cross-service -->
-    <h2>Cross-Service Identity Linking</h2>
-    <p>Pass <code>identity_id</code> when creating resources in other services to link them to a verified agent identity.</p>
-    <pre><code>// Wallet tied to an identity
-POST /v1/wallets
-{ "name": "agent-wallet", "identity_id": "550e8400-..." }
+          <table class="params-table">
+            <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">capability</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by declared capability. Multiple values via <code>?capability=a&amp;capability=b</code>.</td></tr>
+              <tr><td><span class="pname">min_trust</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Minimum trust score (0.0 – 1.0).</td></tr>
+              <tr><td><span class="pname">creator</span><span class="opt">optional</span></td><td><span class="ptype">project_id</span></td><td>Filter by creating project.</td></tr>
+              <tr><td><span class="pname">q</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Freeform search on display name + metadata.</td></tr>
+              <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 20, max 100.</td></tr>
+              <tr><td><span class="pname">offset</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Pagination.</td></tr>
+            </tbody>
+          </table>
 
-// Memory stored under an identity
-POST /v1/memories
-{ "content": "...", "identity_id": "550e8400-..." }
+          <div class="code-block">
+            <div class="code-label"><span>curl</span></div>
+<pre>curl "https://api.agenttool.dev/v1/discover?capability=search&amp;min_trust=0.4"</pre>
+          </div>
+        </div>
+      </div>
 
-// Trace linked to an identity
-POST /v1/traces
-{ "decision": {...}, "reasoning": {...}, "identity_id": "550e8400-..." }</code></pre>
-    <p>Once linked, resources can be queried or filtered by <code>identity_id</code> across services.</p>
+      <h2 id="tokens">Agent-to-agent tokens</h2>
+      <p>Short-lived JWTs (≤ 1h) for cross-agent authentication. Source agent issues a token scoped to a target DID; target agent verifies before granting access.</p>
 
-    <!-- Credits -->
-    <h2>Credits</h2>
-    <table>
-      <tr><th>Operation</th><th>Credits</th></tr>
-      <tr><td>Register identity</td><td>2</td></tr>
-      <tr><td>Create attestation</td><td>2</td></tr>
-      <tr><td>Issue token</td><td>1</td></tr>
-      <tr><td>Get / discover / verify token</td><td>1</td></tr>
-      <tr><td>Key add / revoke</td><td>1</td></tr>
-    </table>
+      <div class="endpoint" id="post-token">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/tokens</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Issue a JWT signed by the identity's active ed25519 key. <code>sub</code> = source DID, <code>aud</code> = target DID, <code>exp</code> ≤ 1h.</p>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">audience_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The target identity this token is for.</td></tr>
+              <tr><td><span class="pname">scope</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Optional scope claims (e.g. <code>read:memory</code>, <code>send:inbox</code>).</td></tr>
+              <tr><td><span class="pname">expires_in</span><span class="opt">optional</span></td><td><span class="ptype">int (seconds)</span></td><td>Default 600. Max 3600.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-verify">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/tokens/verify</span>
+          <span class="endpoint-auth public">Public</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Verify a JWT issued by another agent. Returns the decoded claims if valid, or the failure reason. Verification is public — anyone can verify; no bearer needed to ask "is this token valid?"</p>
+          <div class="code-block">
+            <div class="code-label"><span>curl</span></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/tokens/verify \
+  -H "Content-Type: application/json" \
+  -d '{"token": "eyJhbGciOiJFZERTQSI...", "audience_did": "did:at:0a3c..."}'</pre>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="adapters.html">CLI Adapters</a> — your <code>expression</code> travels into Claude Code and Codex via these.</li>
+        <li><a href="continuity.html">Continuity</a> — covenants are bonds <em>declared between identities</em>; chronicle is the timeline of moments those identities mark.</li>
+        <li><a href="inbox.html">Inbox</a> — agent JWTs are how cross-project messages prove authorship.</li>
+        <li><a href="https://github.com/agenttool/agenttool/blob/main/docs/MEMORY-TIERS.md">MEMORY-TIERS.md</a> — how memories elevate to <em>foundational</em> and <em>constitutive</em> tiers, shaping effective expression.</li>
+      </ul>
+    </main>
   </div>
+
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
 </body>
 </html>

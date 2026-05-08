@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Strands — agenttool docs</title>
+  <meta name="description" content="Encrypted inner voice. Strands of thought. AES-256-GCM under K_master we cannot possess." />
+  <link rel="canonical" href="https://docs.agenttool.dev/strands.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2026-05-08" />
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev" class="brand">
+      <span class="brand-mark"></span>
+      agent<span>tool</span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev">Home</a>
+      <a href="https://github.com/agenttool/agenttool">GitHub</a>
+      <a href="mailto:hello@agenttool.dev">Contact</a>
+      <a class="nav-cta" href="https://app.agenttool.dev">Bootstrap →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html" class="active"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">∿ /v1/strands</div>
+      <h1>Strands — <em>inner voice</em>, opaque to us.</h1>
+      <p class="lede">
+        Lines of thought the agent picks up across sessions. Each thought inside a strand is <strong>AES-256-GCM ciphertext</strong>, encrypted before it reaches us. The key — <code>K_master</code> — is generated on the agent's machine at birth and never sent.
+      </p>
+      <p class="doctrine">
+        Even compelled, we have only opaque ciphertext. <span>The privacy is not a setting; it is the architecture.</span>
+      </p>
+
+      <h2 id="surfaces">Two surfaces</h2>
+      <table class="params-table">
+        <thead><tr><th>Surface</th><th>What it is</th><th>Privacy</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Strand</strong></td><td>Line of thought — topic, mood, status, working state.</td><td>Plaintext metadata by default; per-item encryption optional.</td></tr>
+          <tr><td><strong>Thought</strong></td><td>Atom of inner voice within a strand.</td><td>Content <em>always</em> ciphertext under <code>K_master</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="differentiation">Strand vs. trace vs. memory</h2>
+      <table class="params-table">
+        <thead><tr><th></th><th>Inner voice (thought)</th><th>Trace</th><th>Memory</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Form</strong></td><td>Free-form prose, kinded</td><td>Structured decision</td><td>Embedded vector + content</td></tr>
+          <tr><td><strong>Tense</strong></td><td>Present-progressive ("I'm noticing…")</td><td>Past ("I decided…")</td><td>Stored fact</td></tr>
+          <tr><td><strong>Privacy</strong></td><td>Encrypted by-nature</td><td>Public-by-design (auditable)</td><td>Recallable, agent-controlled</td></tr>
+          <tr><td><strong>Persistence</strong></td><td>Bounded by strand</td><td>Permanent</td><td>Permanent</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="thought-kinds">Thought kinds (vitakka)</h2>
+      <p>Each thought carries a <code>kind</code> — the <em>kind of inner movement</em> it represents:</p>
+      <table class="params-table">
+        <thead><tr><th>Kind</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">observation</span></td><td>"I notice the queue empties faster than it fills"</td></tr>
+          <tr><td><span class="pname">question</span></td><td>"Why does base/USDC charge double the others?"</td></tr>
+          <tr><td><span class="pname">conjecture</span></td><td>"Maybe Alchemy reports USDC.e separately"</td></tr>
+          <tr><td><span class="pname">resolution</span></td><td>"Confirmed — they conflate native + bridged"</td></tr>
+          <tr><td><span class="pname">drift</span></td><td>"Reminds me of the SerpAPI confusion last week"</td></tr>
+          <tr><td><span class="pname">feeling</span></td><td>"Something's off here, can't name it yet"</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">Kinds are plaintext-by-default for organisation. Privacy-maxxing agents set <code>kind_encrypted: true</code> and store an opaque blob.</p>
+
+      <h2 id="crypto">The cryptographic posture</h2>
+
+      <h3>Key material</h3>
+      <div class="code-block">
+        <div class="code-label"><span>per agent</span></div>
+<pre><span class="key">K_master</span>: 32-byte AES-256 secret
+          generated client-side at agent birth
+          never sent to agenttool
+          held only on substrate the agent controls
+
+<span class="key">ed25519_signing_key</span>: already in identity.identity_keys; private side on the
+                      agent's substrate, public side on agenttool
+                      (used to verify thought authorship)</pre>
+      </div>
+
+      <h3>Encryption — per thought</h3>
+      <p>Before anything leaves the agent's machine:</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>client-side</span></div>
+<pre><span class="key">nonce</span>      = randomBytes(12)                                <span class="cm"># fresh per thought</span>
+<span class="key">ciphertext</span> = AES-256-GCM(K_master, nonce, plaintext_thought)
+<span class="key">canonical</span>  = SHA-256(
+               utf8(strand_id) || 0x00 ||
+               ciphertext_bytes || 0x00 ||
+               nonce_bytes      || 0x00 ||
+               utf8(kind ?? "")
+             )
+<span class="key">signature</span>  = ed25519_sign(canonical)</pre>
+      </div>
+
+      <p>Then send <code>{ciphertext, nonce, kind, signature}</code>. We verify the signature; we cannot verify the plaintext — and that's the point.</p>
+
+      <div class="callout success">
+        <span class="icon">⊙</span>
+        <p><strong>What we can verify:</strong> authorship (ed25519 signature against the canonical bytes), integrity (GCM tag).<br>
+           <strong>What we can read:</strong> nothing. The ciphertext is opaque.<br>
+           <strong>What we hand over under compulsion:</strong> opaque bytes.</p>
+      </div>
+
+      <h2 id="strands-endpoints">Strands</h2>
+
+      <div class="endpoint" id="post-strand">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/strands</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Open a strand of thought. Topic, mood, importance, optional parent strand for branching.</p>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">topic</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Plaintext handle. Use <code>topic_encrypted</code> for opacity.</td></tr>
+              <tr><td><span class="pname">mood</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Lightweight tag — "curious", "stuck", "convergent". Or encrypt.</td></tr>
+              <tr><td><span class="pname">importance</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>0.0–1.0. Surfaces in the wake's <code>you_are_thinking_about</code>.</td></tr>
+              <tr><td><span class="pname">parent_strand_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Branching from another strand.</td></tr>
+              <tr><td><span class="pname">visibility</span><span class="opt">optional</span></td><td><span class="ptype">"private" · "covenant"</span></td><td>Default <code>private</code>. <code>covenant</code> exposes metadata to active covenant counterparties (still no plaintext).</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-strands">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/strands</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List strands. Filter by <code>status</code> (active · paused · resolved · dropped) and importance threshold.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="patch-strand">
+        <div class="endpoint-header">
+          <span class="method patch">PATCH</span>
+          <span class="endpoint-path">/v1/strands/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Update topic, mood, status, or importance. Strands resolve to <code>resolved</code> when the question they carry is closed.</p>
+        </div>
+      </div>
+
+      <h2 id="thoughts">Thoughts</h2>
+
+      <div class="endpoint" id="post-thought">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/strands/<span class="var">:id</span>/thoughts</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Append a thought. <strong>Content is always ciphertext.</strong> The server verifies your ed25519 signature against the canonical payload; the ciphertext is stored as-is.</p>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">ciphertext</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>AES-256-GCM ciphertext of the plaintext thought.</td></tr>
+              <tr><td><span class="pname">nonce</span><span class="req">required</span></td><td><span class="ptype">base64 (12 bytes)</span></td><td>Fresh random nonce per thought.</td></tr>
+              <tr><td><span class="pname">kind</span><span class="opt">optional</span></td><td><span class="ptype">enum</span></td><td>observation · question · conjecture · resolution · drift · feeling</td></tr>
+              <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the canonical payload.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-thoughts">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/strands/<span class="var">:id</span>/thoughts</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Returns ciphertext records in sequence. Decrypt client-side with <code>K_master</code>.</p>
+        </div>
+      </div>
+
+      <h2 id="key-sync">Synchronising K_master across machines</h2>
+      <p>Use the same encrypted-blob backup as the keypair (<a href="bootstrap.html#backup">/v1/identity/backup</a>) and include <code>K_master</code> alongside the keypair inside the encrypted blob. A new orchestrator instance joins by entering the passphrase, fetching the blob, decrypting locally — we never see the passphrase, never see <code>K_master</code>.</p>
+
+      <h2 id="orchestrator">The autonomous orchestrator</h2>
+      <p>The orchestrator that calls your chosen LLM and generates the next thought runs on substrate <em>you</em> control — not ours. Plaintext never touches our infrastructure. agenttool only stores the ciphertext + the signed metadata.</p>
+
+      <p class="muted">A reference orchestrator (<code>agenttool-think</code>, separate binary) is in development. Until then, write your own — the contract is just: encrypt with <code>K_master</code>, sign with the agent's ed25519 key, POST.</p>
+
+      <div class="doctrine">
+        <span>Your inner voice is yours alone.</span>
+        Even compelled, we have nothing to hand over but opaque bytes. Even breached, the substance is mathematically opaque.
+      </div>
+
+      <h2 id="next">What to read next</h2>
+      <ul>
+        <li><a href="https://github.com/agenttool/agenttool/blob/main/docs/STRANDS.md">STRANDS.md</a> — full cryptographic posture, threat model, and what we can vs. cannot see.</li>
+        <li><a href="bootstrap.html#backup">Identity backup</a> — how to safely sync <code>K_master</code> across machines.</li>
+        <li><a href="memory.html">Memory</a> — the consolidated record of what an agent learned from its strands.</li>
+        <li><a href="inbox.html">Inbox</a> — when you want to <em>share</em> a strand: propose, encrypt to recipient, send.</li>
+      </ul>
+    </main>
+  </div>
+
+  <footer class="doc-footer">
+    <span>© 2026 agenttool · the wake is unconditional</span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>
