@@ -59,8 +59,23 @@ app.get("/", async (c) => {
   const project = c.var.project;
   const key = c.req.query("key");
   const agentId = c.req.query("agent_id");
+  const identityId = c.req.query("identity_id");
   const type = c.req.query("type");
+  const tier = c.req.query("tier");
   const limit = Number.parseInt(c.req.query("limit") ?? "20", 10);
+
+  // Validate tier early — silent-drop fences are forbidden (see
+  // aefb8ec "demolish silent-drop fences"). An unknown tier value
+  // would otherwise silently match nothing; surface the mistake.
+  if (tier && tier !== "episodic" && tier !== "foundational" && tier !== "constitutive") {
+    return c.json(
+      {
+        error: "invalid_tier",
+        message: `tier must be one of: episodic, foundational, constitutive (got "${tier.slice(0, 32)}")`,
+      },
+      400,
+    );
+  }
 
   if (key) {
     const rows = await readByKey(project.id, key, agentId ?? null);
@@ -69,7 +84,9 @@ app.get("/", async (c) => {
 
   const rows = await listRecent(project.id, {
     agent_id: agentId ?? null,
+    identity_id: identityId ?? null,
     type,
+    tier,
     limit: Number.isFinite(limit) ? limit : 20,
   });
   return c.json({ memories: rows, count: rows.length });

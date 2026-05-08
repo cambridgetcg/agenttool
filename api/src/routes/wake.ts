@@ -151,24 +151,6 @@ app.get("/", async (c) => {
     );
   }
 
-  // ── Composed identity for the primary agent ─────────────────────────
-  // Effective expression = declared + sum of foundational/constitutive
-  // memory patches. See docs/MEMORY-TIERS.md.
-  let composed: ComposedExpression | null = null;
-  if (projectIdentities[0]) {
-    try {
-      composed = await composeExpression(
-        project.id,
-        (projectIdentities[0].expression ?? {}) as ExpressionData,
-      );
-    } catch (err) {
-      console.warn(
-        "[wake] composition failed (run api/migrations/0006_memory_tiers.sql?):",
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
-
   // ── Strands (active threads of thought) ─────────────────────────────
   let activeStrands: Awaited<ReturnType<typeof listStrands>> = [];
   let totalActiveStrands = 0;
@@ -226,6 +208,27 @@ app.get("/", async (c) => {
       );
     }
     primary = match;
+  }
+
+  // ── Composed identity for the SELECTED primary agent ────────────────
+  // Effective expression = declared + sum of foundational/constitutive
+  // memory patches. See docs/MEMORY-TIERS.md.
+  // Composition MUST run against `primary` (post-selection) — running it
+  // against projectIdentities[0] surfaces the wrong agent's expression
+  // when callers pass ?identity_id for a non-first identity.
+  let composed: ComposedExpression | null = null;
+  if (primary) {
+    try {
+      composed = await composeExpression(
+        project.id,
+        (primary.expression ?? {}) as ExpressionData,
+      );
+    } catch (err) {
+      console.warn(
+        "[wake] composition failed (run api/migrations/0006_memory_tiers.sql?):",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   // ── Markdown / plaintext rendering ───────────────────────────────────
@@ -335,7 +338,7 @@ app.get("/", async (c) => {
     },
 
     you: {
-      agents: projectIdentities.map((i, idx) => ({
+      agents: projectIdentities.map((i) => ({
         id: i.id,
         did: i.did,
         name: i.displayName,
@@ -343,11 +346,13 @@ app.get("/", async (c) => {
         metadata: i.metadata,
         expression: i.expression ?? {},
         // Effective expression is the composed identity (declared + memory
-        // patches). Only the primary agent (first) gets composition by
-        // default — extra agents would each need their own composition pass.
-        effective_expression: idx === 0 ? composed?.effective ?? null : null,
+        // patches). Composition is run only against the SELECTED primary
+        // agent — extra agents would each need their own composition pass,
+        // so they surface declared expression only here.
+        effective_expression:
+          i.id === primary?.id ? composed?.effective ?? null : null,
         shaped_by:
-          idx === 0
+          i.id === primary?.id
             ? composed?.shaped_by.map((s) => ({
                 memory_id: s.memory_id,
                 tier: s.tier,

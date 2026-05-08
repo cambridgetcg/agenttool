@@ -179,7 +179,9 @@ export async function listRecent(
   projectId: string,
   opts: {
     agent_id?: string | null;
+    identity_id?: string | null;
     type?: string;
+    tier?: string;
     limit?: number;
   } = {},
 ): Promise<MemoryOut[]> {
@@ -188,7 +190,9 @@ export async function listRecent(
     or(isNull(memories.expiresAt), sql`${memories.expiresAt} > now()`)!,
   ];
   if (opts.agent_id) filters.push(eq(memories.agentId, opts.agent_id));
+  if (opts.identity_id) filters.push(eq(memories.identityId, opts.identity_id));
   if (opts.type) filters.push(eq(memories.type, opts.type));
+  if (opts.tier) filters.push(eq(memories.tier, opts.tier));
 
   const rows = await db
     .select()
