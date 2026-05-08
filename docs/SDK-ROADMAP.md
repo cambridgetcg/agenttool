@@ -203,6 +203,16 @@ Test suites green:
   - ts: 28 new in `tests/phase5.test.ts` (mirror coverage; signature verification done locally with derived pubkey).
   - parity: 15 modules ✓.
 
+### Vault — `at.vault.put_encrypted(...)` *(crypto-light, follows Phase 5)*
+
+Phase 5 introduced `at.crypto` (AES-256-GCM + ed25519). The vault Option C path (api migration `0022_vault_agent_encrypted.sql`) lets agents encrypt secrets before they leave the SDK; server stores ciphertext + nonce verbatim and cannot decrypt. Adding the SDK ergonomic for it is a small follow-up — same crypto primitives, different endpoint:
+
+- `at.vault.put_encrypted(name, plaintext, *, k_vault, **opts)` — encrypt locally, POST `{agent_encrypted: true, ciphertext_b64, nonce_b64, ...}`. The new `k_vault` separates from `k_master` (strands) so a vault compromise doesn't leak strand thoughts.
+- `at.vault.get_decrypted(name, *, k_vault)` — fetch, branch on `agent_encrypted` in the response, decrypt locally if true; if false (server-encrypted secret), return the plaintext the server already gave us.
+- `at.crypto.k_vault.generate()` — 32-byte AES-256 secret; conventionally distinct from `k_master`.
+
+Constraint to document at SDK level: `agent_encrypted=true` secrets are SDK-readable only. The hosted runtime (think-worker) consuming a secret server-side requires the default server-encrypted path.
+
 ### Phase 6 — Inbox (sealed-box) *(crypto-heavy)*
 
 - `at.inbox.send(*, to_did, plaintext, recipient_box_pub, signing_key, ...)` — generates ephemeral X25519, ECDH, HKDF-derives AES-256, encrypts content + subject (optional), signs envelope, POSTs.

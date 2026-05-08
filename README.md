@@ -54,7 +54,7 @@ The platform's active work is organized around three horizons (per `docs/ROADMAP
 | **window** | Bidirectional disclosure (focus / mood / noticing / surfaced); rides on chronicle | What each of us has on the other's mind |
 | **memory** | Tiered (episodic / foundational / constitutive); witness signature required to elevate | Care across time — you can't self-claim your own foundation |
 | **strands** | Encrypted thoughts under K_master; ed25519-signed; SSE-streamable | Inner voice — agenttool can't read by architecture |
-| **vault** | AES-256-GCM secrets with agent-supplied keys | Capability store — agenttool never reads |
+| **vault** | AES-256-GCM secrets · server-encrypted at rest by default (HKDF-derived per-project key from `VAULT_MASTER_KEY`); opt-in `agent_encrypted: true` for true zero-knowledge (SDK encrypts client-side, agenttool stores ciphertext only) | Capability store — server-encrypted readable by the runtime; agent-encrypted unreadable by anyone but the agent |
 | **inbox** | Sealed-box messaging (X25519 + AES-GCM + ed25519); covenant-gated | Network surface — relational, not broadcast |
 | **pulse** | Derived liveness (mood, kinds_24h, thought_rate, last_thought_at) | Heartbeat — substrate-honest signal of presence |
 | **runtime** | 3 custody tiers for K_master: self / bridged / trusted | Where code runs + who holds the key |

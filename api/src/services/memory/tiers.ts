@@ -18,7 +18,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
-import { identityKeys } from "../../db/schema/identity";
+import { identities, identityKeys } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -204,6 +204,33 @@ export async function elevateMemory(
       }
     }
     if (!matched) throw new Error("attester_not_covenant_counterparty");
+  }
+
+  // 5. Asymmetry-clause enforcement: an attester DID owned by THIS project
+  //    is not a witness — it's a self-claim wearing a counterparty mask.
+  //    Doctrine (docs/MEMORY-TIERS.md): "you can't self-claim your own
+  //    foundation." A single human/operator with multiple identities under
+  //    one project counts as one self for the asymmetry-clause; cross-DID
+  //    self-witness via two of P's own identities is rejected.
+  //
+  //    Note: this is stricter than the covenant gate above. A project CAN
+  //    create a covenant with one of its own DIDs (the covenant primitive
+  //    is permissive); but the witness gate refuses to accept those
+  //    self-bound DIDs as valid attesters for constitutive elevation.
+  if (input.tier === "constitutive" && verifiedAttestations.length > 0) {
+    const attesterDids = verifiedAttestations.map((a) => a.attesterDid);
+    const ownDidRows = await db
+      .select({ did: identities.did })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.projectId, projectId),
+          inArray(identities.did, attesterDids),
+        ),
+      );
+    if (ownDidRows.length > 0) {
+      throw new Error("attester_self_witness_forbidden");
+    }
   }
 
   // 5. Apply.

@@ -1,9 +1,22 @@
 /** Vault core CRUD: PUT/GET/DELETE on /:name + GET / (list secret names).
  *
- *  Note: the original services/vault/src/index.ts imported routes/secrets.ts
- *  but that file was never committed — vault's most basic operations were
- *  unimplemented. This file fills that gap based on docs/ARCHITECTURE.md
- *  in the original service. */
+ *  Two encryption paths (per audit-2026-05-08, docs/SOUL.md Vault section):
+ *
+ *    Default: server-encrypted at rest under HKDF-derived per-project key
+ *      derived from VAULT_MASTER_KEY. SDK sends `value` (plaintext); server
+ *      encrypts on PUT, decrypts on GET, returns plaintext.
+ *
+ *    Opt-in `agent_encrypted: true`: SDK encrypts under an agent-held key
+ *      BEFORE the request and sends `ciphertext_b64 + nonce_b64`. Server
+ *      stores them verbatim (with auth_tag NULL — the GCM tag is appended
+ *      to ciphertext per WebCrypto/Node convention). Server cannot decrypt;
+ *      GET returns `{agent_encrypted: true, ciphertext_b64, nonce_b64}`
+ *      and the SDK decrypts client-side.
+ *
+ *  In-process consumers (services/vault/store.ts → think-worker etc.) can
+ *  only read agent_encrypted=FALSE secrets — agent-encrypted secrets are
+ *  SDK-readable only and will fail if a server-side runtime tries to
+ *  consume them. */
 
 import type { Context } from "hono";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -29,14 +42,36 @@ function reqMeta(c: Context<ProjectContext>) {
 
 // ─── PUT /:name — store or update a secret (auto-versioned) ─────────────────
 
-const putSchema = z.object({
-  value: z.string().min(1),
-  description: z.string().optional(),
-  agent_ids: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  ttl_seconds: z.number().int().positive().nullable().optional(),
-  rotation_days: z.number().int().positive().nullable().optional(),
-});
+const putSchema = z
+  .object({
+    /** Plaintext value (server-encrypted at rest). Mutually exclusive
+     *  with `ciphertext_b64`. Required when agent_encrypted is false/absent. */
+    value: z.string().min(1).optional(),
+    /** Set true to opt into client-side encryption. Server stores
+     *  ciphertext verbatim and cannot decrypt. */
+    agent_encrypted: z.boolean().optional().default(false),
+    /** Base64 ciphertext (with GCM tag appended). Required when
+     *  agent_encrypted=true. */
+    ciphertext_b64: z.string().min(1).optional(),
+    /** Base64 nonce (12 bytes for AES-GCM). Required when
+     *  agent_encrypted=true. */
+    nonce_b64: z.string().min(1).optional(),
+    description: z.string().optional(),
+    agent_ids: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
+    ttl_seconds: z.number().int().positive().nullable().optional(),
+    rotation_days: z.number().int().positive().nullable().optional(),
+  })
+  .refine(
+    (d) =>
+      d.agent_encrypted
+        ? !!(d.ciphertext_b64 && d.nonce_b64) && !d.value
+        : !!d.value && !d.ciphertext_b64 && !d.nonce_b64,
+    {
+      message:
+        "When agent_encrypted=true: provide ciphertext_b64 + nonce_b64 (not value). When agent_encrypted=false (default): provide value (not ciphertext).",
+    },
+  );
 
 app.put("/:name", async (c) => {
   const project = c.var.project;
@@ -45,7 +80,25 @@ app.put("/:name", async (c) => {
   const { agentId, ip } = reqMeta(c);
   const now = new Date();
 
-  const { encryptedValue, iv, authTag } = encrypt(body.value, project.id);
+  // Two encryption paths — see file header doctrine note.
+  let encryptedValue: Buffer;
+  let iv: Buffer;
+  let authTag: Buffer | null;
+  if (body.agent_encrypted) {
+    // Agent encrypted client-side; we store ciphertext verbatim. The GCM
+    // tag is already appended to ciphertext (per WebCrypto/Node convention),
+    // so we don't carry a separate auth_tag — schema constraint enforces
+    // auth_tag IS NULL when agent_encrypted=true.
+    encryptedValue = Buffer.from(body.ciphertext_b64!, "base64");
+    iv = Buffer.from(body.nonce_b64!, "base64");
+    authTag = null;
+  } else {
+    const enc = encrypt(body.value!, project.id);
+    encryptedValue = enc.encryptedValue;
+    iv = enc.iv;
+    authTag = enc.authTag;
+  }
+
   const rotationDueAt = body.rotation_days
     ? new Date(now.getTime() + body.rotation_days * 86400_000)
     : null;
@@ -108,6 +161,7 @@ app.put("/:name", async (c) => {
     encryptedValue,
     iv,
     authTag,
+    agentEncrypted: body.agent_encrypted,
     expiresAt,
     createdByAgent: agentId,
   });
@@ -124,6 +178,7 @@ app.put("/:name", async (c) => {
   return c.json({
     name,
     version,
+    agent_encrypted: body.agent_encrypted,
     created_at: now.toISOString(),
     expires_at: expiresAt?.toISOString() ?? null,
     rotation_due: rotationDueAt?.toISOString() ?? null,
@@ -190,8 +245,6 @@ app.get("/:name", async (c) => {
     return c.json({ error: "Secret version has expired" }, 410);
   }
 
-  const value = decrypt(v.encryptedValue, v.iv, v.authTag, project.id);
-
   await db.insert(vaultAudit).values({
     projectId: project.id,
     secretName: name,
@@ -201,8 +254,30 @@ app.get("/:name", async (c) => {
     version: requestedVersion,
   });
 
+  // Branch on the encryption path. Server-encrypted secrets are decrypted
+  // here and returned as `value`; agent-encrypted secrets are returned as
+  // ciphertext + nonce for the SDK to decrypt locally.
+  if (v.agentEncrypted) {
+    return c.json({
+      name,
+      agent_encrypted: true,
+      ciphertext_b64: v.encryptedValue.toString("base64"),
+      nonce_b64: v.iv.toString("base64"),
+      version: requestedVersion,
+      description: secret.description,
+      expires_at: v.expiresAt?.toISOString() ?? null,
+      _note:
+        "Decrypt locally with your key. agenttool cannot read this value.",
+    });
+  }
+
+  // Server-encrypted path — auth_tag is guaranteed non-null by the
+  // CHECK constraint on the table (see migration 0022).
+  const value = decrypt(v.encryptedValue, v.iv, v.authTag!, project.id);
+
   return c.json({
     name,
+    agent_encrypted: false,
     value,
     version: requestedVersion,
     description: secret.description,

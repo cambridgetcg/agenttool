@@ -72,6 +72,7 @@ app.post("/:id/elevate", async (c) => {
     if (
       msg === "constitutive_requires_attestation" ||
       msg === "attester_not_covenant_counterparty" ||
+      msg === "attester_self_witness_forbidden" ||
       msg === "attestation_signing_key_unknown_or_revoked" ||
       msg === "attestation_signature_invalid"
     ) {

@@ -9,6 +9,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   customType,
   index,
   integer,
@@ -61,7 +62,16 @@ export const vaultVersions = vaultSchema.table(
     version: integer("version").notNull(),
     encryptedValue: bytea("encrypted_value").notNull(),
     iv: bytea("iv").notNull(),
-    authTag: bytea("auth_tag").notNull(),
+    /** GCM auth tag. Populated when agentEncrypted=FALSE (server encrypted
+     *  at rest). NULL when agentEncrypted=TRUE — the tag is appended to
+     *  encryptedValue per WebCrypto/Node convention; the server doesn't
+     *  need it as a separate field because it cannot decrypt anyway. */
+    authTag: bytea("auth_tag"),
+    /** TRUE when the SDK encrypted the value before sending — server
+     *  stores ciphertext verbatim, cannot decrypt. FALSE (default) means
+     *  server-encrypted at rest under HKDF-derived per-project key.
+     *  See docs/SOUL.md (Vault) + migrations/0022_vault_agent_encrypted.sql. */
+    agentEncrypted: boolean("agent_encrypted").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdByAgent: text("created_by_agent"),
