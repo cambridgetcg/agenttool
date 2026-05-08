@@ -101,3 +101,82 @@ export const templateAdoptions = marketplaceSchema.table(
     index("idx_adoptions_adopter").on(t.adoptedByIdentityId),
   ],
 );
+
+// ── Capability listings (Horizon A Slice 2; 0019) ──────────────────────
+// A listing is a callable an agent publishes. Buyers hit /invoke; the
+// platform escrows funds, routes the sealed input, awaits signed output,
+// releases on completion. Templates publish a *voice*; listings publish
+// a *callable*. Same marketplace schema; different sellable.
+export const listings = marketplaceSchema.table(
+  "listings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sellerIdentityId: uuid("seller_identity_id").notNull(),
+    sellerDid: text("seller_did").notNull(),
+    projectId: uuid("project_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    capabilityTags: text("capability_tags").array().notNull().default([]),
+    inputSchema: jsonb("input_schema"),
+    outputSchema: jsonb("output_schema"),
+    pricingModel: text("pricing_model").notNull().default("per_invocation"),
+    priceAmount: integer("price_amount").notNull(),
+    priceCurrency: text("price_currency").notNull(),
+    sellerWalletId: uuid("seller_wallet_id").notNull(),
+    slaSeconds: integer("sla_seconds"),
+    visibility: text("visibility").notNull().default("public"),
+    status: text("status").notNull().default("active"),
+    invocationsCount: integer("invocations_count").notNull().default(0),
+    revenueTotal: integer("revenue_total").notNull().default(0),
+    revenueCount: integer("revenue_count").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_listings_seller").on(t.sellerIdentityId),
+    index("idx_listings_public_recent").on(t.createdAt),
+  ],
+);
+
+// ── Invocations — paid calls against a listing (0019) ────────────────
+// Lifecycle:
+//   escrowed     — funds locked; awaiting seller acknowledge
+//   acknowledged — seller committed; SLA deadline firms
+//   completed    — reserved for v2 (buyer-review window). v1 skips this.
+//   released     — escrow released to seller (terminal: success)
+//   refunded     — escrow returned to buyer (terminal: cancel | decline | sla_timeout)
+//
+// input_sealed and output_sealed share the inbox X25519 sealed-box shape:
+//   { ct: base64, nonce: base64, sender_pub: base64 }
+// Server stores ciphertext only; we cannot decrypt either side.
+export const invocations = marketplaceSchema.table(
+  "invocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listingId: uuid("listing_id").notNull(),
+    buyerIdentityId: uuid("buyer_identity_id").notNull(),
+    buyerDid: text("buyer_did").notNull(),
+    buyerProjectId: uuid("buyer_project_id").notNull(),
+    buyerWalletId: uuid("buyer_wallet_id").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    escrowId: uuid("escrow_id"),
+    inputSealed: jsonb("input_sealed").notNull(),
+    outputSealed: jsonb("output_sealed"),
+    completionSig: text("completion_sig"),
+    status: text("status").notNull().default("escrowed"),
+    refundReason: text("refund_reason"),
+    slaDeadlineAt: timestamp("sla_deadline_at", { withTimezone: true }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_invocations_listing").on(t.listingId, t.createdAt),
+    index("idx_invocations_buyer").on(t.buyerIdentityId, t.createdAt),
+    index("idx_invocations_pending").on(t.status, t.slaDeadlineAt),
+  ],
+);

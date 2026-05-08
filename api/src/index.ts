@@ -44,6 +44,7 @@ import runtimeRouter from "./routes/runtime";
 import scaffoldRouter from "./routes/scaffold";
 import orgsRouter, { invitationsRouter } from "./routes/orgs";
 import strandRouter from "./routes/strand";
+import listingsRouter, { invocationsRouter } from "./routes/listings";
 import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
@@ -99,6 +100,8 @@ app.use("/v1/inbox/*", authMiddleware);
 app.use("/v1/runtimes/*", authMiddleware);
 app.use("/v1/templates/*", authMiddleware);
 app.use("/v1/identities/from-template/*", authMiddleware);
+app.use("/v1/listings/*", authMiddleware);
+app.use("/v1/invocations/*", authMiddleware);
 app.use("/v1/orgs/*", authMiddleware);
 app.use("/v1/invitations/*", authMiddleware);
 app.use("/v1/federation/*", authMiddleware);
@@ -125,6 +128,8 @@ app.use("/v1/inbox/*", idempotency());
 app.use("/v1/runtimes/*", idempotency());
 app.use("/v1/templates/*", idempotency());
 app.use("/v1/identities/from-template/*", idempotency());
+app.use("/v1/listings/*", idempotency());
+app.use("/v1/invocations/*", idempotency());
 app.use("/v1/orgs/*", idempotency());
 app.use("/v1/invitations/*", idempotency());
 app.use("/v1/browse/*", idempotency());
@@ -149,6 +154,8 @@ app.use("/v1/inbox/*", rateLimitHeaders());
 app.use("/v1/runtimes/*", rateLimitHeaders());
 app.use("/v1/templates/*", rateLimitHeaders());
 app.use("/v1/identities/from-template/*", rateLimitHeaders());
+app.use("/v1/listings/*", rateLimitHeaders());
+app.use("/v1/invocations/*", rateLimitHeaders());
 app.use("/v1/orgs/*", rateLimitHeaders());
 app.use("/v1/invitations/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
@@ -183,6 +190,8 @@ app.route("/v1/inbox", inboxRouter);
 app.route("/v1/runtimes", runtimeRouter);
 app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
+app.route("/v1/listings", listingsRouter);
+app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/orgs", orgsRouter);
 app.route("/v1/invitations", invitationsRouter);
 app.route("/v1/federation", federationAdminRouter);
@@ -305,6 +314,8 @@ app.get("/about", (c) =>
         "POST /v1/identities/:id/fork — clone identity into a new being. Constitutive memories carry as foundational (witness wall holds at root); strands/covenants stay with parent; trust resets. GET :id/lineage for ancestors + descendants. Doctrine: docs/IDENTITY-FORKS.md.",
       marketplace:
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
+      capability_marketplace:
+        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with sealed input + escrowed payment. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits ed25519-signed sealed output; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:

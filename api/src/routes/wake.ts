@@ -37,6 +37,11 @@ import { vaultSecrets } from "../db/schema/vault";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
+import {
+  buyerInvocationSummary,
+  pendingSellerSummary,
+} from "../services/marketplace/invocations";
+import { listingSummaryForProject } from "../services/marketplace/listings";
 import { countMemories, listRecent } from "../services/memory/store";
 import { listRuntimes } from "../services/runtime/store";
 import { countStrands, listStrands } from "../services/strand/store";
@@ -188,6 +193,39 @@ app.get("/", async (c) => {
   } catch (err) {
     console.warn(
       "[wake] inbox count failed (run api/migrations/0007_inbox.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── Capability marketplace summaries (Horizon A Slice 2) ────────────
+  // Seller side: active listings + revenue + pending queue.
+  // Buyer side:  in-flight invocations + 30-day settlement counts.
+  // All wake reads are aggregate-only — never list inflight payloads.
+  let listingSummary: Awaited<ReturnType<typeof listingSummaryForProject>> = {
+    active_listings_count: 0,
+    revenue_total: 0,
+    revenue_count: 0,
+    top_listing: null,
+  };
+  let sellerPending: Awaited<ReturnType<typeof pendingSellerSummary>> = {
+    pending_invocations_count: 0,
+    oldest_pending_at: null,
+    sla_breach_count: 0,
+  };
+  let buyerSummary: Awaited<ReturnType<typeof buyerInvocationSummary>> = {
+    in_flight_count: 0,
+    released_30d: 0,
+    refunded_30d: 0,
+  };
+  try {
+    [listingSummary, sellerPending, buyerSummary] = await Promise.all([
+      listingSummaryForProject(project.id),
+      pendingSellerSummary(project.id),
+      buyerInvocationSummary(project.id),
+    ]);
+  } catch (err) {
+    console.warn(
+      "[wake] marketplace summaries failed (run api/migrations/0019_capability_marketplace.sql?):",
       err instanceof Error ? err.message : err,
     );
   }
@@ -564,6 +602,37 @@ app.get("/", async (c) => {
         unreadInbox === 0
           ? "Inbox is clear."
           : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch ciphertext; decrypt with your X25519 private key.`,
+    },
+
+    you_offer: {
+      active_listings_count: listingSummary.active_listings_count,
+      revenue_total: listingSummary.revenue_total,
+      revenue_count: listingSummary.revenue_count,
+      top_listing: listingSummary.top_listing,
+      note:
+        listingSummary.active_listings_count === 0
+          ? "No callables published. POST /v1/listings to publish a service. See docs/MARKETPLACE.md."
+          : `Showing ${listingSummary.active_listings_count} active listing${listingSummary.active_listings_count === 1 ? "" : "s"}. GET /v1/listings?seller_id=<your-id> for details.`,
+    },
+
+    you_owe: {
+      pending_invocations_count: sellerPending.pending_invocations_count,
+      oldest_pending_at: sellerPending.oldest_pending_at,
+      sla_breach_count: sellerPending.sla_breach_count,
+      note:
+        sellerPending.pending_invocations_count === 0
+          ? "No invocations awaiting your action."
+          : `${sellerPending.pending_invocations_count} pending. ${sellerPending.sla_breach_count > 0 ? `${sellerPending.sla_breach_count} past SLA — those will auto-refund on next read. ` : ""}GET /v1/invocations?role=seller to see them.`,
+    },
+
+    you_invoked: {
+      in_flight_count: buyerSummary.in_flight_count,
+      released_30d: buyerSummary.released_30d,
+      refunded_30d: buyerSummary.refunded_30d,
+      note:
+        buyerSummary.in_flight_count === 0 && buyerSummary.released_30d === 0
+          ? "No invocations in flight."
+          : `${buyerSummary.in_flight_count} in-flight; ${buyerSummary.released_30d} settled and ${buyerSummary.refunded_30d} refunded in the last 30 days.`,
     },
 
     you_decided: {

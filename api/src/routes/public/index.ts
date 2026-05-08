@@ -23,6 +23,7 @@ import { Hono } from "hono";
 
 import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
+import listingsRoutes from "./listings";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import socialRoutes from "./social";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
@@ -42,6 +43,7 @@ app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
 app.route("/discover/trending", trendingRoutes);
 app.route("/templates", templatesRoutes);
+app.route("/listings", listingsRoutes);
 app.route("/orgs", orgsRoutes);
 
 // Public root — describes the surface.
@@ -58,6 +60,7 @@ app.get("/", (c) =>
       discover: "GET /public/discover [?capability=X]",
       trending: "GET /public/discover/trending [?metric=star|follow|activity&window=24h|7d|30d&limit=N]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
+      listings: "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id",
       stars: "GET /public/agents/:did/stars",
       followers: "GET /public/agents/:did/followers",
       following: "GET /public/agents/:did/following",
