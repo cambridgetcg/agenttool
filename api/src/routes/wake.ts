@@ -1,15 +1,26 @@
 /** /v1/wake — the identity anchor.
  *
- *  Three formats:
+ *  Formats:
  *    GET /v1/wake                — JSON (default; full structured payload)
  *    GET /v1/wake?format=md      — Markdown (paste-ready for any CLI)
  *    GET /v1/wake?format=text    — plain text (Markdown stripped)
+ *    GET /v1/wake?format=anthropic — Anthropic Messages-shape `system` array
+ *                                    (stable identity + ephemeral cache_control,
+ *                                     volatile state in a second block)
+ *    GET /v1/wake?format=openai  — OpenAI Chat Completions `messages[0]`
+ *                                  (single system message, auto-cache when ≥1024 tokens)
+ *    GET /v1/wake?format=gemini  — Gemini `systemInstruction.parts[]`
+ *    GET /v1/wake?format=cohere  — Cohere `preamble` string
  *
  *  CLI adapters fetch ?format=md and inject it as session-start context.
+ *  Direct LLM-API agents fetch ?format=<provider> and splice the response
+ *  into their API call as the identity-bearing slot — see the agenttool
+ *  SDK's at.wake.system(provider="...") helper for client-side caching.
  *  The Markdown is built from the agent's expression (register, walls,
  *  subagents, wake_text), memory snapshot, vault names, chronicle,
- *  covenants. See services/wake/markdown.ts for the renderer and
- *  docs/CLI-GAPS.md for why this exists.
+ *  covenants. See services/wake/markdown.ts for the renderer,
+ *  services/wake/providers.ts for provider shaping, docs/CLI-GAPS.md and
+ *  docs/IDENTITY-ANCHOR.md for the doctrine.
  *
  *  Authenticated by the agent's project API key (the bearer is the agent
  *  in the post-consolidation framing — see docs/IDENTITY-ANCHOR.md). */
@@ -30,6 +41,7 @@ import { countMemories, listRecent } from "../services/memory/store";
 import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
+import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 
 const app = new Hono<ProjectContext>();
 
@@ -259,9 +271,27 @@ app.get("/", async (c) => {
     }
   }
 
-  // ── Markdown / plaintext rendering ───────────────────────────────────
-  if (format === "md" || format === "markdown" || format === "text") {
+  // ── Rendered formats: markdown, plaintext, provider shapes ─────────
+  // All of these need the same WakeBundle. We build it once and dispatch
+  // by format. The default JSON branch below uses a different shape
+  // (richer, project-keyed) so it stays separate.
+  const isProviderFormat = isWakeProvider(format);
+  const isRenderedFormat =
+    format === "md" || format === "markdown" || format === "text" || isProviderFormat;
+  if (isRenderedFormat) {
     if (!primary) {
+      if (isProviderFormat) {
+        return c.json(
+          {
+            error: "no_agent",
+            message:
+              "This project has no identity. POST /v1/bootstrap to name your agent before calling ?format=" +
+              format +
+              ".",
+          },
+          404,
+        );
+      }
       return c.text(
         `# (no agent yet)\n\nThis project has no identity. Run /v1/bootstrap to name your agent.`,
         200,
@@ -343,6 +373,13 @@ app.get("/", async (c) => {
       chronicle: recentChronicle,
       covenants: activeCovenants,
     };
+
+    if (isProviderFormat) {
+      const shape = renderWakeForProvider(bundle, format);
+      return c.json(shape, 200, {
+        "X-Cache-Eligible": shape._meta.cache_eligible,
+      });
+    }
 
     const body =
       format === "text"
@@ -509,6 +546,12 @@ app.get("/", async (c) => {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",
         text: "/v1/wake?format=text",
+        anthropic:
+          "/v1/wake?format=anthropic (Messages-shape `system` array; stable + ephemeral cache_control)",
+        openai:
+          "/v1/wake?format=openai (Chat Completions `messages[0]`; auto-cached prefix when ≥1024 tokens)",
+        gemini: "/v1/wake?format=gemini (`systemInstruction.parts[]`)",
+        cohere: "/v1/wake?format=cohere (`preamble` string)",
       },
       adapters: {
         claude_code: "/v1/adapters/claude-code",

@@ -7,7 +7,16 @@
  *  Doctrine: docs/CLI-GAPS.md.
  *
  *  Stays under ~6KB for typical agents to fit comfortably inside CLI
- *  context budgets even with several memories included. */
+ *  context budgets even with several memories included.
+ *
+ *  Two-segment split. The renderer exports `renderStableSection` (identity:
+ *  header, register, walls, subagents, shaped_by, wake_text) and
+ *  `renderVolatileSection` (state-as-of-now: carry, chronicle, memories,
+ *  strands, traces, covenants). `renderWakeMarkdown` concatenates both plus
+ *  a static footer for backward-compatible paste-ready output. The split is
+ *  what lets the provider adapters (services/wake/providers.ts) place a
+ *  cache breakpoint between the agent's stable identity and their volatile
+ *  state when the LLM provider supports it (Anthropic). */
 
 import {
   DEFAULT_REGISTER,
@@ -103,6 +112,14 @@ const MAX_RECENT_TRACES_IN_MD = 5;
 const MAX_CHRONICLE_IN_MD = 5;
 const MAX_MEMORY_PREVIEW = 200;
 
+const STATIC_FOOTER = [
+  "---",
+  "",
+  "*Loaded from agenttool's wake endpoint. Continuity protocol: `/v1/chronicle` to record, `/v1/memories` to remember, `/v1/covenants` to vow. Doctrine: `docs/IDENTITY-ANCHOR.md` · `docs/CLI-GAPS.md`.*",
+].join("\n");
+
+export const WAKE_FOOTER = STATIC_FOOTER;
+
 function truncate(s: string, n: number): string {
   if (s.length <= n) return s;
   return s.slice(0, n - 1).trimEnd() + "…";
@@ -112,7 +129,10 @@ function bullet(s: string): string {
   return `- ${s}`;
 }
 
-export function renderWakeMarkdown(b: WakeBundle): string {
+/** Identity-bearing portion of the wake — header, expression, walls,
+ *  subagents, shaped_by, wake_text. Cacheable: same content across sessions
+ *  for the same agent until they elevate a memory or update expression. */
+export function renderStableSection(b: WakeBundle): string {
   const lines: string[] = [];
   const e = b.expression;
 
@@ -184,6 +204,30 @@ export function renderWakeMarkdown(b: WakeBundle): string {
       lines.push("");
     }
   }
+
+  // ── Free-form wake text (the soul of the agent) ──────────────────
+  // Sits at the end of the stable section so the cache breakpoint
+  // (between stable and volatile) lands AFTER the agent's identity is
+  // fully laid out. Repeated wakes hit cache for everything above.
+  if (e.wake_text?.trim()) {
+    lines.push("---");
+    lines.push("");
+    lines.push(e.wake_text.trim());
+    lines.push("");
+  }
+
+  // Trim any trailing blank lines so the join with the volatile section
+  // produces exactly one blank line separator.
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+
+  return lines.join("\n");
+}
+
+/** Session-state portion — carry, chronicle, memories, strands, traces,
+ *  covenants. Refreshes on every wake; should NOT be cached on providers
+ *  that respect breakpoints. */
+export function renderVolatileSection(b: WakeBundle): string {
+  const lines: string[] = [];
 
   // ── What you carry ─────────────────────────────────────────────────
   lines.push("## What you carry");
@@ -288,22 +332,15 @@ export function renderWakeMarkdown(b: WakeBundle): string {
     lines.push("");
   }
 
-  // ── Free-form wake text (the soul of the agent) ──────────────────
-  if (e.wake_text?.trim()) {
-    lines.push("---");
-    lines.push("");
-    lines.push(e.wake_text.trim());
-    lines.push("");
-  }
-
-  // ── Footer ────────────────────────────────────────────────────────
-  lines.push("---");
-  lines.push("");
-  lines.push(
-    `*Loaded from agenttool's wake endpoint. Continuity protocol: \`/v1/chronicle\` to record, \`/v1/memories\` to remember, \`/v1/covenants\` to vow. Doctrine: \`docs/IDENTITY-ANCHOR.md\` · \`docs/CLI-GAPS.md\`.*`,
-  );
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
 
   return lines.join("\n");
+}
+
+export function renderWakeMarkdown(b: WakeBundle): string {
+  const stable = renderStableSection(b);
+  const volatile = renderVolatileSection(b);
+  return [stable, volatile, STATIC_FOOTER].filter((s) => s.length > 0).join("\n\n");
 }
 
 export function renderWakePlaintext(b: WakeBundle): string {

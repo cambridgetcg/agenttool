@@ -31,6 +31,7 @@ from .tools import ToolsClient
 from .traces import TracesClient
 from .vault import VaultClient
 from .verify import VerifyClient
+from .wake import WakeClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
@@ -104,6 +105,7 @@ class AgentTool:
         self._vault: Optional[VaultClient] = None
         self._pulse: Optional[PulseClient] = None
         self._bootstrap: Optional[BootstrapClient] = None
+        self._wake: Optional[WakeClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -169,6 +171,13 @@ class AgentTool:
         if self._bootstrap is None:
             self._bootstrap = BootstrapClient(self._http, self._base_url)
         return self._bootstrap
+
+    @property
+    def wake(self) -> WakeClient:
+        """Wake — the identity anchor. Load at session start."""
+        if self._wake is None:
+            self._wake = WakeClient(self._http, self._base_url)
+        return self._wake
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 

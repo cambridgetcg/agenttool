@@ -12,6 +12,7 @@ import { IdentityClient } from "./identity.js";
 import { VaultClient } from "./vault.js";
 import { BootstrapClient } from "./bootstrap.js";
 import { PulseClient } from "./pulse.js";
+import { WakeClient } from "./wake.js";
 
 /**
  * Unified client for the agenttool.dev platform.
@@ -42,6 +43,7 @@ export class AgentTool {
   private _vault: VaultClient | undefined;
   private _bootstrap: BootstrapClient | undefined;
   private _pulse: PulseClient | undefined;
+  private _wake: WakeClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -124,6 +126,12 @@ export class AgentTool {
   get pulse(): PulseClient {
     this._pulse ??= new PulseClient(this.http);
     return this._pulse;
+  }
+
+  /** Access the Wake API (identity anchor; load at session start). */
+  get wake(): WakeClient {
+    this._wake ??= new WakeClient(this.http);
+    return this._wake;
   }
 
   toString(): string {

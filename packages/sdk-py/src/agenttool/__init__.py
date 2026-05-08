@@ -45,7 +45,8 @@ from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchR
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
 from .vault import VaultClient
-from .verify import VerifyClient, VerifyResult
+from .verify import VerifyClient
+from .wake import WakeClient, WakeProvider
 
 __all__ = [
     # Core
@@ -75,6 +76,8 @@ __all__ = [
     "TraceChain",
     "TraceSearchResult",
     "VaultClient",
+    "WakeClient",
+    "WakeProvider",
 ]
 
 __version__ = "0.6.0"

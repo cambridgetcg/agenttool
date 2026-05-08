@@ -24,6 +24,16 @@ export type { PutSecretOptions, GetSecretOptions, ListSecretsOptions, SetPolicyO
 export type { CreateAgentOptions, BootstrapResult, ElevateOptions } from "./bootstrap.js";
 export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
 export type {
+  WakeProvider,
+  WakeFormat,
+  WakeOptions,
+  WakeProviderMeta,
+  AnthropicWakeShape,
+  OpenAIWakeShape,
+  GeminiWakeShape,
+  CohereWakeShape,
+} from "./wake.js";
+export type {
   CreateWalletOptions,
   ExecuteResult,
   Memory,
