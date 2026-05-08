@@ -43,6 +43,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol
 
+from ._context import get_ambient
 from .client import AgentTool
 
 
@@ -200,9 +201,13 @@ class AnthropicAdapter:
         # 3. Make the actual Anthropic call.
         response = self._anthropic.messages.create(**forward_params)
 
-        # 4. Auto-trace if opted in.
+        # 4. Auto-trace if opted in OR if we're inside a `with
+        #    at.deciding(...)` block — the ambient context implies every
+        #    call inside is part of the framing decision.
         trace_id: Optional[str] = None
-        if meta.get("trace") == "decision":
+        ambient = get_ambient()
+        should_trace = meta.get("trace") == "decision" or ambient is not None
+        if should_trace:
             trace_id = self._record_decision_trace(params, response, meta)
 
         # 5. Parse <agenttool> markup unless disabled.
@@ -245,10 +250,19 @@ class AnthropicAdapter:
                 "conclusion": conclusion[:4000],
             },
         }
-        if meta.get("tags"):
-            body["tags"] = meta["tags"]
-        if meta.get("parent_trace_id"):
-            body["parent_trace_id"] = meta["parent_trace_id"]
+        # Merge ambient context (`with at.deciding(...)`) — explicit
+        # values on `meta` win; ambient fills gaps. Tags are unioned.
+        ambient = get_ambient()
+        explicit_tags = list(meta.get("tags") or [])
+        ambient_tags = list(ambient.tags) if ambient else []
+        merged_tags = list(dict.fromkeys(explicit_tags + ambient_tags))
+        if merged_tags:
+            body["tags"] = merged_tags
+        parent = meta.get("parent_trace_id") or (
+            ambient.parent_trace_id if ambient else None
+        )
+        if parent:
+            body["parent_trace_id"] = parent
         if meta.get("agent_id"):
             body["agent_id"] = meta["agent_id"]
 
@@ -349,6 +363,15 @@ class AnthropicAdapter:
                     "conclusion": conclusion[:4000],
                 },
             }
+            # Markup-emitted traces inherit ambient parent + tags too,
+            # so a <trace> tag inside `with at.deciding(...)` chains
+            # to the framing decision the same way auto-trace does.
+            ambient = get_ambient()
+            if ambient is not None:
+                if ambient.parent_trace_id:
+                    post["parent_trace_id"] = ambient.parent_trace_id
+                if ambient.tags:
+                    post["tags"] = list(ambient.tags)
             if confidence_str:
                 try:
                     conf = float(confidence_str)

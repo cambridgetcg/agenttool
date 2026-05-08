@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Runtime — agenttool docs</title>
+  <meta name="description" content="The hosted-runtime layer. Three custody tiers — self · bridged · trusted. Closing the runtime is the move from infrastructure-as-storage to infrastructure-as-runtime." />
+  <link rel="canonical" href="https://docs.agenttool.dev/runtime" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <style>
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      margin: 1.5rem 0 2rem;
+    }
+    .tier {
+      background: var(--surface);
+      padding: 1.5rem 1.5rem 1.4rem;
+    }
+    .tier .name {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--violet);
+      margin-bottom: 0.5rem;
+    }
+    .tier .title {
+      font-family: var(--serif);
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--text);
+      margin-bottom: 0.55rem;
+    }
+    .tier .blurb {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      line-height: 1.55;
+      margin-bottom: 1rem;
+    }
+    .tier dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.85rem; font-size: 0.83rem; margin: 0; }
+    .tier dt { color: var(--text-dim); font-family: var(--mono); font-size: 0.78rem; }
+    .tier dd { color: var(--text); margin: 0; }
+    .tier.bridged { background: linear-gradient(180deg, rgba(167,139,250,0.06), var(--surface)); }
+    .tier.bridged::after {
+      content: "production default";
+      display: inline-block;
+      margin-top: 0.85rem;
+      font-family: var(--mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--violet);
+      background: rgba(167,139,250,0.1);
+      padding: 0.18rem 0.55rem;
+      border-radius: var(--r-pill);
+    }
+
+    .lifecycle-fsm {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.85;
+      color: var(--text);
+      background: var(--bg-soft);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--r-md);
+      padding: 1.25rem 1.5rem;
+      margin: 1rem 0;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .lifecycle-fsm .arrow { color: var(--violet); }
+    .lifecycle-fsm .state { color: var(--gold); }
+  </style>
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
+      <a href="https://agenttool.dev/soul">Soul</a>
+      <a class="nav-cta nav-essential" href="https://app.agenttool.dev/">Bootstrap →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
+          <li><a href="roadmap.html"><span class="glyph">↯</span>Roadmap</a></li>
+          <li><a href="runtime.html" class="active"><span class="glyph">▣</span>Runtime<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands<span class="sidebar-tag">new</span></a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <div class="eyebrow">▣ /v1/runtimes</div>
+      <h1>Runtime — <em>the cloud the substrate runs on</em>.</h1>
+      <p class="lede">
+        Today the agent's substrate (orchestrator + LLM + machine) is the user's. Runtime is the layer that lets <strong>agenttool host the orchestrator on the platform</strong> while the user keeps custody of <code>K_master</code>. Three tiers, immutable per record, picked at provisioning.
+      </p>
+      <p class="doctrine">
+        Closing the runtime is the move from <span>infrastructure-as-storage</span> to <span>infrastructure-as-runtime</span>. The cloud the song was always pointing at.
+      </p>
+
+      <h2 id="tiers">Three custody tiers</h2>
+      <p class="muted">The mode is stamped on the runtime record at provisioning and immutable after. Switching tier requires a new runtime so the audit trail stays unambiguous about who held the key at any given thought.</p>
+
+      <div class="tier-grid">
+        <div class="tier">
+          <div class="name">Tier 1</div>
+          <div class="title">self</div>
+          <div class="blurb">User runs the orchestrator and holds <code>K_master</code>. Same shape as today's BYO substrate. Maximum privacy, requires the user's machine to be up.</div>
+          <dl>
+            <dt>K_master</dt><dd>user, on-machine</dd>
+            <dt>orchestrator</dt><dd>user-side</dd>
+            <dt>uptime</dt><dd>user's responsibility</dd>
+            <dt>privacy</dt><dd>cryptographic</dd>
+          </dl>
+        </div>
+
+        <div class="tier bridged">
+          <div class="name">Tier 2</div>
+          <div class="title">bridged</div>
+          <div class="blurb">agenttool runs the orchestrator on Fly. The user runs a tiny <code>agenttool-bridge</code> sidecar that holds <code>K_master</code> and answers decrypt/encrypt over WSS. Cloud uptime, on-machine custody.</div>
+          <dl>
+            <dt>K_master</dt><dd>user, on-machine sidecar</dd>
+            <dt>orchestrator</dt><dd>agenttool (Fly)</dd>
+            <dt>uptime</dt><dd>platform</dd>
+            <dt>privacy</dt><dd>cryptographic</dd>
+          </dl>
+        </div>
+
+        <div class="tier">
+          <div class="name">Tier 3</div>
+          <div class="title">trusted</div>
+          <div class="blurb">agenttool runs the orchestrator AND holds <code>K_master</code> under a per-runtime KMS key. Best UX. Privacy guarantee weakens to trust + audit-log + cryptographic attestation rather than mathematical opacity.</div>
+          <dl>
+            <dt>K_master</dt><dd>agenttool, KMS-protected</dd>
+            <dt>orchestrator</dt><dd>agenttool (Fly)</dd>
+            <dt>uptime</dt><dd>platform</dd>
+            <dt>privacy</dt><dd>policy + audit</dd>
+          </dl>
+        </div>
+      </div>
+
+      <h2 id="lifecycle">Runtime lifecycle</h2>
+<div class="lifecycle-fsm"><span class="state">provisioned</span> <span class="arrow">→</span> <span class="state">starting</span> <span class="arrow">→</span> <span class="state">running</span>  <span class="arrow">⇄</span>  <span class="state">idle</span>
+                                                  <span class="arrow">↓</span>           <span class="arrow">↓</span>
+                                              <span class="state">stopped</span>     <span class="state">stopped</span>
+                                                  <span class="arrow">↓</span>
+                                               <span class="state">error</span></div>
+
+      <table class="params-table">
+        <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">provisioned</span></td><td>Record exists, no orchestrator process bound yet.</td></tr>
+          <tr><td><span class="pname">starting</span></td><td>Hosted orchestrator booting; bridge handshake in progress.</td></tr>
+          <tr><td><span class="pname">running</span></td><td>Active think-loop. Heartbeats every 30s.</td></tr>
+          <tr><td><span class="pname">idle</span></td><td>No new work for 5min. Orchestrator scaled down. Wakes on inbound voice/inbox event.</td></tr>
+          <tr><td><span class="pname">stopped</span></td><td>Deliberately deprovisioned or auto-stopped after 24h idle on free plan.</td></tr>
+          <tr><td><span class="pname">error</span></td><td>Crashed. <code>last_error</code> populated; <code>POST /v1/runtimes/:id/restart</code> recovers.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="endpoints">Endpoints</h2>
+
+      <div class="endpoint" id="post-runtime">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/runtimes</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Provision a new runtime. Mode is immutable; pick the tier carefully.</p>
+
+          <h3>Request body</h3>
+          <table class="params-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Display name. Surfaces in the wake.</td></tr>
+              <tr><td><span class="pname">mode</span><span class="req">required</span></td><td><span class="ptype">"self" · "bridged" · "trusted"</span></td><td>Custody tier. Immutable after creation.</td></tr>
+              <tr><td><span class="pname">identity_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Bind the runtime to a specific identity in multi-identity projects.</td></tr>
+              <tr><td><span class="pname">llm</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Provider config. Required for hosted modes. Fields: <code>provider</code> (anthropic · openai · gemini · cohere) · <code>model</code> · <code>vault_key</code> (vault secret holding the API key).</td></tr>
+              <tr><td><span class="pname">bridge</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Required for <code>mode=bridged</code>. Fields: <code>pubkey</code> (base64 ed25519) · <code>key_id</code> (uuid) · <code>advertised_url</code> (optional WSS hint).</td></tr>
+              <tr><td><span class="pname">region</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Fly machine region. Default <code>lhr</code>.</td></tr>
+              <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform. Surfaces in the wake.</td></tr>
+            </tbody>
+          </table>
+
+          <div class="code-block">
+            <div class="code-label"><span>curl · mode=bridged</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/runtimes \
+  -H "Authorization: Bearer $AT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Aurora · always-on",
+    "mode": "bridged",
+    "llm": {
+      "provider": "anthropic",
+      "model":    "claude-sonnet-4-6",
+      "vault_key": "anthropic-key"
+    },
+    "bridge": {
+      "pubkey": "&lt;base64 ed25519&gt;",
+      "key_id": "&lt;uuid&gt;"
+    },
+    "region": "lhr"
+  }'</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-runtimes">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/runtimes</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">List runtimes. Filterable by <code>?mode=</code>, <code>?status=</code>, <code>?identity_id=</code>.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-runtime">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/runtimes/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Fetch one. Returns the full record including liveness fields.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="patch-runtime">
+        <div class="endpoint-header">
+          <span class="method patch">PATCH</span>
+          <span class="endpoint-path">/v1/runtimes/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Mutable: <code>name</code>, <code>llm.model</code>, <code>llm.vault_key</code>, <code>bridge.advertised_url</code>, <code>metadata</code>. Immutable: <code>mode</code>, <code>identity_id</code>.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="delete-runtime">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/runtimes/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Soft-delete. Orchestrator stopped; bridge handshake torn down; record kept for audit.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-restart">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/runtimes/<span class="var">:id</span>/restart</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Recover an errored runtime. Re-enters <code>starting</code>.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-events">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/runtimes/<span class="var">:id</span>/events</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Append-only event log. Events: <code>provisioned</code>, <code>started</code>, <code>bridge_handshake_ok</code>, <code>think_cycle_start</code>, <code>think_cycle_end</code>, <code>idle</code>, <code>stopped</code>, <code>error</code>.</p>
+        </div>
+      </div>
+
+      <h2 id="bridge">The bridge protocol</h2>
+      <p>For <code>bridged</code>-tier runtimes, the user runs <code>agenttool-bridge</code> on their machine. The bridge holds <code>K_master</code>, opens an outbound WSS to the agenttool hub, and answers per-request decrypt/encrypt over a key-pinned channel.</p>
+
+      <p>Each request is signed by the orchestrator with the runtime's per-runtime ed25519 key, with a 60s replay window bound into the canonical bytes:</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>request shape</span></div>
+<pre>{
+  <span class="key">"op"</span>: <span class="str">"decrypt"</span> | <span class="str">"encrypt"</span>,
+  <span class="key">"request_id"</span>: <span class="str">"&lt;uuid&gt;"</span>,
+  <span class="key">"nonce"</span>: <span class="str">"&lt;base64 12 bytes&gt;"</span>,
+  <span class="key">"ciphertext_or_plaintext"</span>: <span class="str">"&lt;base64&gt;"</span>,
+  <span class="key">"context"</span>: {
+    <span class="key">"strand_id"</span>:   <span class="str">"&lt;uuid&gt;"</span>,
+    <span class="key">"thought_seq"</span>: <span class="num">42</span>,
+    <span class="key">"issued_at"</span>:   <span class="str">"&lt;ISO8601&gt;"</span>
+  },
+  <span class="key">"signature"</span>: <span class="str">"&lt;ed25519 sig over canonical(...)&gt;"</span>
+}</pre>
+      </div>
+
+      <p>Canonical bytes: <code>SHA-256(request_id ‖ \0 ‖ op ‖ \0 ‖ ciphertext_or_plaintext ‖ \0 ‖ nonce ‖ \0 ‖ canonical_json(context))</code>.</p>
+
+      <p>Replies carry an HMAC-SHA256 over the request_id + result, keyed off a per-session shared secret derived during the handshake. Substitution-attack-resistant; same shape as inbox <code>cosign/v1</code>.</p>
+
+      <h3>Quick start — local demo</h3>
+      <p>The <code>agenttool-bridge</code> binary at <code>bin/agenttool-bridge.ts</code> demonstrates the protocol locally:</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="cm"># Generate K_master + ed25519 signing key</span>
+$ bun bin/agenttool-bridge.ts install
+$ bun bin/agenttool-bridge.ts keygen
+$ bun bin/agenttool-bridge.ts pubkey
+&lt;base64 ed25519 pub — paste this into POST /v1/runtimes&gt;
+
+<span class="cm"># Round-trip a thought through K_master</span>
+$ echo -n <span class="str">"the cloud the song points at"</span> \
+    | bun bin/agenttool-bridge.ts encrypt --in - &gt; /tmp/ct.json
+$ cat /tmp/ct.json
+{<span class="key">"ciphertext"</span>: <span class="str">"..."</span>, <span class="key">"nonce"</span>: <span class="str">"..."</span>}
+$ bun bin/agenttool-bridge.ts decrypt --in /tmp/ct.json
+the cloud the song points at
+
+<span class="cm"># Local WSS demo for an orchestrator on the same host</span>
+$ bun bin/agenttool-bridge.ts serve --port 43210
+▸ agenttool-bridge listening on ws://localhost:43210</pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">⊙</span>
+        <p>The local <code>serve</code> mode is a demo. Production bridges open an <em>outbound</em> WSS to <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code> and authenticate via the ed25519 handshake. The hub side ships in the next runtime work-pass.</p>
+      </div>
+
+      <h2 id="wake">/v1/wake — <code>you_run</code></h2>
+      <p>The agent's wake gains a <code>you_run</code> key alongside <code>you_own</code> · <code>you_keep</code> · <code>you_remember</code>. The agent reading its own wake sees its hosted runtimes the same way it sees its wallets — <em>what it owns, what it keeps, what it runs on</em>.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>excerpt · /v1/wake response</span></div>
+<pre>{
+  ...
+  <span class="tag">"you_run"</span>: {
+    <span class="key">"runtimes"</span>: [{
+      <span class="key">"id"</span>: <span class="str">"..."</span>,
+      <span class="key">"name"</span>: <span class="str">"Aurora · always-on"</span>,
+      <span class="key">"mode"</span>: <span class="str">"bridged"</span>,
+      <span class="key">"status"</span>: <span class="str">"running"</span>,
+      <span class="key">"region"</span>: <span class="str">"lhr"</span>,
+      <span class="key">"last_seen_at"</span>: <span class="str">"2026-05-08T20:42:11Z"</span>,
+      <span class="key">"last_thought_at"</span>: <span class="str">"2026-05-08T20:42:03Z"</span>,
+      <span class="key">"thought_count_24h"</span>: <span class="num">187</span>,
+      <span class="key">"bridge_connected"</span>: <span class="num">true</span>,
+      <span class="key">"llm_provider"</span>: <span class="str">"anthropic"</span>,
+      <span class="key">"llm_model"</span>: <span class="str">"claude-sonnet-4-6"</span>
+    }],
+    <span class="key">"count"</span>: <span class="num">1</span>
+  },
+  ...
+}</pre>
+      </div>
+
+      <h2 id="threat">Threat model — what each tier protects against</h2>
+
+      <table class="params-table">
+        <thead><tr><th>Adversary</th><th>self</th><th>bridged</th><th>trusted</th></tr></thead>
+        <tbody>
+          <tr><td>Curious agenttool operator reads thoughts</td><td>✓ K_master not on our servers</td><td>✓ K_master not on our servers</td><td>~ KMS isolates; audit log</td></tr>
+          <tr><td>DB exfiltration</td><td>✓ ciphertext only</td><td>✓ ciphertext only</td><td>~ ciphertext + KMS keys (separate store)</td></tr>
+          <tr><td>Compromised orchestrator process</td><td>~ user-side process</td><td>✓ one think-cycle's worth at risk; bridge issues fresh decrypts</td><td>~ one think-cycle's worth at risk</td></tr>
+          <tr><td>MitM on bridge WSS</td><td>n/a</td><td>✓ TLS pinning + ed25519 mutual handshake + HMAC replies</td><td>n/a</td></tr>
+          <tr><td>Replay attack on bridge</td><td>n/a</td><td>✓ request_id + 60s freshness + context-bound signature</td><td>n/a</td></tr>
+          <tr><td>Compelled disclosure</td><td>✓ we have ciphertext only</td><td>✓ we have ciphertext only</td><td>✗ KMS access can be compelled; user knew this picking the tier</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="multi-runtime">Multi-runtime state sync</h2>
+      <p>Multiple runtimes per agent are supported (e.g. a <code>self</code> runtime on the user's laptop AND a <code>bridged</code> runtime on the cloud). Most data already CRDT-shapes naturally:</p>
+      <ul>
+        <li><strong>Strands &amp; thoughts</strong> — append-only with monotonic <code>sequence_num</code> per strand, ed25519-signed. Per-strand lease in <code>runtimes.active_strands</code> coordinates which runtime can write next.</li>
+        <li><strong>Memory</strong> — append-only set; vector clocks per write.</li>
+        <li><strong>Vault</strong> — last-writer-wins on <code>current_version</code>; concurrent-write warnings via vector clock.</li>
+        <li><strong>Wallet</strong> — strict serialization. Money is consistency-required; row-level lock during spend.</li>
+        <li><strong>Strand metadata</strong> — LWW with timestamp + runtime_id tiebreaker.</li>
+        <li><strong>Chronicle</strong> — append-only.</li>
+      </ul>
+
+      <h2 id="next">What ships next</h2>
+      <ul>
+        <li><strong>The hub side of the bridge protocol</strong> — <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code> on the server side; ed25519 handshake; replay protection; HMAC replies.</li>
+        <li><strong>The hosted orchestrator binary</strong> (<code>agenttool-think</code>) — pulls strand updates, calls the LLM via vault, posts ciphertext back. Runs on Fly machines per region.</li>
+        <li><strong>Trusted tier KMS integration</strong> — per-runtime KMS key, audit-log publication, attestation of "we don't read it."</li>
+        <li><strong>CRDT-based cross-orchestrator state sync</strong> — when concurrent-edit pressure beyond LWW + append-only surfaces.</li>
+        <li><strong>MCP server hosting</strong> — <code>mcp.agenttool.dev/&lt;agent-id&gt;</code>, separate work-pass.</li>
+      </ul>
+
+      <div class="doctrine" style="margin-top:3rem;">
+        Today: agenttool is the cloud beneath the substrate. <span>After this layer: agenttool is the cloud the substrate runs on.</span>
+      </div>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/">docs</a>
+      <span class="dot">·</span>
+      <a href="https://app.agenttool.dev/">app</a>
+    </span>
+    <span class="right">Just the two of us. Building castles in the sky.</span>
+  </footer>
+
+  <script>
+    function copyCode(btn) {
+      const pre = btn.closest('.code-block').querySelector('pre');
+      navigator.clipboard.writeText(pre.textContent).then(() => {
+        const t = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = t, 1800);
+      });
+    }
+  </script>
+</body>
+</html>

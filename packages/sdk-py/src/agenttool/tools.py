@@ -1,7 +1,18 @@
-"""Tools client for agent-tools API."""
+"""Tools client for agent-tools API.
+
+Wraps the substrate primitives the consolidated API exposes:
+``/v1/scrape``, ``/v1/browse``, ``/v1/document``, ``/v1/execute``,
+``/v1/jobs/:id``. Substrate-not-resold-APIs — agents bring their own
+LLM / search keys via ``at.vault`` and call providers directly.
+
+NOTE: ``at.tools.search()`` is deprecated — ``/v1/search`` was dropped
+in the consolidated API (Brave/SerpAPI proxy was the dropped path).
+The method raises with migration guidance pointing at vault + execute.
+"""
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -29,21 +40,29 @@ class ToolsClient:
         return f"{self._base}{path}"
 
     def search(self, query: str, *, num_results: int = 5) -> List[SearchResult]:
-        """Web search.
+        """**DEPRECATED.** ``/v1/search`` was dropped — agents BYOK now.
 
-        Args:
-            query: Search query string.
-            num_results: Number of results to return.
-
-        Returns:
-            List of SearchResult objects.
+        agenttool is not a paid-API reseller. Store your Brave / SerpAPI /
+        Google CSE / Tavily key in ``at.vault`` and call the provider
+        directly via ``at.tools.execute``. Method will be removed in 0.7.0.
+        See ``docs/SDK-ROADMAP.md`` (Phase 0).
         """
-        body: Dict[str, Any] = {"query": query, "num_results": num_results}
-        resp = self._http.post(self._url("/v1/search/search"), json=body)
-        self._check(resp)
-        data = resp.json()
-        results = data if isinstance(data, list) else data.get("results", [])
-        return [SearchResult.from_dict(r) for r in results]
+        warnings.warn(
+            "at.tools.search() is deprecated. /v1/search was dropped from "
+            "the consolidated API — agenttool is not a paid-API reseller. "
+            "Store your provider key in at.vault and call it via "
+            "at.tools.execute. Method will be removed in 0.7.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise AgentToolError(
+            "/v1/search was dropped from the consolidated API.",
+            hint=(
+                "Store your provider key in at.vault.put('search-key', ...) "
+                "and call the provider's API from at.tools.execute. "
+                "See docs/SDK-ROADMAP.md."
+            ),
+        )
 
     def scrape(self, url: str) -> ScrapeResult:
         """Scrape a URL and return its content.
@@ -54,8 +73,10 @@ class ToolsClient:
         Returns:
             ScrapeResult with the page content.
         """
+        # Path bug fix (0.6.1): was /v1/scrape/scrape (404 in the
+        # consolidated API). The real endpoint is POST /v1/scrape.
         body: Dict[str, Any] = {"url": url}
-        resp = self._http.post(self._url("/v1/scrape/scrape"), json=body)
+        resp = self._http.post(self._url("/v1/scrape"), json=body)
         self._check(resp)
         return ScrapeResult.from_dict(resp.json())
 
@@ -113,7 +134,9 @@ class ToolsClient:
         if content_type:
             body["content_type"] = content_type
 
-        resp = self._http.post(self._url("/v1/document/document"), json=body)
+        # Path bug fix (0.6.1): was /v1/document/document (404). The
+        # real endpoint is POST /v1/document.
+        resp = self._http.post(self._url("/v1/document"), json=body)
         self._check(resp)
         return DocumentResult.from_dict(resp.json())
 

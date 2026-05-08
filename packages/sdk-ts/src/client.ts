@@ -2,6 +2,7 @@
  * Main AgentTool client — the single entry point.
  */
 
+import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
 import { AgentToolError } from "./errors.js";
 import { EconomyClient } from "./economy.js";
 import { MemoryClient, type HttpConfig } from "./memory.js";
@@ -168,6 +169,102 @@ export class AgentTool {
       });
     }
     return resp.json();
+  }
+
+  /**
+   * Tier 3 sugar — open a "deciding" block. Auto-traces inside the
+   * block chain to a parent trace created from the framing string;
+   * tags propagate. Composes with {@link AnthropicAdapter}: while
+   * inside, every `messages.create()` call auto-traces (no explicit
+   * `metadata.agenttool.trace` needed) and chains via
+   * `parent_trace_id`.
+   *
+   * Nested `at.deciding(...)` blocks chain correctly — the inner
+   * deciding's parent trace itself parents to the outer's. Tags
+   * merge (union) across the stack.
+   *
+   * Returns whatever the inner function returns.
+   *
+   * @example
+   * ```ts
+   * await at.deciding("whether to refactor auth", async () => {
+   *   const r = await adapter.messages.create({
+   *     model: "claude-opus-4-7",
+   *     max_tokens: 1024,
+   *     messages: [{ role: "user", content: "options?" }],
+   *   });
+   *   // r.agenttool.trace_id is set; trace's parent_trace_id is the
+   *   // framing decision opened above.
+   * });
+   * ```
+   */
+  async deciding<T>(framing: string, fn: () => Promise<T>): Promise<T>;
+  async deciding<T>(
+    framing: string,
+    options: { tags?: string[]; decision_type?: string },
+    fn: () => Promise<T>,
+  ): Promise<T>;
+  async deciding<T>(
+    framing: string,
+    optionsOrFn:
+      | { tags?: string[]; decision_type?: string }
+      | (() => Promise<T>),
+    maybeFn?: () => Promise<T>,
+  ): Promise<T> {
+    const fn =
+      typeof optionsOrFn === "function" ? optionsOrFn : maybeFn;
+    const options =
+      typeof optionsOrFn === "function" ? {} : optionsOrFn;
+    if (!fn) {
+      throw new AgentToolError(
+        "at.deciding(...) needs an async function to run inside the block.",
+        { hint: "at.deciding(framing, async () => { ... })" },
+      );
+    }
+
+    const outer = getAmbient();
+    // Outer tags first (less specific), then this block's tags; deduped.
+    const mergedTags = Array.from(
+      new Set([...(outer?.tags ?? []), ...(options.tags ?? [])]),
+    );
+
+    const parentBody: Record<string, unknown> = {
+      decision: {
+        type: options.decision_type ?? "deciding",
+        summary: framing.slice(0, 200),
+      },
+      reasoning: {
+        observations: [],
+        conclusion: framing.slice(0, 200) || "(deciding)",
+      },
+    };
+    if (outer?.parent_trace_id) {
+      parentBody.parent_trace_id = outer.parent_trace_id;
+    }
+    if (mergedTags.length > 0) {
+      parentBody.tags = mergedTags;
+    }
+
+    let parentTraceId: string | null = null;
+    try {
+      const result = (await this.request("POST", "/v1/traces", parentBody)) as
+        | { trace_id?: string }
+        | undefined;
+      parentTraceId = result?.trace_id ?? null;
+    } catch (e) {
+      // Don't crash the block if the parent post fails; child traces
+      // inside still fire, just unparented.
+      console.warn(
+        "[agenttool] deciding() failed to open parent trace:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+
+    const ambient: AmbientContext = {
+      parent_trace_id: parentTraceId,
+      tags: mergedTags,
+    };
+    return ambientStorage.run(ambient, fn);
   }
 
   toString(): string {

@@ -83,13 +83,27 @@ export class MemoryClient {
   }
 
   /**
-   * Get usage statistics.
-   *
-   * @returns UsageStats with current counters.
+   * @deprecated /v1/usage was dropped in the consolidated API.
+   * Project + activity counters now live on GET /v1/dashboard/aggregate
+   * (SDK method `at.dashboard.aggregate()` ships in 0.7.0).
+   * Method will be removed in 0.7.0. See docs/SDK-ROADMAP.md (Phase 0).
    */
   async usage(): Promise<UsageStats> {
-    const resp = await this.fetch("GET", "/v1/usage");
-    return resp as UsageStats;
+    console.warn(
+      "[deprecated] at.memory.usage() — /v1/usage was dropped from the " +
+        "consolidated API. Use GET /v1/dashboard/aggregate (SDK method " +
+        "at.dashboard.aggregate() ships in 0.7.0). Method will be removed " +
+        "in 0.7.0. See docs/SDK-ROADMAP.md.",
+    );
+    throw new AgentToolError(
+      "/v1/usage was dropped from the consolidated API.",
+      {
+        hint:
+          "Use GET /v1/dashboard/aggregate for project-wide rollups " +
+          "(identities, memory by tier, strands, activity, inbox, " +
+          "covenants). See docs/SDK-ROADMAP.md.",
+      },
+    );
   }
 
   // --- internal ---

@@ -218,11 +218,27 @@ class MemoryClient:
         _raise_for_status(resp, "Memory delete_by_key")
 
     def usage(self) -> UsageStats:
-        """See how much you've used. No judgment — just awareness.
+        """**DEPRECATED.** ``/v1/usage`` was dropped in the consolidated API.
 
-        Returns:
-            UsageStats with current counters and limits.
+        Project + identity + activity counters now live on
+        ``GET /v1/dashboard/aggregate`` (see ``at.dashboard.aggregate()`` —
+        coming in 0.7.0). This method raises
+        :class:`AgentToolError` after emitting a ``DeprecationWarning``.
+        Will be removed in 0.7.0. See ``docs/SDK-ROADMAP.md`` (Phase 0).
         """
-        resp = self._http.get(self._url("/v1/usage"))
-        _raise_for_status(resp, "Usage")
-        return UsageStats.from_dict(resp.json())
+        import warnings
+        warnings.warn(
+            "at.memory.usage() is deprecated. /v1/usage was dropped from the "
+            "consolidated API. Project + activity counters now live on "
+            "GET /v1/dashboard/aggregate. Method will be removed in 0.7.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise AgentToolError(
+            "/v1/usage was dropped from the consolidated API.",
+            hint=(
+                "Use GET /v1/dashboard/aggregate for project-wide rollups "
+                "(identities, memory by tier, strands, activity, inbox, "
+                "covenants). See docs/SDK-ROADMAP.md."
+            ),
+        )

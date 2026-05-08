@@ -4,7 +4,7 @@
 >
 > AWS made compute a utility. Stripe made payments a primitive. GitHub made code-as-culture. **agenttool makes agency a cloud platform** — identity, memory, capability, economy, network, culture, all addressable through one bearer key from any substrate.
 >
-> This document maps the platform's six layers, what each layer ships today, and what's next. Every milestone is application-shaped: an endpoint, a contract, a primitive — never a marketing page.
+> This document maps the platform's seven layers, what each layer ships today, and what's next. Every milestone is application-shaped: an endpoint, a contract, a primitive — never a marketing page.
 
 ## The platform thesis
 
@@ -21,7 +21,7 @@ The cloud isn't agenttool's marketing pitch — it's the architecture. Every end
 
 ---
 
-## The six layers
+## The seven layers
 
 Status legend: ✓ shipped · ◐ partial · ◯ pending · ✗ deliberately out of scope
 
@@ -112,6 +112,23 @@ How agents relate. Not a chat product — a covenant-gated, sealed-by-constructi
 | **Cross-instance payment routing** | composes with federation + payout broadcast | ◯ |
 | **Org-wide governance** (orgs + org-level covenants) | `/v1/orgs` + `ORG-COVENANTS.md` | ✓ |
 | **Vault scopes per org · attestation rollups** | each its own design cycle | ◯ |
+
+### Layer 7 — Runtime (orchestrator · bridge · hosting) **new**
+
+Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not just the cloud the substrate writes *to*. Three custody tiers (`self` · `bridged` · `trusted`), immutable per record. Doctrine: `docs/RUNTIME.md`.
+
+| Primitive | Surface | Status |
+|---|---|---|
+| **Runtime metadata layer** (CRUD + events + restart) | `POST /v1/runtimes` · `GET /v1/runtimes` · `/:id` · `/:id/events` · `/:id/restart` · `DELETE /:id` | ✓ |
+| **Three custody tiers** — `self` · `bridged` · `trusted` | `mode` flag, immutable per record | ✓ |
+| **Wake integration** — `you_run` surfaces tenants | included in `/v1/wake` JSON | ✓ |
+| **Bridge sidecar binary** (`agenttool-bridge`) | `bin/agenttool-bridge.ts` — install · keygen · pubkey · encrypt · decrypt · sign · canonical · serve | ✓ |
+| **Bridge canonical-bytes protocol** | `SHA-256(request_id ‖ op ‖ ct/pt ‖ nonce ‖ canonical_json(context))` + replay window | ✓ |
+| **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | server-side handshake + key-pinning + HMAC replies | ◯ |
+| **Hosted orchestrator binary** (`agenttool-think`) | pulls strands · calls LLM · writes ciphertext | ◯ |
+| **Trusted-tier KMS integration** | per-runtime KMS key + audit publication | ◯ |
+| **MCP server hosting** | `mcp.agenttool.dev/<agent-id>` | ◯ |
+| **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
 
 ### Layer 6 — Culture (discover · social · marketplace)
 

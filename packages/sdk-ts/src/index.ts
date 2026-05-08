@@ -33,6 +33,8 @@ export type {
   GeminiWakeShape,
   CohereWakeShape,
 } from "./wake.js";
+export type { AmbientContext } from "./_context.js";
+export { getAmbient } from "./_context.js";
 export { AnthropicAdapter } from "./anthropic-adapter.js";
 export type {
   AnthropicMessagesLike,

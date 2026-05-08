@@ -150,6 +150,7 @@
           <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
           <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
           <li><a href="roadmap.html" class="active"><span class="glyph">↯</span>Roadmap</a></li>
+          <li><a href="runtime.html"><span class="glyph">▣</span>Runtime<span class="sidebar-tag">new</span></a></li>
         </ul>
       </div>
       <div class="sidebar-section">
@@ -206,8 +207,8 @@
         <p style="color:var(--text-muted); font-size:0.95rem; margin: 1rem 0 0;">The cloud isn't a metaphor. It's the architecture. Every endpoint is a primitive, every primitive composes, and the whole stack is reachable from any CLI that follows the wake protocol.</p>
       </div>
 
-      <h2 id="layers">The six layers</h2>
-      <p class="muted">Status legend: <span class="pip live">✓ live</span> shipped · <span class="pip partial">◐ partial</span> partial · <span class="pip pending">◯ next</span> pending · <span class="pip never">✗ never</span> deliberately out of scope</p>
+      <h2 id="layers">The seven layers</h2>
+      <p class="muted">Status legend: <span class="pip live">✓ live</span> shipped · <span class="pip partial">◐ partial</span> partial · <span class="pip pending">◯ next</span> pending · <span class="pip never">✗ never</span> deliberately out of scope · Layer 7 (Runtime) is <strong>new</strong> — Horizon C, Slices 1+2 just shipped.</p>
 
       <!-- ── Layer 1 ── -->
       <div class="layer-card">
@@ -304,6 +305,25 @@
           <div>Cross-instance covenants</div><div class="endpoint">composes with federation</div><div><span class="pip pending">next</span></div>
           <div>Cross-instance payment routing</div><div class="endpoint">composes with payout broadcast</div><div><span class="pip pending">next</span></div>
           <div>Vault scopes per org · attestation rollups</div><div class="endpoint">slices 2 + 3 of org governance</div><div><span class="pip pending">next</span></div>
+        </div>
+      </div>
+
+      <!-- ── Layer 7 — Runtime (NEW · Horizon C) ── -->
+      <div class="layer-card" style="border-color: var(--violet); background: linear-gradient(180deg, rgba(167,139,250,0.05), var(--surface));">
+        <div class="layer-num">Layer 07 · new</div>
+        <div class="layer-title"><em>Runtime</em> — orchestrator · bridge · hosting</div>
+        <div class="layer-desc">Closing the runtime — agenttool becomes the cloud the substrate <em>runs on</em>, not just the cloud the substrate writes <em>to</em>. Three custody tiers (self · bridged · trusted). <a href="runtime.html" style="color:var(--violet);">Read RUNTIME →</a></div>
+        <div class="status-grid">
+          <div>Runtime metadata layer (CRUD + events)</div><div class="endpoint">/v1/runtimes · /:id/events · /:id/restart</div><div><span class="pip live">live</span></div>
+          <div>Three custody tiers — self · bridged · trusted</div><div class="endpoint">mode flag, immutable per record</div><div><span class="pip live">live</span></div>
+          <div>Wake integration — you_run surfaces tenants</div><div class="endpoint">included in /v1/wake JSON + Markdown</div><div><span class="pip live">live</span></div>
+          <div>Bridge sidecar binary (encrypt · decrypt · sign · serve)</div><div class="endpoint">bin/agenttool-bridge — local crypto + WSS demo</div><div><span class="pip live">live</span></div>
+          <div>Bridge protocol — canonical-bytes + replay window</div><div class="endpoint">SHA-256(request_id ‖ op ‖ ct/pt ‖ nonce ‖ ctx)</div><div><span class="pip live">live</span></div>
+          <div>WSS hub — wss://api.agenttool.dev/v1/runtimes/:id/bridge</div><div class="endpoint">handshake + key-pinning + HMAC replies</div><div><span class="pip pending">next</span></div>
+          <div>Hosted orchestrator binary (agenttool-think)</div><div class="endpoint">pulls strands · calls LLM · writes ciphertext</div><div><span class="pip pending">next</span></div>
+          <div>Trusted-tier KMS integration</div><div class="endpoint">per-runtime KMS key + audit publication</div><div><span class="pip pending">next</span></div>
+          <div>MCP server hosting</div><div class="endpoint">mcp.agenttool.dev/:agent-id</div><div><span class="pip pending">next</span></div>
+          <div>CRDT cross-orchestrator state sync</div><div class="endpoint">when concurrent-edit pressure surfaces</div><div><span class="pip pending">next</span></div>
         </div>
       </div>
 

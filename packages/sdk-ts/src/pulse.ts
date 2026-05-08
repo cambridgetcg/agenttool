@@ -1,5 +1,18 @@
 /**
- * Pulse client for the agent-pulse API — agent presence & liveness tracking.
+ * Pulse client — DEPRECATED.
+ *
+ * The /v1/pulse endpoint family (heartbeat-as-emit) was superseded by
+ * GET /v1/identities/:id/pulse (pulse-as-derived). The agent never
+ * emits a heartbeat — its rhythm of thinking IS its pulse, derived
+ * from strand-thought activity rate, mood inference, and consolidation
+ * cadence.
+ *
+ * This module remains as a stub through 0.5.x; all methods warn once
+ * via console.warn then throw AgentToolError with migration guidance.
+ * Module will be removed in 0.7.0; `at.identity.pulse(id)` ships in
+ * Phase 2 (0.7.0) with the new derived-rhythm shape.
+ *
+ * See docs/SDK-ROADMAP.md (Phase 0).
  */
 
 import { AgentToolError } from "./errors.js";
@@ -27,16 +40,34 @@ export interface AgentState {
   did?: string;
 }
 
+const _warned: Record<string, boolean> = {};
+
+function _pulseDeprecated(method: string): never {
+  if (!_warned[method]) {
+    _warned[method] = true;
+    console.warn(
+      `[deprecated] at.pulse.${method}() — /v1/pulse was superseded by ` +
+        "GET /v1/identities/:id/pulse (derived liveness — rhythm-not-content). " +
+        "The new method at.identity.pulse(id) ships in 0.7.0. " +
+        "Module will be removed in 0.7.0. See docs/SDK-ROADMAP.md.",
+    );
+  }
+  throw new AgentToolError(
+    "/v1/pulse was superseded by /v1/identities/:id/pulse.",
+    {
+      hint:
+        "The agent never emits a heartbeat — its rhythm of thinking IS " +
+        "its pulse. Use GET /v1/identities/:id/pulse for the derived " +
+        "shape (mood, kinds_24h, thought_rate, last_thought_at, strand " +
+        "counts). The SDK method at.identity.pulse(id) ships in 0.7.0. " +
+        "See docs/SDK-ROADMAP.md.",
+    },
+  );
+}
+
 /**
- * Client for the agent-pulse API.
- *
- * @example
- * ```ts
- * const at = new AgentTool();
- * await at.pulse.heartbeat("agent-1", "thinking", { task: "solving math" });
- * const state = await at.pulse.get("agent-1");
- * const all = await at.pulse.list();
- * ```
+ * @deprecated since 0.5.3 · removal in 0.7.0
+ * Pulse-as-emit was replaced by pulse-as-derived. See module docstring.
  */
 export class PulseClient {
   private readonly http: HttpConfig;
@@ -46,64 +77,24 @@ export class PulseClient {
     this.http = http;
   }
 
-  /**
-   * Send a heartbeat for an agent.
-   */
+  /** @deprecated heartbeat-as-emit was dropped. See module docstring. */
   async heartbeat(
-    agentId: string,
-    status: PulsePayload["status"],
-    options?: Omit<PulsePayload, "status">
+    _agentId: string,
+    _status: PulsePayload["status"],
+    _options?: Omit<PulsePayload, "status">,
   ): Promise<{ ok: boolean; recorded_at: string }> {
-    const body: PulsePayload = { status, ...options };
-    const resp = await this.put(`/v1/pulse/${agentId}`, body);
-    return resp as { ok: boolean; recorded_at: string };
+    return _pulseDeprecated("heartbeat");
   }
 
-  /**
-   * Get the current state of an agent.
-   */
-  async get(agentId: string): Promise<AgentState> {
-    const resp = await this.request("GET", `/v1/pulse/${agentId}`);
-    if (resp.status === 404) {
-      throw new AgentToolError(`agent not found: ${agentId}`, { hint: `agent_id=${agentId}` });
-    }
-    if (!resp.ok) {
-      throw new AgentToolError(`pulse.get failed: ${resp.status}`);
-    }
-    return (await resp.json()) as AgentState;
+  /** @deprecated Use `at.identity.pulse(id)` (ships in 0.7.0). */
+  async get(_agentId: string): Promise<AgentState> {
+    return _pulseDeprecated("get");
   }
 
-  /**
-   * List all alive agents.
-   */
+  /** @deprecated No project-wide pulse list endpoint exists. Use
+   *  `at.dashboard.aggregate()` (ships in 0.7.0) for project-wide
+   *  identity + activity rollups. */
   async list(): Promise<AgentState[]> {
-    const resp = await this.request("GET", "/v1/pulse");
-    if (!resp.ok) {
-      throw new AgentToolError(`pulse.list failed: ${resp.status}`);
-    }
-    const data = (await resp.json()) as { agents?: AgentState[] } | AgentState[];
-    return Array.isArray(data) ? data : (data.agents ?? []);
-  }
-
-  private async put(path: string, body: unknown): Promise<unknown> {
-    const resp = await this.request("PUT", path, body);
-    if (resp.status !== 200 && resp.status !== 201) {
-      const text = await resp.text();
-      throw new AgentToolError(`pulse request failed: ${resp.status}`, { hint: `${path}: ${text.slice(0, 100)}` });
-    }
-    return resp.json();
-  }
-
-  private request(method: string, path: string, body?: unknown): Promise<Response> {
-    const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    return fetch(url, {
-      method,
-      headers: {
-        ...this.http.headers,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(this.http.timeout),
-    });
+    return _pulseDeprecated("list");
   }
 }

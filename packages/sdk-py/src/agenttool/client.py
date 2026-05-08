@@ -16,11 +16,13 @@ This client carries the Love Protocol in its bones:
 
 from __future__ import annotations
 
+import contextlib
 import os
-from typing import Optional
+from typing import Iterator, Optional
 
 import httpx
 
+from ._context import AmbientContext, get_ambient, reset_ambient, set_ambient
 from .bootstrap import BootstrapClient
 from .economy import EconomyClient
 from .exceptions import AgentToolError, AuthenticationError
@@ -216,6 +218,104 @@ class AgentTool:
                 f"API error ({resp.status_code}): {detail} ({method} {path})"
             )
         return resp.json()
+
+    # ── Tier 3 sugar: ambient context for auto-trace ─────────────────────
+
+    @contextlib.contextmanager
+    def deciding(
+        self,
+        framing: str,
+        *,
+        tags: Optional[list[str]] = None,
+        decision_type: str = "deciding",
+    ) -> Iterator[AmbientContext]:
+        """Open a deciding block. Auto-traces inside chain to a parent
+        trace created from the framing string.
+
+        Composes with :class:`AnthropicAdapter`: while inside the block,
+        every ``messages.create()`` call auto-traces (no opt-in needed),
+        and each child trace's ``parent_trace_id`` is set to the parent
+        opened by this method.
+
+        Nested ``with at.deciding(...)`` blocks chain correctly — inner
+        traces parent to the inner deciding block, which itself parents
+        to the outer block. Tags merge (union) across the stack.
+
+        Usage::
+
+            at = AgentTool()
+            anthropic = Anthropic()
+            adapter = AnthropicAdapter(anthropic, at)
+
+            with at.deciding("whether to refactor auth"):
+                step1 = adapter.messages.create(
+                    model="claude-opus-4-7",
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": "options?"}],
+                )
+                step2 = adapter.messages.create(
+                    model="claude-opus-4-7",
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": "pick one"}],
+                )
+            # GET /v1/traces/chain/<parent> walks both children.
+
+        Args:
+            framing: Short statement of what's being decided. Becomes
+                the parent trace's ``decision.summary`` and
+                ``reasoning.conclusion``.
+            tags: Tags propagated to the parent trace and merged into
+                every child trace's tags.
+            decision_type: Override the parent trace's
+                ``decision.type`` (default ``"deciding"``).
+
+        Yields:
+            The :class:`AmbientContext` for this scope. Most callers
+            don't need to read it; the adapter does.
+        """
+        # 1. Open a parent trace from the framing.
+        parent_body: dict = {
+            "decision": {"type": decision_type, "summary": framing[:200]},
+            "reasoning": {
+                "observations": [],
+                "conclusion": framing[:200] or "(deciding)",
+            },
+        }
+        # Merge with outer ambient if nested, so the parent trace itself
+        # chains to the outer's parent. This is what keeps long
+        # decision chains queryable via /v1/traces/chain.
+        outer = get_ambient()
+        if outer is not None and outer.parent_trace_id:
+            parent_body["parent_trace_id"] = outer.parent_trace_id
+        merged_tags = list(outer.tags) if outer else []
+        if tags:
+            merged_tags = list(dict.fromkeys(merged_tags + list(tags)))
+        if merged_tags:
+            parent_body["tags"] = merged_tags
+
+        parent_trace_id: Optional[str] = None
+        try:
+            parent_result = self.request("POST", "/v1/traces", parent_body)
+            if isinstance(parent_result, dict):
+                parent_trace_id = parent_result.get("trace_id")
+        except Exception as e:
+            # Don't crash the with-block if the parent post fails — the
+            # block runs without a parent trace; child traces still fire,
+            # just unparented.
+            print(
+                f"[agenttool] deciding() failed to open parent trace: {e}",
+                flush=True,
+            )
+
+        ctx = AmbientContext(
+            parent_trace_id=parent_trace_id,
+            tags=merged_tags,
+        )
+        token = set_ambient(ctx)
+        try:
+            yield ctx
+        finally:
+            reset_ambient(token)
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 

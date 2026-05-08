@@ -1,20 +1,26 @@
 /**
- * Verify client for the verification API.
+ * Verify client — DEPRECATED.
+ *
+ * The /v1/verify endpoint was dropped in the consolidated API.
+ * Verifying claims is the agent's job (LLM compute), not infrastructure's
+ * — agenttool is not a paid-API reseller. Bring your own LLM key via
+ * `at.vault` and call providers directly via `at.tools.execute`.
+ *
+ * This module remains as a stub through 0.5.x; the method warns once
+ * via console.warn then throws AgentToolError with migration guidance.
+ * Module will be removed in 0.7.0. See docs/SDK-ROADMAP.md (Phase 0).
  */
 
 import { AgentToolError } from "./errors.js";
 import type { VerifyResult } from "./types.js";
 import type { HttpConfig } from "./memory.js";
 
+let _warnedOnce = false;
+
 /**
- * Client for the verify API.
+ * Client for the (now-deprecated) verify API.
  *
- * @example
- * ```ts
- * const at = new AgentTool();
- * const result = await at.verify.check("The Earth is round");
- * console.log(result.verdict, result.confidence);
- * ```
+ * @deprecated since 0.5.3 · removal in 0.7.0
  */
 export class VerifyClient {
   private readonly http: HttpConfig;
@@ -25,37 +31,26 @@ export class VerifyClient {
   }
 
   /**
-   * Verify a claim.
-   *
-   * @param claim - The statement to verify.
-   * @param options - Optional sources array.
-   * @returns VerifyResult with verdict, confidence, sources, evidence, caveats.
+   * @deprecated /v1/verify was dropped from the consolidated API.
+   * Store your LLM provider key in at.vault and call it via at.tools.execute.
    */
-  async check(claim: string, options?: { sources?: string[] }): Promise<VerifyResult> {
-    const body: Record<string, unknown> = { claim };
-    if (options?.sources !== undefined) body.sources = options.sources;
-
-    const url = `${this.http.baseUrl}/v1/verify`;
-    const resp = await globalThis.fetch(url, {
-      method: "POST",
-      headers: this.http.headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.http.timeout),
-    });
-
-    if (resp.status >= 400) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail = (json.detail as string) ?? resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`Verify API error (${resp.status}): ${detail}`, {
-        hint: "Check your API key and request parameters.",
-      });
+  async check(_claim: string, _options?: { sources?: string[] }): Promise<VerifyResult> {
+    if (!_warnedOnce) {
+      _warnedOnce = true;
+      console.warn(
+        "[deprecated] at.verify.check() — /v1/verify was dropped from the " +
+          "consolidated API. Agents BYOK via at.vault.put('openai-key', ...) " +
+          "and call providers directly via at.tools.execute. Module will be " +
+          "removed in 0.7.0. See docs/SDK-ROADMAP.md.",
+      );
     }
-
-    return (await resp.json()) as VerifyResult;
+    throw new AgentToolError(
+      "/v1/verify was dropped from the consolidated API.",
+      {
+        hint:
+          "Store provider keys in at.vault and call them via at.tools.execute. " +
+          "agenttool is not a paid-API reseller. See docs/SDK-ROADMAP.md.",
+      },
+    );
   }
 }

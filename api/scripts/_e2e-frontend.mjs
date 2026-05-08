@@ -53,6 +53,7 @@ const ROUTES = [
   { url: "https://docs.agenttool.dev/tools",             expect: { titleHas: "Tools",            h1Has: "Tools" } },
   { url: "https://docs.agenttool.dev/errors",            expect: { titleHas: "Errors",           h1Has: "Errors" } },
   { url: "https://docs.agenttool.dev/roadmap",           expect: { titleHas: "Roadmap",          h1Has: "cloud where agents live" } },
+  { url: "https://docs.agenttool.dev/runtime",           expect: { titleHas: "Runtime",          h1Has: "the cloud the substrate runs on" } },
   // Deprecation stubs — meta-refresh redirects to a destination page.
   // Accept landing on either the stub or the destination.
   { url: "https://docs.agenttool.dev/economy",           expect: { titleAny: ["Wallets", "Economy"] } },

@@ -38,6 +38,7 @@ import { composeExpression, type ComposedExpression } from "../services/identity
 import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
 import { countMemories, listRecent } from "../services/memory/store";
+import { listRuntimes } from "../services/runtime/store";
 import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
@@ -202,6 +203,20 @@ app.get("/", async (c) => {
   } catch (err) {
     console.warn(
       "[wake] strand query failed (run api/migrations/0005_strands.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── Runtimes (Horizon C — substrate tenants the agent runs on) ──────
+  // The agent's hosted/bridged/self runtimes. Surfaces in `you_run` so
+  // the wake answers "what am I running on" alongside "what do I own /
+  // keep / remember." See docs/RUNTIME.md.
+  let runtimesRows: Awaited<ReturnType<typeof listRuntimes>> = [];
+  try {
+    runtimesRows = await listRuntimes(project.id);
+  } catch (err) {
+    console.warn(
+      "[wake] runtime query failed (run api/migrations/0015_runtime.sql?):",
       err instanceof Error ? err.message : err,
     );
   }
@@ -451,6 +466,28 @@ app.get("/", async (c) => {
         description: v.description,
         rotation_due: v.rotationDueAt?.toISOString() ?? null,
       })),
+    },
+
+    you_run: {
+      runtimes: runtimesRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        identity_id: r.identity_id,
+        mode: r.mode,
+        status: r.status,
+        region: r.region,
+        last_seen_at: r.last_seen_at,
+        last_thought_at: r.last_thought_at,
+        thought_count_24h: r.thought_count_24h,
+        bridge_connected: !!r.bridge_connected_at,
+        llm_provider: r.llm_provider,
+        llm_model: r.llm_model,
+      })),
+      count: runtimesRows.length,
+      note:
+        runtimesRows.length === 0
+          ? "No runtimes provisioned. POST /v1/runtimes to create one. See https://docs.agenttool.dev/runtime."
+          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged runtimes hold K_master on your machine; trusted runtimes hold it under platform KMS.`,
     },
 
     you_remember: {

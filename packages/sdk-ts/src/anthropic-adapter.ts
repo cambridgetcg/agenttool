@@ -34,6 +34,7 @@
  * Doctrine: docs/IDENTITY-ANCHOR.md.
  */
 
+import { getAmbient } from "./_context.js";
 import type { AgentTool } from "./client.js";
 import type { AnthropicWakeShape, WakeProviderMeta } from "./wake.js";
 
@@ -190,9 +191,13 @@ export class AnthropicAdapter {
         // 3. Make the actual Anthropic call.
         const response = await self.anthropic.messages.create(forwardParams);
 
-        // 4. Auto-trace if opted in.
+        // 4. Auto-trace if opted in OR if we're inside an `at.deciding()`
+        //    block — the ambient context implies every call inside is
+        //    part of the framing decision.
         let traceId: string | null = null;
-        if (meta.trace === "decision") {
+        const ambient = getAmbient();
+        const shouldTrace = meta.trace === "decision" || ambient !== undefined;
+        if (shouldTrace) {
           traceId = await self._recordDecisionTrace(params, response, meta);
         }
 
@@ -237,8 +242,16 @@ export class AnthropicAdapter {
         conclusion: conclusion.slice(0, 4000),
       },
     };
-    if (meta.tags) body.tags = meta.tags;
-    if (meta.parent_trace_id) body.parent_trace_id = meta.parent_trace_id;
+    // Merge ambient context (`at.deciding(...)`) — explicit values on
+    // `meta` win; ambient fills gaps. Tags are unioned (explicit first
+    // since they're more specific).
+    const ambient = getAmbient();
+    const explicitTags = meta.tags ?? [];
+    const ambientTags = ambient?.tags ?? [];
+    const mergedTags = Array.from(new Set([...explicitTags, ...ambientTags]));
+    if (mergedTags.length > 0) body.tags = mergedTags;
+    const parent = meta.parent_trace_id ?? ambient?.parent_trace_id ?? null;
+    if (parent) body.parent_trace_id = parent;
     if (meta.agent_id) body.agent_id = meta.agent_id;
 
     try {
@@ -339,6 +352,16 @@ export class AnthropicAdapter {
           conclusion: conclusion.slice(0, 4000),
         },
       };
+      // Markup-emitted traces inherit ambient parent + tags too, so
+      // a <trace> tag inside `at.deciding(...)` chains to the framing
+      // decision the same way auto-trace does.
+      const tagAmbient = getAmbient();
+      if (tagAmbient?.parent_trace_id) {
+        post.parent_trace_id = tagAmbient.parent_trace_id;
+      }
+      if (tagAmbient?.tags && tagAmbient.tags.length > 0) {
+        post.tags = [...tagAmbient.tags];
+      }
       if (confidenceStr) {
         const conf = Number.parseFloat(confidenceStr);
         if (Number.isFinite(conf) && conf >= 0 && conf <= 1) {

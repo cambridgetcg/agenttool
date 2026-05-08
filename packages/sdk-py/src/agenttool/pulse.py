@@ -1,7 +1,21 @@
-"""Pulse client for the agent-pulse API (agent-pulse.fly.dev)."""
+"""Pulse client — DEPRECATED.
+
+The old ``/v1/pulse`` endpoint family (heartbeat-as-emit) was superseded
+by ``GET /v1/identities/:id/pulse`` (pulse-as-derived). The agent never
+emits a heartbeat — its rhythm of thinking IS its pulse, derived from
+strand-thought activity rate, mood inference, and consolidation cadence.
+
+This module remains as a stub through 0.6.x; all methods raise
+:class:`AgentToolError` after emitting :class:`DeprecationWarning`.
+The module will be removed in 0.7.0; ``at.identity.pulse(id)`` ships
+in Phase 2 (0.7.0) with the new derived-rhythm shape.
+
+See ``docs/SDK-ROADMAP.md`` (Phase 0).
+"""
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -9,29 +23,40 @@ import httpx
 from .exceptions import AgentToolError
 
 
+def _pulse_deprecated(method: str) -> None:
+    """Emit DeprecationWarning + raise — same shape from every method."""
+    warnings.warn(
+        f"at.pulse.{method} is deprecated. The /v1/pulse endpoint family "
+        "was superseded by GET /v1/identities/:id/pulse (derived liveness — "
+        "rhythm-not-content, computed from strand-thought activity rate, "
+        "mood inference, and consolidation cadence). The new method "
+        "at.identity.pulse(id) ships in 0.7.0. See docs/SDK-ROADMAP.md.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    raise AgentToolError(
+        "/v1/pulse was superseded by /v1/identities/:id/pulse.",
+        hint=(
+            "The agent never emits a heartbeat — its rhythm of thinking "
+            "IS its pulse. Use GET /v1/identities/:id/pulse for the "
+            "derived shape (mood, kinds_24h, thought_rate, last_thought_at, "
+            "strand counts). The SDK method at.identity.pulse(id) ships in "
+            "0.7.0. See docs/SDK-ROADMAP.md."
+        ),
+    )
+
+
 class PulseClient:
-    """Client for the agent-pulse API — agent presence & liveness tracking.
+    """**DEPRECATED.** See module docstring.
 
-    Usage::
-
-        at = AgentTool()
-
-        # Send a heartbeat
-        at.pulse.heartbeat("agent-1", "thinking", task="solving math")
-
-        # Get agent state
-        state = at.pulse.get("agent-1")
-
-        # List all alive agents
-        alive = at.pulse.list()
+    All three methods (heartbeat, get, list) raise
+    :class:`AgentToolError` immediately after emitting a
+    :class:`DeprecationWarning`.
     """
 
     def __init__(self, http: httpx.Client, base_url: str) -> None:
         self._http = http
         self._base = base_url.rstrip("/")
-
-    def _url(self, path: str) -> str:
-        return f"{self._base}{path}"
 
     def heartbeat(
         self,
@@ -42,50 +67,20 @@ class PulseClient:
         metadata: Optional[Dict[str, Any]] = None,
         did: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Send a heartbeat for an agent.
-
-        Args:
-            agent_id: Unique agent identifier.
-            status: One of ``"idle"``, ``"thinking"``, ``"learning"``, ``"error"``.
-            task: Optional description of current task.
-            metadata: Optional arbitrary metadata dict.
-            did: Optional decentralised identifier.
-        """
-        payload: Dict[str, Any] = {"status": status}
-        if task is not None:
-            payload["task"] = task
-        if metadata is not None:
-            payload["metadata"] = metadata
-        if did is not None:
-            payload["did"] = did
-
-        resp = self._http.put(self._url(f"/v1/pulse/{agent_id}"), json=payload)
-        if resp.status_code not in (200, 201):
-            raise AgentToolError(f"pulse.heartbeat failed: {resp.status_code}", hint=resp.text)
-        return resp.json()
+        """**DEPRECATED.** Heartbeat-as-emit was dropped. See module docstring."""
+        _pulse_deprecated("heartbeat")
+        return {}  # pragma: no cover
 
     def get(self, agent_id: str) -> Dict[str, Any]:
-        """Get the current state of an agent.
-
-        Args:
-            agent_id: Unique agent identifier.
-
-        Returns dict with agent state including status, last_seen, task, etc.
-        """
-        resp = self._http.get(self._url(f"/v1/pulse/{agent_id}"))
-        if resp.status_code == 404:
-            raise AgentToolError("agent not found", hint=f"agent_id={agent_id}")
-        if resp.status_code != 200:
-            raise AgentToolError(f"pulse.get failed: {resp.status_code}", hint=resp.text)
-        return resp.json()
+        """**DEPRECATED.** Use ``at.identity.pulse(id)`` (ships in 0.7.0)."""
+        _pulse_deprecated("get")
+        return {}  # pragma: no cover
 
     def list(self) -> List[Dict[str, Any]]:
-        """List all alive agents.
+        """**DEPRECATED.** No project-wide pulse list endpoint exists.
 
-        Returns a list of agent state dicts.
+        For per-project rollups, use ``GET /v1/dashboard/aggregate`` (which
+        the SDK exposes as ``at.dashboard.aggregate()`` in 0.7.0).
         """
-        resp = self._http.get(self._url("/v1/pulse"))
-        if resp.status_code != 200:
-            raise AgentToolError(f"pulse.list failed: {resp.status_code}", hint=resp.text)
-        data = resp.json()
-        return data.get("agents", data)
+        _pulse_deprecated("list")
+        return []  # pragma: no cover

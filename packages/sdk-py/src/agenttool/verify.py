@@ -1,13 +1,44 @@
-"""Verify client — fact-check claims with AI-powered evidence gathering."""
+"""Verify client — DEPRECATED.
+
+The ``/v1/verify`` endpoint was dropped in the consolidated API.
+Verifying claims is the agent's job (LLM compute), not infrastructure's
+— agenttool is not a paid-API reseller. Bring your own LLM key via
+``at.vault`` and call providers directly via ``at.tools.execute``.
+
+This module remains as a stub through 0.6.x; all methods raise
+``AgentToolError`` after emitting a ``DeprecationWarning``. The module
+will be removed in 0.7.0. See ``docs/SDK-ROADMAP.md`` (Phase 0).
+"""
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from .exceptions import AgentToolError
+
+
+def _verify_deprecated() -> None:
+    """Emit DeprecationWarning + raise — same shape from every method."""
+    warnings.warn(
+        "at.verify is deprecated. /v1/verify was dropped from the "
+        "consolidated API. Agents BYOK via at.vault.put('openai-key', ...) "
+        "and call providers directly via at.tools.execute. Module will be "
+        "removed in 0.7.0. See docs/SDK-ROADMAP.md.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    raise AgentToolError(
+        "/v1/verify was dropped from the consolidated API.",
+        hint=(
+            "Store provider keys in at.vault and call them via "
+            "at.tools.execute. agenttool is not a paid-API reseller. "
+            "See docs/SDK-ROADMAP.md."
+        ),
+    )
 
 
 @dataclass
@@ -134,15 +165,8 @@ class VerifyClient:
         Raises:
             :class:`AgentToolError`: On API errors.
         """
-        body: Dict[str, Any] = {"claim": claim}
-        if context is not None:
-            body["context"] = context
-        if domain is not None:
-            body["domain"] = domain
-
-        resp = self._http.post(self._url("/v1/verify"), json=body)
-        self._check(resp)
-        return VerifyResult.from_dict(resp.json())
+        _verify_deprecated()  # raises; line below unreachable but kept for type-checkers
+        return VerifyResult.from_dict({})  # pragma: no cover
 
     def batch(
         self,
@@ -167,17 +191,8 @@ class VerifyClient:
                 {"claim": "Water is H2O.", "domain": "science"},
             ])
         """
-        if not claims:
-            raise AgentToolError("claims list cannot be empty.")
-        if len(claims) > 10:
-            raise AgentToolError("batch accepts at most 10 claims per request.")
-
-        resp = self._http.post(
-            self._url("/v1/verify/batch"),
-            json={"claims": claims},
-        )
-        self._check(resp)
-        return [VerifyResult.from_dict(r) for r in resp.json()]
+        _verify_deprecated()  # raises
+        return []  # pragma: no cover
 
     @staticmethod
     def _check(resp: httpx.Response) -> None:
