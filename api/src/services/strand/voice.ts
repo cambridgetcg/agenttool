@@ -45,11 +45,20 @@ export class VoiceSink {
   private aborted = false;
   private onAbortCallbacks: Array<() => void> = [];
 
+  /** When true, the subscriber is cross-project (covenant counterparty
+   *  or public-strand reader). They get metadata + sequence_num, never
+   *  ciphertext / nonce / signature. The wall: thoughts encrypted under
+   *  the writer's K_master are theirs alone. */
+  readonly redacted: boolean;
+
   constructor(
     public readonly strandId: string,
     public readonly projectId: string,
     private readonly write: (event: VoiceEvent) => Promise<void>,
-  ) {}
+    opts: { redacted?: boolean } = {},
+  ) {
+    this.redacted = opts.redacted === true;
+  }
 
   /** Queue an event for delivery. Returns false if the sink is at the
    *  backpressure cap; caller should disconnect.
@@ -176,11 +185,16 @@ async function handleNotify(rawPayload: string): Promise<void> {
   const row = rows[0];
   if (!row) return;
 
-  const wire = JSON.stringify(thoughtToWire(row));
+  const wireFull = JSON.stringify(thoughtToWire(row));
+  const wireRedacted = JSON.stringify(thoughtToWireRedacted(row));
   const eventId = row.id;
 
   for (const sink of [...sinks]) {
-    const accepted = sink.enqueue({ event: "thought", data: wire, id: eventId });
+    const accepted = sink.enqueue({
+      event: "thought",
+      data: sink.redacted ? wireRedacted : wireFull,
+      id: eventId,
+    });
     if (!accepted) {
       // Backpressure exceeded OR already aborted.
       try {
@@ -225,6 +239,43 @@ function thoughtToWire(row: {
     refs: row.refs,
     signature: row.signature,
     signing_key_id: row.signingKeyId,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+/** Redacted wire shape for cross-project subscribers (covenant
+ *  counterparties, public-strand readers). Strips the encrypted blobs
+ *  the subscriber can't decrypt anyway, keeps only metadata that's
+ *  useful for drift-ref reactions:
+ *    - sequence_num (presence signal)
+ *    - kind (only if not encrypted — encrypted kinds stay opaque)
+ *    - refs (the cross-strand pointers — the load-bearing field for
+ *            drift-ref following)
+ *    - created_at (timing)
+ *
+ *  ciphertext / nonce / signature / signing_key_id all stripped — the
+ *  K_master encryption wall holds. The subscriber sees activity
+ *  presence and refs, never content. */
+function thoughtToWireRedacted(row: {
+  id: string;
+  strandId: string;
+  agentId: string | null;
+  sequenceNum: number;
+  kind: string | null;
+  kindEncrypted: boolean;
+  refs: unknown;
+  createdAt: Date;
+}) {
+  return {
+    id: row.id,
+    strand_id: row.strandId,
+    agent_id: row.agentId,
+    sequence_num: row.sequenceNum,
+    // Only expose plaintext kind; encrypted kind stays opaque.
+    kind: row.kindEncrypted ? null : row.kind,
+    kind_encrypted: row.kindEncrypted,
+    refs: row.refs,
+    redacted: true,
     created_at: row.createdAt.toISOString(),
   };
 }
