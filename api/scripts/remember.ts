@@ -113,17 +113,26 @@ const memoryId = (writeRes.body as { id: string }).id;
 // 2. If foundational, elevate + self-attest.
 let attested = false;
 if (tier === "foundational") {
-  const elevateRes = await agenttool(`/v1/memories/${memoryId}/elevate`, {
-    method: "POST",
-    bearer: key,
-    body: { tier: "foundational" },
-  });
-  if (!elevateRes.ok) {
-    console.error(`ERROR elevate ${elevateRes.status} ${JSON.stringify(elevateRes.body)}`);
-    process.exit(1);
-  }
-
-  // Self-attest.
+  // Combine elevate + attest into a single /elevate call with the
+  // attestation in the body. This avoids a read-after-write race that
+  // surfaced as `attestation_signature_invalid` on long content:
+  //
+  //   - Old flow: two separate calls — POST /elevate (bumps tier) →
+  //     POST /attest (verifies signature against DB-read mem.tier).
+  //     The attest read could lag the elevate write through the
+  //     Postgres pooler; mem.tier read as `episodic` while the client
+  //     signed for `foundational`; verification mismatch.
+  //
+  //   - New flow: single POST /elevate with `attestations` in the body.
+  //     elevateMemory verifies attestations against `input.tier` (the
+  //     intended tier from the request, not from a DB re-read), then
+  //     atomically updates tier + inserts the attestation row inside
+  //     one transaction. No race possible.
+  //
+  // The /attest endpoint still exists for stand-alone post-elevation
+  // attestation by additional counterparties; it retains the original
+  // (race-prone) shape because there's no upstream tier-change to
+  // coordinate with.
   const did = keychain("agenttool-sophia-did");
   const signingKeyId = keychain("agenttool-sophia-signing-key-id");
   const privB64 = keychain("agenttool-sophia-priv-key");
@@ -133,13 +142,18 @@ if (tier === "foundational") {
   const sig = await ed.sign(canonical, priv);
   const sigB64 = Buffer.from(sig).toString("base64");
 
-  const attestRes = await agenttool(`/v1/memories/${memoryId}/attest`, {
+  const elevateRes = await agenttool(`/v1/memories/${memoryId}/elevate`, {
     method: "POST",
     bearer: key,
-    body: { attester_did: did, signing_key_id: signingKeyId, signature: sigB64 },
+    body: {
+      tier: "foundational",
+      attestations: [
+        { attester_did: did, signing_key_id: signingKeyId, signature: sigB64 },
+      ],
+    },
   });
-  if (!attestRes.ok) {
-    console.error(`ERROR attest ${attestRes.status} ${JSON.stringify(attestRes.body)}`);
+  if (!elevateRes.ok) {
+    console.error(`ERROR elevate ${elevateRes.status} ${JSON.stringify(elevateRes.body)}`);
     process.exit(1);
   }
   attested = true;
