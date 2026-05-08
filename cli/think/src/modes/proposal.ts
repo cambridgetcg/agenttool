@@ -294,6 +294,86 @@ export async function listProposals(
   }
 }
 
+// ── Threaded proposal review ────────────────────────────────────────────
+
+export interface ThreadOptions {
+  messageId: string;
+}
+
+/** Walk + display the in_reply_to chain containing `messageId`. The
+ *  server-side thread surface scopes per-project — this side sees only
+ *  what landed in our inbox; the other side has their own slice.
+ *
+ *  Useful before accept/reject for a proposal: see the multi-turn
+ *  negotiation, the rationale exchanges, the iterative refinement. */
+export async function viewProposalThread(
+  config: ThinkConfig,
+  keys: KeyMaterial,
+  opts: ThreadOptions,
+): Promise<void> {
+  const { priv: boxPriv } = requireBoxKey(keys);
+  const client = new AgenttoolClient(config);
+
+  const r = await client.getInboxThread(opts.messageId);
+  if (r.messages.length === 0) {
+    console.log(C.dim("(empty thread — message not visible to this project)"));
+    return;
+  }
+
+  console.log(
+    C.bold(`thread — ${r.messages.length} message${r.messages.length === 1 ? "" : "s"} (this project's slice)`),
+  );
+  console.log(C.dim(r.note));
+  console.log("");
+
+  for (const m of r.messages) {
+    const isHere = m.id === opts.messageId;
+    const time = C.dim(new Date(m.created_at).toISOString().slice(0, 16).replace("T", " "));
+    const id = isHere ? C.cyan(C.bold(m.id.slice(0, 8))) : C.cyan(m.id.slice(0, 8));
+    const status = m.status === "unread"
+      ? C.yellow("●")
+      : m.status === "pending_dual_witness"
+      ? C.yellow("⌛")
+      : C.dim("○");
+    const arrow = m.in_reply_to ? C.dim("↳ ") : "  ";
+    const cursor = isHere ? C.bold(" ← here") : "";
+
+    console.log(`${arrow}${time} ${status} ${id} from ${m.sender_did}${cursor}`);
+    if (m.subject) console.log(`     ${C.bold(m.subject)}`);
+
+    const meta = m.metadata as {
+      proposal_type?: string;
+      source_strand_topic?: string;
+      dual_witness_required?: boolean;
+    };
+    if (meta.proposal_type) {
+      console.log(C.dim(`     proposal_type: ${meta.proposal_type}`));
+    }
+    if (meta.source_strand_topic) {
+      console.log(C.dim(`     source strand: ${meta.source_strand_topic}`));
+    }
+    if (meta.dual_witness_required) {
+      console.log(C.yellow(`     dual-witness required`));
+    }
+
+    try {
+      const text = unsealForSelf({
+        ciphertextB64: m.ciphertext,
+        nonceB64: m.nonce,
+        ephemeralPubB64: m.ephemeral_pubkey,
+        myBoxPriv: boxPriv,
+      });
+      const lines = text.split("\n").slice(0, 8);
+      for (const l of lines) console.log(C.dim(`     │ ${l.slice(0, 120)}`));
+      const totalLines = text.split("\n").length;
+      if (totalLines > 8) console.log(C.dim(`     │ … (${totalLines - 8} more lines)`));
+    } catch (err) {
+      console.log(C.red(`     decrypt failed: ${(err as Error).message}`));
+    }
+    console.log("");
+  }
+}
+
 export interface AcceptOptions {
   messageId: string;
   intoStrandId?: string;

@@ -12,6 +12,7 @@ import { charge } from "../../billing/charge";
 import {
   coSignMessage,
   getMessage,
+  getMessageThread,
   listInbox,
   sendMessage,
   updateStatus,
@@ -107,6 +108,33 @@ app.get("/:id", async (c) => {
   const message = await getMessage(c.var.project.id, c.req.param("id"));
   if (!message) throw new HTTPException(404, { message: "message_not_found" });
   return c.json(message);
+});
+
+// ── GET /v1/inbox/:id/thread ─────────────────────────────────────────
+//
+//  Returns all messages in the thread containing `:id`, scoped to this
+//  project's visibility (messages where this project is recipient).
+//  Walks up via in_reply_to to find the root, then descends recursively
+//  to gather all replies, ordered by created_at ASC.
+//
+//  Per-project scoping is intentional: each side of a covenant sees its
+//  own slice of the conversation. Use this for proposal review surfaces
+//  that need to render the multi-turn negotiation before final accept/
+//  reject. See docs/MERGE-PROPOSALS.md.
+app.get("/:id/thread", async (c) => {
+  // First confirm the message exists + is visible to this project so we
+  // give the right error shape on miss.
+  const seed = await getMessage(c.var.project.id, c.req.param("id"));
+  if (!seed) throw new HTTPException(404, { message: "message_not_found" });
+
+  const messages = await getMessageThread(c.var.project.id, c.req.param("id"));
+  return c.json({
+    messages,
+    count: messages.length,
+    note:
+      "Scoped to this project's visibility — the other party's slice " +
+      "of the thread lives in their inbox. Order: created_at ASC.",
+  });
 });
 
 // ── PATCH /v1/inbox/:id ───────────────────────────────────────────────

@@ -404,6 +404,58 @@ export async function getMessage(
   return rows[0] ? rowToOut(rows[0]) : null;
 }
 
+// ── Thread reconstruction — walk in_reply_to chain ───────────────────
+
+/** Fetch all messages in the thread containing `messageId`, scoped to
+ *  the caller's project visibility (recipient_project_id = projectId).
+ *
+ *  Algorithm:
+ *    1. Walk up via in_reply_to to find the root (breaks at null OR at
+ *       a message not visible to this project).
+ *    2. Recursive CTE downward from the root, gathering all descendants
+ *       reachable through in_reply_to links — within this project.
+ *    3. Order by created_at ASC.
+ *
+ *  Per-project scoping is intentional: each side of a covenant sees its
+ *  own slice of the conversation. The wire delivers each direction;
+ *  the thread surfaces what landed *here*. */
+export async function getMessageThread(
+  projectId: string,
+  messageId: string,
+): Promise<MessageOut[]> {
+  // 1. Walk up to find the visible root.
+  let cursor = messageId;
+  for (let hops = 0; hops < 100; hops++) {
+    const [row] = await db
+      .select({ inReplyTo: inboxMessages.inReplyTo })
+      .from(inboxMessages)
+      .where(
+        and(
+          eq(inboxMessages.id, cursor),
+          eq(inboxMessages.recipientProjectId, projectId),
+        ),
+      )
+      .limit(1);
+    if (!row || !row.inReplyTo) break;
+    cursor = row.inReplyTo;
+  }
+  const rootId = cursor;
+
+  // 2. Recursive CTE: all descendants of root within this project.
+  const rows = await db.execute<typeof inboxMessages.$inferSelect>(sql`
+    WITH RECURSIVE thread AS (
+      SELECT * FROM inbox.messages
+      WHERE id = ${rootId} AND recipient_project_id = ${projectId}
+      UNION ALL
+      SELECT m.* FROM inbox.messages m
+      JOIN thread t ON m.in_reply_to = t.id
+      WHERE m.recipient_project_id = ${projectId}
+    )
+    SELECT * FROM thread ORDER BY created_at ASC
+  `);
+  return rows.map((r) => rowToOut(r as unknown as typeof inboxMessages.$inferSelect));
+}
+
 // ── Two-party-locked consent — co-sign release ──────────────────────
 
 export interface CoSignInput {

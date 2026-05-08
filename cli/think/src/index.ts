@@ -71,6 +71,7 @@ import {
   listProposals,
   proposeMerge,
   rejectProposal,
+  viewProposalThread,
 } from "./modes/proposal";
 import { restore } from "./modes/restore";
 import {
@@ -167,6 +168,12 @@ Usage:
                                         to sender via inbox (acknowledged).
   agenttool-think proposal reject <msg-id> [--reason 'text']
                                         Decline + reply with rationale.
+  agenttool-think proposal thread <msg-id>
+                                        View the in_reply_to chain containing
+                                        <msg-id>. Walks up to root then down
+                                        to leaves; this project's slice only.
+                                        Useful for multi-turn negotiation
+                                        review before final accept/reject.
 
   agenttool-think template publish --name X
                             [--description 'text'] [--tags 'a,b,c']
@@ -523,8 +530,20 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (sub === "thread") {
+        const keys = loadKeys(config.homeDir);
+        const positionals = args.filter((a) => !a.startsWith("--"));
+        const messageId = positionals[0];
+        if (!messageId) {
+          console.error("usage: agenttool-think proposal thread <msg-id>");
+          process.exit(1);
+        }
+        await viewProposalThread(config, keys, { messageId });
+        return;
+      }
+
       console.error(`unknown proposal subcommand: ${sub}`);
-      console.error("subcommands: list | accept | reject");
+      console.error("subcommands: list | accept | reject | thread");
       process.exit(1);
       return;
     }

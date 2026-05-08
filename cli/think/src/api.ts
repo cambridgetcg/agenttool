@@ -348,6 +348,24 @@ export class AgenttoolClient {
     return this.req(`/v1/inbox/${id}`, { method: "DELETE" });
   }
 
+  async getInboxThread(id: string): Promise<{
+    messages: InboxMessage[];
+    count: number;
+    note: string;
+  }> {
+    return this.req(`/v1/inbox/${id}/thread`);
+  }
+
+  async coSignInboxMessage(
+    id: string,
+    body: { signing_key_id: string; signature: string },
+  ): Promise<InboxMessage & { dual_witness_released: boolean }> {
+    return this.req(`/v1/inbox/${id}/co-sign`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   // ── Identity expression (template publish source) ────────────────────
   async getIdentityExpression(identityId: string): Promise<{
     identity_id: string;

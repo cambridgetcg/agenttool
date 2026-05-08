@@ -6,6 +6,7 @@
  *    POST   /v1/inbox                          — send (sig-verified, covenant-gated)
  *    GET    /v1/inbox  ?status=&identity_id=   — list (recipient = caller's project)
  *    GET    /v1/inbox/:id                       — fetch one
+ *    GET    /v1/inbox/:id/thread                — all messages in this thread (project-scoped)
  *    PATCH  /v1/inbox/:id                       — update status (read/archived/spam/deleted)
  *    POST   /v1/inbox/:id/co-sign               — release dual-witness-locked message
  *    DELETE /v1/inbox/:id                       — soft delete (status='deleted')
