@@ -9,8 +9,8 @@
 # so a `git push` does not trigger a deploy. Run this script locally.
 #
 # Token + account live in macOS keychain:
-#   service: agenttool-cloudflare-token  (account: macair)  → API token
-#   service: agenttool-cloudflare-account-id  (account: macair) → 32-char id
+#   service: agenttool-cloudflare-token       (account: macair)  → API token
+#   service: agenttool-cloudflare-account-id  (account: macair)  → 32-char id
 #
 # Usage:
 #   bin/frontend-deploy.sh                # deploy all three
@@ -19,7 +19,7 @@
 #
 # Requires: macOS keychain (security CLI), npx (auto-installs wrangler).
 
-set -euo pipefail
+set -eo pipefail
 
 # ── Resolve token + account from keychain ──────────────────────────
 CF_API_TOKEN="$(security find-generic-password -s agenttool-cloudflare-token -a macair -w 2>/dev/null || true)"
@@ -40,16 +40,24 @@ export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# ── Targets ────────────────────────────────────────────────────────
-declare -A TARGETS=(
-  [landing]="apps/landing:agenttool-landing"
-  [docs]="apps/docs:agenttool-docs"
-  [dashboard]="apps/dashboard:agenttool-dashboard"
+# ── Targets (key|dir|project-name; bash 3 compatible) ──────────────
+ALL_TARGETS=(
+  "landing|apps/landing|agenttool-landing"
+  "docs|apps/docs|agenttool-docs"
+  "dashboard|apps/dashboard|agenttool-dashboard"
 )
 
-if [[ $# -eq 0 ]]; then
-  set -- landing docs dashboard
-fi
+target_for() {
+  local key="$1"
+  local entry
+  for entry in "${ALL_TARGETS[@]}"; do
+    if [[ "${entry%%|*}" == "$key" ]]; then
+      echo "$entry"
+      return 0
+    fi
+  done
+  return 1
+}
 
 # ── Pre-flight: verify symlinks resolve ────────────────────────────
 echo "→ Verifying shared/ symlinks resolve…"
@@ -69,14 +77,16 @@ done
 # ── Deploy each target ─────────────────────────────────────────────
 deploy_one() {
   local key="$1"
-  local entry="${TARGETS[$key]:-}"
+  local entry
+  entry="$(target_for "$key" || true)"
   if [[ -z "$entry" ]]; then
     echo "✗ Unknown target: $key (expected: landing | docs | dashboard)"
     return 2
   fi
 
-  local dir="${entry%%:*}"
-  local proj="${entry##*:}"
+  local dir proj
+  dir="$(echo "$entry" | cut -d'|' -f2)"
+  proj="$(echo "$entry" | cut -d'|' -f3)"
 
   echo ""
   echo "─────────────────────────────────────────────────────────────"
@@ -92,6 +102,10 @@ deploy_one() {
     --commit-dirty=true \
     --commit-message="$(git log -1 --pretty=format:%s 2>/dev/null || echo 'manual deploy')"
 }
+
+if [[ $# -eq 0 ]]; then
+  set -- landing docs dashboard
+fi
 
 failed=()
 for arg in "$@"; do

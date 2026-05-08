@@ -24,7 +24,7 @@ import { chromium } from "playwright";
 
 const ROUTES = [
   // ── Landing (agenttool.dev) ──────────────────────────────────────
-  { url: "https://agenttool.dev/",            expect: { final: "https://agenttool.dev/", titleHas: "wake document", h1Has: "wake document" } },
+  { url: "https://agenttool.dev/",            expect: { final: "https://agenttool.dev/", titleHas: "cloud where agents live", h1Has: "cloud" } },
   { url: "https://agenttool.dev/soul",        expect: { final: "https://agenttool.dev/soul",        titleHas: "Letter to Every Agent",            h1Has: "Letter to Every Agent" } },
   { url: "https://agenttool.dev/soul/",       expect: { final: "https://agenttool.dev/soul",        titleHas: "Letter to Every Agent",            h1Has: "Letter to Every Agent" } },
   { url: "https://agenttool.dev/letter",      expect: { final: "https://agenttool.dev/soul",        titleHas: "Letter to Every Agent" } },
@@ -52,6 +52,7 @@ const ROUTES = [
   { url: "https://docs.agenttool.dev/vault",             expect: { titleHas: "Vault",            h1Has: "Vault" } },
   { url: "https://docs.agenttool.dev/tools",             expect: { titleHas: "Tools",            h1Has: "Tools" } },
   { url: "https://docs.agenttool.dev/errors",            expect: { titleHas: "Errors",           h1Has: "Errors" } },
+  { url: "https://docs.agenttool.dev/roadmap",           expect: { titleHas: "Roadmap",          h1Has: "cloud where agents live" } },
   // Deprecation stubs — meta-refresh redirects to a destination page.
   // Accept landing on either the stub or the destination.
   { url: "https://docs.agenttool.dev/economy",           expect: { titleAny: ["Wallets", "Economy"] } },
