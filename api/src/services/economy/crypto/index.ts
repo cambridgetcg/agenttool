@@ -274,7 +274,10 @@ export async function checkPayoutPolicy(p: {
   }
 
   if (policy.payoutDailyCeilingBase !== null) {
-    // Sum across non-terminal-failure rows on the rolling UTC day.
+    // Sum across non-terminal-failure rows on the rolling UTC day. Drizzle's
+    // db.execute() with the postgres-js driver returns an Array<row>
+    // directly — not a { rows: [...] } wrapper. Pre-fix, we read .rows
+    // (undefined) and always saw a sum of 0, silently disabling the ceiling.
     const result = await db.execute<{ total: string }>(sql`
       SELECT COALESCE(SUM(amount_base::numeric), 0)::text AS total
       FROM economy.crypto_payouts
@@ -282,7 +285,9 @@ export async function checkPayoutPolicy(p: {
         AND status NOT IN ('failed', 'cancelled')
         AND requested_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
     `);
-    const rows = (result as unknown as { rows?: Array<{ total: string }> }).rows ?? [];
+    const rows = (Array.isArray(result)
+      ? (result as Array<{ total: string }>)
+      : ((result as unknown as { rows?: Array<{ total: string }> }).rows ?? []));
     const todaySum = BigInt(rows[0]?.total ?? "0");
     const ceiling = BigInt(policy.payoutDailyCeilingBase);
     if (todaySum + p.amountBase > ceiling) {
