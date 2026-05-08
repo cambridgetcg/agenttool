@@ -49,6 +49,10 @@ export const covenants = continuitySchema.table(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id").notNull(),
+    /** Optional org scope — when set, the covenant applies to all
+     *  active member projects of this org (not just `project_id`).
+     *  NULL = project-scoped (default; current behavior). */
+    orgId: uuid("org_id"),
     agentId: uuid("agent_id").notNull(), // the agent making the vow
     counterpartyDid: text("counterparty_did").notNull(), // who the vow is with (DID or human:<name>)
     counterpartyName: text("counterparty_name"), // human-readable

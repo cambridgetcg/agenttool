@@ -192,15 +192,17 @@ export async function elevateMemory(
   }
 
   // 4. For constitutive: confirm at least one attester is a covenant counterparty.
+  //    Includes project-level + org-level (inherited via membership)
+  //    via isCovenantCounterparty.
   if (input.tier === "constitutive") {
-    const covRows = await db
-      .select({ counterpartyDid: covenants.counterpartyDid })
-      .from(covenants)
-      .where(
-        and(eq(covenants.projectId, projectId), eq(covenants.status, "active")),
-      );
-    const covSet = new Set(covRows.map((r) => r.counterpartyDid));
-    const matched = verifiedAttestations.some((a) => covSet.has(a.attesterDid));
+    const { isCovenantCounterparty } = await import("../covenants/check");
+    let matched = false;
+    for (const a of verifiedAttestations) {
+      if (await isCovenantCounterparty(projectId, a.attesterDid)) {
+        matched = true;
+        break;
+      }
+    }
     if (!matched) throw new Error("attester_not_covenant_counterparty");
   }
 

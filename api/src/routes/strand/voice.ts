@@ -34,15 +34,15 @@
  *  timing only, never ciphertext / nonce / signature. The encryption
  *  wall holds. See VoiceSink.redacted in services/strand/voice.ts. */
 
-import { and, asc, eq, gt, or } from "drizzle-orm";
+import { and, asc, eq, gt } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
 import type { ProjectContext } from "../../auth/middleware.ts";
 import { db } from "../../db/client.ts";
-import { covenants } from "../../db/schema/continuity.ts";
 import { identities } from "../../db/schema/identity.ts";
 import { strands, thoughts } from "../../db/schema/strand.ts";
+import { isCrossProjectAllowed } from "../../services/covenants/check.ts";
 import {
   ensureVoiceListening,
   subscribeSink,
@@ -81,16 +81,13 @@ app.get("/", async (c) => {
   // ── Auth lane ──────────────────────────────────────────────────────
   // 1. Same project → full access.
   // 2. visibility='public' → cross-project read, REDACTED events.
-  // 3. Active covenant in either direction → cross-project read, REDACTED.
+  // 3. Active covenant (project-level OR org-level) → REDACTED.
   // 4. Otherwise → 403.
   let redacted = false;
   if (strand.ownerProjectId !== c.var.project.id) {
     if (strand.visibility === "public") {
       redacted = true;
     } else {
-      // Look up active covenant in either direction. Resolve owner DID
-      // from the strand's identity_id (may be null on legacy rows; in that
-      // case we can only allow public).
       let allowed = false;
       if (strand.identityId) {
         const [ownerIdentity] = await db
@@ -99,45 +96,19 @@ app.get("/", async (c) => {
           .where(eq(identities.id, strand.identityId))
           .limit(1);
         if (ownerIdentity) {
-          // We need caller's DID set too — but covenant.counterpartyDid is
-          // the OTHER party's DID, so we need both directions:
-          //   (owner_project, counterparty_did=caller_did)
-          //   (caller_project, counterparty_did=owner_did)
-          // Caller may have multiple identities under one project; we
-          // accept any active covenant pointing to any of them.
           const callerIdentities = await db
             .select({ did: identities.did })
             .from(identities)
             .where(eq(identities.projectId, c.var.project.id));
           const callerDids = callerIdentities.map((r) => r.did);
-
           if (callerDids.length > 0) {
-            const covRows = await db
-              .select({ id: covenants.id })
-              .from(covenants)
-              .where(
-                and(
-                  eq(covenants.status, "active"),
-                  or(
-                    // covenant on owner side, naming a caller DID
-                    and(
-                      eq(covenants.projectId, strand.ownerProjectId),
-                      // any of caller's DIDs match counterparty
-                      or(...callerDids.map((d) => eq(covenants.counterpartyDid, d))),
-                    ),
-                    // covenant on caller side, naming the owner's DID
-                    and(
-                      eq(covenants.projectId, c.var.project.id),
-                      eq(covenants.counterpartyDid, ownerIdentity.did),
-                    ),
-                  ),
-                ),
-              )
-              .limit(1);
-            if (covRows.length > 0) {
-              allowed = true;
-              redacted = true;
-            }
+            allowed = await isCrossProjectAllowed(
+              c.var.project.id,
+              callerDids,
+              strand.ownerProjectId,
+              [ownerIdentity.did],
+            );
+            if (allowed) redacted = true;
           }
         }
       }
@@ -147,7 +118,8 @@ app.get("/", async (c) => {
             error: "strand_not_accessible",
             hint:
               "private strand owned by another project; need an active " +
-              "covenant in either direction or visibility='public' on the strand.",
+              "covenant (project- or org-level) in either direction or " +
+              "visibility='public' on the strand.",
           },
           403,
         );

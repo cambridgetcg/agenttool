@@ -7,7 +7,7 @@
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { covenants } from "../../db/schema/continuity";
+import { isCrossProjectAllowed } from "../covenants/check";
 import {
   getSettings as getFederationSettings,
   parseDid,
@@ -91,36 +91,8 @@ function rowToOut(row: typeof inboxMessages.$inferSelect): MessageOut {
  *  receiver can mark spam if they don't reciprocate.
  *
  *  Same-project: ungated (sibling agents always reachable). */
-async function isCrossProjectAllowed(
-  senderProjectId: string,
-  senderDid: string,
-  recipientProjectId: string,
-  recipientDid: string,
-): Promise<boolean> {
-  if (senderProjectId === recipientProjectId) return true;
-
-  const rows = await db
-    .select({ id: covenants.id })
-    .from(covenants)
-    .where(
-      and(
-        eq(covenants.status, "active"),
-        or(
-          and(
-            eq(covenants.projectId, senderProjectId),
-            eq(covenants.counterpartyDid, recipientDid),
-          ),
-          and(
-            eq(covenants.projectId, recipientProjectId),
-            eq(covenants.counterpartyDid, senderDid),
-          ),
-        ),
-      ),
-    )
-    .limit(1);
-
-  return rows.length > 0;
-}
+// isCrossProjectAllowed lives in services/covenants/check.ts — handles
+// project-level + org-level (inherited via org membership) gating.
 
 // ── Operations ───────────────────────────────────────────────────────
 

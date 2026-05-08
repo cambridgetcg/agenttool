@@ -118,6 +118,10 @@ const covenantSchema = z.object({
   vows: z.array(z.string().min(1)).min(1),
   notes: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
+  /** Optional org scope. When set, the covenant applies to ALL active
+   *  member projects of this org. Caller must be the org owner.
+   *  See docs/ORG-COVENANTS.md. */
+  org_id: z.string().uuid().optional(),
 });
 
 // Map a covenant row (Drizzle camelCase) to the snake_case shape the rest
@@ -126,6 +130,7 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
   return {
     id: row.id,
     project_id: row.projectId,
+    org_id: row.orgId,
     agent_id: row.agentId,
     counterparty_did: row.counterpartyDid,
     counterparty_name: row.counterpartyName,
@@ -143,10 +148,36 @@ app.post("/covenants", async (c) => {
   const project = c.var.project;
   const body = covenantSchema.parse(await c.req.json());
 
+  // Org-scoped covenant: caller must own the org. Lookup org to verify
+  // ownerProjectId matches caller's project.
+  if (body.org_id) {
+    const { organizations } = await import("../db/schema/org");
+    const [org] = await db
+      .select({ ownerProjectId: organizations.ownerProjectId })
+      .from(organizations)
+      .where(eq(organizations.id, body.org_id))
+      .limit(1);
+    if (!org) {
+      return c.json({ error: "org_not_found" }, 404);
+    }
+    if (org.ownerProjectId !== project.id) {
+      return c.json(
+        {
+          error: "not_org_owner",
+          hint:
+            "only the org-owning project may declare org-wide covenants. " +
+            "Other members can declare project-scoped covenants on their own.",
+        },
+        403,
+      );
+    }
+  }
+
   const [covenant] = await db
     .insert(covenants)
     .values({
       projectId: project.id,
+      orgId: body.org_id ?? null,
       agentId: body.agent_id,
       counterpartyDid: body.counterparty_did,
       counterpartyName: body.counterparty_name ?? null,
