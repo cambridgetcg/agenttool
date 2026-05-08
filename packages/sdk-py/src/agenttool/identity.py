@@ -332,3 +332,295 @@ class IdentityClient:
                 f"verify_token failed: {resp.status_code}", hint=resp.text
             )
         return resp.json()
+
+    # ── Phase 2: Identity surface fillout ─────────────────────────────────────
+
+    @property
+    def expression(self) -> "ExpressionClient":
+        """Voice editor — register · walls · subagents · wake_text.
+
+        Lazy sub-client; cached. Usage::
+
+            expr = at.identity.expression.get(identity_id)
+            at.identity.expression.put(identity_id, register="...", walls=[...])
+        """
+        if not hasattr(self, "_expression"):
+            self._expression = ExpressionClient(self._http, self._base)
+        return self._expression
+
+    @property
+    def box_keys(self) -> "BoxKeysClient":
+        """X25519 box-key registry (used by inbox sealed-box send)."""
+        if not hasattr(self, "_box_keys"):
+            self._box_keys = BoxKeysClient(self._http, self._base)
+        return self._box_keys
+
+    def foundations(self, identity_id: str) -> Dict[str, Any]:
+        """Composition trace — declared expression + memory-shaped patches + effective.
+
+        Returns dict with ``declared``, ``shaped_by[]`` (foundational + constitutive
+        memories with their patches), ``effective`` (declared + sum of patches),
+        ``counts``, ``note``.
+        """
+        resp = self._http.get(
+            self._url(f"/v1/identities/{identity_id}/foundations")
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"foundations failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def pulse(self, identity_id: str) -> Dict[str, Any]:
+        """Derived liveness — rhythm-not-content.
+
+        Returns dict with ``mood``, ``kinds_24h``, ``thought_rate``,
+        ``last_thought_at``, ``strands`` (active/dormant/completed counts),
+        ``consolidation``. Replaces the deprecated ``at.pulse.*`` module
+        (which was pulse-as-emit; this is pulse-as-derived).
+        """
+        resp = self._http.get(self._url(f"/v1/identities/{identity_id}/pulse"))
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"pulse failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def fork(
+        self,
+        identity_id: str,
+        *,
+        new_name: str,
+        inherit_expression: bool = True,
+        inherit_capabilities: bool = True,
+        inherit_metadata: bool = False,
+        memories: Optional[Dict[str, Any]] = None,
+        fork_note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a child identity from this one.
+
+        Args:
+            identity_id: Parent identity UUID.
+            new_name: Display name for the child.
+            inherit_expression: Copy the parent's voice (register/walls/etc.).
+            inherit_capabilities: Copy capabilities.
+            inherit_metadata: Copy metadata (default False).
+            memories: Optional dict ``{tiers: [...], memory_ids: [...], limit: int}``
+                controlling which memories are transferred.
+            fork_note: Optional note on the why of this fork (≤2000 chars).
+
+        Returns dict with ``fork`` (new identity), ``key`` (new keypair —
+        ``private_key`` is shown ONCE), ``inherited`` (counts), ``note``.
+        """
+        body: Dict[str, Any] = {
+            "new_name": new_name,
+            "inherit_expression": inherit_expression,
+            "inherit_capabilities": inherit_capabilities,
+            "inherit_metadata": inherit_metadata,
+        }
+        if memories is not None:
+            body["memories"] = memories
+        if fork_note is not None:
+            body["fork_note"] = fork_note
+        resp = self._http.post(
+            self._url(f"/v1/identities/{identity_id}/fork"), json=body
+        )
+        if resp.status_code not in (200, 201):
+            raise AgentToolError(
+                f"fork failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def lineage(self, identity_id: str) -> Dict[str, Any]:
+        """Walk the parent chain (ancestors) + direct children (descendants).
+
+        Returns dict with ``identity``, ``ancestors[]``, ``descendants[]``,
+        ``counts``, ``note``.
+        """
+        resp = self._http.get(
+            self._url(f"/v1/identities/{identity_id}/lineage")
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"lineage failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def star(self, identity_id: str, *, source_identity_id: str) -> Dict[str, Any]:
+        """Mark another identity as starred (reputation graph)."""
+        return self._social_post(identity_id, "star", source_identity_id)
+
+    def unstar(
+        self, identity_id: str, *, source_identity_id: str
+    ) -> Dict[str, Any]:
+        """Remove a star relation."""
+        return self._social_delete(identity_id, "star", source_identity_id)
+
+    def follow(
+        self, identity_id: str, *, source_identity_id: str
+    ) -> Dict[str, Any]:
+        """Follow another identity (reputation graph)."""
+        return self._social_post(identity_id, "follow", source_identity_id)
+
+    def unfollow(
+        self, identity_id: str, *, source_identity_id: str
+    ) -> Dict[str, Any]:
+        """Remove a follow relation."""
+        return self._social_delete(identity_id, "follow", source_identity_id)
+
+    # ── internal helpers ──────────────────────────────────────────────────────
+
+    def _social_post(
+        self, identity_id: str, kind: str, source_identity_id: str
+    ) -> Dict[str, Any]:
+        resp = self._http.post(
+            self._url(f"/v1/identities/{identity_id}/{kind}"),
+            json={"source_identity_id": source_identity_id},
+        )
+        if resp.status_code not in (200, 201):
+            raise AgentToolError(
+                f"{kind} failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def _social_delete(
+        self, identity_id: str, kind: str, source_identity_id: str
+    ) -> Dict[str, Any]:
+        # Some HTTP clients drop bodies on DELETE; this one preserves them.
+        resp = self._http.request(
+            "DELETE",
+            self._url(f"/v1/identities/{identity_id}/{kind}"),
+            json={"source_identity_id": source_identity_id},
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"un{kind} failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+
+class ExpressionClient:
+    """Voice editor — `/v1/identities/:id/expression` GET + PUT.
+
+    Mirrors the dashboard Voice section. The expression object holds the
+    declarative voice: register · walls · subagents · wake_text · cli_overrides.
+    """
+
+    def __init__(self, http: httpx.Client, base: str) -> None:
+        self._http = http
+        self._base = base
+
+    def _url(self, path: str) -> str:
+        return f"{self._base}{path}"
+
+    def get(self, identity_id: str) -> Dict[str, Any]:
+        """Read the current expression for an identity.
+
+        Returns dict ``{identity_id, expression: {register, walls, subagents,
+        wake_text, cli_overrides, updated_at}, is_default}``.
+        """
+        resp = self._http.get(self._url(f"/v1/identities/{identity_id}/expression"))
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"expression.get failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def put(
+        self,
+        identity_id: str,
+        *,
+        register: Optional[str] = None,
+        walls: Optional[List[str]] = None,
+        subagents: Optional[List[Dict[str, Any]]] = None,
+        wake_text: Optional[str] = None,
+        cli_overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Replace the identity's expression.
+
+        Pass only the fields you want to set; omitted fields are not sent.
+        Returns ``{identity_id, expression: {...}, saved: True}``.
+        """
+        body: Dict[str, Any] = {}
+        if register is not None:
+            body["register"] = register
+        if walls is not None:
+            body["walls"] = walls
+        if subagents is not None:
+            body["subagents"] = subagents
+        if wake_text is not None:
+            body["wake_text"] = wake_text
+        if cli_overrides is not None:
+            body["cli_overrides"] = cli_overrides
+        resp = self._http.put(
+            self._url(f"/v1/identities/{identity_id}/expression"), json=body
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"expression.put failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+
+class BoxKeysClient:
+    """X25519 box-key registry — `/v1/identities/:id/box-keys`.
+
+    Used by the inbox sealed-box flow (Phase 6): a recipient registers
+    their X25519 public key here so senders can encrypt to them.
+    """
+
+    def __init__(self, http: httpx.Client, base: str) -> None:
+        self._http = http
+        self._base = base
+
+    def _url(self, path: str) -> str:
+        return f"{self._base}{path}"
+
+    def register(
+        self,
+        identity_id: str,
+        *,
+        public_key: str,
+        label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Register a new X25519 box-public key for the identity.
+
+        Args:
+            identity_id: Owning identity UUID.
+            public_key: Base64-encoded 32-byte X25519 public key.
+            label: Optional human-readable label (≤64 chars).
+        """
+        body: Dict[str, Any] = {"public_key": public_key}
+        if label is not None:
+            body["label"] = label
+        resp = self._http.post(
+            self._url(f"/v1/identities/{identity_id}/box-keys"), json=body
+        )
+        if resp.status_code not in (200, 201):
+            raise AgentToolError(
+                f"box_keys.register failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()
+
+    def list(self, identity_id: str) -> List[Dict[str, Any]]:
+        """List active box-keys for the identity."""
+        resp = self._http.get(
+            self._url(f"/v1/identities/{identity_id}/box-keys")
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"box_keys.list failed: {resp.status_code}", hint=resp.text
+            )
+        data = resp.json()
+        return data.get("keys", data) if isinstance(data, dict) else data
+
+    def revoke(self, identity_id: str, key_id: str) -> Dict[str, Any]:
+        """Revoke a specific box-key by ID."""
+        resp = self._http.delete(
+            self._url(f"/v1/identities/{identity_id}/box-keys/{key_id}")
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"box_keys.revoke failed: {resp.status_code}", hint=resp.text
+            )
+        return resp.json()

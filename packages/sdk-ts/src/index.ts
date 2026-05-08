@@ -16,10 +16,27 @@
 
 export { AgentTool } from "./client.js";
 export { AgentToolError } from "./errors.js";
+export { register, DEFAULT_BASE_URL } from "./register.js";
 
 // Type exports
+export type {
+  RegisterOptions,
+  RegisterAgent,
+  RegisterProject,
+  RegisterResponse,
+} from "./register.js";
 export type { PulsePayload, AgentState } from "./pulse.js";
-export type { RegisterIdentityOptions, UpdateIdentityOptions, AttestOptions, DiscoverOptions, IssueTokenOptions } from "./identity.js";
+export type {
+  RegisterIdentityOptions,
+  UpdateIdentityOptions,
+  AttestOptions,
+  DiscoverOptions,
+  IssueTokenOptions,
+  ForkOptions,
+  ExpressionData,
+  RegisterBoxKeyOpts,
+} from "./identity.js";
+export { ExpressionClient, BoxKeysClient } from "./identity.js";
 export type { PutSecretOptions, GetSecretOptions, ListSecretsOptions, SetPolicyOptions } from "./vault.js";
 export type { CreateAgentOptions, BootstrapResult, ElevateOptions } from "./bootstrap.js";
 export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";

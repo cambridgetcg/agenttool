@@ -139,6 +139,19 @@ async function tsMethodsOf(module: string): Promise<string[]> {
   }
   src = scopeToClient(src, "ts");
   const out = new Set<string>();
+
+  // First pass: `readonly fieldName: SomeClient;` — sub-client properties.
+  // Counts as a parity-equivalent of a py @property returning a Client.
+  const fieldRe = /^[ ]{2}readonly +([a-zA-Z_$][a-zA-Z0-9_$]*) *:/gm;
+  let fm: RegExpExecArray | null;
+  while ((fm = fieldRe.exec(src)) !== null) {
+    const name = fm[1];
+    if (SKIP_NAMES.has(name)) continue;
+    if (name.startsWith("_")) continue;
+    out.add(name);
+  }
+
+  // Second pass: methods.
   // Match: 2-space indent + (async )? identifier( - class method body
   const re = /^[ ]{2}(?:async +)?([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
   const reserved = new Set([

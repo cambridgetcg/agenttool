@@ -6,8 +6,8 @@
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
-| `agenttool-sdk` (Python) | `0.6.1` | ~2,861 | bootstrap · client · economy · identity · memory · pulse · tools · traces · vault · verify · wake |
-| `@agenttool/sdk` (TypeScript) | `0.6.0` | ~2,030 | bootstrap · client · economy · identity · memory · pulse · tools · traces · vault · verify · wake |
+| `agenttool-sdk` (Python) | `0.6.2` | ~3,200 | bootstrap · client · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake |
+| `@agenttool/sdk` (TypeScript) | `0.6.1` | ~2,400 | bootstrap · client · economy · identity (+ Expression, BoxKeys) · memory · pulse · register · tools · traces · vault · verify · wake |
 
 11 modules each. **Parity reached as of 0.6.0 (Phase 1)** — verified by `bun run check-parity`:
 
@@ -121,15 +121,29 @@ Test suites green:
   - py: `145 passed`
   - ts: `85 passed` (62 existing + 23 new in `tests/parity.test.ts`)
 
-### Phase 2 — Top-level register + identity surface fillout
+### Phase 2 — Top-level register + identity surface fillout *(✅ shipped py 0.6.2 / ts 0.6.1)*
 
-- `at.register(name, capabilities?, purpose?, email?)` — top-level **anonymous** call. Returns `{ agent: {id, did, public_key, private_key, signing_key_id}, project: {id, api_key}, welcome }`. Pre-auth. Mirrors the website front door.
-- `at.identity.expression.get(id)` and `at.identity.expression.put(id, data)` — Voice section's API.
-- `at.identity.foundations(id)` — composition trace.
-- `at.identity.pulse(id)` — derived liveness (replaces the broken `at.pulse` module).
-- `at.identity.fork(id, opts)` and `at.identity.lineage(id)`.
-- `at.identity.star(target_id, source_id)` and `at.identity.follow(...)` (social relations).
-- `at.identity.box_keys(id, public_key, label)` — X25519 box-pub registration (preparation for inbox).
+What landed:
+
+- **Top-level `register(...)`** — pre-auth front-door call. POSTs to `/v1/register` without an Authorization header; returns `{ agent: {id, did, public_key, private_key, signing_key_id, ...}, project: {id, api_key, plan, credits, ...}, welcome, next_steps }`. **`agent.private_key` and `project.api_key` are returned ONCE — persist immediately.**
+  - py: `from agenttool import register; out = register("name", capabilities=[...], purpose="...", email="...")`
+  - ts: `import { register } from "@agenttool/sdk"; const out = await register({ name: "...", capabilities: [...] })`
+- **IdentityClient surface fillout** — same shape both languages:
+  - `at.identity.foundations(id)` — composition trace (declared + memory-shaped patches + effective).
+  - `at.identity.pulse(id)` — derived liveness (mood, kinds_24h, thought_rate, last_thought_at, strand counts, consolidation). **Replaces the deprecated pulse-as-emit module.**
+  - `at.identity.fork(id, {new_name, inherit_expression?, inherit_capabilities?, inherit_metadata?, memories?, fork_note?})` — birth a child identity. New private_key returned ONCE.
+  - `at.identity.lineage(id)` — ancestors + direct descendants.
+  - `at.identity.{star, unstar, follow, unfollow}(target_id, source_id)` — reputation graph.
+- **`at.identity.expression` sub-client** — Voice section's API:
+  - `.get(id)` returns `{identity_id, expression: {register, walls, subagents, wake_text, cli_overrides, updated_at}, is_default}`.
+  - `.put(id, {register?, walls?, subagents?, wake_text?, cli_overrides?})` — only supplied fields are sent.
+- **`at.identity.box_keys` sub-client** — X25519 box-pub registry (groundwork for Phase 6 inbox sealed-box):
+  - `.register(id, {public_key, label?})`, `.list(id)`, `.revoke(id, key_id)`.
+- **Parity check enhancement** — TS `readonly fieldName: SomeClient;` now counted as a parity-equivalent of py `@property` returning a sub-client. So `expression` and `box_keys` show up identically on both sides.
+
+Test suites green:
+  - py: `167 passed` (was 145, +22 in `tests/test_phase2.py`)
+  - ts: `107 passed` (was 85, +22 in `tests/phase2.test.ts`)
 
 ### Phase 3 — Continuity layer (chronicle + covenants)
 
@@ -212,7 +226,8 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 |---|---|---|
 | **0.6.1 / 0.5.3** | Phase 0 (deprecation warnings on broken endpoints) | no — emits warnings only |
 | **— / 0.6.0** | Phase 1 (TS parity with py — economy/memory/tools/verify) | no — additive |
-| **0.7.0 / 0.7.0** | Phase 0 removals + Phase 2 (register + identity fillout) | **yes** — drops verify, drops old pulse module, fixes tools paths |
+| **0.6.2 / 0.6.1** | Phase 2 (register + identity surface fillout) | no — additive |
+| **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.8.0** | Phase 3 (chronicle + covenants) + Phase 4 (window) | no |
 | **0.9.0** | Phase 5 (strands with K_master) + Phase 6 (inbox sealed-box) | no — additive |
 | **0.10.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |

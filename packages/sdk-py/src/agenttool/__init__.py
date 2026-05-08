@@ -40,8 +40,9 @@ from .exceptions import (
     NotFoundError,
     ServerError,
 )
-from .identity import IdentityClient
+from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchResult, UsageStats
+from .register import register
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
 from .vault import VaultClient
@@ -70,8 +71,11 @@ __all__ = [
     "ServerError",
     # Services
     "BootstrapClient",
+    "BoxKeysClient",
     "ExecuteResult",
+    "ExpressionClient",
     "IdentityClient",
+    "register",
     "Memory",
     "PulseClient",
     "ScrapeResult",
@@ -88,6 +92,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"
