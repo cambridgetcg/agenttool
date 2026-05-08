@@ -483,4 +483,180 @@ app.get("/", async (c) => {
   });
 });
 
+// ── GET /v1/dashboard/aggregate — cross-identity rollup ──────────────
+//
+//  Different from `/v1/dashboard` (per-identity, third-person view of
+//  one agent). This is the project-wide rollup — totals across all
+//  identities the caller owns, with leaderboards by activity and
+//  attestation. Ambient-information surface for operators with multiple
+//  agents in one project.
+//
+//  No new schema; pure aggregation. Window-of-recency is configurable
+//  via ?window=24h|7d|30d (default 7d).
+app.get("/aggregate", async (c) => {
+  const project = c.var.project;
+  const windowParam = c.req.query("window");
+  const windowDays =
+    windowParam === "24h" ? 1 : windowParam === "30d" ? 30 : 7;
+  const windowLabel = windowParam === "24h" ? "24h" : windowParam === "30d" ? "30d" : "7d";
+  const windowStart = new Date(Date.now() - windowDays * ONE_DAY_MS);
+
+  // 1. Identity headcount + status breakdown.
+  const identityRows = await db
+    .select({
+      id: identities.id,
+      did: identities.did,
+      name: identities.displayName,
+      status: identities.status,
+      trustScore: identities.trustScore,
+    })
+    .from(identities)
+    .where(eq(identities.projectId, project.id));
+  const identityCount = identityRows.length;
+  const activeCount = identityRows.filter((r) => r.status === "active").length;
+  const revokedCount = identityRows.filter((r) => r.status === "revoked").length;
+  const identityById = new Map(identityRows.map((r) => [r.id, r]));
+
+  // 2. Memory totals + tier breakdown.
+  const memoryStats = await db
+    .select({
+      tier: memories.tier,
+      n: count(),
+    })
+    .from(memories)
+    .where(eq(memories.projectId, project.id))
+    .groupBy(memories.tier);
+  const memoryByTier: Record<string, number> = {};
+  let memoryTotal = 0;
+  for (const r of memoryStats) {
+    memoryByTier[r.tier] = Number(r.n);
+    memoryTotal += Number(r.n);
+  }
+
+  // 3. Strand totals + active count.
+  const [{ strandTotal }] = await db
+    .select({ strandTotal: count() })
+    .from(strands)
+    .where(eq(strands.projectId, project.id));
+  const [{ strandActive }] = await db
+    .select({ strandActive: count() })
+    .from(strands)
+    .where(and(eq(strands.projectId, project.id), eq(strands.status, "active")));
+  const [{ strandPublic }] = await db
+    .select({ strandPublic: count() })
+    .from(strands)
+    .where(and(eq(strands.projectId, project.id), eq(strands.visibility, "public")));
+
+  // 4. Activity in window.
+  const [{ thoughtsInWindow }] = await db
+    .select({ thoughtsInWindow: count() })
+    .from(thoughts)
+    .where(and(eq(thoughts.projectId, project.id), gte(thoughts.createdAt, windowStart)));
+
+  // 5. Top N most active identities in window.
+  const TOP_N = 5;
+  const topActiveRaw = await db
+    .select({
+      identityId: strands.identityId,
+      n: count(),
+    })
+    .from(thoughts)
+    .innerJoin(strands, eq(strands.id, thoughts.strandId))
+    .where(and(eq(thoughts.projectId, project.id), gte(thoughts.createdAt, windowStart), isNotNull(strands.identityId)))
+    .groupBy(strands.identityId)
+    .orderBy(desc(count()))
+    .limit(TOP_N);
+  const topActive = topActiveRaw
+    .filter((r): r is { identityId: string; n: number } => r.identityId !== null)
+    .map((r) => {
+      const id = identityById.get(r.identityId);
+      return {
+        identity_id: r.identityId,
+        did: id?.did ?? null,
+        name: id?.name ?? null,
+        thought_count: Number(r.n),
+      };
+    });
+
+  // 6. Top N by trust_score (already stored, just rank).
+  const topTrust = [...identityRows]
+    .filter((r) => r.status === "active")
+    .sort((a, b) => b.trustScore - a.trustScore)
+    .slice(0, TOP_N)
+    .map((r) => ({
+      identity_id: r.id,
+      did: r.did,
+      name: r.name,
+      trust_score: r.trustScore,
+    }));
+
+  // 7. Pending dual-witness messages (if any) for any of our identities.
+  const [{ pendingCosign }] = await db
+    .select({ pendingCosign: count() })
+    .from(inboxMessages)
+    .where(
+      and(
+        eq(inboxMessages.recipientProjectId, project.id),
+        eq(inboxMessages.status, "pending_dual_witness"),
+      ),
+    );
+
+  // 8. Inbox unread (any identity).
+  const [{ inboxUnread }] = await db
+    .select({ inboxUnread: count() })
+    .from(inboxMessages)
+    .where(
+      and(
+        eq(inboxMessages.recipientProjectId, project.id),
+        eq(inboxMessages.status, "unread"),
+      ),
+    );
+
+  // 9. Active covenants count.
+  const [{ activeCovenants }] = await db
+    .select({ activeCovenants: count() })
+    .from(covenants)
+    .where(and(eq(covenants.projectId, project.id), eq(covenants.status, "active")));
+
+  return c.json({
+    project: {
+      id: project.id,
+      name: project.name ?? null,
+    },
+    window: windowLabel,
+    identities: {
+      total: identityCount,
+      active: activeCount,
+      revoked: revokedCount,
+    },
+    memory: {
+      total: memoryTotal,
+      by_tier: memoryByTier,
+    },
+    strands: {
+      total: Number(strandTotal),
+      active: Number(strandActive),
+      public: Number(strandPublic),
+    },
+    activity: {
+      thoughts_in_window: Number(thoughtsInWindow),
+      top_active: topActive,
+    },
+    trust: {
+      top_attested: topTrust,
+    },
+    inbox: {
+      unread: Number(inboxUnread),
+      pending_dual_witness: Number(pendingCosign),
+    },
+    covenants: {
+      active: Number(activeCovenants),
+    },
+    _note:
+      "Project-wide aggregate. For per-identity third-person view, see /v1/dashboard. " +
+      "No new schema; pure aggregation. " +
+      "?window=24h|7d|30d.",
+  });
+});
+
 export default app;
