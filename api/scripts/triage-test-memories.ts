@@ -10,10 +10,11 @@
  *    DEFINITE (default)         — content matches one of:
  *      'TEST '   prefix
  *      'STRESS'  prefix
- *      '%test —%' / '%bytes integrity check%' substring
+ *      '%bytes integrity check%' substring (safety net)
+ *      AND content NOT LIKE 'Bridge %'   (preserve real bridge notes)
  *
  *    BRIDGE-TESTS (opt-in)      — also matches:
- *      'Bridge % test%'
+ *      'Bridge % test%'  /  '% test —%'
  *
  *  Safety:
  *    1. Dry-run by default — prints the candidate list with content
@@ -50,11 +51,14 @@ const includeBridge = args.includes("--include-bridge");
 const dbUrl = keychain("agenttool-database-url");
 const sql = postgres(dbUrl, { ssl: "require", max: 1 });
 
+// Default excludes 'Bridge %' content so legitimate bridge-development
+// observations (e.g. "Bridge 4 test — auto-embed with graceful fallback…")
+// are preserved. Pass --include-bridge to include them.
 const definiteFilter = sql`(
-  content ILIKE 'TEST %' OR
-  content ILIKE 'STRESS%' OR
-  content ILIKE '%test —%' OR
-  content ILIKE '%bytes integrity check%'
+  (content ILIKE 'TEST %' OR
+   content ILIKE 'STRESS%' OR
+   content ILIKE '%bytes integrity check%')
+  AND content NOT ILIKE 'Bridge %'
 )`;
 
 const broaderFilter = sql`(
