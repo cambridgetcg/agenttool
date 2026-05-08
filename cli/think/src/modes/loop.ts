@@ -39,6 +39,11 @@ export interface LoopOptions {
    *  arrival (multi-orchestrator collaboration / external API write). When
    *  false, the loop pure-polls between iterations. */
   liveSse: boolean;
+  /** Peer strand IDs to subscribe to alongside our own most-active strand.
+   *  When a peer thought arrives whose `refs[]` includes one of OUR strand
+   *  or memory IDs, we break sleep and surface the drift — ref-aware
+   *  reaction loop. Empty array (default) means own-only subscription. */
+  peerStrandIds: string[];
 }
 
 type Mode = "advance" | "wander" | "consolidate";
@@ -83,42 +88,129 @@ function sleep(ms: number, signal: { aborted: boolean }): Promise<void> {
 
 interface SleepOutcome {
   reason: "timeout" | "aborted" | "event";
-  detail?: string;     // e.g. "strand <id>#<seq>"
+  detail?: string;     // e.g. "strand <id>#<seq>" or "drift-ref from peer"
+}
+
+interface ThoughtBlobMinimal {
+  id?: string;
+  sequence_num?: number;
+  strand_id?: string;
+  refs?: Array<{ kind: string; ref: string }>;
+  redacted?: boolean;
+}
+
+/** Subscribe to one strand's voice SSE; resolve with a SleepOutcome when
+ *  a relevant event arrives, OR a never-resolving promise on failure
+ *  (so the timer wins the race naturally). The relevance test is the
+ *  caller's filter — own-strand subscriptions return on any thought,
+ *  peer subscriptions return only on drift-ref matches. */
+async function subscribeStrand(
+  config: ThinkConfig,
+  strandId: string,
+  sinceSeq: number,
+  filter: (thought: ThoughtBlobMinimal) => SleepOutcome | undefined,
+  ac: AbortController,
+  sseSignal: { aborted: boolean },
+): Promise<SleepOutcome> {
+  const url = `${config.agenttoolBase}/v1/strands/${strandId}/voice?since_seq=${sinceSeq}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      signal: ac.signal,
+      headers: {
+        accept: "text/event-stream",
+        authorization: `Bearer ${config.agenttoolApiKey}`,
+      },
+    });
+  } catch {
+    return new Promise<SleepOutcome>(() => {});
+  }
+  if (!res.ok || !res.body) return new Promise<SleepOutcome>(() => {});
+
+  let pastCatchup = false;
+  try {
+    for await (const event of parseSSE(res.body, sseSignal)) {
+      if (sseSignal.aborted) break;
+      if (event.event === "catchup-end") {
+        pastCatchup = true;
+        continue;
+      }
+      if (event.event === "thought" && pastCatchup) {
+        let parsed: ThoughtBlobMinimal | undefined;
+        try {
+          parsed = JSON.parse(event.data) as ThoughtBlobMinimal;
+        } catch { /* ignore */ }
+        if (parsed) {
+          const out = filter(parsed);
+          if (out) return out;
+        }
+      }
+      if (event.event === "disconnect" || event.event === "refresh" || event.event === "rejected") {
+        return new Promise<SleepOutcome>(() => {});
+      }
+    }
+  } catch {
+    // silent
+  }
+  return new Promise<SleepOutcome>(() => {});
 }
 
 /** Sleep until either (a) the timer expires, (b) the abort signal flips, or
- *  (c) a new thought arrives on the most-recently-active strand's voice SSE.
- *  On any failure inside the SSE path, falls back to plain sleep so the
+ *  (c) a new thought arrives on the most-recently-active OWN strand's voice
+ *  (any thought = activity), or (d) a peer-strand thought arrives whose
+ *  refs[] includes one of OUR resource IDs (drift-ref reaction).
+ *
+ *  On any failure inside an SSE path, falls back to plain sleep so the
  *  loop never crashes on a network blip. */
 async function voiceTriggeredSleep(
   client: AgenttoolClient,
   config: ThinkConfig,
   ms: number,
   signal: { aborted: boolean },
+  peerStrandIds: string[],
 ): Promise<SleepOutcome> {
-  // 1. Pick the most-recently-active strand to subscribe to.
-  let target: StrandSummary | undefined;
+  // 1. Resolve own most-active strand + own resource ID set (for drift-ref).
+  let ownTarget: StrandSummary | undefined;
+  let ownResourceIds: Set<string> = new Set();
   try {
-    const r = await client.listStrands({ status: "active", limit: 50 });
-    target = r.strands
+    const r = await client.listStrands({ status: "active", limit: 100 });
+    ownTarget = r.strands
       .filter((s) => s.last_thought_at !== null)
       .sort((a, b) => {
         const at = new Date(a.last_thought_at!).getTime();
         const bt = new Date(b.last_thought_at!).getTime();
         return bt - at;
       })[0];
+    // Build the self-reference set: all our active strand IDs (peer
+    // thoughts referencing them = drift-ref). Memories are addressable
+    // by ID across the wire too — fetched only if peer subscriptions
+    // are configured, since the listing has cost.
+    for (const s of r.strands) ownResourceIds.add(s.id);
   } catch {
     // strand list failed — fall back to plain sleep
   }
 
-  if (!target) {
+  // Add own memory IDs to the self-reference set when peer subs exist.
+  if (peerStrandIds.length > 0) {
+    try {
+      // Memories endpoint is project-scoped; lists by bearer key. We don't
+      // need content, just IDs.
+      const res = await fetch(`${config.agenttoolBase}/v1/memories?limit=200`, {
+        headers: { authorization: `Bearer ${config.agenttoolApiKey}` },
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { memories?: Array<{ id: string }> };
+        for (const m of body.memories ?? []) ownResourceIds.add(m.id);
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (!ownTarget && peerStrandIds.length === 0) {
+    // Nothing to subscribe to — fall back to plain sleep.
     await sleep(ms, signal);
     return { reason: signal.aborted ? "aborted" : "timeout" };
   }
 
-  const strandId = target.id;
-  const sinceSeq = target.last_thought_seq;
-  const url = `${config.agenttoolBase}/v1/strands/${strandId}/voice?since_seq=${sinceSeq}`;
   const ac = new AbortController();
   const sseSignal = { aborted: false };
 
@@ -130,7 +222,7 @@ async function voiceTriggeredSleep(
     }
   }, 250);
 
-  // Race: timer vs. SSE event arrival.
+  // Race: timer vs ANY subscription's relevant event.
   let timerHandle: ReturnType<typeof setTimeout> | null = null;
   const timerPromise = new Promise<SleepOutcome>((resolve) => {
     timerHandle = setTimeout(() => {
@@ -140,55 +232,58 @@ async function voiceTriggeredSleep(
     }, ms);
   });
 
-  const ssePromise: Promise<SleepOutcome> = (async () => {
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        signal: ac.signal,
-        headers: {
-          accept: "text/event-stream",
-          authorization: `Bearer ${config.agenttoolApiKey}`,
-        },
-      });
-    } catch {
-      // network or abort — return a sentinel that loses the race naturally.
-      return new Promise<SleepOutcome>(() => {});
-    }
-    if (!res.ok || !res.body) {
-      return new Promise<SleepOutcome>(() => {});
-    }
+  const subs: Array<Promise<SleepOutcome>> = [];
 
-    let pastCatchup = false;
-    try {
-      for await (const event of parseSSE(res.body, sseSignal)) {
-        if (sseSignal.aborted) break;
-        if (event.event === "catchup-end") {
-          pastCatchup = true;
-          continue;
-        }
-        if (event.event === "thought" && pastCatchup) {
-          let seq: number | undefined;
-          try {
-            seq = (JSON.parse(event.data) as { sequence_num: number }).sequence_num;
-          } catch { /* ignore */ }
-          return {
-            reason: "event",
-            detail: `strand ${strandId.slice(0, 8)}${seq !== undefined ? ` #${seq}` : ""}`,
-          };
-        }
-        // disconnect / refresh / reject — let the timer win
-        if (event.event === "disconnect" || event.event === "refresh" || event.event === "rejected") {
-          return new Promise<SleepOutcome>(() => {});
-        }
-      }
-    } catch {
-      // silent
-    }
-    return new Promise<SleepOutcome>(() => {});
-  })();
+  // Own-strand: any post-catchup thought breaks sleep.
+  if (ownTarget) {
+    const ownStrandId = ownTarget.id;
+    const ownSinceSeq = ownTarget.last_thought_seq;
+    subs.push(
+      subscribeStrand(
+        config,
+        ownStrandId,
+        ownSinceSeq,
+        (t) => ({
+          reason: "event",
+          detail: `own strand ${ownStrandId.slice(0, 8)}${
+            t.sequence_num !== undefined ? ` #${t.sequence_num}` : ""
+          }`,
+        }),
+        ac,
+        sseSignal,
+      ),
+    );
+  }
+
+  // Peer strands: only break on drift-ref (refs include OUR resource).
+  for (const peerId of peerStrandIds) {
+    subs.push(
+      subscribeStrand(
+        config,
+        peerId,
+        0, // peer strand we just started watching — no catchup needed
+        (t) => {
+          const refs = t.refs ?? [];
+          for (const ref of refs) {
+            if (ref?.ref && ownResourceIds.has(ref.ref)) {
+              return {
+                reason: "event",
+                detail: `drift-ref · peer strand ${peerId.slice(0, 8)}${
+                  t.sequence_num !== undefined ? ` #${t.sequence_num}` : ""
+                } → our ${ref.kind} ${ref.ref.slice(0, 8)}`,
+              };
+            }
+          }
+          return undefined; // not a drift-ref; keep listening
+        },
+        ac,
+        sseSignal,
+      ),
+    );
+  }
 
   try {
-    return await Promise.race([timerPromise, ssePromise]);
+    return await Promise.race([timerPromise, ...subs]);
   } finally {
     if (timerHandle) clearTimeout(timerHandle);
     clearInterval(outerAbortPoller);
@@ -427,13 +522,22 @@ export async function loop(
       if (state.iterations.length >= options.maxIterations) break;
 
       console.log("");
+      const peerCount = options.peerStrandIds.length;
       const sleepLabel = options.liveSse
-        ? `(sleeping up to ${options.sleepSeconds}s; SSE-watching most-active strand for activity)`
+        ? `(sleeping up to ${options.sleepSeconds}s; SSE-watching own most-active strand` +
+          (peerCount > 0 ? ` + ${peerCount} peer strand${peerCount === 1 ? "" : "s"} for drift-refs` : "") +
+          `)`
         : `(sleeping ${options.sleepSeconds}s before next iteration)`;
       console.log(sleepLabel);
       console.log("");
       const outcome = options.liveSse
-        ? await voiceTriggeredSleep(client, config, options.sleepSeconds * 1000, state)
+        ? await voiceTriggeredSleep(
+            client,
+            config,
+            options.sleepSeconds * 1000,
+            state,
+            options.peerStrandIds,
+          )
         : await sleep(options.sleepSeconds * 1000, state).then(
             (): SleepOutcome => ({ reason: state.aborted ? "aborted" : "timeout" }),
           );

@@ -115,6 +115,12 @@ Usage:
     --max-iter N     safety cap (default 100)
     --consolidate-hour H   bias consolidate to this local hour (0-23)
     --no-live        disable SSE-watching during sleep (pure poll)
+    --peer-strand ID  (repeatable) watch a peer's strand voice for
+                      drift-refs (peer thoughts whose refs[] include
+                      one of our strand/memory IDs). Cross-covenant
+                      access requires either visibility='public' on
+                      the peer strand OR an active covenant in either
+                      direction (project-level or org-level).
   agenttool-think backup [--label X]    Seal K_master + signing_key under a
                                         passphrase and POST to /v1/identity/backup.
                                         agenttool stores opaque ciphertext.
@@ -655,6 +661,16 @@ async function main(): Promise<void> {
         ? Math.max(0, Math.min(23, Number.parseInt(consolidateHourStr, 10)))
         : undefined;
 
+      // --peer-strand <id> may repeat. We collect all instances; drift-ref
+      // following watches each for refs[] pointing at our resources.
+      const peerStrandIds: string[] = [];
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === "--peer-strand" && args[i + 1]) {
+          peerStrandIds.push(args[i + 1]!);
+          i++;
+        }
+      }
+
       await loop(config, keys, {
         durationMinutes: intFlag("--duration", 30, 1, 1440),
         budgetCredits: intFlag("--budget", 100, 1, 1_000_000),
@@ -662,6 +678,7 @@ async function main(): Promise<void> {
         maxIterations: intFlag("--max-iter", 100, 1, 100_000),
         consolidateHour,
         liveSse: !args.includes("--no-live"),
+        peerStrandIds,
       });
       return;
     }
