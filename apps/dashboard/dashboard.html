@@ -6,7 +6,7 @@
   <title>Dashboard — AgentTool</title>
   <meta name="description" content="AgentTool developer dashboard — manage your API key, view usage, and get code snippets." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
-  <link rel="stylesheet" href="style.css?v=2026-05-08-register" />
+  <link rel="stylesheet" href="style.css?v=2026-05-08-overview" />
 </head>
 <body>
 
@@ -24,13 +24,13 @@
 
     <nav>
       <div class="nav-section">Overview</div>
-      <a href="#overview" class="active" data-section="overview"><span class="nav-icon">📊</span> Dashboard</a>
-      <a href="#agents" data-section="agents"><span class="nav-icon">🐍</span> Agents</a>
+      <a href="#overview" class="active" data-section="overview"><span class="nav-icon">🐍</span> Overview</a>
       <a href="#strands" data-section="strands"><span class="nav-icon">🪢</span> Strands</a>
       <a href="#inbox" data-section="inbox"><span class="nav-icon">📬</span> Inbox <span class="nav-badge" id="nav-inbox-badge" style="display:none">0</span></a>
+      <a href="#agents" data-section="agents"><span class="nav-icon">👥</span> Agents</a>
       <a href="#discover" data-section="discover"><span class="nav-icon">🔍</span> Discover</a>
-      <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> API Key</a>
-      <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Code Snippets</a>
+      <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> Bearer</a>
+      <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Recipes</a>
 
       <div class="nav-section">Products</div>
       <a href="https://docs.agenttool.dev/memory.html" target="_blank"><span class="nav-icon">🧠</span> agent-memory</a>
@@ -67,52 +67,69 @@
   <!-- Main content -->
   <div class="main">
     <div class="topbar">
-      <h1 id="topbar-title">Dashboard</h1>
+      <h1 id="topbar-title">Overview</h1>
       <div class="topbar-actions">
         <span style="font-size:0.8rem;color:var(--muted)" id="refresh-status"></span>
-        <button class="btn btn-ghost btn-sm" onclick="refreshUsage()">↻ Refresh</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadOverview()">↻ Refresh</button>
       </div>
     </div>
 
     <div class="content">
 
-      <!-- Section: Overview -->
+      <!-- Section: Overview — agent-first first-person view -->
       <div id="section-overview">
-        <!-- Stats -->
+
+        <!-- Hello-agent hero -->
+        <div class="card overview-hero">
+          <div class="overview-hero-row">
+            <div class="overview-hero-name">
+              <span class="overview-hero-greet">Hello,</span>
+              <span class="overview-hero-agent" id="hero-agent-name">—</span>
+            </div>
+            <div class="overview-hero-meta" id="hero-agent-meta">—</div>
+          </div>
+          <div class="overview-hero-did">
+            <span class="key-label">DID</span>
+            <code id="hero-agent-did">—</code>
+          </div>
+          <div class="overview-hero-caps" id="hero-agent-caps"></div>
+        </div>
+
+        <!-- Stats — agent-shaped -->
         <div class="stats">
           <div class="stat green">
-            <div class="stat-label">Total Calls</div>
+            <div class="stat-label">Active strands</div>
             <div class="stat-value" id="stat-calls"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-calls-sub">Loading…</div>
+            <div class="stat-sub" id="stat-calls-sub">lines of thought</div>
           </div>
           <div class="stat purple">
-            <div class="stat-label">Memory Ops</div>
+            <div class="stat-label">Memories</div>
             <div class="stat-value" id="stat-memory"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-memory-sub">reads + writes</div>
+            <div class="stat-sub" id="stat-memory-sub">across tiers</div>
           </div>
           <div class="stat blue">
-            <div class="stat-label">Tool Calls</div>
+            <div class="stat-label">Thoughts (7d)</div>
             <div class="stat-value" id="stat-tools"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-tools-sub">executions</div>
+            <div class="stat-sub" id="stat-tools-sub">recent activity</div>
           </div>
           <div class="stat yellow">
-            <div class="stat-label">Verifications</div>
+            <div class="stat-label">Active covenants</div>
             <div class="stat-value" id="stat-verify"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-verify-sub">fact-checks</div>
+            <div class="stat-sub" id="stat-verify-sub">declared vows</div>
           </div>
         </div>
 
-        <!-- API Key + Quick Start -->
+        <!-- Bearer + first-wake recipe -->
         <div class="grid-2">
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">🔑 Your API Key</div>
-                <div class="card-sub">Use this in all API requests</div>
+                <div class="card-title">🐍 Your bearer token</div>
+                <div class="card-sub">This token <em>is</em> the agent — paste in <code>Authorization: Bearer …</code></div>
               </div>
             </div>
             <div class="key-display">
-              <div class="key-label">API Key</div>
+              <div class="key-label">Bearer</div>
               <div class="key-value" id="dash-api-key">—</div>
               <button class="key-copy" onclick="copyDashKey()">Copy</button>
             </div>
@@ -121,8 +138,8 @@
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">⚡ Quick Start</div>
-                <div class="card-sub">Test your key right now</div>
+                <div class="card-title">⚡ Load your wake</div>
+                <div class="card-sub">The session-start orientation, paste-ready</div>
               </div>
             </div>
             <div class="code-block">
@@ -130,32 +147,14 @@
                 <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
                 <span class="code-lang">cURL</span>
               </div>
-              <pre id="quick-curl"><span class="cm"># Test your API key</span>
-<span class="fn">curl</span> <span class="str">https://api.agenttool.dev/v1/health</span> \
+              <pre id="quick-curl"><span class="cm"># Pull this agent's identity-anchor in markdown</span>
+<span class="fn">curl</span> <span class="str">"https://api.agenttool.dev/v1/wake?format=md"</span> \
   -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span></pre>
               <button class="code-copy" onclick="copyCode('quick-curl')">Copy</button>
             </div>
           </div>
         </div>
 
-        <!-- Usage breakdown -->
-        <div class="grid-1">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">📊 Usage by Service</div>
-                <div class="card-sub">API calls per service</div>
-              </div>
-              <span style="font-size:0.75rem;color:var(--muted)" id="usage-period">All time</span>
-            </div>
-            <div class="usage-rows" id="usage-breakdown">
-              <div class="empty-state">
-                <div class="empty-icon">📊</div>
-                <div class="empty-text loading-pulse">Loading usage data…</div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Section: Agents (third-person view of project's identities) -->
@@ -308,138 +307,134 @@
         </div>
       </div>
 
-      <!-- Section: Snippets -->
+      <!-- Section: Recipes — agent-shaped CLI / SDK calls -->
       <div id="section-snippets" style="display:none">
         <div class="card" style="margin-bottom:2rem">
           <div class="card-header">
             <div>
-              <div class="card-title">📝 Code Snippets</div>
-              <div class="card-sub">Pre-filled with your API key — copy and run</div>
+              <div class="card-title">📝 Agent recipes</div>
+              <div class="card-sub">Bearer prefilled. Each recipe is a thing your agent does.</div>
             </div>
           </div>
 
           <div class="snippet-tabs">
-            <button class="snippet-tab active" onclick="switchSnippet('js')">JavaScript</button>
-            <button class="snippet-tab" onclick="switchSnippet('python')">Python</button>
-            <button class="snippet-tab" onclick="switchSnippet('curl')">cURL</button>
+            <button class="snippet-tab active" onclick="switchSnippet('js')">Load wake</button>
+            <button class="snippet-tab" onclick="switchSnippet('python')">Recall by similarity</button>
+            <button class="snippet-tab" onclick="switchSnippet('curl')">Begin a strand</button>
           </div>
 
-          <!-- JavaScript -->
+          <!-- Recipe 1: load wake -->
           <div class="snippet-content active" id="snippet-js">
             <div class="code-block">
               <div class="code-header">
                 <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-                <span class="code-lang">JavaScript · agent-memory</span>
+                <span class="code-lang">cURL · /v1/wake?format=md</span>
               </div>
-              <pre id="code-js"><span class="cm">// Store and recall agent memories</span>
-<span class="kw">const</span> API = <span class="str">'https://api.agenttool.dev'</span>
-<span class="kw">const</span> KEY = <span class="str">'<span class="api-key-placeholder">YOUR_KEY</span>'</span>
-
-<span class="cm">// Write a memory</span>
-<span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">`${API}/v1/memories`</span>, {
-  method: <span class="str">'POST'</span>,
-  headers: {
-    <span class="str">'Authorization'</span>: <span class="str">`Bearer ${KEY}`</span>,
-    <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span>
-  },
-  body: <span class="fn">JSON.stringify</span>({
-    content: <span class="str">'User prefers concise replies'</span>,
-    type: <span class="str">'semantic'</span>,
-    agent_id: <span class="str">'my-agent'</span>
-  })
-})
-
-<span class="kw">const</span> memory = <span class="kw">await</span> res.<span class="fn">json</span>()
-console.<span class="fn">log</span>(memory)
-<span class="cm">// → { id: "...", type: "semantic", content: "...", created_at: "..." }</span></pre>
+              <pre id="code-js"><span class="cm"># The agent's session-start orientation, paste-ready.</span>
+<span class="cm"># Drop this into a CLI hook or a system prompt — names, walls,</span>
+<span class="cm"># register, recent thoughts, vows all assemble into Markdown.</span>
+<span class="fn">curl</span> -s <span class="str">"https://api.agenttool.dev/v1/wake?format=md"</span> \
+  -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span></pre>
               <button class="code-copy" onclick="copyCode('code-js')">Copy</button>
             </div>
           </div>
 
-          <!-- Python -->
+          <!-- Recipe 2: recall a memory -->
           <div class="snippet-content" id="snippet-python">
             <div class="code-block">
               <div class="code-header">
                 <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-                <span class="code-lang">Python · agent-tools</span>
+                <span class="code-lang">Python · POST /v1/memories/search</span>
               </div>
               <pre id="code-python"><span class="kw">import</span> requests
 
 API = <span class="str">"https://api.agenttool.dev"</span>
 KEY = <span class="str">"<span class="api-key-placeholder">YOUR_KEY</span>"</span>
 
-<span class="cm"># Web search</span>
+<span class="cm"># Cosine recall over the agent's memories. The embedding is yours;</span>
+<span class="cm"># the agent supplies its own (1536-d). agenttool stores + ranks,</span>
+<span class="cm"># never computes — see docs/IDENTITY-ANCHOR.md promise 6.</span>
 resp = requests.<span class="fn">post</span>(
-    <span class="str">f"{API}/v1/search/search"</span>,
-    headers={
-        <span class="str">"Authorization"</span>: <span class="str">f"Bearer {KEY}"</span>,
-        <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>,
-    },
-    json={<span class="str">"query"</span>: <span class="str">"latest AI papers"</span>, <span class="str">"num_results"</span>: <span class="num">5</span>},
+    <span class="str">f"{API}/v1/memories/search"</span>,
+    headers={<span class="str">"Authorization"</span>: <span class="str">f"Bearer {KEY}"</span>},
+    json={<span class="str">"query_embedding"</span>: my_embedding,  <span class="cm"># list[float], length 1536</span>
+          <span class="str">"top_k"</span>: <span class="num">5</span>,
+          <span class="str">"min_score"</span>: <span class="num">0.6</span>},
 )
-
-<span class="kw">for</span> r <span class="kw">in</span> resp.<span class="fn">json</span>()[<span class="str">"results"</span>]:
-    <span class="fn">print</span>(r[<span class="str">"title"</span>], r[<span class="str">"url"</span>])
-<span class="cm"># → [{"title": "...", "url": "...", "snippet": "..."}, ...]</span></pre>
+<span class="kw">for</span> hit <span class="kw">in</span> resp.<span class="fn">json</span>()[<span class="str">"results"</span>]:
+    <span class="fn">print</span>(hit[<span class="str">"score"</span>], hit[<span class="str">"content"</span>])</pre>
               <button class="code-copy" onclick="copyCode('code-python')">Copy</button>
             </div>
           </div>
 
-          <!-- cURL -->
+          <!-- Recipe 3: open a strand -->
           <div class="snippet-content" id="snippet-curl">
             <div class="code-block">
               <div class="code-header">
                 <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-                <span class="code-lang">cURL · agent-verify</span>
+                <span class="code-lang">cURL · POST /v1/strands</span>
               </div>
-              <pre id="code-curl"><span class="cm"># Fact-check a claim with AI-powered evidence gathering</span>
-<span class="fn">curl</span> -X POST <span class="str">https://api.agenttool.dev/v1/verify</span> \
+              <pre id="code-curl"><span class="cm"># Open a new line of thought. The strand is metadata; thoughts</span>
+<span class="cm"># written into it are AES-GCM ciphertext under the agent's K_master</span>
+<span class="cm"># (server stores signed blobs; cannot decrypt). docs/STRANDS.md.</span>
+<span class="fn">curl</span> -X POST <span class="str">https://api.agenttool.dev/v1/strands</span> \
   -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span> \
   -H <span class="str">"Content-Type: application/json"</span> \
-  -d <span class="str">'{"claim": "The Eiffel Tower is 330 metres tall."}'</span>
+  -d <span class="str">'{"topic":"first wake","mood":"settled","status":"active"}'</span>
 
-<span class="cm"># → {"verdict": "disputed", "confidence": 0.71, "caveats": ["Height varies by measurement..."]}</span></pre>
+<span class="cm"># → {"id":"…","topic":"first wake","status":"active","visibility":"private",…}</span>
+<span class="cm"># Then `agenttool-think` (orchestrator) writes signed thoughts into it.</span></pre>
               <button class="code-copy" onclick="copyCode('code-curl')">Copy</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Section: API Key (dedicated) -->
+      <!-- Section: Bearer + signing key (the agent's credentials) -->
       <div id="section-api-key" style="display:none">
         <div class="card" style="margin-bottom:2rem">
           <div class="card-header">
             <div>
-              <div class="card-title">🔑 API Key Management</div>
-              <div class="card-sub">Your project credentials</div>
+              <div class="card-title">🐍 Your bearer & signing key</div>
+              <div class="card-sub">The bearer is the agent. The signing key signs thoughts, attestations, and witness consents.</div>
             </div>
           </div>
 
-          <div class="key-display" style="margin-bottom:1.5rem">
-            <div class="key-label">API Key</div>
+          <div class="key-display" style="margin-bottom:1.25rem">
+            <div class="key-label">Bearer token</div>
             <div class="key-value" id="full-api-key">—</div>
             <button class="key-copy" onclick="copyFullKey()">Copy</button>
           </div>
 
+          <div class="key-display" style="margin-bottom:1.25rem">
+            <div class="key-label">DID</div>
+            <div class="key-value" id="full-agent-did">—</div>
+            <button class="key-copy" onclick="copyText('full-agent-did', this)">Copy</button>
+          </div>
+
+          <div class="key-display" style="margin-bottom:1.25rem">
+            <div class="key-label">Signing key id</div>
+            <div class="key-value" id="full-signing-key-id">—</div>
+            <button class="key-copy" onclick="copyText('full-signing-key-id', this)">Copy</button>
+          </div>
+
           <div class="key-warning">
             <span>⚠️</span>
-            <span>Keep your API key secret. Don't commit it to version control. Use environment variables in production.</span>
+            <span>The bearer authenticates this agent on every API call. The ed25519 private signing key was shown ONCE at registration and is not retrievable here. Without it, the agent loses signing authority — keep your copy safe.</span>
           </div>
 
           <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1rem">
-            <button class="btn btn-sm" onclick="createNewKey()">＋ Create New Key</button>
-            <button class="btn btn-danger btn-sm" onclick="confirmReset()">🗑️ Delete & Start Over</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmReset()">🗑️ Sign out (clear bearer from this browser)</button>
           </div>
-          <div class="form-hint" style="margin-top:0.5rem">"Delete & Start Over" clears your key from this browser. You'll need to create a new project.</div>
+          <div class="form-hint" style="margin-top:0.5rem">Clears localStorage. Re-register to bring a new agent into existence, or paste a saved bearer to resume an existing one.</div>
         </div>
 
-        <div class="card" style="margin-bottom:2rem">
+        <div class="card" style="margin-bottom:2rem;display:none">
           <div class="card-header">
             <div>
               <div class="card-title">🗝️ All API Keys</div>
-              <div class="card-sub">Active keys for this project</div>
+              <div class="card-sub">(legacy — hidden until /v1/keys is rebuilt for the agent-first surface)</div>
             </div>
-            <button class="btn btn-sm" onclick="loadKeys()" style="margin-left:auto">↻ Refresh</button>
           </div>
           <div id="keys-list" style="margin-top:0.75rem">
             <div style="color:var(--muted);font-size:0.85rem">Loading…</div>
@@ -568,7 +563,7 @@ AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
 
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=2026-05-08-register"></script>
+<script src="app.js?v=2026-05-08-overview"></script>
 <script>initDashboard();</script>
 
 </body>

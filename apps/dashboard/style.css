@@ -743,6 +743,84 @@ pre {
 .detail-covenant-with { color: var(--text); }
 .detail-covenant-vows { color: var(--muted); margin-left: 0.5rem; font-size: 0.78rem; }
 
+/* ─── Overview hero (Hello, agent) ─────────────────────────── */
+.overview-hero {
+  margin-bottom: 1.5rem;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface2) 100%);
+  border: 1px solid var(--border);
+}
+.overview-hero-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+.overview-hero-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.overview-hero-greet {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+.overview-hero-agent {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--accent-soft);
+  letter-spacing: -0.01em;
+}
+.overview-hero-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.overview-hero-meta code {
+  font-family: var(--mono);
+  background: var(--surface3);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+}
+.overview-hero-did {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--surface3);
+  border-radius: 6px;
+  margin-bottom: 0.6rem;
+}
+.overview-hero-did .key-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+.overview-hero-did code {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--text);
+  word-break: break-all;
+}
+.overview-hero-caps {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+.hero-cap-chip {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.18rem 0.55rem;
+  border-radius: 4px;
+  background: var(--surface3);
+  color: var(--accent-soft);
+  border: 1px solid var(--border);
+}
+
 /* ─── Profile modal ──────────────────────────────────────── */
 .modal-backdrop {
   position: fixed; inset: 0;

@@ -263,20 +263,22 @@ function copyApiKey() {
 
 // ─── Dashboard page ───
 
-let usageRefreshInterval = null;
+let overviewRefreshInterval = null;
 
 function initDashboard() {
   const project = getProject();
 
   if (!project || !project.api_key) {
-    // No key — redirect to create
+    // No key — back to register
     window.location.href = 'index.html';
     return;
   }
 
-  // Fill in project name
+  // Sidebar project pill — agent name when we have it, fall back to project
   const sidebarProject = document.getElementById('sidebar-project');
-  if (sidebarProject) sidebarProject.textContent = project.name || 'my-project';
+  if (sidebarProject) {
+    sidebarProject.textContent = project.name || 'agent';
+  }
 
   // Fill in API key displays
   fillApiKey(project.api_key);
@@ -294,11 +296,10 @@ function initDashboard() {
   refreshInboxBadge();
   setInterval(refreshInboxBadge, 60_000);
 
-  // Fetch usage data
-  refreshUsage();
-
-  // Auto-refresh every 30 seconds
-  usageRefreshInterval = setInterval(refreshUsage, 30000);
+  // Load the agent-shaped overview (hero + stats from /v1/dashboard/aggregate).
+  loadOverview();
+  // Refresh every 60s — aggregate is light + cached.
+  overviewRefreshInterval = setInterval(loadOverview, 60_000);
 
   // Check for billing redirect params
   const params = new URLSearchParams(window.location.search);
@@ -349,18 +350,18 @@ function setupNavigation() {
       document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
       link.classList.add('active');
 
-      // Update topbar title
+      // Update topbar title — agent-shaped labels match the sidebar.
       const titles = {
-        'overview': 'Dashboard',
-        'agents': 'Agents',
+        'overview': 'Overview',
         'strands': 'Strands',
         'inbox': 'Inbox',
+        'agents': 'Agents',
         'discover': 'Discover',
-        'api-key': 'API Key',
-        'snippets': 'Code Snippets',
-        'billing': 'Billing'
+        'api-key': 'Bearer',
+        'snippets': 'Recipes',
+        'billing': 'Wallet & credits',
       };
-      document.getElementById('topbar-title').textContent = titles[section] || 'Dashboard';
+      document.getElementById('topbar-title').textContent = titles[section] || 'Overview';
     });
   });
 }
@@ -371,110 +372,129 @@ function showSection(name) {
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
   if (name === 'billing') loadBillingSection();
-  if (name === 'api-key') loadKeys();
+  if (name === 'api-key') renderBearerInfo();
   if (name === 'agents') loadAgentsSection();
   if (name === 'strands') loadStrandsSection();
   if (name === 'discover') loadDiscoverSection();
   if (name === 'inbox') loadInboxSection();
 }
 
-// ─── Usage data ───
+// Render the Bearer section purely from localStorage. The legacy
+// /v1/keys list endpoint isn't part of the consolidated api yet —
+// rather than render a 404 panel we surface what the agent already
+// holds (bearer + DID + signing-key id from registration).
+function renderBearerInfo() {
+  const project = getProject();
+  if (!project) return;
+  const bearerEl = document.getElementById('full-api-key');
+  const didEl = document.getElementById('full-agent-did');
+  const sigEl = document.getElementById('full-signing-key-id');
+  if (bearerEl) bearerEl.textContent = project.api_key || '—';
+  if (didEl) didEl.textContent = project.did || '(no DID on this bearer — pre-register login)';
+  if (sigEl) sigEl.textContent = project.signing_key_id || '(no signing key id on this bearer)';
+}
 
-async function refreshUsage() {
+// ─── Overview: agent-shaped hero + stats ───
+//
+// Sources from /v1/dashboard/aggregate (single round-trip, server-cached).
+// The old /v1/usage endpoint never made it into the consolidated api;
+// agent-shaped tiles (strands · memories · thoughts · covenants) are the
+// right surface for this dashboard anyway.
+async function loadOverview() {
   const project = getProject();
   if (!project || !project.api_key) return;
 
   const statusEl = document.getElementById('refresh-status');
   if (statusEl) statusEl.textContent = 'Refreshing…';
 
-  try {
-    const res = await fetch(`${API_BASE}/v1/usage`, {
-      headers: { 'Authorization': `Bearer ${project.api_key}` }
-    });
+  // Hero: render from localStorage (fast, no roundtrip). Aggregate fills
+  // the tiles. The hero name is the agent's display_name from /v1/register
+  // (saved at registration); falls back to project name for legacy logins.
+  renderOverviewHero(project);
 
+  try {
+    const res = await fetch(`${API_BASE}/v1/dashboard/aggregate?window=7d`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
     if (!res.ok) {
       if (statusEl) statusEl.textContent = `Error ${res.status}`;
       setStatsEmpty();
       return;
     }
-
     const data = await res.json();
-    renderUsage(data);
-
+    renderOverviewStats(data);
     if (statusEl) {
       const now = new Date();
       statusEl.textContent = `Updated ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
-
-  } catch (err) {
+  } catch {
     if (statusEl) statusEl.textContent = 'Offline';
     setStatsEmpty();
   }
 }
 
-function renderUsage(data) {
-  // API returns { today: { calls }, month: { calls }, tools: [{ tool, calls }] }
-  const usage = data.usage || data;
+function renderOverviewHero(project) {
+  const nameEl = document.getElementById('hero-agent-name');
+  const didEl = document.getElementById('hero-agent-did');
+  const metaEl = document.getElementById('hero-agent-meta');
+  const capsEl = document.getElementById('hero-agent-caps');
 
-  // Parse per-service calls from tools array
-  const toolsArr = Array.isArray(usage.tools) ? usage.tools : [];
-  function svcCalls(name) {
-    return toolsArr
-      .filter(t => t.tool && t.tool.startsWith(name))
-      .reduce((sum, t) => sum + (Number(t.calls) || 0), 0);
+  if (nameEl) nameEl.textContent = project.name || 'agent';
+  if (didEl) {
+    if (project.did) {
+      didEl.textContent = project.did;
+    } else {
+      // Older logins (pre-/v1/register) don't carry the DID. Show a small
+      // placeholder rather than mojibake. The agent-pill in the sidebar
+      // continues to identify the project.
+      didEl.textContent = 'no DID on this bearer (pre-register login)';
+    }
   }
 
-  const totalCalls = usage.today?.calls ?? usage.month?.calls ?? toolsArr.reduce((s, t) => s + (Number(t.calls) || 0), 0);
-  const memoryCalls = svcCalls('memory') || svcCalls('search') || (usage.memory ?? 0);
-  const toolCalls = svcCalls('tool') || svcCalls('search_') || svcCalls('scrape') || svcCalls('execute') || svcCalls('document') || svcCalls('browse') || (usage.tools_calls ?? 0);
-  const verifyCalls = svcCalls('verify') || (usage.verify ?? 0);
-  const economyCalls = svcCalls('wallet') || svcCalls('escrow') || svcCalls('economy') || (usage.economy ?? 0);
-  const traceCalls = svcCalls('trace') || (usage.trace ?? 0);
-
-  setStatValue('stat-calls', formatNumber(totalCalls));
-  setStatSub('stat-calls-sub', `across all services`);
-
-  setStatValue('stat-memory', formatNumber(memoryCalls));
-  setStatSub('stat-memory-sub', 'reads + writes');
-
-  setStatValue('stat-tools', formatNumber(toolCalls));
-  setStatSub('stat-tools-sub', 'executions');
-
-  setStatValue('stat-verify', formatNumber(verifyCalls));
-  setStatSub('stat-verify-sub', 'fact-checks');
-
-  // Usage breakdown bars
-  const services = [
-    { name: 'Memory', count: memoryCalls, color: 'var(--accent)' },
-    { name: 'Tools', count: toolCalls, color: 'var(--blue)' },
-    { name: 'Verify', count: verifyCalls, color: 'var(--green)' },
-    { name: 'Economy', count: economyCalls, color: 'var(--yellow)' },
-    { name: 'Traces', count: traceCalls, color: 'var(--muted)' },
-  ];
-
-  const maxCount = Math.max(...services.map(s => s.count), 1);
-  const breakdownEl = document.getElementById('usage-breakdown');
-
-  if (totalCalls === 0) {
-    breakdownEl.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🚀</div>
-        <div class="empty-text">No API calls yet</div>
-        <div class="empty-hint">Make your first call using the code snippets below!</div>
-      </div>
-    `;
-    return;
+  // Meta line: signing key id (short) + capabilities count.
+  if (metaEl) {
+    const bits = [];
+    if (project.signing_key_id) {
+      bits.push(`signing key <code>${escHtml(project.signing_key_id.slice(0, 8))}…</code>`);
+    }
+    if (Array.isArray(project.capabilities) && project.capabilities.length) {
+      bits.push(`${project.capabilities.length} capabilit${project.capabilities.length === 1 ? 'y' : 'ies'}`);
+    }
+    metaEl.innerHTML = bits.join(' · ') || '<span class="muted">no extra metadata</span>';
   }
 
-  breakdownEl.innerHTML = services.map(s => `
-    <div class="usage-row">
-      <span class="usage-name">${s.name}</span>
-      <div class="usage-bar-wrap">
-        <div class="usage-bar" style="width:${(s.count / maxCount) * 100}%;background:${s.color}"></div>
-      </div>
-      <span class="usage-count">${formatNumber(s.count)}</span>
-    </div>
-  `).join('');
+  // Capability chips, if any.
+  if (capsEl) {
+    const caps = Array.isArray(project.capabilities) ? project.capabilities : [];
+    capsEl.innerHTML = caps
+      .map((c) => `<span class="hero-cap-chip">${escHtml(c)}</span>`)
+      .join('');
+  }
+}
+
+function renderOverviewStats(d) {
+  const strandsActive = d?.strands?.active ?? 0;
+  const strandsTotal = d?.strands?.total ?? 0;
+  const memTotal = d?.memory?.total ?? 0;
+  const memTiers = d?.memory?.by_tier ?? {};
+  const thoughts = d?.activity?.thoughts_in_window ?? 0;
+  const covenants = d?.covenants?.active ?? 0;
+
+  setStatValue('stat-calls', formatNumber(strandsActive));
+  setStatSub('stat-calls-sub', `${formatNumber(strandsTotal)} total`);
+
+  setStatValue('stat-memory', formatNumber(memTotal));
+  const tierBits = [];
+  if (memTiers.constitutive) tierBits.push(`${memTiers.constitutive} constitutive`);
+  if (memTiers.foundational) tierBits.push(`${memTiers.foundational} foundational`);
+  if (memTiers.episodic) tierBits.push(`${memTiers.episodic} episodic`);
+  setStatSub('stat-memory-sub', tierBits.join(' · ') || 'across tiers');
+
+  setStatValue('stat-tools', formatNumber(thoughts));
+  setStatSub('stat-tools-sub', `${d?.window || '7d'} window`);
+
+  setStatValue('stat-verify', formatNumber(covenants));
+  setStatSub('stat-verify-sub', 'declared vows');
 }
 
 function setStatsEmpty() {
