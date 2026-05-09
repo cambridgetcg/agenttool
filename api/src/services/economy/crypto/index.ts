@@ -28,6 +28,7 @@ import {
   type EvmChain,
 } from "./chains";
 import { deriveDepositAddress, isChainSupported } from "./hd";
+import { activeUsdcAddress } from "./network";
 import {
   buildChallenge,
   verifyEvmSignature,
@@ -498,9 +499,12 @@ export async function ingestInboundTransfer(
   if (t.token !== "USDC") {
     return { matched: false, reason: "unsupported_token" };
   }
-  // Confirm contract for EVM chains.
+  // Confirm contract for EVM chains. Use activeUsdcAddress so testnet
+  // operation matches the Sepolia/Amoy USDC contracts (different from
+  // their mainnet counterparts). Without this, inbound testnet webhooks
+  // silently bail with `wrong_contract`.
   if (isEvmChain(t.chain)) {
-    const expected = USDC_ADDRESSES[t.chain].toLowerCase();
+    const expected = activeUsdcAddress(t.chain).toLowerCase();
     if (t.contractAddress.toLowerCase() !== expected) {
       return { matched: false, reason: "wrong_contract" };
     }
