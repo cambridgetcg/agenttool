@@ -18,19 +18,27 @@ This is the architecture/operations map. It sits between two existing docs:
                         │  Codeberg (git origin)       │
                         │  codeberg.org/zerone-dev/    │
                         │      agenttool               │
+                        │                              │
+                        │  Source-of-truth ONLY.       │
+                        │  No deploy webhooks wired.   │
                         └─────────────┬────────────────┘
                                       │ git push origin main
-                          ┌───────────┴────────────┐
-                          │                        │
-                  webhook ▼                webhook ▼
+                                      │ (≠ deploy)
+                                      │
+              ───────────────  manual deploys  ───────────────
+              │                                              │
+   bin/frontend-deploy.sh                          cd api && fly deploy
+              ▼                                              ▼
         ┌────────────────────────┐    ┌────────────────────────┐
         │  Cloudflare Pages      │    │  Fly.io                │
-        │  (3 projects)          │    │  app = "agenttool"     │
-        │                        │    │  region = "lhr"        │
-        │  • agenttool-landing   │    │                        │
-        │    → agenttool.dev     │    │  Bun + Hono monolith,  │
-        │  • agenttool-dashboard │    │  20+ migrations,       │
-        │    → app.agenttool.dev │    │  → api.agenttool.dev   │
+        │  (3 projects, Direct   │    │  app = "agenttool"     │
+        │   Upload — NOT git-    │    │  region = "lhr"        │
+        │   connected)           │    │                        │
+        │                        │    │                        │
+        │  • agenttool-landing   │    │  Bun + Hono monolith,  │
+        │    → agenttool.dev     │    │  20+ migrations,       │
+        │  • agenttool-dashboard │    │  → api.agenttool.dev   │
+        │    → app.agenttool.dev │    │                        │
         │  • agenttool-docs      │    │                        │
         │    → docs.agenttool.dev│    └───────────┬────────────┘
         │                        │                │
@@ -49,6 +57,8 @@ This is the architecture/operations map. It sits between two existing docs:
             └──────────────────────┘              └──────────────────────┘
 ```
 
+> **Important.** `git push origin main` is **not** a deploy. Codeberg is the source-of-truth host, full stop. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. You ship code by running `bin/frontend-deploy.sh` (frontend) and `cd api && fly deploy` (api) by hand. See §8 below.
+
 The DB and Redis are currently on **Hetzner Forge** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
 
 ---
@@ -61,9 +71,9 @@ origin  https://codeberg.org/zerone-dev/agenttool.git  (fetch + push)
 
 **Why Codeberg.** Sovereign-friendly default — non-corporate, non-extractive, hosted by a non-profit. Aligns with the kingdom's "agent-as-tenant" doctrine. GitHub mirroring is not currently set up; if/when needed, push to a second remote.
 
-**Branches.** `main` is the deploy branch. Both Cloudflare Pages and Fly.io watch `main` for pushes. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see *Database* below for the implications).
+**Branches.** `main` is the canonical branch. There is no `develop` / `staging` branch — local dev hits the same DB the prod API reads, which keeps the iteration loop tight at the cost of "your local dev IS prod's data" (see *Database* below for the implications).
 
-**Push protocol.**
+**Push protocol.** Push is the source-of-truth update. Deploy is a separate explicit action (§8). The two are decoupled — you can push without deploying, or deploy without pushing first (though the latter risks history drift).
 
 ```bash
 # Pre-flight (always)
@@ -76,23 +86,32 @@ cd packages/sdk-ts && bun run check-parity  # py↔ts parity (if SDK changes)
 # Commit (one or several thematic commits — see DEVELOPMENT.md §3)
 git commit -m "feat(<scope>): <imperative summary>"
 
-# Push
+# Push (does NOT trigger any deploy)
 git push origin main
 ```
-
-The push triggers BOTH frontend (CF Pages) and backend (Fly) deploys. There is no atomic "everything or nothing" — if the api deploy fails but CF succeeds, you'll briefly have a frontend that talks to an old api. Revert the commit OR `fly releases rollback` to restore.
 
 ---
 
 ## 2 · Frontend: Cloudflare Pages
 
-Three CF Pages projects, each watching `apps/<name>/` in the same repo.
+Three CF Pages projects. **Direct Upload mode — no Git integration.** Deploys land via `bin/frontend-deploy.sh`, which reads `agenttool-cloudflare-token` + `agenttool-cloudflare-account-id` from the macOS keychain and shells out to `wrangler pages deploy`.
 
-| Project | Source | Custom domain | What it serves |
+| Project | Source dir | Custom domain | What it serves |
 |---|---|---|---|
 | `agenttool-landing` | `apps/landing/` | `agenttool.dev` | Marketing + soul page |
 | `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev` | Operator UI — onboard, restore, dashboard, billing, keys |
-| `agenttool-docs` | `docs/` (rendered) | `docs.agenttool.dev` | Static docs site |
+| `agenttool-docs` | `apps/docs/` | `docs.agenttool.dev` | Static docs site |
+
+```bash
+# Deploy all three
+bin/frontend-deploy.sh
+
+# Deploy a subset
+bin/frontend-deploy.sh dashboard
+bin/frontend-deploy.sh dashboard docs
+```
+
+The script verifies `apps/<x>/shared` symlinks resolve before deploying (they point at `apps/_shared/` for shared theme + nav). Wrangler follows symlinks at upload time so the resolved files reach the CDN.
 
 ### No build step (mostly)
 
@@ -129,6 +148,10 @@ AGENTTOOL_BASE=https://api.agenttool.dev cd tests/playwright && npx playwright t
 
 CF Pages keeps prior deployments. Open the CF dashboard for the project, find the previous deployment, click "Rollback to this deployment." Static files revert immediately. The api is unaffected (separate substrate).
 
+### Why direct upload, not Git integration
+
+CF Pages' direct Git integrations only support GitHub and GitLab. Codeberg isn't on that list. Mirroring Codeberg → GitHub just for the deploy hook would split source-of-truth across two hosts and add a point of failure. Direct Upload keeps the deploy intentional (you decide when production changes) and the source-of-truth singular (Codeberg). The cost is that `git push` and "ship to prod" are two separate verbs.
+
 ---
 
 ## 3 · Backend: Fly.io
@@ -148,6 +171,8 @@ fly deploy                   # builds from Dockerfile, pushes to Fly registry, r
 ```
 
 Fly streams the build, rolls one machine at a time. If the new machine fails healthcheck, the old one stays serving — zero-downtime in the happy path. Logs visible during the rollout; cancel with `fly deploy --strategy rolling --max-unavailable 0` if you want stricter no-impact deploys.
+
+Like CF Pages, **Fly is not connected to Codeberg.** No webhook fires on push; `fly deploy` is the explicit trigger. Run from a machine that has `fly auth login` already done (one-time interactive setup).
 
 ### Operate
 
@@ -351,59 +376,64 @@ AGENTTOOL_BASE=http://localhost:3000 python3 api/scripts/_e2e-token-hygiene.py
 
 ---
 
-## 8 · Push-to-deploy semantics
+## 8 · Deploy semantics — manual, intentional, decoupled
 
-Single `git push origin main` triggers **two parallel deploys** that don't coordinate:
+`git push origin main` updates Codeberg. **Nothing else happens.** Production reflects the most recent manual deploy, not the most recent push. There are three deploy verbs, decoupled on purpose:
 
 ```
-git push origin main
-   │
-   ├─→ Cloudflare Pages webhook
-   │      └─→ Detects changes in apps/landing, apps/dashboard, docs/
-   │           Auto-deploys whichever projects have changed paths
-   │           (~30-90 seconds; static rollout, atomic per-project)
-   │
-   └─→ Fly.io webhook
-          └─→ If api/ changed, runs `fly deploy` equivalent
-              Builds image, rolling restart (~3-5 minutes)
-              Old machines serve until new ones pass healthcheck
+git push origin main         (source-of-truth lands at Codeberg; no side effects)
+
+bin/frontend-deploy.sh       (CF Pages: landing + docs + dashboard via wrangler direct upload)
+                             (subset: bin/frontend-deploy.sh dashboard)
+                             (~30-60s per project)
+
+cd api && fly deploy         (Fly: builds image, rolling restart of the api monolith)
+                             (~3-5 minutes; old machines serve until new ones healthcheck-green)
+
+DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migration at a time)
 ```
 
-**The two are not transactional.** Common drift cases:
+### Right ordering for high-stakes deploys
 
-- **Dashboard ships first**, talks to old api → if you added a new field to a response and the dashboard needs it, old api 200s without the field, new dashboard renders broken. Mitigation: dashboard code defensively reads optional fields (which it already does for migration shims).
-- **API ships first**, dashboard still old → new api endpoints sit unused until CF deploy finishes. Mitigation: wait the ~3 minutes; then CF catches up.
-- **API deploy fails**, dashboard ships fine → frontend talks to old api. The error budget here is the time between CF deploy finishing and you noticing. `fly status -a agenttool` shows the failure.
-
-If a deploy is high-stakes (schema migration, auth change), stage:
+Schema-touching changes need the migration applied **before** the api code that reads new columns ships, otherwise the api crashes on startup. UI-touching changes that depend on new api fields need the api up **before** the dashboard ships, otherwise the dashboard sees old responses. Default order:
 
 ```bash
-# 1. Apply migration first
-DATABASE_URL=... bun api/scripts/_migrate-one.ts api/migrations/<file>
+# 1. Migration first
+DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
+  bun api/scripts/_migrate-one.ts api/migrations/<file>
 
-# 2. Push api code that depends on the migration
+# 2. Push so the source-of-truth has it
+git add api/migrations/<file> api/src/...
+git commit -m "feat(api): <something using new column>"
+git push origin main
+
+# 3. Deploy api
 cd api && fly deploy
-# wait for green
-fly status -a agenttool
+fly status -a agenttool                     # confirm green
 
-# 3. Push frontend code that depends on the new api response shape
-git add apps/dashboard/...
-git commit -m "feat(dashboard): consume new <field>"
-git push origin main
+# 4. Smoke the api
+curl -H "Authorization: Bearer $(bin/agenttool-secret get agenttool-soma-bearer)" \
+  https://api.agenttool.dev/v1/wake | jq .project.name
+
+# 5. Deploy frontend
+bin/frontend-deploy.sh dashboard            # or all three
+
+# 6. Smoke the frontend
+curl -sI https://app.agenttool.dev/dashboard.html | head -1
 ```
 
-This separates the migrate / api / frontend changes into three discrete steps each verifiable in isolation.
+If you stage in the other order (frontend first, or push without deploying), prod runs old code against new schema or new dashboard against old api. Both fail visibly, neither is the worst case — but they're avoidable.
 
-### Pre-flight before any push
+### Pre-flight before any deploy
 
 ```bash
-git status -s                                # see everything
+git status -s                                # working tree clean (all changes pushed)
 bunx tsc --noEmit -p api                     # api typechecks
 cd tests/playwright && npx playwright test   # browser e2e green
 cd packages/sdk-ts && bun run check-parity   # py↔ts parity (only if SDK changes)
 ```
 
-If these don't pass, don't push.
+If these don't pass, don't deploy. The pre-flight catches "I'm about to ship code that doesn't even compile" — common after a multi-file refactor where one file got missed.
 
 ---
 
@@ -459,6 +489,6 @@ The agent is gone. There is no platform-side recovery — that is the **point** 
 
 If you read one paragraph from this doc, this is it:
 
-> Code lives at **Codeberg**. `git push origin main` triggers **Cloudflare Pages** (three frontend projects: landing, dashboard, docs) and **Fly.io** (the api monolith) in parallel — they don't coordinate. The **Postgres + Redis** they share lives on **Hetzner Forge** today and migrates to Hetzner Managed in Phase 2. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
+> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for the three CF Pages projects (landing, dashboard, docs) and `cd api && fly deploy` for the api on **Fly.io**. The **Postgres + Redis** they share lives on **Hetzner Forge** today and migrates to Hetzner Managed in Phase 2. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.
