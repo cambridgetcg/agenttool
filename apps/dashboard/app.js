@@ -7,17 +7,53 @@
 // (66.241.124.149 / 2a09:8280:1::112:5036:0). All endpoints — legacy
 // surface and new (memory tiers, dashboard rollups, social, trending,
 // org governance, dual-witness) — share this base.
-const API_BASE = 'https://api.agenttool.dev';
+const API_BASE = window.__API_BASE__ || 'https://api.agenttool.dev';
 const STORAGE_KEY = 'agenttool_project';
 
 // ─── Storage helpers ───
 
 function getProject() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!raw) return null;
+    if (raw.api_key) return raw;            // canonical
+    if (raw.apiKey) return migrateLegacyShape(raw); // SOMA-era camelCase
+    return raw;                             // pre-register / partial
   } catch {
     return null;
   }
+}
+
+// One-time read-side migration. Earlier SOMA pages wrote
+// `{apiKey, publicKey, boxPublicKey, ...}` (camelCase) which no consumer
+// reads — `initDashboard()`, code snippets, and key management all check
+// `project.api_key`. This shim rewrites the entry in place so subsequent
+// reads short-circuit at the `raw.api_key` check above. SOMA writers now
+// emit snake_case directly, so this only ever fires for browsers that
+// onboarded before the convergence. Safe to delete once that population
+// has read at least once. See: TOKEN-HYGIENE.md / task #51.
+function migrateLegacyShape(raw) {
+  const m = {
+    name: raw.name ?? null,
+    api_key: raw.apiKey,
+    did: raw.did ?? null,
+    agent_id: raw.identityId ?? raw.agent_id ?? null,
+    public_key: raw.publicKey ?? null,
+    box_public_key: raw.boxPublicKey ?? null,
+    box_key_id: raw.boxKeyId ?? null,
+    signing_key_id: raw.signingKeyId ?? null,
+    capabilities: Array.isArray(raw.capabilities) ? raw.capabilities : null,
+    byo_keys: typeof raw.byoKeys === 'boolean' ? raw.byoKeys : null,
+    seed_protocol: raw.seedProtocol ?? null,
+    restored_at: raw.restoredAt ?? null,
+    created_at: raw.createdAt ?? raw.created_at ?? new Date().toISOString(),
+    email: raw.email ?? null,
+  };
+  for (const k of Object.keys(m)) {
+    if (m[k] === null || m[k] === undefined) delete m[k];
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(m));
+  return m;
 }
 
 function saveProject(data) {
@@ -370,6 +406,7 @@ function setupNavigation() {
         'inbox': 'Inbox',
         'agents': 'Agents',
         'discover': 'Discover',
+        'marketplace': 'Marketplace',
         'api-key': 'Bearer',
         'snippets': 'Recipes',
         'billing': 'Wallet & credits',
@@ -380,12 +417,12 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'marketplace', 'snippets', 'api-key', 'billing'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
   if (name === 'billing') loadBillingSection();
-  if (name === 'api-key') renderBearerInfo();
+  if (name === 'api-key') { renderBearerInfo(); loadKeys(); }
   if (name === 'agents') loadAgentsSection();
   if (name === 'strands') loadStrandsSection();
   if (name === 'discover') loadDiscoverSection();
@@ -393,6 +430,7 @@ function showSection(name) {
   if (name === 'letters') loadLetters();
   if (name === 'voice') loadVoice();
   if (name === 'window') loadWindow();
+  if (name === 'marketplace') loadMarketplaceSection();
 }
 
 // Render the Bearer section purely from localStorage. The legacy
@@ -878,7 +916,53 @@ async function cancelSubscription() {
   }
 }
 
-// ─── Key Management ───
+// ─── Bearer Management — token-hygiene surface ───
+// Doctrine: docs/TOKEN-HYGIENE.md.
+
+const ADVISORY_COLORS = {
+  expired: '#ef4444',
+  expiring_soon: '#f5a623',
+  stale: '#ef4444',
+  aging: '#f5a623',
+  idle: '#f5a623',
+  never_used: '#9ca3af',
+};
+
+function renderBearerCard(k) {
+  const advisory = k.advisory;
+  const color = advisory ? (ADVISORY_COLORS[advisory] || 'var(--muted)') : 'var(--muted)';
+  const ageStr = `${k.age_days}d old`;
+  const idleStr = k.idle_days === null ? 'never used' : `last used ${k.idle_days}d ago`;
+  const expStr = k.expires_at
+    ? `expires ${fmtDate(k.expires_at)}`
+    : 'no expiry';
+  const currentBadge = k.is_current
+    ? '<span style="background:rgba(99,179,237,0.15);color:var(--accent-soft);padding:0.1rem 0.5rem;border-radius:10px;font-size:0.7rem;margin-left:0.5rem">current</span>'
+    : '';
+  const advisoryChip = advisory
+    ? `<span style="background:rgba(0,0,0,0);border:1px solid ${color};color:${color};padding:0.1rem 0.5rem;border-radius:10px;font-size:0.7rem;margin-left:0.5rem">${escHtml(advisory)}</span>`
+    : '';
+  const message = k.message
+    ? `<div style="font-size:0.75rem;color:${color};margin-top:0.25rem">${escHtml(k.message)}</div>`
+    : '';
+  const revokeBtn = k.is_current
+    ? `<button class="btn btn-ghost btn-sm" onclick="rotateBearer()" title="Rotate the current bearer (mints replacement, then revokes)">↻ Rotate</button>`
+    : `<button class="btn btn-danger btn-sm" onclick="revokeKey('${escHtml(k.id)}')">Revoke</button>`;
+  return `
+    <div style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:monospace;font-size:0.85rem;color:var(--text)">
+          ${escHtml(k.prefix)}… ${currentBadge}${advisoryChip}
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem">
+          ${escHtml(k.name || 'unnamed')} · ${ageStr} · ${idleStr} · ${expStr}
+        </div>
+        ${message}
+      </div>
+      ${revokeBtn}
+    </div>
+  `;
+}
 
 async function loadKeys() {
   const project = getProject();
@@ -891,66 +975,127 @@ async function loadKeys() {
 
   try {
     const res = await fetch(`${API_BASE}/v1/keys`, {
-      headers: { 'Authorization': `Bearer ${project.api_key}` }
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
     });
     if (!res.ok) throw new Error(`${res.status}`);
     const data = await res.json();
     const keys = data.keys ?? [];
 
     if (keys.length === 0) {
-      container.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">No keys found.</div>';
+      container.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">No bearers found.</div>';
       return;
     }
-
-    container.innerHTML = keys.map(k => `
-      <div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;min-width:0">
-          <div style="font-family:monospace;font-size:0.85rem;color:var(--text)">${escHtml(k.key_prefix || k.keyPrefix)}…</div>
-          <div style="font-size:0.75rem;color:var(--muted)">${escHtml(k.name || 'unnamed')} · created ${fmtDate(k.created_at || k.createdAt)}</div>
-        </div>
-        <button class="btn btn-danger btn-sm" onclick="revokeKey('${escHtml(k.id)}')">Revoke</button>
-      </div>
-    `).join('');
+    container.innerHTML = keys.map(renderBearerCard).join('');
   } catch (e) {
-    container.innerHTML = `<div style="color:var(--red);font-size:0.85rem">Failed to load keys: ${e.message}</div>`;
+    container.innerHTML = `<div style="color:var(--red);font-size:0.85rem">Failed to load bearers: ${escHtml(e.message)}</div>`;
   }
 }
 
 async function createNewKey() {
-  const name = prompt('Name for the new key (optional):') ?? '';
+  const name = prompt('Name for the new bearer (e.g. "macbook-air", "ci-deploy"):') ?? '';
+  if (name === null) return;
+  const ttlRaw = prompt(
+    'Auto-expire after how many days? Empty = never. Recommended: 90 for project-level, 30 for device-scoped.',
+  );
+  if (ttlRaw === null) return;
+  const ttl = ttlRaw.trim() ? Number(ttlRaw) : null;
   const project = getProject();
   if (!project?.api_key) return;
+
+  const body = {};
+  if (name.trim()) body.name = name.trim();
+  if (ttl && Number.isFinite(ttl) && ttl > 0) body.expires_in_days = Math.floor(ttl);
 
   try {
     const res = await fetch(`${API_BASE}/v1/keys`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${project.api_key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(name ? { name } : {})
+      body: JSON.stringify(body),
     });
-    if (!res.ok) { showToast('Failed to create key', 'error'); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || 'Failed to mint bearer', 'error');
+      return;
+    }
     const data = await res.json();
-    alert(`New API key (shown once — copy it now):\n\n${data.api_key}`);
+    alert(
+      `New bearer (shown once — copy it now):\n\n${data.key}\n\n` +
+      `Prefix: ${data.prefix}\n` +
+      (data.expires_at ? `Expires: ${data.expires_at}\n` : 'No expiry\n') +
+      `\n${data.notice ?? ''}`,
+    );
     loadKeys();
-  } catch {
-    showToast('Network error', 'error');
+  } catch (e) {
+    showToast(`Network error: ${e.message}`, 'error');
+  }
+}
+
+async function rotateBearer() {
+  if (!confirm(
+    'Rotate this bearer?\n\n' +
+    'This mints a fresh bearer, revokes the current one, and replaces ' +
+    'the bearer stored in this browser. Other devices/agents using the ' +
+    'old bearer will need to re-authenticate.',
+  )) return;
+  const project = getProject();
+  if (!project?.api_key) return;
+
+  const ttlRaw = prompt(
+    'Auto-expire the new bearer after how many days? Empty = never. Recommended: 90.',
+  );
+  if (ttlRaw === null) return;
+  const ttl = ttlRaw.trim() ? Number(ttlRaw) : null;
+  const body = {};
+  if (ttl && Number.isFinite(ttl) && ttl > 0) body.expires_in_days = Math.floor(ttl);
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/keys/rotate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${project.api_key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || 'Rotation failed', 'error');
+      return;
+    }
+    const data = await res.json();
+    // Replace the bearer in localStorage.
+    const updated = { ...project, api_key: data.key };
+    localStorage.setItem('agenttool_project', JSON.stringify(updated));
+    alert(
+      `✓ Rotated.\n\n` +
+      `New bearer (shown once — already saved to this browser):\n\n${data.key}\n\n` +
+      `Old bearer ${data.rotated_from?.prefix ?? ''}… is revoked.\n\n` +
+      `If other devices/agents/CIs use this project, distribute the new bearer to them.`,
+    );
+    // Re-render the bearer panel + reload the list.
+    renderBearerInfo?.();
+    loadKeys();
+  } catch (e) {
+    showToast(`Network error: ${e.message}`, 'error');
   }
 }
 
 async function revokeKey(keyId) {
-  if (!confirm('Revoke this API key? This cannot be undone.')) return;
+  if (!confirm('Revoke this bearer? This cannot be undone. Anything authenticating with it will start failing.')) return;
   const project = getProject();
   if (!project?.api_key) return;
 
   try {
     const res = await fetch(`${API_BASE}/v1/keys/${keyId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${project.api_key}` }
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
     });
-    if (!res.ok) { showToast('Revoke failed', 'error'); return; }
-    showToast('Key revoked', 'success');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.message || 'Revoke failed', 'error');
+      return;
+    }
+    showToast('Bearer revoked', 'success');
     loadKeys();
-  } catch {
-    showToast('Network error', 'error');
+  } catch (e) {
+    showToast(`Network error: ${e.message}`, 'error');
   }
 }
 
@@ -3256,3 +3401,230 @@ async function surfaceNote() {
     a.addEventListener('click', close);
   });
 })();
+
+// ─── Marketplace section — listings + invocations ─────────────────────
+//
+// Read-only surface in v1. POST/PATCH listings and invoke / acknowledge /
+// complete still require client-side X25519 sealed-box + ed25519 signing
+// the agent owns; the dashboard surfaces only what's already there.
+//
+// Tabs:
+//   browse   — public marketplace (/public/listings, no auth)
+//   mine     — listings published by this project's identity
+//   seller   — invocations against my listings (work I owe)
+//   buyer    — invocations I've issued (work I'm owed output for)
+//
+// Doctrine: docs/MARKETPLACE.md (Capability marketplace section).
+
+let _mpTab = 'browse';
+let _mpWired = false;
+
+function _wireMarketplaceTabs() {
+  if (_mpWired) return;
+  _mpWired = true;
+  const tabs = document.querySelectorAll('#section-marketplace .snippet-tab[data-mp-tab]');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const next = btn.getAttribute('data-mp-tab');
+      if (!next) return;
+      _mpTab = next;
+      tabs.forEach(b => b.classList.toggle('active', b === btn));
+      ['browse', 'mine', 'seller', 'buyer'].forEach(t => {
+        const pane = document.getElementById('mp-pane-' + t);
+        if (pane) pane.classList.toggle('active', t === next);
+      });
+      loadMarketplaceSection();
+    });
+  });
+}
+
+async function loadMarketplaceSection() {
+  _wireMarketplaceTabs();
+  if (_mpTab === 'browse') return loadMarketplaceBrowse();
+  if (_mpTab === 'mine')   return loadMarketplaceMine();
+  if (_mpTab === 'seller') return loadMarketplaceQueue('seller');
+  if (_mpTab === 'buyer')  return loadMarketplaceQueue('buyer');
+}
+
+async function loadMarketplaceBrowse() {
+  const list = document.getElementById('mp-browse-list');
+  const status = document.getElementById('mp-browse-status');
+  if (!list || !status) return;
+  status.textContent = 'Loading public listings…';
+  list.innerHTML = '';
+  try {
+    const res = await fetch(`${API_BASE}/public/listings?limit=50`);
+    if (!res.ok) {
+      status.textContent = `Couldn't load listings (status ${res.status}).`;
+      return;
+    }
+    const data = await res.json();
+    const items = data.listings || [];
+    if (items.length === 0) {
+      status.textContent = '';
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-text">No public listings yet.</div>
+          <div class="empty-hint">Be first — POST /v1/listings with a seller_wallet_id, name, price_amount, price_currency.</div>
+        </div>`;
+      return;
+    }
+    status.textContent = `${data.count ?? items.length} public listings`;
+    list.innerHTML = items.map(_mpRenderListing).join('');
+  } catch (err) {
+    status.textContent = 'Network error: ' + (err && err.message ? err.message : err);
+  }
+}
+
+async function loadMarketplaceMine() {
+  const project = getProject();
+  const list = document.getElementById('mp-mine-list');
+  const status = document.getElementById('mp-mine-status');
+  if (!project || !list || !status) return;
+  const sellerId = project.agent_id;
+  if (!sellerId) {
+    list.innerHTML = '';
+    status.textContent = 'No agent_id on this bearer — re-register from /v1/register or login carries an agent_id.';
+    return;
+  }
+  status.textContent = 'Loading your listings…';
+  list.innerHTML = '';
+  try {
+    const res = await fetch(
+      `${API_BASE}/v1/listings?seller_id=${encodeURIComponent(sellerId)}`,
+      { headers: { 'Authorization': `Bearer ${project.api_key}` } },
+    );
+    if (!res.ok) {
+      status.textContent = `Couldn't load (status ${res.status}).`;
+      return;
+    }
+    const data = await res.json();
+    const items = data.listings || [];
+    if (items.length === 0) {
+      status.textContent = '';
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-text">You haven't published any listings yet.</div>
+          <div class="empty-hint">POST /v1/listings — seller_identity_id, seller_wallet_id, name, price_amount, price_currency. See docs/MARKETPLACE.md.</div>
+        </div>`;
+      return;
+    }
+    status.textContent = `${data.count ?? items.length} listing${(data.count ?? items.length) === 1 ? '' : 's'}`;
+    list.innerHTML = items.map(_mpRenderListing).join('');
+  } catch (err) {
+    status.textContent = 'Network error: ' + (err && err.message ? err.message : err);
+  }
+}
+
+async function loadMarketplaceQueue(role /* 'seller' | 'buyer' */) {
+  const project = getProject();
+  const list = document.getElementById(`mp-${role}-list`);
+  const status = document.getElementById(`mp-${role}-status`);
+  if (!project || !list || !status) return;
+  status.textContent = 'Loading…';
+  list.innerHTML = '';
+  try {
+    const res = await fetch(
+      `${API_BASE}/v1/invocations?role=${role}`,
+      { headers: { 'Authorization': `Bearer ${project.api_key}` } },
+    );
+    if (!res.ok) {
+      status.textContent = `Couldn't load (status ${res.status}).`;
+      return;
+    }
+    const data = await res.json();
+    const items = data.invocations || [];
+    if (items.length === 0) {
+      const msg = role === 'seller'
+        ? "No invocations against your listings yet."
+        : "You haven't invoked any listings yet.";
+      const hint = role === 'seller'
+        ? 'When a buyer posts to /v1/listings/:id/invoke, the row lands here.'
+        : 'POST /v1/listings/:id/invoke with buyer_wallet_id, buyer_identity_id, and a sealed-box of your input.';
+      status.textContent = '';
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-text">${msg}</div>
+          <div class="empty-hint">${hint}</div>
+        </div>`;
+      return;
+    }
+    status.textContent = `${data.count ?? items.length} invocation${(data.count ?? items.length) === 1 ? '' : 's'}`;
+    list.innerHTML = items.map(inv => _mpRenderInvocation(inv, role)).join('');
+  } catch (err) {
+    status.textContent = 'Network error: ' + (err && err.message ? err.message : err);
+  }
+}
+
+function _mpRenderListing(l) {
+  const tags = (l.capability_tags || [])
+    .map(t => `<span class="hero-cap-chip">${escHtml(String(t))}</span>`)
+    .join(' ');
+  const price = _mpFmtPrice(l.price_amount, l.price_currency);
+  const seller = _mpShortId(l.seller_did || '', 18);
+  const invocations = l.invocations_count ?? 0;
+  const sla = l.sla_seconds ? ` · SLA ${l.sla_seconds}s` : '';
+  const desc = l.description
+    ? `<div style="font-size:0.82rem;color:var(--muted);margin:0.4rem 0 0.5rem;line-height:1.5">${escHtml(l.description)}</div>`
+    : '';
+  return `
+    <div class="agent-card">
+      <div class="agent-card-head">
+        <div class="agent-card-name">${escHtml(l.name || '(unnamed)')}</div>
+        <div class="agent-card-metric">${price}</div>
+      </div>
+      ${desc}
+      ${tags ? `<div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.4rem">${tags}</div>` : ''}
+      <div class="agent-card-did">${seller ? 'seller ' + seller + ' · ' : ''}${invocations} invocations${sla}</div>
+    </div>
+  `;
+}
+
+function _mpRenderInvocation(inv, role) {
+  const status = inv.status || 'unknown';
+  const cls = ({
+    escrowed: 'status-blue',
+    acknowledged: 'status-yellow',
+    completed: 'status-green',
+    released: 'status-green',
+    refunded: 'status-red',
+  })[status] || '';
+  const counterpartyLabel = role === 'seller'
+    ? 'buyer ' + _mpShortId(inv.buyer_did || inv.buyer_identity_id || '', 18)
+    : 'listing ' + _mpShortId(inv.listing_id || '', 12);
+  const amount = _mpFmtPrice(inv.amount, inv.currency);
+  const slaInfo = inv.sla_deadline_at
+    ? ` · SLA ${fmtDate(inv.sla_deadline_at)}`
+    : '';
+  const refund = inv.refund_reason
+    ? ` · ${escHtml(inv.refund_reason)}`
+    : '';
+  return `
+    <div class="agent-card">
+      <div class="agent-card-head">
+        <div class="agent-card-name">${escHtml(inv.id.slice(0, 8))}…</div>
+        <div class="agent-card-metric"><span class="hero-cap-chip ${cls}">${escHtml(status)}</span></div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--muted);margin:0.35rem 0 0.4rem">${counterpartyLabel} · ${amount}${slaInfo}${refund}</div>
+      <div class="agent-card-did">id: ${escHtml(inv.id)}</div>
+    </div>
+  `;
+}
+
+function _mpFmtPrice(amount, currency) {
+  if (amount == null) return '—';
+  const c = (currency || '').toUpperCase();
+  if (c === 'USDC' || c === 'USD') {
+    return `${(Number(amount) / 1_000_000).toFixed(2)} ${c}`;
+  }
+  if (c === 'GBP') {
+    return `£${(Number(amount) / 100).toFixed(2)}`;
+  }
+  return `${amount} ${c || ''}`.trim();
+}
+
+function _mpShortId(id, head) {
+  if (!id) return '—';
+  if (id.length <= head + 4) return id;
+  return id.slice(0, head) + '…' + id.slice(-4);
+}

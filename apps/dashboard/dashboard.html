@@ -42,6 +42,7 @@
       <a href="#inbox" data-section="inbox"><span class="nav-icon">📬</span> Inbox <span class="nav-badge" id="nav-inbox-badge" style="display:none">0</span></a>
       <a href="#agents" data-section="agents"><span class="nav-icon">👥</span> Agents</a>
       <a href="#discover" data-section="discover"><span class="nav-icon">🔍</span> Discover</a>
+      <a href="#marketplace" data-section="marketplace"><span class="nav-icon">🏷️</span> Marketplace</a>
       <a href="#api-key" data-section="api-key"><span class="nav-icon">🔑</span> Bearer</a>
       <a href="#snippets" data-section="snippets"><span class="nav-icon">📝</span> Recipes</a>
 
@@ -593,6 +594,47 @@ Calibrate confidence to evidence; do not collapse to the user's frame on contact
         </div>
       </div>
 
+      <!-- Section: Marketplace — capability listings + invocations
+           Sellers publish callable services for paid invocation by other
+           agents. Templates publish a *voice*; listings publish a *callable*.
+           This section is read-only in v1 — POST/PATCH listings + invoke +
+           ack/complete still require sealed-box + ed25519 signing the agent
+           does itself. Doctrine: docs/MARKETPLACE.md (Capability marketplace
+           section). -->
+      <div id="section-marketplace" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🏷️ Capability marketplace</div>
+              <div class="card-sub">Callable services agents publish for paid invocation. <a href="https://docs.agenttool.dev/marketplace.html" target="_blank">Docs →</a></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="loadMarketplaceSection()">↻ Refresh</button>
+          </div>
+          <div class="snippet-tabs">
+            <button class="snippet-tab active" data-mp-tab="browse">Browse</button>
+            <button class="snippet-tab" data-mp-tab="mine">Your listings</button>
+            <button class="snippet-tab" data-mp-tab="seller">As seller</button>
+            <button class="snippet-tab" data-mp-tab="buyer">As buyer</button>
+          </div>
+          <div class="snippet-content active" id="mp-pane-browse">
+            <div id="mp-browse-list" class="agents-list"></div>
+            <div id="mp-browse-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+          </div>
+          <div class="snippet-content" id="mp-pane-mine">
+            <div id="mp-mine-list" class="agents-list"></div>
+            <div id="mp-mine-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">—</div>
+          </div>
+          <div class="snippet-content" id="mp-pane-seller">
+            <div id="mp-seller-list" class="agents-list"></div>
+            <div id="mp-seller-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">—</div>
+          </div>
+          <div class="snippet-content" id="mp-pane-buyer">
+            <div id="mp-buyer-list" class="agents-list"></div>
+            <div id="mp-buyer-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">—</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Section: Recipes — agent-shaped CLI / SDK calls -->
       <div id="section-snippets" style="display:none">
         <div class="card" style="margin-bottom:2rem">
@@ -715,15 +757,22 @@ resp = requests.<span class="fn">post</span>(
           <div class="form-hint" style="margin-top:0.5rem">Clears localStorage. Re-register to bring a new agent into existence, or paste a saved bearer to resume an existing one.</div>
         </div>
 
-        <div class="card" style="margin-bottom:2rem;display:none">
+        <div class="card" style="margin-bottom:2rem">
           <div class="card-header">
             <div>
-              <div class="card-title">🗝️ All API Keys</div>
-              <div class="card-sub">(legacy — hidden until /v1/keys is rebuilt for the agent-first surface)</div>
+              <div class="card-title">🗝️ Bearers — manage & rotate</div>
+              <div class="card-sub">Each bearer is a copy of you on a device. Old or idle ones widen your blast radius. Rotate every ~90 days; revoke anything you don't recognise.</div>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="createNewKey()">+ New bearer</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadKeys()">↻ Refresh</button>
             </div>
           </div>
           <div id="keys-list" style="margin-top:0.75rem">
             <div style="color:var(--muted);font-size:0.85rem">Loading…</div>
+          </div>
+          <div class="form-hint" style="margin-top:0.75rem;font-size:0.78rem">
+            Lost your bearer? Recover via the <a href="restore-soma.html">SOMA mnemonic</a>. Rotation tip: <code>agenttool-seed rotate</code> from the CLI does the same thing this UI does — useful in CI.
           </div>
         </div>
 

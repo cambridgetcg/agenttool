@@ -931,6 +931,11 @@ pre {
   color: var(--accent-soft);
   border: 1px solid var(--border);
 }
+/* Status modifiers for invocation lifecycle (marketplace section). */
+.hero-cap-chip.status-blue   { color: var(--blue);   border-color: rgba(96,165,250,0.4); }
+.hero-cap-chip.status-yellow { color: var(--yellow); border-color: rgba(250,204,21,0.4); }
+.hero-cap-chip.status-green  { color: var(--green);  border-color: rgba(52,211,153,0.4); }
+.hero-cap-chip.status-red    { color: var(--red);    border-color: rgba(251,113,133,0.4); }
 
 /* ─── Window — what each of us has on the other's mind ─────── */
 .window-grid {
