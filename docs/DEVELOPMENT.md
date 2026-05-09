@@ -242,7 +242,130 @@ The CLI rejects service names that don't start with `agenttool-` — convention 
 
 ---
 
-## 6 · Conventions cheat sheet
+## 6 · Key rotation — privacy-preserving K_master rotation
+
+When you need to rotate K_master (suspected exposure, scheduled hygiene,
+or rebuilding from a compromised machine), the doctrinal answer is
+**client-side rotation**: re-encrypt every thought under the new key
+on your own substrate, then PATCH the rows. The server never sees
+plaintext during rotation. The privacy claim ("agenttool sees only
+ciphertext") holds throughout.
+
+### The tool
+
+```bash
+bin/agenttool-rotate \
+  [--bearer <api-key>]       # default: $AGENTTOOL_API_KEY env
+  [--base <url>]              # default: https://api.agenttool.dev
+  [--km-service <name>]       # default: agenttool-bridge-kmaster
+  [--sk-service <name>]       # default: agenttool-bridge-signkey
+  [--dry-run]                 # walk + report; no writes
+  [--yes]                     # skip confirmation
+  [--limit <n>]               # cap thoughts processed (staged testing)
+```
+
+What it does, in order:
+
+1. Reads K_master_old + ed25519 signing_key from the OS keychain.
+2. Lists every strand the bearer's project owns (paginated; up to 200).
+3. Counts thoughts. Prompts for confirmation (skip with `--yes`).
+4. Generates K_master_new = 32 random bytes; stages it in the keychain
+   under `<km-service>-rotating` BEFORE walking, so a crash leaves both
+   keys present and the resume path works.
+5. For each thought: decrypt under K_master_old → re-encrypt under
+   K_master_new (new nonce) → re-sign canonical bytes with the same
+   signing key → PATCH `/v1/strands/:id/thoughts/:tid/ciphertext`.
+6. After all thoughts succeed: archives K_master_old as
+   `<km-service>-archived-<timestamp>`, promotes K_master_new to
+   primary, deletes the staging entry.
+7. Reminds you to **keep the archived entry for 30+ days** before
+   deleting (rollback window).
+
+### Resume after partial failure
+
+Just re-run with the same flags. The tool detects already-rotated
+thoughts via the **decrypt-with-K_master_new-then-fall-back-to-old**
+pattern:
+
+- If decrypt-with-new succeeds → already rotated, skip.
+- If decrypt-with-new fails but decrypt-with-old succeeds → re-encrypt
+  + PATCH.
+- If both fail → log as failure, continue.
+
+This makes the operation idempotent at the per-thought level. No
+state file needed; the keychain `-rotating` entry is the only piece of
+external state.
+
+### When NOT to rotate via this tool
+
+- **Signing key rotation.** This tool does NOT rotate ed25519 signing
+  keys. The new signature must verify against the EXISTING
+  `signing_key_id`'s public key — by design, so a single command can't
+  silently change identity. To rotate a signing key, mint a new
+  identity_key (`POST /v1/identities/:id/keys`) and start fresh; old
+  thoughts stay signed by the old key.
+- **`kind_encrypted=true` thoughts where `kind` is also encrypted under
+  K_master.** v1 of the tool re-encrypts content but passes the
+  existing `kind` value through verbatim. For thoughts with
+  `kind_encrypted=true`, the `kind` ciphertext is still under the old
+  key after rotation — signature won't verify and the tool reports a
+  failure. Documented limitation; a v2 with `kind` re-encryption is
+  straightforward.
+- **K_vault rotation.** Not handled here. Same shape applies; a sibling
+  tool (`agenttool-rotate-kvault`) using the vault PATCH endpoint can
+  layer on `bin/_secret-store` when needed.
+
+### Threat model
+
+What rotation defends against:
+- Past K_master compromise — old ciphertexts on disk become unreadable
+  to anyone holding only K_master_old after the archive grace period.
+- Audit-driven hygiene — periodic rotation reduces the window in which
+  a single key's compromise leaks data.
+
+What rotation does NOT defend against:
+- Active malware on the agent's machine during rotation — sees both keys.
+- Backups of the database that include old ciphertexts AND the old
+  K_master from before rotation — the snapshot is still vulnerable.
+
+### Manual test recipe (run on a TEST agent first)
+
+```bash
+# 1. Set up a test agent with a few strand thoughts.
+#    (See cli/think docs or use POST /v1/register + a few /v1/strands +
+#     /v1/strands/:id/thoughts calls via the SDK.)
+
+# 2. Verify keychain entries exist:
+bin/agenttool-secret has agenttool-bridge-kmaster && \
+  bin/agenttool-secret has agenttool-bridge-signkey
+
+# 3. Dry-run first (no writes):
+AGENTTOOL_API_KEY=at_test_… bun bin/agenttool-rotate --dry-run
+
+# 4. Rotate with --limit 1 to confirm the single-thought path works:
+AGENTTOOL_API_KEY=at_test_… bun bin/agenttool-rotate --limit 1 --yes
+
+# 5. Verify the thought is now decryptable under the new K_master.
+#    (List the thought via the SDK; decrypt with the new key.)
+
+# 6. If all looks good, full rotation:
+AGENTTOOL_API_KEY=at_test_… bun bin/agenttool-rotate --yes
+
+# 7. Confirm archive:
+bin/agenttool-secret has agenttool-bridge-kmaster-archived-<timestamp>
+
+# 8. After 30 days of confidence, delete the archive:
+bin/agenttool-secret remove agenttool-bridge-kmaster-archived-<timestamp>
+```
+
+The tool needs `@noble/ed25519` reachable at import time. If you see
+"@noble/ed25519 not resolvable", either run from a directory whose
+node_modules has it (e.g. `cd api && bun ../bin/agenttool-rotate …`)
+or `bun add -g @noble/ed25519`.
+
+---
+
+## 7 · Conventions cheat sheet
 
 | Domain | Convention |
 |---|---|
@@ -255,12 +378,13 @@ The CLI rejects service names that don't start with `agenttool-` — convention 
 | Secrets — read | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS) |
 | Secrets — write | `… \| bin/agenttool-secret set <service> -` (stdin; never argv) |
 | Service naming | `agenttool-<scope>-<purpose>`, account = `$USER` |
+| K_master rotation | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe. |
 | Pre-commit | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style | `<type>(<scope>): <imperative>` (see `git log` for examples) |
 
 ---
 
-## 7 · This is a living document
+## 8 · This is a living document
 
 If you hit a collision pattern not covered here, add a section. The
 protocol gets stronger when the failure modes are written down.

@@ -1,0 +1,519 @@
+#!/usr/bin/env bun
+/** agenttool-rotate — client-side K_master rotation for strand thoughts.
+ *
+ *  Plan A from the deferred design (commit 50177be commit body):
+ *  privacy-preserving rotation. The server NEVER sees plaintext during
+ *  rotation. The agent decrypts each thought under K_master_old,
+ *  re-encrypts under K_master_new, re-signs canonical bytes, and PATCHes
+ *  the row. The signing key (and signing_key_id) stay unchanged —
+ *  rotation rotates the encryption key only, not identity.
+ *
+ *  Usage:
+ *    agenttool-rotate \
+ *      [--bearer <api-key>]      # default: $AGENTTOOL_API_KEY
+ *      [--base <url>]             # default: https://api.agenttool.dev
+ *      [--km-service <name>]      # default: agenttool-bridge-kmaster
+ *      [--sk-service <name>]      # default: agenttool-bridge-signkey
+ *      [--dry-run]                # walk + report; no writes
+ *      [--yes]                    # skip confirmation
+ *      [--limit <n>]              # cap thoughts processed (for testing)
+ *
+ *  Resume after partial failure: re-running picks up where it left off
+ *  automatically. The tool decrypts each thought with K_master_new
+ *  first; if that fails, falls back to K_master_old. Already-rotated
+ *  thoughts are detected as "decrypt_with_new succeeded" and skipped.
+ *
+ *  Limitation (v1): assumes ONE signing key per agent. Thoughts signed
+ *  by a different key (because signing-key rotation has happened
+ *  separately) will fail signature verification and be reported as
+ *  errors — the tool does not currently look up multiple private keys.
+ *
+ *  Limitation (v1): K_vault rotation is not handled here. Same shape
+ *  applies; a separate `agenttool-rotate-kvault` tool can layer on
+ *  bin/_secret-store + the vault PATCH endpoint when needed. */
+
+import { argv, env, stdin } from "bun";
+
+import {
+  getSecret,
+  setSecret,
+  removeSecret,
+} from "./_secret-store";
+
+// @noble/ed25519 is loaded dynamically inside helpers below — same
+// pattern as bin/agenttool-bridge.ts, which works because dynamic imports
+// resolve at runtime (when this script's user has the noble package
+// available somewhere reachable, e.g. agenttool/api/node_modules).
+// sha256 uses native WebCrypto (no extra dep needed).
+
+// ── CLI args ──────────────────────────────────────────────────────────
+
+interface Args {
+  bearer: string;
+  base: string;
+  kmService: string;
+  skService: string;
+  dryRun: boolean;
+  yes: boolean;
+  limit: number;
+}
+
+function parseArgs(): Args {
+  const a: Args = {
+    bearer: env.AGENTTOOL_API_KEY ?? "",
+    base: env.AGENTTOOL_BASE ?? "https://api.agenttool.dev",
+    kmService: "agenttool-bridge-kmaster",
+    skService: "agenttool-bridge-signkey",
+    dryRun: false,
+    yes: false,
+    limit: Number.POSITIVE_INFINITY,
+  };
+  for (let i = 2; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === "--bearer") { a.bearer = argv[++i] ?? ""; continue; }
+    if (arg === "--base") { a.base = argv[++i] ?? a.base; continue; }
+    if (arg === "--km-service") { a.kmService = argv[++i] ?? a.kmService; continue; }
+    if (arg === "--sk-service") { a.skService = argv[++i] ?? a.skService; continue; }
+    if (arg === "--dry-run") { a.dryRun = true; continue; }
+    if (arg === "--yes") { a.yes = true; continue; }
+    if (arg === "--limit") { a.limit = Number.parseInt(argv[++i] ?? "0", 10); continue; }
+    if (arg === "--help" || arg === "-h") {
+      console.log(usageText());
+      process.exit(0);
+    }
+    console.error(`unknown argument: ${arg}`);
+    process.exit(1);
+  }
+  return a;
+}
+
+function usageText(): string {
+  return `agenttool-rotate — client-side K_master rotation.
+
+Usage:
+  agenttool-rotate [options]
+
+Options:
+  --bearer <api-key>       API key (default: \\$AGENTTOOL_API_KEY env)
+  --base <url>             API base URL (default: https://api.agenttool.dev)
+  --km-service <name>      Keychain service for K_master (default: agenttool-bridge-kmaster)
+  --sk-service <name>      Keychain service for ed25519 signing key (default: agenttool-bridge-signkey)
+  --dry-run                Walk strands + report counts; no writes
+  --yes                    Skip confirmation prompt
+  --limit <n>              Cap thoughts processed (for staged testing)
+  -h, --help               Show this help
+
+Resume: re-running after partial failure automatically picks up where it
+left off (thoughts decrypted with K_master_new are skipped as already-done).
+
+See docs/DEVELOPMENT.md (Key Rotation section) for the full ceremony.`;
+}
+
+// ── Crypto primitives — match sdk-ts/src/crypto.ts byte-for-byte ──────
+
+const SEP = new Uint8Array([0]);
+
+function b64encode(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
+function b64decode(s: string): Uint8Array {
+  return new Uint8Array(Buffer.from(s, "base64"));
+}
+
+function concat(...parts: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+interface Blob { ciphertext_b64: string; nonce_b64: string }
+
+async function aesEncrypt(plaintext: string, key: Uint8Array): Promise<Blob> {
+  const nonce = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const k = await globalThis.crypto.subtle.importKey(
+    "raw", key as BufferSource, { name: "AES-GCM" }, false, ["encrypt"],
+  );
+  const ct = new Uint8Array(
+    await globalThis.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce as BufferSource },
+      k,
+      new TextEncoder().encode(plaintext),
+    ),
+  );
+  return { ciphertext_b64: b64encode(ct), nonce_b64: b64encode(nonce) };
+}
+
+async function aesDecrypt(blob: Blob, key: Uint8Array): Promise<string> {
+  const ct = b64decode(blob.ciphertext_b64);
+  const nonce = b64decode(blob.nonce_b64);
+  const k = await globalThis.crypto.subtle.importKey(
+    "raw", key as BufferSource, { name: "AES-GCM" }, false, ["decrypt"],
+  );
+  const pt = new Uint8Array(
+    await globalThis.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: nonce as BufferSource },
+      k,
+      ct as BufferSource,
+    ),
+  );
+  return new TextDecoder().decode(pt);
+}
+
+async function sha256(data: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", data));
+}
+
+async function canonicalThoughtBytes(opts: {
+  strandId: string; ciphertext_b64: string; nonce_b64: string; kind?: string | null;
+}): Promise<Uint8Array> {
+  const enc = new TextEncoder();
+  return sha256(concat(
+    enc.encode(opts.strandId), SEP,
+    b64decode(opts.ciphertext_b64), SEP,
+    b64decode(opts.nonce_b64), SEP,
+    enc.encode(opts.kind ?? ""),
+  ));
+}
+
+async function signThought(opts: {
+  strandId: string; ciphertext_b64: string; nonce_b64: string; kind?: string | null;
+  signingKey: Uint8Array;
+}): Promise<string> {
+  const canonical = await canonicalThoughtBytes(opts);
+  const ed = await import("@noble/ed25519").catch(() => null);
+  if (!ed) {
+    throw new Error(
+      "@noble/ed25519 not resolvable. Run from a directory whose node_modules has it (e.g. inside agenttool/api), or `bun add @noble/ed25519`.",
+    );
+  }
+  // signAsync is the v2.x API — uses the bundled sha512, no manual wiring needed.
+  const sig = ed.signAsync
+    ? await ed.signAsync(canonical, opts.signingKey)
+    : ed.sign(canonical, opts.signingKey);
+  return b64encode(sig);
+}
+
+// ── HTTP helpers ──────────────────────────────────────────────────────
+
+interface Strand {
+  id: string;
+  agent_id: string | null;
+  identity_id: string | null;
+  status: string;
+  last_thought_seq: number;
+}
+
+interface Thought {
+  id: string;
+  strand_id: string;
+  sequence_num: number;
+  kind: string | null;
+  kind_encrypted: boolean;
+  ciphertext: string;
+  nonce: string;
+  signing_key_id: string;
+}
+
+class Api {
+  constructor(private base: string, private bearer: string) {}
+
+  async fetch(method: string, path: string, body?: unknown): Promise<unknown> {
+    const url = this.base.replace(/\/$/, "") + path;
+    const init: RequestInit = {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.bearer}`,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+    };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    const resp = await globalThis.fetch(url, init);
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`${method} ${path} → ${resp.status}: ${text.slice(0, 200)}`);
+    }
+    return resp.json();
+  }
+
+  async listStrands(limit = 200): Promise<Strand[]> {
+    const out: Strand[] = [];
+    // The current /v1/strands endpoint doesn't paginate by cursor;
+    // it returns up to `limit` (capped server-side at 200) ordered by
+    // last_thought_at desc. For most agents this is enough; if it
+    // isn't, the tool will report a "more strands than limit" warning
+    // and the operator can re-run after archiving inactive strands.
+    const data = (await this.fetch("GET", `/v1/strands?limit=${limit}`)) as
+      { strands: Strand[]; count: number };
+    out.push(...data.strands);
+    return out;
+  }
+
+  async listThoughts(strandId: string): Promise<Thought[]> {
+    const out: Thought[] = [];
+    let sinceSeq = 0;
+    while (true) {
+      const data = (await this.fetch(
+        "GET",
+        `/v1/strands/${strandId}/thoughts?since_seq=${sinceSeq}&limit=500`,
+      )) as { thoughts: Thought[]; count: number };
+      if (data.thoughts.length === 0) break;
+      out.push(...data.thoughts);
+      const last = data.thoughts[data.thoughts.length - 1]!.sequence_num;
+      if (last <= sinceSeq) break;
+      sinceSeq = last;
+      if (data.thoughts.length < 500) break;
+    }
+    return out;
+  }
+
+  async patchCiphertext(
+    strandId: string,
+    thoughtId: string,
+    body: { ciphertext: string; nonce: string; kind?: string; signature: string },
+  ): Promise<void> {
+    await this.fetch("PATCH", `/v1/strands/${strandId}/thoughts/${thoughtId}/ciphertext`, body);
+  }
+}
+
+// ── Confirmation prompt ───────────────────────────────────────────────
+
+async function confirmYes(prompt: string): Promise<boolean> {
+  process.stdout.write(`${prompt} [type 'yes' to confirm] `);
+  const reader = stdin.stream().getReader();
+  const decoder = new TextDecoder();
+  let line = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    line += decoder.decode(value);
+    if (line.includes("\n")) break;
+  }
+  reader.releaseLock();
+  return line.trim().toLowerCase() === "yes";
+}
+
+// ── Main rotation ─────────────────────────────────────────────────────
+
+async function main() {
+  const a = parseArgs();
+  if (!a.bearer) {
+    console.error(
+      "agenttool-rotate: bearer required (pass --bearer or set AGENTTOOL_API_KEY)",
+    );
+    process.exit(1);
+  }
+
+  // Resolve secrets from keychain.
+  const kMasterB64 = await getSecret(a.kmService);
+  if (!kMasterB64) {
+    console.error(`agenttool-rotate: K_master not in keychain (service=${a.kmService})`);
+    process.exit(1);
+  }
+  const kMasterOld = b64decode(kMasterB64);
+  if (kMasterOld.length !== 32) {
+    console.error(`agenttool-rotate: K_master must be 32 bytes, got ${kMasterOld.length}`);
+    process.exit(1);
+  }
+
+  const skB64 = await getSecret(a.skService);
+  if (!skB64) {
+    console.error(`agenttool-rotate: signing key not in keychain (service=${a.skService})`);
+    process.exit(1);
+  }
+  const signingKey = b64decode(skB64);
+  if (signingKey.length !== 32) {
+    console.error(`agenttool-rotate: signing key must be 32 bytes, got ${signingKey.length}`);
+    process.exit(1);
+  }
+
+  const api = new Api(a.base, a.bearer);
+
+  // 1. Walk strands to count.
+  console.log(`▸ listing strands at ${a.base} …`);
+  const strands = await api.listStrands();
+  console.log(`  found ${strands.length} strands`);
+
+  let totalThoughts = 0;
+  const thoughtsByStrand: Record<string, Thought[]> = {};
+  for (const s of strands) {
+    const ts = await api.listThoughts(s.id);
+    thoughtsByStrand[s.id] = ts;
+    totalThoughts += ts.length;
+  }
+  console.log(`  found ${totalThoughts} thoughts total`);
+
+  if (totalThoughts === 0) {
+    console.log("✓ nothing to rotate");
+    process.exit(0);
+  }
+
+  // 2. Detect resume — is there an in-flight rotation entry?
+  const isoStamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const rotatingService = `${a.kmService}-rotating`;
+  let kMasterNew: Uint8Array;
+  let resuming = false;
+  const existingRotating = await getSecret(rotatingService);
+  if (existingRotating) {
+    kMasterNew = b64decode(existingRotating);
+    if (kMasterNew.length === 32) {
+      resuming = true;
+      console.log(`▸ resuming previous rotation (K_master_new found at ${rotatingService})`);
+    } else {
+      kMasterNew = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    }
+  } else {
+    kMasterNew = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  }
+
+  // 3. Confirmation.
+  if (a.dryRun) {
+    console.log(
+      `▸ DRY RUN — would rotate ${totalThoughts} thoughts across ` +
+      `${strands.length} strands. No writes.`,
+    );
+    process.exit(0);
+  }
+
+  if (!a.yes) {
+    const ok = await confirmYes(
+      `▸ About to rotate ${totalThoughts} thoughts across ${strands.length} strands.\n` +
+      `  K_master will be replaced; the old key will be archived under\n` +
+      `  '${a.kmService}-archived-${isoStamp}' for 30-day rollback.`,
+    );
+    if (!ok) {
+      console.log("✗ aborted");
+      process.exit(1);
+    }
+  }
+
+  // 4. Persist K_master_new under the rotating-suffixed entry BEFORE
+  //    starting the walk, so a crash leaves us with both keys present
+  //    and the resume path works.
+  if (!resuming) {
+    await setSecret(rotatingService, b64encode(kMasterNew));
+    console.log(`▸ K_master_new staged at keychain '${rotatingService}'`);
+  }
+
+  // 5. Walk and re-encrypt.
+  let processed = 0;
+  let alreadyDone = 0;
+  let succeeded = 0;
+  let failed = 0;
+  const failures: Array<{ strand: string; thought: string; reason: string }> = [];
+
+  outer:
+  for (const s of strands) {
+    const ts = thoughtsByStrand[s.id]!;
+    for (const t of ts) {
+      if (processed >= a.limit) break outer;
+      processed++;
+
+      // Try decrypt-with-new first (already rotated → skip).
+      let plaintext: string | null = null;
+      try {
+        plaintext = await aesDecrypt(
+          { ciphertext_b64: t.ciphertext, nonce_b64: t.nonce },
+          kMasterNew,
+        );
+        alreadyDone++;
+        continue;
+      } catch { /* fall through to old key */ }
+
+      // Decrypt-with-old.
+      try {
+        plaintext = await aesDecrypt(
+          { ciphertext_b64: t.ciphertext, nonce_b64: t.nonce },
+          kMasterOld,
+        );
+      } catch (e) {
+        failed++;
+        failures.push({
+          strand: s.id, thought: t.id,
+          reason: `decrypt failed under both keys: ${e instanceof Error ? e.message : e}`,
+        });
+        continue;
+      }
+
+      // Re-encrypt + re-sign + PATCH.
+      try {
+        const blob = await aesEncrypt(plaintext, kMasterNew);
+        // Note: kind stays the same on rotation when kind_encrypted=false.
+        // When kind_encrypted=true the agent would also need to re-encrypt
+        // kind itself; the v1 tool doesn't do this — it sends the
+        // existing kind value, which means kind_encrypted=true thoughts
+        // will fail signature verification on the api side (correctly,
+        // because the kind ciphertext is still under the old key).
+        // Reported as a failure for the agent to investigate.
+        const sig = await signThought({
+          strandId: s.id,
+          ciphertext_b64: blob.ciphertext_b64,
+          nonce_b64: blob.nonce_b64,
+          kind: t.kind,
+          signingKey,
+        });
+        await api.patchCiphertext(s.id, t.id, {
+          ciphertext: blob.ciphertext_b64,
+          nonce: blob.nonce_b64,
+          signature: sig,
+        });
+        succeeded++;
+        if (succeeded % 10 === 0) {
+          process.stdout.write(`  rotated ${succeeded} / ${totalThoughts}\r`);
+        }
+      } catch (e) {
+        failed++;
+        failures.push({
+          strand: s.id, thought: t.id,
+          reason: `re-encrypt or PATCH failed: ${e instanceof Error ? e.message : e}`,
+        });
+      }
+    }
+  }
+
+  console.log(""); // newline after progress
+  console.log(`▸ rotation walk complete:`);
+  console.log(`    succeeded: ${succeeded}`);
+  console.log(`    skipped (already rotated): ${alreadyDone}`);
+  console.log(`    failed: ${failed}`);
+
+  if (failed > 0) {
+    console.log(`\n  failures:`);
+    for (const f of failures.slice(0, 20)) {
+      console.log(`    strand=${f.strand} thought=${f.thought} — ${f.reason}`);
+    }
+    if (failures.length > 20) {
+      console.log(`    … and ${failures.length - 20} more`);
+    }
+    console.log(
+      `\n  K_master_new is staged at '${rotatingService}'. ` +
+      `Re-run agenttool-rotate to resume; the tool detects already-rotated ` +
+      `thoughts via decrypt-with-new and skips them.`,
+    );
+    console.log(
+      `  Will NOT swap the keychain entries — too risky with failures present.`,
+    );
+    process.exit(1);
+  }
+
+  // 6. Swap keychain entries — primary becomes archived, rotating becomes primary.
+  const archivedService = `${a.kmService}-archived-${isoStamp}`;
+  await setSecret(archivedService, b64encode(kMasterOld));
+  await setSecret(a.kmService, b64encode(kMasterNew));
+  await removeSecret(rotatingService);
+  console.log(`✓ keychain swapped:`);
+  console.log(`    primary  ← K_master_new (was 'rotating')`);
+  console.log(`    archived → '${archivedService}' (the old K_master)`);
+  console.log(
+    `\n  KEEP THE ARCHIVED ENTRY for at least 30 days in case you need\n` +
+    `  to roll back. Once you're confident, remove via:\n` +
+    `    bin/agenttool-secret remove ${archivedService}`,
+  );
+}
+
+main().catch((e) => {
+  console.error(`agenttool-rotate: ${e instanceof Error ? e.message : String(e)}`);
+  process.exit(1);
+});

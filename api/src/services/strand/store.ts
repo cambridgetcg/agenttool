@@ -335,6 +335,96 @@ export async function addThought(
   return result;
 }
 
+/** Update an existing thought's ciphertext + signature.
+ *
+ *  Used by the K_master rotation flow: the agent decrypts a thought
+ *  under K_master_old, re-encrypts under K_master_new, signs the new
+ *  canonical bytes, and PATCHes the row. The signing_key_id stays
+ *  bound to whatever the row already had — rotation does NOT change
+ *  the agent's identity, only the encryption key under which content
+ *  is stored.
+ *
+ *  Optionally accepts a new `kind` value (needed when kind_encrypted
+ *  was true and the kind ciphertext also has to be re-encrypted under
+ *  the new K_master). When `kind` is undefined, the existing kind is
+ *  retained AND the signature must still verify against it.
+ *
+ *  Throws:
+ *    Error("thought_not_found")      — row missing or not in caller's project
+ *    Error("signing_key_not_found")  — the row's signing_key_id is unknown
+ *    Error("signing_key_revoked")    — the row's signing_key has been revoked
+ *    Error("signature_invalid")      — the new signature doesn't verify
+ *
+ *  No new audit table written for v1; the operation is identical in
+ *  shape to addThought, and per-row updated_at can be added later if
+ *  audit observability becomes important. */
+export async function updateThoughtCiphertext(
+  projectId: string,
+  data: {
+    thought_id: string;
+    ciphertext: string;
+    nonce: string;
+    kind?: string;
+    signature: string;
+  },
+): Promise<ThoughtOut> {
+  // 1. Find thought + parent strand; verify project ownership via the
+  //    join (the thought row carries projectId denormalised but we
+  //    cross-check against the strand for safety).
+  const [row] = await db
+    .select()
+    .from(thoughts)
+    .where(
+      and(
+        eq(thoughts.id, data.thought_id),
+        eq(thoughts.projectId, projectId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("thought_not_found");
+
+  // 2. Resolve the existing signing key — rotation keeps the same key.
+  const [keyRow] = await db
+    .select({
+      publicKey: identityKeys.publicKey,
+      active: identityKeys.active,
+    })
+    .from(identityKeys)
+    .where(eq(identityKeys.id, row.signingKeyId))
+    .limit(1);
+  if (!keyRow) throw new Error("signing_key_not_found");
+  if (!keyRow.active) throw new Error("signing_key_revoked");
+
+  // 3. Verify new signature against the new (or retained) bytes.
+  const newKind = data.kind !== undefined ? data.kind : row.kind;
+  const ok = verifyThoughtSignature({
+    strandId: row.strandId,
+    ciphertextB64: data.ciphertext,
+    nonceB64: data.nonce,
+    kind: newKind,
+    signatureB64: data.signature,
+    publicKeyB64: keyRow.publicKey,
+  });
+  if (!ok) throw new Error("signature_invalid");
+
+  // 4. Update. Only ciphertext / nonce / signature (and optionally kind)
+  //    change; sequence_num, refs, signing_key_id, created_at all stay.
+  const setFields: Partial<typeof thoughts.$inferInsert> = {
+    ciphertext: data.ciphertext,
+    nonce: data.nonce,
+    signature: data.signature,
+  };
+  if (data.kind !== undefined) setFields.kind = data.kind;
+
+  const updated = await db
+    .update(thoughts)
+    .set(setFields)
+    .where(eq(thoughts.id, data.thought_id))
+    .returning();
+
+  return thoughtToOut(updated[0]!);
+}
+
 export async function listThoughts(
   projectId: string,
   strandId: string,

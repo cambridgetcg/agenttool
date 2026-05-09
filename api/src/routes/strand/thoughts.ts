@@ -11,7 +11,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
-import { addThought, listThoughts } from "../../services/strand/store";
+import { addThought, listThoughts, updateThoughtCiphertext } from "../../services/strand/store";
 
 // Mounted at /v1/strands/:strandId/thoughts so :strandId is the parent.
 const app = new Hono<ProjectContext>();
@@ -78,6 +78,68 @@ app.post("/", async (c) => {
       throw new HTTPException(401, { message: msg });
     }
     if (msg === "signature_invalid") {
+      throw new HTTPException(401, { message: msg });
+    }
+    throw err;
+  }
+});
+
+// ── PATCH /v1/strands/:id/thoughts/:thoughtId/ciphertext ────────────────
+// K_master rotation: agent re-encrypts a thought under a new key,
+// re-signs canonical bytes, and PATCHes the row. signing_key_id stays
+// bound to whatever the row already had — rotation does NOT change
+// identity, only the encryption key under which content is stored.
+//
+// Wire shape mirrors POST minus signing_key_id (read from existing row)
+// and minus refs (rotation doesn't change relational metadata).
+const rotateSchema = z.object({
+  ciphertext: z.string().min(1).max(200_000),
+  nonce: z.string().min(1).max(64),
+  /** Optional. When present, replaces the row's `kind`. Required when
+   *  kind_encrypted was true and the kind ciphertext is also being
+   *  re-encrypted under the new K_master. */
+  kind: z.union([KIND, z.string().max(64)]).optional(),
+  signature: z.string().min(1).max(255),
+});
+
+app.patch("/:thoughtId/ciphertext", async (c) => {
+  const strandId = c.req.param("strandId") ?? c.req.param("id");
+  const thoughtId = c.req.param("thoughtId");
+  if (!strandId || !thoughtId) {
+    throw new HTTPException(400, { message: "strand_id_and_thought_id_required" });
+  }
+  const body = await c.req.json();
+  const parsed = rotateSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation", details: parsed.error.flatten() },
+      400,
+    );
+  }
+
+  // Charge 1 credit per rotated thought — same as addThought. Keeps
+  // the economy simple and provides a soft rate limit on bulk rotation.
+  await charge(c, 1, "strand.rotate");
+
+  try {
+    const result = await updateThoughtCiphertext(c.var.project.id, {
+      thought_id: thoughtId,
+      ciphertext: parsed.data.ciphertext,
+      nonce: parsed.data.nonce,
+      kind: parsed.data.kind,
+      signature: parsed.data.signature,
+    });
+    return c.json(result);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg === "thought_not_found") {
+      throw new HTTPException(404, { message: msg });
+    }
+    if (
+      msg === "signing_key_not_found" ||
+      msg === "signing_key_revoked" ||
+      msg === "signature_invalid"
+    ) {
       throw new HTTPException(401, { message: msg });
     }
     throw err;
