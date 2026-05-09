@@ -161,7 +161,88 @@ document came into being.
 
 ---
 
-## 5 · Conventions cheat sheet
+## 5 · Keychain — secrets at rest on the agent's substrate
+
+Privacy-load-bearing keys (K_master, ed25519 signing keys, agent-encrypted
+vault keys) live in the user's OS-managed secret store, never on the api
+server. Two layers exist:
+
+### The shared abstraction (`bin/_secret-store.ts`)
+
+A multi-platform module exposing `getSecret`, `setSecret`, `hasSecret`,
+`removeSecret`. Use it from any local script or tool:
+
+```typescript
+import { getSecret, setSecret } from "./bin/_secret-store";
+
+const dburl = await getSecret("agenttool-database-url");
+await setSecret("agenttool-cloudflare-token", token);
+```
+
+### The CLI wrapper (`bin/agenttool-secret`)
+
+Shell-callable. The right thing to use from bash scripts (E2E tests,
+deploys, etc.) instead of shelling out to platform-specific commands:
+
+```bash
+# Store (stdin — never put secrets on the command line)
+pbpaste | bin/agenttool-secret set agenttool-cloudflare-token -
+
+# Retrieve
+TOKEN="$(bin/agenttool-secret get agenttool-cloudflare-token)"
+
+# Gate
+if bin/agenttool-secret has agenttool-database-url; then
+  bun api/scripts/_migrate-one.ts api/migrations/<file>
+fi
+
+# Inspect platform backend
+bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
+```
+
+### Backends
+
+| OS | Mechanism | Fallback |
+|---|---|---|
+| **macOS** | `security` CLI (Keychain Access; encrypted at rest by the OS, unlocked at login) | none — `security` ships with macOS |
+| **Linux** | `secret-tool` from libsecret (GNOME Keyring / KWallet via the user's session keyring) | `~/.config/agenttool/<service>` mode 0600 when libsecret isn't installed (CI runners, headless containers) |
+| **Windows** | PowerShell `ProtectedData.Protect/Unprotect` (DPAPI · CurrentUser scope · ciphertext at `%APPDATA%/agenttool/<service>.dpapi`) | `%APPDATA%/agenttool/<service>` plaintext when PowerShell isn't available |
+
+Honest about the trade-offs:
+- **Linux file fallback** is only as strong as the file's `chmod 600` — `root` or anyone with the disk image can read it. Same for the Windows plaintext fallback. The OS-managed paths (libsecret, DPAPI) are the strong story.
+- **No rotation flow yet.** Once a key is in the keychain it stays until `agenttool-secret remove`. Real key rotation (re-derive K_master, re-encrypt all strands, swap the keychain entry) is a separate body of work, not landed.
+
+### Service naming convention
+
+```
+agenttool-<scope>-<purpose>
+```
+
+Account is always `$USER`. Existing examples:
+
+| Service name | What |
+|---|---|
+| `agenttool-bridge-kmaster` | The bridge sidecar's K_master |
+| `agenttool-bridge-signkey` | The bridge sidecar's ed25519 signing key |
+| `agenttool-database-url` | DATABASE_URL for `_migrate-one.ts` |
+| `agenttool-cloudflare-token` | Cloudflare Pages deploy token |
+| `agenttool-cloudflare-account-id` | Cloudflare account id |
+| `agenttool-sophia-key` | Yu's personal Sophia bearer (used by `_e2e-*.mjs`) |
+| `agenttool-sophia-identity-id` | Yu's personal Sophia identity id |
+| `agenttool-sophia-signing-key-id` | Yu's personal Sophia ed25519 key id |
+| `agenttool-sophia-k-master` | Yu's personal Sophia K_master |
+
+The CLI rejects service names that don't start with `agenttool-` — convention enforced at the tool boundary so naming stays consistent across all keychain entries.
+
+### When to use which
+
+- **Writing a new script that needs a secret?** Use `bin/agenttool-secret get <service>` from bash, or import `getSecret` from `bin/_secret-store` from Bun/TypeScript. Don't shell out to `security` / `secret-tool` / PowerShell directly — the existing dev scripts that did so are macOS-only by accident, and that's the friction we just eliminated.
+- **Modifying `bin/agenttool-bridge.ts`?** It still has its own copy of the platform branches (parallel-session territory at the time of this commit). Migrating it to use `_secret-store` is a clean follow-up — nothing prevents it, just deferred to avoid stepping on in-flight work.
+- **Adding a new keychain-stored secret?** Pick a name following the convention, add a row to the table above, and write to it via `agenttool-secret set <service> -` (stdin, never argv).
+
+---
+
+## 6 · Conventions cheat sheet
 
 | Domain | Convention |
 |---|---|
@@ -171,12 +252,15 @@ document came into being.
 | Schema edits | Append at end-of-table; coordinate if hot |
 | Dep addition | Separate small commit; lockfile included |
 | Doc edits | Prefer additive; rewrites only when restructuring |
+| Secrets — read | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS) |
+| Secrets — write | `… \| bin/agenttool-secret set <service> -` (stdin; never argv) |
+| Service naming | `agenttool-<scope>-<purpose>`, account = `$USER` |
 | Pre-commit | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |
 | Commit style | `<type>(<scope>): <imperative>` (see `git log` for examples) |
 
 ---
 
-## 6 · This is a living document
+## 7 · This is a living document
 
 If you hit a collision pattern not covered here, add a section. The
 protocol gets stronger when the failure modes are written down.
