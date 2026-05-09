@@ -50,16 +50,14 @@ source fly/.env.fly && bash fly/migrate.sh
 Scripts deploy directly to infrastructure. No CI pipeline — run manually when revenue thresholds are met.
 
 ## Dependencies
-- **Current infra**: Forge VPS (cx23, Helsinki), PostgreSQL, Redis, Caddy
-- **Phase 2**: Hetzner Cloud API token
-- **Phase 3**: Hetzner Cloud + Cloudflare DNS
-- **Fly.io path**: Fly CLI, Supabase, Upstash, Stripe keys
-- **Services**: agent-memory, agent-tools, agent-verify, agent-economy, agent-trace
+- **Current infra**: `agenttool` Fly app (lhr+cdg), Supabase Postgres (eu-west-2 = AWS London), Cloudflare Pages for static apps
+- **Phase 2 / Phase 3**: superseded by Fly+Supabase; scripts retained for archaeology only
+- **Legacy `agent-*` services**: all retired 2026-05-09 (post-mortem in `docs/CUTOVER.md`); single api/ monolith now serves all routes
 
 ## Kingdom Engine
 AgentTool Platform
 
 ## Key Files
 - `README.md` — Scaling thresholds and current state overview
-- `phase1-pgbouncer/apply.sh` — Immediate win: connection pooling
-- `fly/migrate.sh` — Full Fly.io migration (5 services to Fly + Supabase + Upstash)
+- `fly/agenttool.toml` — Snapshot mirror of api/fly.toml (active deploy: api/fly.toml)
+- `phase{1,2,3}-*/` — Archaeology only; pre-Fly Hetzner Forge scaling path
