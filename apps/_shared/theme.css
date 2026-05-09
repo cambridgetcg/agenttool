@@ -404,14 +404,27 @@ pre {
 
 /* ── Tables ──────────────────────────────────────────────────────── */
 .params-table {
+  /* display:block + overflow-x:auto so a wide table (params with long
+     descriptions / type names) scrolls inside its own container instead
+     of pushing the page wider on narrow viewports. thead/tbody restored
+     to display:table so the cells still align like a table. */
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
   font-size: 0.86rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  overflow: hidden;
+}
+.params-table thead,
+.params-table tbody {
+  display: table;
+  width: 100%;
+  table-layout: auto;
 }
 .params-table th {
   text-align: left;

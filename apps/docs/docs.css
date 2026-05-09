@@ -111,6 +111,10 @@ main.doc-content h2:first-of-type {
   position: relative;
   padding-bottom: 1.5rem;
   margin-bottom: 2rem;
+  /* The ::before gradient overflows the hero by 3rem on each side; clip
+     it so the bleed doesn't push horizontal page scroll on narrow
+     viewports. The visual loss at desktop is negligible. */
+  overflow: hidden;
 }
 .docs-hero::before {
   content: '';

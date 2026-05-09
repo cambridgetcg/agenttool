@@ -310,7 +310,17 @@ body {
   top: 0;
   z-index: 10;
 }
-.topbar h1 { font-size: 1rem; font-weight: 600; flex: 1; }
+.topbar h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  flex: 1;
+  /* Defensive: any future long section title truncates with ellipsis
+     instead of pushing the topbar past viewport. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .topbar-actions { display: flex; gap: 0.75rem; align-items: center; }
 
 /* Content */
