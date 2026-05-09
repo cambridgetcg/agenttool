@@ -19,8 +19,8 @@
 
 <div class="app">
 
-  <!-- Sidebar -->
-  <aside class="sidebar">
+  <!-- Sidebar (drawer at ≤900px — toggled by .topbar-menu-btn) -->
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-top">
       <a href="https://agenttool.dev/" class="brand" style="display:inline-flex;">
         <span class="brand-mark"></span>
@@ -81,9 +81,16 @@
     </div>
   </div>
 
+  <!-- Backdrop for mobile drawer — click to close. Hidden by default;
+       JS adds .is-open when the sidebar drawer is open. -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
   <!-- Main content -->
   <div class="main">
     <div class="topbar">
+      <button class="topbar-menu-btn" id="sidebar-toggle"
+              aria-label="Toggle navigation" aria-controls="sidebar"
+              aria-expanded="false">☰</button>
       <h1 id="topbar-title">Overview</h1>
       <div class="topbar-actions">
         <span style="font-size:0.8rem;color:var(--muted)" id="refresh-status"></span>

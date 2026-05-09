@@ -362,6 +362,16 @@ body {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
 .grid-1 { margin-bottom: 2rem; }
 
+/* Allow grid columns to shrink below their children's min-content width.
+   Without this, a wide <pre> (long curl URL in the wake/recipe block)
+   blows the column open + forces page-wide horizontal scroll. The <pre>
+   itself already has overflow-x:auto, so once the parent shrinks, the
+   code block scrolls cleanly inside its card. */
+.grid-2 > *,
+.window-grid > *,
+.agents-list > *,
+.card { min-width: 0; }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -525,18 +535,94 @@ pre {
 
 /* ─── Responsive ─── */
 
+/* Hamburger toggle — present in the topbar at all widths, hidden by
+   default; the ≤900px media query reveals it. Pairs with .sidebar-backdrop
+   below + the JS init in app.js. */
+.topbar-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+}
+.topbar-menu-btn:hover { background: var(--surface2); color: var(--text); }
+.topbar-menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Backdrop overlay when the drawer is open. Sits below the sidebar
+   (z-index 49 vs 50) so the sidebar floats over it. */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 49;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+.sidebar-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Intermediate range — collapse sidebar to icons-only on laptops. Keeps
+   nav reachable while reclaiming the room the wide <pre> recipes need.
+   At >=1100px the sidebar opens to its full width again. */
+@media (min-width: 901px) and (max-width: 1099px) {
+  :root { --sidebar-w: 64px; }
+  .sidebar-top { padding: 1rem 0; text-align: center; }
+  .sidebar-top .brand { justify-content: center; }
+  .brand-text,
+  .project-pill,
+  .nav-section,
+  .sidebar-bottom > div:first-child {
+    display: none;
+  }
+  .sidebar nav a {
+    padding: 0.6rem 0;
+    justify-content: center;
+    gap: 0;
+    /* font-size:0 collapses bare text nodes (the "Overview" / "Window"
+       labels are NOT wrapped in spans — they're direct text children of
+       the <a>); the .nav-icon / .nav-badge spans below restore size for
+       their content. */
+    font-size: 0;
+  }
+  .sidebar nav a > .nav-icon { font-size: 1rem; width: auto; }
+  .sidebar nav a > .nav-badge { font-size: 0.7rem; }
+  .logout-link { justify-content: center; font-size: 0; }
+  .logout-link > span { font-size: 1rem; }
+}
+
 @media (max-width: 900px) {
-  .sidebar { display: none; }
+  /* Sidebar slides in from the left as a drawer. Stays in DOM (so the
+     21 nav links remain accessible) but is offscreen until .is-open is
+     toggled by the hamburger. */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .sidebar.is-open { transform: translateX(0); }
   .main { margin-left: 0; }
   .grid-2 { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }
+  .topbar-menu-btn { display: inline-flex; }
 }
 
 @media (max-width: 520px) {
   .onboard-card { padding: 1.75rem; }
   .stats { grid-template-columns: 1fr; }
   .content { padding: 1.25rem; }
-  .topbar { padding: 0 1.25rem; }
+  .topbar { padding: 0 1rem; }
 }
 
 /* ─── Billing meters ─────────────────────────────────────── */

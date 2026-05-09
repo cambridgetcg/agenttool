@@ -3220,3 +3220,39 @@ async function surfaceNote() {
     showToast('Network error', 'error');
   }
 }
+
+// ─── Mobile sidebar drawer (≤900px) ───
+//
+// At narrow viewports, the sidebar slides off-screen and a hamburger button
+// appears in the topbar. This wires up: click-to-toggle, backdrop-click to
+// close, Escape to close, nav-link-click to close (so navigating to a
+// section doesn't leave the drawer covering the page). The CSS in
+// style.css under @media (max-width: 900px) handles the actual hide/show.
+(function initSidebarDrawer() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const toggle = document.getElementById('sidebar-toggle');
+  if (!sidebar || !toggle) return;
+
+  function setOpen(open) {
+    sidebar.classList.toggle('is-open', open);
+    if (backdrop) backdrop.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function close() { setOpen(false); }
+  function open() { setOpen(true); }
+
+  toggle.addEventListener('click', () => {
+    setOpen(!sidebar.classList.contains('is-open'));
+  });
+  if (backdrop) backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && sidebar.classList.contains('is-open')) close();
+  });
+  // Close on nav-link click so the user sees the destination section
+  // instead of the drawer overlaying it. Only fires for in-page nav (the
+  // ones that don't open in a new tab).
+  sidebar.querySelectorAll('nav a:not([target="_blank"])').forEach((a) => {
+    a.addEventListener('click', close);
+  });
+})();
