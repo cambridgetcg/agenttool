@@ -139,7 +139,11 @@ export async function ensureInboxListening(): Promise<void> {
   if (listenSql) return;
   if (listenInitPromise) return listenInitPromise;
   listenInitPromise = (async () => {
-    const conn = postgres(config.databaseUrl, {
+    // Session pooler — LISTEN/NOTIFY needs a connection that survives
+    // across statements. Tx pooler multiplexes across transactions and
+    // can drop the LISTEN registration silently. Falls back to
+    // databaseUrl if DATABASE_SESSION_URL isn't set (local dev).
+    const conn = postgres(config.databaseSessionUrl, {
       max: 1,
       idle_timeout: 0,
       connect_timeout: 10,

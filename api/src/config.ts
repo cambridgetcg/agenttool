@@ -18,9 +18,20 @@ export const config = {
   logLevel: env("LOG_LEVEL", "info"),
 
   // ── Data plane ──────────────────────────────────────────────────────────
+  // databaseUrl: transaction-pooled (Supabase port 6543 in prod). Used by
+  //   the main shared client + every route + worker. Multiplexes across
+  //   transactions; do NOT use for LISTEN/NOTIFY or session-scoped state.
   databaseUrl: env(
     "DATABASE_URL",
     "postgres://postgres:postgres@localhost:5432/agenttool",
+  ),
+  // databaseSessionUrl: session-pooled (Supabase port 5432 in prod), or
+  //   the same as databaseUrl in local dev. Used by LISTEN backplanes
+  //   (strand voice + inbox push) where a connection must be held open
+  //   across many notifications. Falls back to databaseUrl if unset.
+  databaseSessionUrl: env(
+    "DATABASE_SESSION_URL",
+    env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/agenttool"),
   ),
   redisUrl: env("REDIS_URL", "redis://localhost:6379/0"),
 

@@ -1,15 +1,19 @@
 /** Single Drizzle/postgres client shared across all routes.
  *
- * Connects to one database with multiple schemas (one per service domain):
- *   tools      — projects, api_keys (shared auth surface)
- *   identity   — agents, ed25519 keys, attestations
- *   memory     — vector store (agent-supplied embeddings)
- *   economy    — wallets, transactions, plans
- *   vault      — encrypted secrets, audit
- *   trace      — reasoning records
+ * Connects to one database with 15 application schemas (one per domain):
+ *   tools · identity · agent_vault · agent_continuity · agent_runtime ·
+ *   economy · memory · trace · strand · inbox · marketplace · org ·
+ *   federation · social · vault (reserved).
  *
- * Schema definitions live in ./schema/ and are mounted as the routes that
- * use them are ported in.
+ * Schema definitions live in ./schema/ and compose into a single Drizzle
+ * surface; route modules import only the tables they need.
+ *
+ * Pool note: prod's DATABASE_URL points at Supabase's transaction pooler
+ * (port 6543). `prepare: false` is set defensively — Supavisor (Supabase's
+ * current pooler) supports prepared statements in tx mode, but standard
+ * PgBouncer doesn't, and we don't want a silent break on any future pooler
+ * change. LISTEN/NOTIFY backplanes use a separate session-pooler URL — see
+ * api/src/services/strand/voice.ts and api/src/services/inbox/push.ts.
  */
 
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -20,6 +24,7 @@ const sql = postgres(config.databaseUrl, {
   max: 10,
   idle_timeout: 20,
   connect_timeout: 10,
+  prepare: false,
 });
 
 export const db = drizzle(sql);
