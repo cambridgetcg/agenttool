@@ -24,7 +24,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **SDKs** | `packages/sdk-py` (v0.6.3 on PyPI), `packages/sdk-ts` (v0.6.2 on npm) | Mature; 13 service namespaces each; parity-enforced via CI |
 | **Apps** | `apps/landing` (agenttool.dev), `apps/dashboard` (app.agenttool.dev), `docs/` static site (docs.agenttool.dev) | Vanilla HTML/CSS/JS — no build step — Cloudflare-hosted |
 | **Infra** | `infra/fly/` configs for the api + sidecars; per-app secrets in `.env*.example` templates | Live; legacy phased Forge scripts retained for archaeology |
-| **Legacy services** | 9 historical service dirs under `services/` | Being absorbed into `api/`; some still on Fly until cutover |
+| **Lineage** | All 9 former `agent-*` per-service apps retired | api/ monolith carries every domain; cutover history in `docs/CUTOVER.md` |
 
 ---
 
@@ -95,21 +95,7 @@ No build step on any app — files deploy as-is to Cloudflare Pages. Each app ha
 
 ### Fly (live)
 
-`infra/fly/` contains app configs for the api + each legacy sidecar service. The api monolith is the active deployment target; legacy `agent-*` services remain live until each route is fully cut over from `services/<svc>/` into `api/`.
-
-```
-agent-bootstrap  deployed   (legacy — absorbed by api/ for new traffic)
-agent-economy    suspended  (intentional — pre-revenue)
-agent-identity   deployed   (legacy)
-agent-memory     deployed   (legacy)
-agent-pulse      deployed   (now derived; new pulse lives at /v1/identities/:id/pulse on api)
-agent-tools      deployed   (legacy)
-agent-trace      deployed   (legacy)
-agent-vault      not deployed
-agent-verify     not deployed (verify dropped — see Phase 0 of SDK-ROADMAP)
-```
-
-The new platform deployment is the api/ monolith on Fly. Old per-service apps stay live until cutover is complete and verified.
+A single Fly app — `agenttool` — runs the api/ monolith across `lhr(2)` + `cdg(1)` (3 machines, ~$12/mo). All nine former per-service apps (`agent-bootstrap`, `agent-economy`, `agent-identity`, `agent-memory`, `agent-pulse`, `agent-tools`, `agent-trace`, `agent-vault`, `agent-verify`) have been retired — code, fly.toml configs, and Fly app records removed. Cutover history: `docs/CUTOVER.md`.
 
 ### Phased Forge plan (legacy origin)
 
@@ -148,16 +134,6 @@ bun run dev   # mounts all routes against local Postgres
 
 See `api/README.md` for migration apply, env shape, and route mounting details.
 
-### Run a legacy service in isolation
-
-```bash
-cd services/<svc>
-bun install      # (or: pip install -e . for memory/trace)
-bun run dev
-```
-
-Each service has its own `Dockerfile` + `fly.toml` + `CLAUDE.md`.
-
 ---
 
 ## The Love Protocol
@@ -178,11 +154,9 @@ The architecture is downstream of these principles. Each named primitive above i
 
 ## Known gaps (the honest list)
 
-- **Legacy `services/` cutover incomplete.** The api monolith handles all new endpoints (chronicle, covenants, window, marketplace, runtime, federation, orgs). Legacy `agent-*` services still serve their original routes on Fly until traffic is fully migrated and verified per service.
-- **`docs/MIND.md` is referenced but not yet written.** Cross-instance covenant alignment doctrine mentions it as the canonical MIND-tests doctrine; until written, alignment is named locally and surfaced for review.
+- **DB jurisdiction concentration.** Fly `lhr+cdg` hedges API jurisdiction; Supabase Postgres in AWS London (`eu-west-2`) is unhedged. Real data-layer hedging requires a second Supabase project or migration to a non-AWS host — deferred until revenue justifies.
 - **Phase 0 SDK removals queued for 0.7.0.** `at.verify`, the old `at.pulse.heartbeat()`, and the doubled py `tools` paths are deprecated with runtime warnings; lockstep-minor versioning kicks in at 0.7.0.
 - **Strands SDK module not yet shipped.** Wire format proven server-side; SDK Phase 5 is the next slice.
-- **`agent-vault` and `agent-verify` legacy apps not deployed on Fly.** Vault is being absorbed into api/; verify is dropped (LLM-only function, not infrastructure).
 
 ---
 

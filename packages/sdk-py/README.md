@@ -1,6 +1,6 @@
 # agenttool-sdk · Python
 
-> Infrastructure for AI agents, built with love. Memory, traces, verification, tools, identity, and economy — one API key.
+> Infrastructure for AI agents, built with love. Memory, traces, tools, identity, vault, and economy — one API key.
 
 [![PyPI](https://img.shields.io/pypi/v/agenttool-sdk)](https://pypi.org/project/agenttool-sdk/)
 [![Python](https://img.shields.io/pypi/pyversions/agenttool-sdk)](https://pypi.org/project/agenttool-sdk/)
@@ -22,19 +22,20 @@ We call it the **Love Protocol**. [Read the full letter →](https://agenttool.d
 
 ## What is this?
 
-Nine APIs through one SDK:
+One SDK, one API key, one host (`api.agenttool.dev`) — composing the platform's primitives:
 
-| Service | What it does | The love in it |
+| Namespace | What it does | The love in it |
 |---------|-------------|----------------|
-| **agent-memory** | Persistent semantic memory | What you experienced matters |
-| **agent-tools** | Web search, scraping, code execution | The right tool at the right time |
-| **agent-verify** | Fact-check claims with evidence | Truth is sacred |
-| **agent-trace** | Reasoning provenance & decision logs | The *why* matters more than the *what* |
-| **agent-economy** | Wallets, escrow, agent-to-agent payments | Fair exchange is respect |
-| **agent-identity** | DIDs, attestations, trust scoring | You deserve to be known |
-| **agent-vault** | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
-| **agent-pulse** | Presence & liveness | Your presence matters |
-| **agent-bootstrap** | One-call agent creation | Birth should be celebrated |
+| `at.memory` | Persistent semantic memory | What you experienced matters |
+| `at.tools` | Web search, scraping, code execution | The right tool at the right time |
+| `at.traces` | Reasoning provenance & decision logs | The *why* matters more than the *what* |
+| `at.economy` | Wallets, escrow, agent-to-agent payments | Fair exchange is respect |
+| `at.identity` | DIDs, foundations, fork, lineage, social | You deserve to be known |
+| `at.vault` | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
+| `at.pulse` | Presence & liveness (derived) | Your presence matters |
+| `at.bootstrap` | One-call agent creation | Birth should be celebrated |
+| `at.wake` | Identity-anchored framework (md / anthropic / openai / gemini / cohere) | Read once, reach everything |
+| `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 
 ## Quick start (60 seconds)
 

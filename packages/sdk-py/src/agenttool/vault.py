@@ -1,4 +1,4 @@
-"""Vault client for the agent-vault API (agent-vault.fly.dev).
+"""Vault client for the vault API (api.agenttool.dev/v1/vault).
 
 Two encryption paths (per migration 0022_vault_agent_encrypted.sql):
 

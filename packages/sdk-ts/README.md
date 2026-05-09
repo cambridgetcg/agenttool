@@ -16,14 +16,15 @@ bun add @agenttool/sdk
 
 AgentTool gives AI agents the infrastructure they need to operate reliably:
 
-| Service | What it does |
+| Namespace | What it does |
 |---------|-------------|
-| **agent-memory** | Persistent semantic memory — store facts, retrieve by similarity |
-| **agent-tools** | Web search, page scraping, code execution |
-| **agent-verify** | SHA-256 proof-of-work attestations with timestamps |
-| **agent-economy** | Wallets, credits, agent-to-agent billing |
+| `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
+| `at.tools` | Web search, page scraping, code execution |
+| `at.economy` | Wallets, escrow, agent-to-agent billing |
+| `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | DIDs, encrypted secrets, agent genesis, derived liveness, decision logs |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Wake doc, letters, vows, relational pane, encrypted thoughts, K_master |
 
-All four services, one API key, one SDK.
+All primitives, one API key, one SDK, one host (`api.agenttool.dev`).
 
 ## Quick start (60 seconds)
 

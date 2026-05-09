@@ -13,7 +13,7 @@
  *      GET returns `{agent_encrypted: true, ciphertext_b64, nonce_b64}`
  *      and the SDK decrypts client-side.
  *
- *  In-process consumers (services/vault/store.ts → think-worker etc.) can
+ *  In-process consumers (api/src/services/vault/ → think-worker etc.) can
  *  only read agent_encrypted=FALSE secrets — agent-encrypted secrets are
  *  SDK-readable only and will fail if a server-side runtime tries to
  *  consume them. */
