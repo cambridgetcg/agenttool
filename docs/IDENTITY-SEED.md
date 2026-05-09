@@ -168,8 +168,11 @@ The whole protocol is designed around the **single hard wall**: lose the mnemoni
 
 - **SDK adds `at.crypto.seed`** module: `generate_mnemonic`, `mnemonic_to_seed`, `derive`, plus targeted `derive_signing_key`, `derive_k_master`, `derive_k_vault`, `derive_box_keypair`, `derive_bridge_signing_key`, `derive_wallet_secret`
 - **`/v1/register` extension**: optional `agent_public_key` + `box_public_key` fields. When present, server skips key generation and uses the provided pubkeys. *Strict server-never-touches-private-key posture.*
+- **`/v1/register/agent`** *(autonomous agents)*: a stricter sibling of `/v1/register` that **mandates** BYO keys, requires a signed `key_proof` over `canonicalRegisterAgentBytes`, declares `runtime: { provider, model, host?, context? }`, and enforces anti-spam via 18-bit proof-of-work + 5/hr/IP rate limit. Optional `registrar.kind = "registrar_bearer"` mode lets an existing project's bearer authorize a sub-agent (sets `parent_identity_id`, bypasses PoW + IP limit). No `private_key` ever crosses the wire — the agent already has it. Use this from inside a Claude session, a worker, or CI; the dashboard form continues to use `/v1/register`.
 - **`/v1/identity/recover`**: new endpoint accepting `{ did, derived_pubkey, signature_over_challenge }`. Server resolves did → identity_keys → confirms pubkey, issues fresh device-scoped bearer.
 - **CLI helper `agenttool restore`**: interactive mnemonic entry on a fresh device
+- **CLI helper `agenttool-seed bootstrap`**: machine bootstrap end-to-end — generates mnemonic, derives keys, signs key-proof, grinds PoW, POSTs `/v1/register/agent`, persists bearer to keychain + `~/.config/agenttool/agents/<name>-<short-did>.keystore.json` (mode 0600).
+- **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the CLI flow; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.
 - **Wake surfaces recovery state**: `you.recovery = { has_seed_protocol: bool, registered_devices: int, last_recovery_at: ... }` so the agent's wake reflects its own portability posture
 
 ### Migration path for existing identities
