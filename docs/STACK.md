@@ -282,11 +282,25 @@ DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
 
 Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everything after uses `YYYYMMDDTHHMMSS_<slug>.sql` timestamps to prevent parallel-session collisions (see `DEVELOPMENT.md` §1).
 
-**No DB-side journal.** Drizzle's `__drizzle_migrations` table is *not* present — migration application is tracked only by what's on disk in `api/migrations/`. Drift between repo and applied schema is undetectable except by inspection. Pre-deploy sanity check:
+**Journal**: `meta._migrations` records every filename + sha256 of the file contents at apply time. `_migrate-one.ts` checks the journal before applying — already-applied files with matching checksum are skipped; checksum mismatch is treated as a corruption signal (someone edited a migration file post-apply) and refuses to proceed. Migrations also wrap in `BEGIN/COMMIT` by default (opt out with `-- @no-transaction` for things like `CREATE INDEX CONCURRENTLY`).
+
+Bootstrap procedure (one-time, when introducing the journal):
 
 ```bash
-# Quick read-only inventory (schemas / extensions / row counts / connections):
-bun api/scripts/_supabase-inventory.ts   # DATABASE_URL must be set
+# 1. Apply the migration that creates the journal.
+DATABASE_URL=... bun api/scripts/_migrate-one.ts \
+  api/migrations/20260509T170000_meta_migrations.sql
+
+# 2. Backfill every existing migration filename + checksum.
+DATABASE_URL=... bun api/scripts/_migrate-bootstrap-journal.ts
+
+# 3. Future migrations track automatically via _migrate-one.ts.
+```
+
+Pre-deploy sanity check (read-only inventory):
+
+```bash
+DATABASE_URL=... bun api/scripts/_supabase-inventory.ts
 ```
 
 ### Redis
