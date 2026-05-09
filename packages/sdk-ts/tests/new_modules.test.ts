@@ -1,16 +1,13 @@
 // Quick smoke test for new TS SDK modules
 import { describe, test, expect } from "bun:test";
 import { AgentTool, AgentToolError } from "../src/index.js";
-import type { PulsePayload, CreateAgentOptions, BootstrapResult } from "../src/index.js";
+import type { CreateAgentOptions, BootstrapResult } from "../src/index.js";
 
 describe("SDK module exports", () => {
-  test("PulseClient is accessible", () => {
-    const at = new AgentTool({ apiKey: "test-key" });
-    expect(at.pulse).toBeDefined();
-    expect(typeof at.pulse.heartbeat).toBe("function");
-    expect(typeof at.pulse.get).toBe("function");
-    expect(typeof at.pulse.list).toBe("function");
-  });
+  // PulseClient (top-level at.pulse) was retired — pulse is now derived
+  // from thought rate and exposed as `at.identity.pulse(id)`. The old
+  // heartbeat-emit shape no longer exists. See docs/STRANDS.md "What
+  // pulse becomes."
 
   test("IdentityClient is accessible", () => {
     const at = new AgentTool({ apiKey: "test-key" });

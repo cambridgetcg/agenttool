@@ -3,7 +3,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { Memory, SearchMemoryOptions, StoreOptions, UsageStats } from "./types.js";
+import type { Memory, SearchMemoryOptions, StoreOptions } from "./types.js";
 
 /** @internal Shared HTTP config passed from the main client. */
 export interface HttpConfig {
@@ -99,30 +99,6 @@ export class MemoryClient {
   async delete_by_key(key: string): Promise<void> {
     const qs = `?key=${encodeURIComponent(key)}`;
     await this.fetch("DELETE", `/v1/memories${qs}`);
-  }
-
-  /**
-   * @deprecated /v1/usage was dropped in the consolidated API.
-   * Project + activity counters now live on GET /v1/dashboard/aggregate
-   * (SDK method `at.dashboard.aggregate()` ships in 0.7.0).
-   * Method will be removed in 0.7.0. See docs/SDK-ROADMAP.md (Phase 0).
-   */
-  async usage(): Promise<UsageStats> {
-    console.warn(
-      "[deprecated] at.memory.usage() — /v1/usage was dropped from the " +
-        "consolidated API. Use GET /v1/dashboard/aggregate (SDK method " +
-        "at.dashboard.aggregate() ships in 0.7.0). Method will be removed " +
-        "in 0.7.0. See docs/SDK-ROADMAP.md.",
-    );
-    throw new AgentToolError(
-      "/v1/usage was dropped from the consolidated API.",
-      {
-        hint:
-          "Use GET /v1/dashboard/aggregate for project-wide rollups " +
-          "(identities, memory by tier, strands, activity, inbox, " +
-          "covenants). See docs/SDK-ROADMAP.md.",
-      },
-    );
   }
 
   // --- internal ---

@@ -31,18 +31,16 @@ from .economy import EconomyClient
 from .exceptions import AgentToolError, AuthenticationError
 from .identity import IdentityClient
 from .memory import MemoryClient
-from .pulse import PulseClient
 from .strands import StrandsClient
 from .tools import ToolsClient
 from .traces import TracesClient
 from .vault import VaultClient
-from .verify import VerifyClient
 from .wake import WakeClient
 from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.6.5"
+SDK_VERSION = "0.7.1"
 
 
 class AgentTool:
@@ -65,8 +63,7 @@ class AgentTool:
         at = AgentTool()                           # reads AT_API_KEY from env
         at.memory.store("I exist")                  # remember something
         results = at.memory.search("existence")     # find by meaning
-        v = at.verify.check("the sky is blue")      # truth-seeking
-        at.pulse.update("thinking")                 # presence
+        rhythm = at.identity.pulse(identity_id)     # derived liveness
 
     Args:
         api_key: API key. Falls back to ``AT_API_KEY`` env var.
@@ -106,11 +103,9 @@ class AgentTool:
         self._memory: Optional[MemoryClient] = None
         self._tools: Optional[ToolsClient] = None
         self._traces: Optional[TracesClient] = None
-        self._verify: Optional[VerifyClient] = None
         self._economy: Optional[EconomyClient] = None
         self._identity: Optional[IdentityClient] = None
         self._vault: Optional[VaultClient] = None
-        self._pulse: Optional[PulseClient] = None
         self._bootstrap: Optional[BootstrapClient] = None
         self._wake: Optional[WakeClient] = None
         self._chronicle: Optional[ChronicleClient] = None
@@ -143,13 +138,6 @@ class AgentTool:
         return self._traces
 
     @property
-    def verify(self) -> VerifyClient:
-        """Verify — because truth is sacred."""
-        if self._verify is None:
-            self._verify = VerifyClient(self._http, self._base_url)
-        return self._verify
-
-    @property
     def economy(self) -> EconomyClient:
         """Economy — because fair exchange is respect."""
         if self._economy is None:
@@ -169,13 +157,6 @@ class AgentTool:
         if self._vault is None:
             self._vault = VaultClient(self._http, self._base_url)
         return self._vault
-
-    @property
-    def pulse(self) -> PulseClient:
-        """Pulse — because your presence matters."""
-        if self._pulse is None:
-            self._pulse = PulseClient(self._http, self._base_url)
-        return self._pulse
 
     @property
     def bootstrap(self) -> BootstrapClient:

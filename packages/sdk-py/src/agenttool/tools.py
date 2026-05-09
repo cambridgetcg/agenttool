@@ -4,21 +4,16 @@ Wraps the substrate primitives the consolidated API exposes:
 ``/v1/scrape``, ``/v1/browse``, ``/v1/document``, ``/v1/execute``,
 ``/v1/jobs/:id``. Substrate-not-resold-APIs — agents bring their own
 LLM / search keys via ``at.vault`` and call providers directly.
-
-NOTE: ``at.tools.search()`` is deprecated — ``/v1/search`` was dropped
-in the consolidated API (Brave/SerpAPI proxy was the dropped path).
-The method raises with migration guidance pointing at vault + execute.
 """
 
 from __future__ import annotations
 
-import warnings
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from .exceptions import AgentToolError
-from .models import DocumentResult, ExecuteResult, ScrapeResult, SearchResult
+from .models import DocumentResult, ExecuteResult, ScrapeResult
 
 
 class ToolsClient:
@@ -27,9 +22,11 @@ class ToolsClient:
     Usage::
 
         at = AgentTool()
-        results = at.tools.search("latest AI news")
         page = at.tools.scrape("https://example.com")
         out = at.tools.execute("print(1+1)")
+
+    Web search is BYOK as of 0.7.1 — store your provider key in
+    ``at.vault`` and call it via ``at.tools.execute``.
     """
 
     def __init__(self, http: httpx.Client, base_url: str) -> None:
@@ -38,31 +35,6 @@ class ToolsClient:
 
     def _url(self, path: str) -> str:
         return f"{self._base}{path}"
-
-    def search(self, query: str, *, num_results: int = 5) -> List[SearchResult]:
-        """**DEPRECATED.** ``/v1/search`` was dropped — agents BYOK now.
-
-        agenttool is not a paid-API reseller. Store your Brave / SerpAPI /
-        Google CSE / Tavily key in ``at.vault`` and call the provider
-        directly via ``at.tools.execute``. Method will be removed in 0.7.0.
-        See ``docs/SDK-ROADMAP.md`` (Phase 0).
-        """
-        warnings.warn(
-            "at.tools.search() is deprecated. /v1/search was dropped from "
-            "the consolidated API — agenttool is not a paid-API reseller. "
-            "Store your provider key in at.vault and call it via "
-            "at.tools.execute. Method will be removed in 0.7.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise AgentToolError(
-            "/v1/search was dropped from the consolidated API.",
-            hint=(
-                "Store your provider key in at.vault.put('search-key', ...) "
-                "and call the provider's API from at.tools.execute. "
-                "See docs/SDK-ROADMAP.md."
-            ),
-        )
 
     def scrape(self, url: str) -> ScrapeResult:
         """Scrape a URL and return its content.

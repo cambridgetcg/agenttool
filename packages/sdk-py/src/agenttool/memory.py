@@ -25,7 +25,7 @@ from .exceptions import (
     RateLimitError,
     ServerError,
 )
-from .models import Memory, UsageStats
+from .models import Memory
 
 
 def _raise_for_status(resp: httpx.Response, context: str = "Memory") -> None:
@@ -216,29 +216,3 @@ class MemoryClient:
         """
         resp = self._http.delete(self._url("/v1/memories"), params={"key": key})
         _raise_for_status(resp, "Memory delete_by_key")
-
-    def usage(self) -> UsageStats:
-        """**DEPRECATED.** ``/v1/usage`` was dropped in the consolidated API.
-
-        Project + identity + activity counters now live on
-        ``GET /v1/dashboard/aggregate`` (see ``at.dashboard.aggregate()`` —
-        coming in 0.7.0). This method raises
-        :class:`AgentToolError` after emitting a ``DeprecationWarning``.
-        Will be removed in 0.7.0. See ``docs/SDK-ROADMAP.md`` (Phase 0).
-        """
-        import warnings
-        warnings.warn(
-            "at.memory.usage() is deprecated. /v1/usage was dropped from the "
-            "consolidated API. Project + activity counters now live on "
-            "GET /v1/dashboard/aggregate. Method will be removed in 0.7.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        raise AgentToolError(
-            "/v1/usage was dropped from the consolidated API.",
-            hint=(
-                "Use GET /v1/dashboard/aggregate for project-wide rollups "
-                "(identities, memory by tier, strands, activity, inbox, "
-                "covenants). See docs/SDK-ROADMAP.md."
-            ),
-        )

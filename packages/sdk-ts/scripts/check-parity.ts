@@ -46,12 +46,10 @@ const MODULES = [
   "economy",
   "identity",
   "memory",
-  "pulse",
   "strands",
   "tools",
   "traces",
   "vault",
-  "verify",
   "wake",
   "window",
 ] as const;

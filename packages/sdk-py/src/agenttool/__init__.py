@@ -43,7 +43,6 @@ from .crypto import (
     encrypt_thought,
     sign_thought,
 )
-from .pulse import PulseClient
 from .economy import EconomyClient, Escrow, Wallet
 from .exceptions import (
     AgentToolError,
@@ -53,7 +52,7 @@ from .exceptions import (
     ServerError,
 )
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
-from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchResult, UsageStats
+from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult
 from .register import register
 from .bootstrap_agent import (
     DEFAULT_POW_DIFFICULTY,
@@ -76,7 +75,6 @@ from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
 from .vault import VaultClient
-from .verify import VerifyClient
 from .wake import WakeClient, WakeProvider
 from .anthropic_adapter import (
     AnthropicAdapter,
@@ -120,9 +118,7 @@ __all__ = [
     "WindowClient",
     "register",
     "Memory",
-    "PulseClient",
     "ScrapeResult",
-    "SearchResult",
     # Seed protocol — BIP39 mnemonic-rooted identity (docs/IDENTITY-SEED.md)
     "SeedClient",
     "DerivedBundle",
@@ -131,7 +127,6 @@ __all__ = [
     "derive",
     "derive_bridge_signing",
     "derive_wallet",
-    "UsageStats",
     "Trace",
     "TraceChain",
     "TraceSearchResult",
@@ -143,6 +138,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

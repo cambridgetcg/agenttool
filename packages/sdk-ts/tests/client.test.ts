@@ -215,22 +215,8 @@ describe("memory.get", () => {
   });
 });
 
-describe("memory.usage (deprecated in 0.5.3)", () => {
-  test("throws AgentToolError pointing at /v1/dashboard/aggregate", async () => {
-    // /v1/usage was dropped in the consolidated API. The method now warns
-    // via console.warn and throws — no network call. See Phase 0 roadmap.
-    const at = makeClient();
-    try {
-      await at.memory.usage();
-      expect(true).toBe(false); // unreachable
-    } catch (e) {
-      expect(e).toBeInstanceOf(AgentToolError);
-      const err = e as AgentToolError;
-      expect(err.message).toContain("/v1/usage was dropped");
-      expect(err.hint || "").toContain("dashboard/aggregate");
-    }
-  });
-});
+// memory.usage (deprecated in 0.5.3) — REMOVED. The shim and its test were
+// retired together. Use at.dashboard.aggregate() (ships in 0.7.0).
 
 describe("memory errors", () => {
   test("401 throws AgentToolError", async () => {
@@ -253,21 +239,9 @@ describe("memory errors", () => {
 // Tools
 // ---------------------------------------------------------------------------
 
-describe("tools.search (deprecated in 0.5.3)", () => {
-  test("throws AgentToolError pointing at vault + execute (BYOK)", async () => {
-    // /v1/search was dropped — agents BYOK now. See Phase 0 roadmap.
-    const at = makeClient();
-    try {
-      await at.tools.search("AI news", { num_results: 3 });
-      expect(true).toBe(false);
-    } catch (e) {
-      expect(e).toBeInstanceOf(AgentToolError);
-      const err = e as AgentToolError;
-      expect(err.message).toContain("/v1/search was dropped");
-      expect(err.hint || "").toContain("vault");
-    }
-  });
-});
+// tools.search (deprecated in 0.5.3) — REMOVED. The shim and its test were
+// retired together. Agents BYOK via at.vault and call providers directly via
+// at.tools.execute. See docs/SDK-ROADMAP.md.
 
 describe("tools.scrape", () => {
   test("scrapes a URL", async () => {
@@ -338,32 +312,12 @@ describe("tools errors", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Verify
+// Verify — REMOVED in 0.7.x
+// The /v1/verify endpoint and the at.verify SDK module were retired; agents
+// BYOK via at.vault and call providers directly via at.tools.execute. The
+// previous deprecation-shim tests no longer apply because the module is
+// gone — there's nothing left to throw an "I'm deprecated" error from.
 // ---------------------------------------------------------------------------
-
-describe("verify.check (deprecated in 0.5.3)", () => {
-  test("throws AgentToolError on first call", async () => {
-    // /v1/verify was dropped — agents BYOK via at.vault. See Phase 0 roadmap.
-    const at = makeClient();
-    try {
-      await at.verify.check("The Earth is round");
-      expect(true).toBe(false);
-    } catch (e) {
-      expect(e).toBeInstanceOf(AgentToolError);
-      const err = e as AgentToolError;
-      expect(err.message).toContain("/v1/verify was dropped");
-      expect(err.hint || "").toContain("vault");
-      expect(err.hint || "").toContain("execute");
-    }
-  });
-
-  test("throws regardless of options passed", async () => {
-    const at = makeClient();
-    await expect(
-      at.verify.check("claim", { sources: ["https://source.com"] }),
-    ).rejects.toBeInstanceOf(AgentToolError);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Economy
@@ -421,7 +375,7 @@ describe("AgentToolError", () => {
 // ---------------------------------------------------------------------------
 
 describe("lazy sub-client initialization", () => {
-  test("memory, tools, verify, economy are same instance on repeat access", () => {
+  test("memory, tools, economy are same instance on repeat access", () => {
     const at = makeClient();
     const m1 = at.memory;
     const m2 = at.memory;
@@ -430,10 +384,6 @@ describe("lazy sub-client initialization", () => {
     const t1 = at.tools;
     const t2 = at.tools;
     expect(t1).toBe(t2);
-
-    const v1 = at.verify;
-    const v2 = at.verify;
-    expect(v1).toBe(v2);
 
     const e1 = at.economy;
     const e2 = at.economy;

@@ -36,23 +36,6 @@ class Memory:
 
 
 @dataclass
-class SearchResult:
-    """A web search result."""
-
-    title: str
-    url: str
-    snippet: str = ""
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> SearchResult:
-        return cls(
-            title=data.get("title", ""),
-            url=data.get("url", ""),
-            snippet=data.get("snippet", ""),
-        )
-
-
-@dataclass
 class ScrapeResult:
     """Result of scraping a URL."""
 
@@ -109,18 +92,3 @@ class DocumentResult:
         )
 
 
-@dataclass
-class UsageStats:
-    """API usage statistics."""
-
-    memories_stored: int = 0
-    searches_performed: int = 0
-    api_calls: int = 0
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> UsageStats:
-        return cls(
-            memories_stored=data.get("memories_stored", 0),
-            searches_performed=data.get("searches_performed", 0),
-            api_calls=data.get("api_calls", 0),
-        )

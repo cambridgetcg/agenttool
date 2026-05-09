@@ -7,9 +7,9 @@
  *
  * const at = new AgentTool();
  * await at.memory.store("just a string");
- * await at.pulse.heartbeat("my-agent", "idle");
+ * await at.identity.pulse("…uuid…");      // derived liveness
  * const agent = await at.bootstrap.create("my-researcher", {
- *   capabilities: ["memory", "search"],
+ *   capabilities: ["memory", "voice"],
  * });
  * ```
  */
@@ -31,7 +31,6 @@ export type {
   BootstrapAgentResult,
   BootstrapAgentRuntime,
 } from "./bootstrap-agent.js";
-export type { PulsePayload, AgentState } from "./pulse.js";
 export type {
   RegisterIdentityOptions,
   UpdateIdentityOptions,
@@ -83,11 +82,7 @@ export type {
   Memory,
   ScrapeResult,
   SearchMemoryOptions,
-  SearchResponse,
-  SearchResult,
   StoreOptions,
-  UsageStats,
-  VerifyResult,
   Wallet,
 } from "./types.js";
 export type {

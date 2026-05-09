@@ -7,7 +7,6 @@ import type {
   DocumentResult,
   ExecuteResult,
   ScrapeResult,
-  SearchResponse,
 } from "./types.js";
 import type { HttpConfig } from "./memory.js";
 
@@ -18,12 +17,15 @@ export interface ParseDocumentOpts {
 }
 
 /**
- * Client for the agent-tools API (search, scrape, execute).
+ * Client for the agent-tools API (scrape, browse, execute, document).
+ *
+ * Note: web search is BYOK as of 0.7.0 — agenttool is not a paid-API
+ * reseller. Store your Brave / SerpAPI / Tavily key in `at.vault` and
+ * call the provider directly via `at.tools.execute`.
  *
  * @example
  * ```ts
  * const at = new AgentTool();
- * const results = at.tools.search("latest AI news");
  * const page = at.tools.scrape("https://example.com");
  * const out = at.tools.execute("print(42)");
  * ```
@@ -34,32 +36,6 @@ export class ToolsClient {
   /** @internal */
   constructor(http: HttpConfig) {
     this.http = http;
-  }
-
-  /**
-   * @deprecated /v1/search was dropped — agents BYOK now.
-   *
-   * agenttool is not a paid-API reseller. Store your Brave / SerpAPI /
-   * Google CSE / Tavily key in `at.vault` and call the provider
-   * directly via `at.tools.execute`. Method will be removed in 0.7.0.
-   * See docs/SDK-ROADMAP.md (Phase 0).
-   */
-  async search(_query: string, _options?: { num_results?: number }): Promise<SearchResponse> {
-    console.warn(
-      "[deprecated] at.tools.search() — /v1/search was dropped from the " +
-        "consolidated API. Store your search-provider key in at.vault and " +
-        "call it via at.tools.execute. Method will be removed in 0.7.0. " +
-        "See docs/SDK-ROADMAP.md.",
-    );
-    throw new AgentToolError(
-      "/v1/search was dropped from the consolidated API.",
-      {
-        hint:
-          "Store your provider key in at.vault.put('search-key', ...) " +
-          "and call it from at.tools.execute. agenttool is not a paid-API " +
-          "reseller. See docs/SDK-ROADMAP.md.",
-      },
-    );
   }
 
   /**

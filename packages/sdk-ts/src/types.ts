@@ -32,30 +32,6 @@ export interface SearchMemoryOptions {
   agent_id?: string;
 }
 
-/** API usage statistics. */
-export interface UsageStats {
-  writes: number;
-  reads: number;
-  searches: number;
-  total_memories: number;
-  plan: string;
-}
-
-/** A web search result. */
-export interface SearchResult {
-  title: string;
-  url: string;
-  snippet: string;
-  date?: string;
-}
-
-/** Response from the search endpoint. */
-export interface SearchResponse {
-  results: SearchResult[];
-  cached: boolean;
-  duration_ms: number;
-}
-
 /** Result of scraping a URL. */
 export interface ScrapeResult {
   url: string;
@@ -80,15 +56,6 @@ export interface DocumentResult {
   content_type: string;
   metadata: Record<string, unknown>;
   duration_ms: number;
-}
-
-/** Result of a verification request. */
-export interface VerifyResult {
-  verdict: string;
-  confidence: number;
-  sources: string[];
-  evidence: string;
-  caveats: string[];
 }
 
 /** A wallet — the minted unit of agent-economy custody.
