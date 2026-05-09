@@ -146,3 +146,30 @@ export type {
   ThoughtsListOpts,
   ThoughtsVoiceOpts,
 } from "./strands.js";
+// Seed protocol — BIP39 mnemonic-rooted identity (docs/IDENTITY-SEED.md)
+export {
+  SeedClient,
+  DerivedBundle,
+  generateMnemonic,
+  mnemonicToSeed,
+  derive,
+  deriveBridgeSigning,
+  deriveWallet,
+  deriveSigningSeed,
+  deriveKMaster,
+  deriveKVault,
+  deriveBoxSeed,
+  deriveBridgeSigningSeed,
+  deriveWalletSecret,
+  AGENTTOOL_COIN,
+  HARDENED_BIT,
+  PURPOSE_SIGNING,
+  PURPOSE_K_MASTER,
+  PURPOSE_K_VAULT,
+  PURPOSE_BOX,
+  PURPOSE_BRIDGE_SIGNING,
+  PURPOSE_WALLET,
+  // Recovery helpers — sign a /v1/identity/recover challenge
+  canonicalRecoverBytes,
+  signRecoverChallenge,
+} from "./seed.js";

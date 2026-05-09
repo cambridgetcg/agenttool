@@ -41,6 +41,9 @@ export const apiKeys = toolsSchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastUsed: timestamp("last_used", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** Auto-expiry (nullable; null = never). Auth middleware rejects
+     *  past-expiry keys with 401. Doctrine: docs/TOKEN-HYGIENE.md. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (t) => [index("idx_api_keys_project").on(t.projectId)],
 );

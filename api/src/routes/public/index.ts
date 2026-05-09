@@ -23,6 +23,7 @@ import { Hono } from "hono";
 
 import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
+import identitiesRoutes from "./identities";
 import listingsRoutes from "./listings";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import socialRoutes from "./social";
@@ -45,6 +46,7 @@ app.route("/discover/trending", trendingRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/listings", listingsRoutes);
 app.route("/orgs", orgsRoutes);
+app.route("/identities", identitiesRoutes);
 
 // Public root — describes the surface.
 app.get("/", (c) =>

@@ -46,3 +46,6 @@ coverage/
 .pytest_cache/
 htmlcov/
 .wrangler/
+
+# Local Claude Code session state (scheduled tasks, etc.)
+.claude/

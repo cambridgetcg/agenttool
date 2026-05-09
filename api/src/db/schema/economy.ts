@@ -33,11 +33,57 @@ export const wallets = economySchema.table(
     balance: bigint("balance", { mode: "number" }).notNull().default(0),
     currency: text("currency").notNull().default("GBP"),
     status: text("status").notNull().default("active"), // active | frozen | closed
+    // ── Wallet ownership (Slice 4 of SOMA seed) ─────────────────────
+    // 'platform' (default) — addresses derive from operator's CRYPTO_HD_MNEMONIC.
+    // 'agent'             — addresses derive from agent's SOMA seed
+    //                        (m/44'/169'/5'/<wallet-index>') and are
+    //                        submitted via /v1/wallets/:id/addresses.
+    // Doctrine: docs/IDENTITY-SEED.md.
+    ownerType: text("owner_type").notNull().default("platform"),
+    /** Agent's ed25519 signing pubkey at wallet creation. Required for
+     *  ownerType='agent'; null for platform wallets. */
+    agentSigningPubB64: text("agent_signing_pub_b64"),
+    /** Index used in m/44'/169'/5'/<n>' to derive this wallet's seed.
+     *  Lets the agent reproduce the wallet on any device with the same
+     *  mnemonic. Optional for platform wallets. */
+    agentWalletIndex: integer("agent_wallet_index"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("idx_wallets_project").on(t.projectId),
     index("idx_wallets_identity").on(t.identityId),
+  ],
+);
+
+/** Per-chain addresses for agent-owned wallets. Platform-owned wallets
+ *  derive on-the-fly via services/economy/crypto/hd.ts; this table only
+ *  carries rows for ownerType='agent' wallets where the platform doesn't
+ *  have the seed and the agent submits addresses explicitly. */
+export const walletAddresses = economySchema.table(
+  "wallet_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    chain: text("chain").notNull(),
+    address: text("address").notNull(),
+    derivationPath: text("derivation_path"),
+    /** Agent's ed25519 signature over canonical address-claim bytes
+     *  binding (chain + address + wallet_id). Lets the platform verify
+     *  ownership at submission time. */
+    addressSigB64: text("address_sig_b64"),
+    /** ed25519 pubkey the address was claimed with. Should match
+     *  wallets.agentSigningPubB64 — checked at insert. */
+    claimPubkeyB64: text("claim_pubkey_b64"),
+    label: text("label"),
+    active: boolean("active").notNull().default(true),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_wallet_addresses_wallet").on(t.walletId, t.chain),
+    index("idx_wallet_addresses_address").on(t.address),
   ],
 );
 

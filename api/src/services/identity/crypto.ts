@@ -55,3 +55,117 @@ export function canonicalPayload(attestation: {
     evidence: attestation.evidence ?? null,
   });
 }
+
+/** Canonical bytes for /v1/identity/recover signatures.
+ *
+ *  Mirrors strand/sig.ts canonicalThoughtBytes shape — produces a 32-byte
+ *  SHA-256 digest the SDK signs with the mnemonic-derived ed25519 key:
+ *
+ *      sha256(
+ *        utf8("identity-recover/v1") || 0x00 ||
+ *        utf8(did)                   || 0x00 ||
+ *        base64decode(derived_pubkey)|| 0x00 ||
+ *        utf8(timestamp_iso)
+ *      )
+ *
+ *  SDK clients (py + ts + browser bundle) implement the same algorithm;
+ *  signatures over these bytes verify here regardless of language. */
+export function canonicalRecoverBytes(opts: {
+  did: string;
+  derivedPubkeyB64: string;
+  timestamp: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("identity-recover/v1"),
+    SEP,
+    enc.encode(opts.did),
+    SEP,
+    Uint8Array.from(Buffer.from(opts.derivedPubkeyB64, "base64")),
+    SEP,
+    enc.encode(opts.timestamp),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  // sha256 from @noble/hashes — mirrors strand/sig.ts.
+  // Lazy require so this module's existing string-based exports stay
+  // usable without pulling sha256 unless callers need recover-bytes.
+  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
+  return sha256(buf);
+}
+
+/** Verify an ed25519 signature over canonicalRecoverBytes. Returns true
+ *  iff valid. */
+export function verifyRecoverSignature(opts: {
+  canonical: Uint8Array;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  try {
+    const sig = Uint8Array.from(Buffer.from(opts.signatureB64, "base64"));
+    const pub = Uint8Array.from(Buffer.from(opts.publicKeyB64, "base64"));
+    if (sig.length !== 64 || pub.length !== 32) return false;
+    return ed.verify(sig, opts.canonical, pub);
+  } catch {
+    return false;
+  }
+}
+
+/** Canonical bytes for /public/identities/by-pubkey discovery signatures.
+ *
+ *      sha256(
+ *        utf8("identity-discover/v1") || 0x00 ||
+ *        base64decode(derived_pubkey) || 0x00 ||
+ *        utf8(timestamp_iso)
+ *      )
+ *
+ *  Same shape as canonicalRecoverBytes minus the DID — the whole point of
+ *  discovery is the caller doesn't know the DID(s) yet, only their derived
+ *  pubkey. The signature still proves possession of the matching priv,
+ *  which gates enumeration: an attacker who only knows a pubkey from a
+ *  signed message can NOT use this endpoint to enumerate that agent's
+ *  other DIDs without the priv. */
+export function canonicalDiscoveryBytes(opts: {
+  derivedPubkeyB64: string;
+  timestamp: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("identity-discover/v1"),
+    SEP,
+    Uint8Array.from(Buffer.from(opts.derivedPubkeyB64, "base64")),
+    SEP,
+    enc.encode(opts.timestamp),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
+  return sha256(buf);
+}
+
+/** Verify ed25519 signature over canonicalDiscoveryBytes. */
+export function verifyDiscoverySignature(opts: {
+  canonical: Uint8Array;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  // Same shape as verifyRecoverSignature — separate function for symmetry
+  // with canonicalDiscoveryBytes / future divergence.
+  return verifyRecoverSignature({
+    canonical: opts.canonical,
+    signatureB64: opts.signatureB64,
+    publicKeyB64: opts.publicKeyB64,
+  });
+}

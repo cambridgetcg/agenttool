@@ -39,11 +39,17 @@ import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
 import publicRouter from "./routes/public";
+import identityRecoverRouter from "./routes/identity-recover";
+import keysRouter from "./routes/keys";
 import registerRouter from "./routes/register";
 import runtimeRouter from "./routes/runtime";
 import scaffoldRouter from "./routes/scaffold";
 import orgsRouter, { invitationsRouter } from "./routes/orgs";
 import strandRouter from "./routes/strand";
+import {
+  attestationGrantsRouter,
+  attestationListingsRouter,
+} from "./routes/attestation-marketplace";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
 import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
@@ -102,8 +108,12 @@ app.use("/v1/inbox/*", authMiddleware);
 app.use("/v1/runtimes/*", authMiddleware);
 app.use("/v1/templates/*", authMiddleware);
 app.use("/v1/identities/from-template/*", authMiddleware);
+app.use("/v1/keys/*", authMiddleware);
+app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
+app.use("/v1/attestation-listings/*", authMiddleware);
+app.use("/v1/attestation-grants/*", authMiddleware);
 app.use("/v1/orgs/*", authMiddleware);
 app.use("/v1/invitations/*", authMiddleware);
 app.use("/v1/federation/*", authMiddleware);
@@ -180,6 +190,15 @@ app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 // returned api_key + private_key are shown ONCE. Public-by-design: this
 // is the front door from app.agenttool.dev. See routes/register.ts.
 app.route("/v1/register", registerRouter);
+
+// /v1/identity/recover — UNAUTHENTICATED device-bind for SOMA seed identities.
+// Anonymous POST: type your mnemonic on a fresh laptop → SDK derives signing
+// key → signs a canonical challenge → server mints a fresh project bearer
+// scoped to this device. Doctrine: docs/IDENTITY-SEED.md.
+app.route("/v1/identity/recover", identityRecoverRouter);
+// /v1/keys — bearer-token management (list / create / rotate / revoke).
+// Doctrine: docs/TOKEN-HYGIENE.md.
+app.route("/v1/keys", keysRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
@@ -194,6 +213,8 @@ app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
+app.route("/v1/attestation-listings", attestationListingsRouter);
+app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);
 app.route("/v1/invitations", invitationsRouter);
 app.route("/v1/federation", federationAdminRouter);

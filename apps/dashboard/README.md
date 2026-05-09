@@ -27,16 +27,32 @@ The developer dashboard, hosted at **app.agenttool.dev** on Cloudflare Pages. Va
 
 ## How it persists
 
-Client-side only — `localStorage` under key `agenttool_project`:
+Client-side only — `localStorage` under key `agenttool_project`. Canonical
+shape is **snake_case**, mirroring the API JSON. All writers (legacy register
+flow, SOMA onboard, SOMA restore, `/v1/keys/rotate`) emit this shape; the
+`getProject()` reader carries a one-time migration shim for older entries
+that used camelCase (see `app.js`, task #51).
 
 ```json
 {
   "name": "...",
   "api_key": "at_...",
-  "email": "...",
-  "created_at": "..."
+  "did": "did:at:...",
+  "agent_id": "uuid",
+  "public_key": "base64",
+  "box_public_key": "base64 | null",
+  "box_key_id": "uuid | null",
+  "signing_key_id": "uuid",
+  "capabilities": [],
+  "byo_keys": true,
+  "seed_protocol": "soma-seed-v1",
+  "restored_at": "ISO-8601 (only on the SOMA-restore path)",
+  "created_at": "ISO-8601",
+  "email": "..."
 }
 ```
+
+Most fields are optional — the auth-gate only requires `api_key`.
 
 Server-side state lives in `agent-tools` (the projects + api_keys tables). The dashboard is a thin client.
 

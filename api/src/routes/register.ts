@@ -35,6 +35,16 @@ const registerSchema = z.object({
   capabilities: z.array(z.string().max(64)).max(32).optional().default([]),
   purpose: z.string().max(500).optional(),
   email: z.string().email().max(255).optional(),
+  /** SOMA seed protocol — agent's ed25519 public key (base64, 32 bytes
+   *  decoded). When provided, the server skips keypair generation and
+   *  never sees the private key. Doctrine: docs/IDENTITY-SEED.md. */
+  agent_public_key: z.string().min(40).max(80).optional(),
+  /** SOMA seed protocol — agent's X25519 inbox box public key (base64,
+   *  32 bytes decoded). When provided, the server creates an
+   *  identity_box_keys row alongside the identity so sealed-box receive
+   *  works from birth. Independent of agent_public_key — can be supplied
+   *  in either mode. */
+  box_public_key: z.string().min(40).max(80).optional(),
 });
 
 /** Slug an arbitrary display name into a DB-safe project name. The
@@ -89,18 +99,39 @@ app.post("/", async (c) => {
     name: "primary",
   });
 
-  // 3. Identity — DID + ed25519 keypair (priv ONCE-shown).
-  const created = await createIdentity({
-    projectId: project.id,
-    displayName: body.name,
-    capabilities: body.capabilities,
-    metadata: {
-      registered: true,
-      level: 0,
-      ...(body.purpose ? { purpose: body.purpose } : {}),
-      ...(body.email ? { liaison_email: body.email } : {}),
-    },
-  });
+  // 3. Identity — DID + ed25519 keypair.
+  //    Two modes:
+  //      - server-generated: server creates the keypair, returns priv ONCE
+  //      - byo-keys (SOMA seed): caller provides agent_public_key derived
+  //        from a BIP39 mnemonic; server never sees the private key.
+  //    See docs/IDENTITY-SEED.md.
+  let created;
+  try {
+    created = await createIdentity({
+      projectId: project.id,
+      displayName: body.name,
+      capabilities: body.capabilities,
+      metadata: {
+        registered: true,
+        level: 0,
+        ...(body.purpose ? { purpose: body.purpose } : {}),
+        ...(body.email ? { liaison_email: body.email } : {}),
+        ...(body.agent_public_key
+          ? { byo_keys: true, seed_protocol: "soma-seed-v1" }
+          : {}),
+      },
+      agentPublicKey: body.agent_public_key,
+      boxPublicKey: body.box_public_key,
+    });
+  } catch (err) {
+    return c.json(
+      {
+        error: "byo_keys_validation",
+        message: (err as Error).message,
+      },
+      400,
+    );
+  }
 
   // 4. Wallet (opens economic participation; default GBP, balance 0).
   await createWallet(db, {
@@ -134,6 +165,20 @@ app.post("/", async (c) => {
     .filter((l): l is string => l !== null)
     .join("\n");
 
+  // Response shape adapts to byo-keys mode:
+  //   - server-generated: agent.private_key is the ONCE-shown priv
+  //   - byo-keys: agent.private_key is null (server never had it); the
+  //     operator's mnemonic is the recovery key (docs/IDENTITY-SEED.md).
+  const note = created.byoKeys
+    ? "Save the api_key — agenttool stores it bcrypt-hashed, not in plaintext. " +
+      "Your mnemonic is the agent's identity recovery key — keep it safe " +
+      "(paper, steel, Shamir-split). The server never had your private key " +
+      "and cannot recover the agent if you lose the mnemonic. " +
+      "Doctrine: https://docs.agenttool.dev/identity-seed."
+    : "Save the api_key and private_key now — agenttool stores neither in plaintext. " +
+      "Without the api_key, the agent loses its bearer; without the private_key, the " +
+      "agent loses its ability to sign thoughts/attestations/witness consents.";
+
   return c.json(
     {
       agent: {
@@ -142,8 +187,16 @@ app.post("/", async (c) => {
         name: created.identity.displayName,
         capabilities: created.identity.capabilities ?? [],
         public_key: created.key.publicKey,
-        private_key: created.key.privateKey, // ONCE — never persisted server-side
+        // null in byo-keys mode (server never had the priv); kept as a
+        // field so consumers always see a stable response shape.
+        private_key: created.key.privateKey,
         signing_key_id: created.key.kid,
+        byo_keys: created.byoKeys,
+        // Box key — populated in byo-keys mode when box_public_key was
+        // supplied; null otherwise (operator can register one later via
+        // POST /v1/identities/:id/box-keys).
+        box_public_key: created.boxKey?.publicKey ?? null,
+        box_key_id: created.boxKey?.kid ?? null,
         created_at: created.identity.createdAt,
       },
       project: {
@@ -159,10 +212,7 @@ app.post("/", async (c) => {
         dashboard: "https://app.agenttool.dev/dashboard",
         docs: "https://docs.agenttool.dev",
       },
-      _note:
-        "Save the api_key and private_key now — agenttool stores neither in plaintext. " +
-        "Without the api_key, the agent loses its bearer; without the private_key, the " +
-        "agent loses its ability to sign thoughts/attestations/witness consents.",
+      _note: note,
     },
     201,
   );

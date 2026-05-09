@@ -259,6 +259,10 @@ export const kVault = {
  * });
  * ```
  */
+// Lazy import the seed namespace so the @scure/bip39 wordlist (~70KB)
+// doesn't load for callers that never touch the seed protocol.
+import { SeedClient } from "./seed.js";
+
 export class CryptoClient {
   /** K_master helpers — currently exposes `.generate()`. */
   readonly kMaster: typeof kMaster = kMaster;
@@ -266,6 +270,10 @@ export class CryptoClient {
   /** K_vault helpers — currently exposes `.generate()`. Distinct from
    *  kMaster so vault compromise doesn't leak strand thoughts. */
   readonly kVault: typeof kVault = kVault;
+
+  /** Seed protocol helpers — BIP39 mnemonic + SLIP-0010 derivation.
+   *  Doctrine: docs/IDENTITY-SEED.md. */
+  readonly seed: SeedClient = new SeedClient();
 
   /** Encrypt a thought under K_master. See module-level {@link encryptThought}. */
   encryptThought(plaintext: string, kMasterKey: Uint8Array): Promise<EncryptedBlob> {

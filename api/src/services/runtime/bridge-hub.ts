@@ -55,8 +55,10 @@ export interface BridgeWsData {
 
 type BridgeState = "awaiting_hello" | "awaiting_proof" | "ready" | "closed";
 
+export type BridgeOp = "encrypt" | "decrypt" | "sign";
+
 interface PendingRequest {
-  op: "encrypt" | "decrypt";
+  op: BridgeOp;
   resolve: (v: CryptoResult) => void;
   reject: (e: Error) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -82,13 +84,15 @@ export interface CryptoContext {
 }
 
 export interface CryptoRequest {
-  op: "encrypt" | "decrypt";
-  /** For decrypt: base64 ciphertext. Omit for encrypt. */
+  op: BridgeOp;
+  /** For decrypt: base64 ciphertext. Omit for encrypt/sign. */
   ciphertext?: string;
-  /** For encrypt: base64 plaintext. Omit for decrypt. */
+  /** For encrypt: base64 plaintext. Omit for decrypt/sign. */
   plaintext?: string;
-  /** For decrypt: base64 nonce. Omit for encrypt. */
+  /** For decrypt: base64 nonce. Omit for encrypt/sign. */
   nonce?: string;
+  /** For sign: base64 raw bytes to sign. Omit for encrypt/decrypt. */
+  message?: string;
   context: CryptoContext;
 }
 
@@ -99,6 +103,8 @@ export interface CryptoResult {
   ciphertext?: string;
   /** Returned for encrypt — fresh per op. */
   nonce?: string;
+  /** Returned for sign — base64 ed25519 signature (64 bytes raw). */
+  signature?: string;
 }
 
 // ── Registry ──────────────────────────────────────────────────────────
@@ -159,6 +165,7 @@ export async function bridgeRequest(
       ...(request.ciphertext != null ? { ciphertext: request.ciphertext } : {}),
       ...(request.plaintext != null ? { plaintext: request.plaintext } : {}),
       ...(request.nonce != null ? { nonce: request.nonce } : {}),
+      ...(request.message != null ? { message: request.message } : {}),
       context: request.context,
     };
 

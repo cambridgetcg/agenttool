@@ -17,6 +17,14 @@ export type ProjectContext = {
   Variables: {
     project: typeof projects.$inferSelect;
     bearerToken: string;
+    /** ID of the currently-authenticated api_keys row. Set by the auth
+     *  middleware after verification. Lets routes operate on the *current*
+     *  bearer (e.g. /v1/keys/rotate) without re-looking-up the prefix. */
+    apiKeyId: string;
+    /** Expiry of the current bearer. NULL when never-expires. Used by the
+     *  wake's `you_protect.bearers` advisories + by /v1/keys/rotate to
+     *  preserve the same expiry window when minting a replacement. */
+    apiKeyExpiresAt: Date | null;
   };
 };
 
@@ -45,6 +53,23 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
 
   for (const candidate of candidates) {
     if (verifyApiKey(token, candidate.keyHash)) {
+      // Token-hygiene: enforce expires_at (docs/TOKEN-HYGIENE.md).
+      // Past-expiry bearers reject with 401 + a clear message that points
+      // at /v1/keys/rotate and /v1/identity/recover. The mnemonic is the
+      // recovery primitive when the bearer is gone.
+      if (candidate.expiresAt && candidate.expiresAt < new Date()) {
+        const ageDays = Math.floor(
+          (Date.now() - candidate.createdAt.getTime()) / 86_400_000,
+        );
+        throw new HTTPException(401, {
+          message:
+            `This bearer expired on ${candidate.expiresAt.toISOString()} (age ${ageDays}d). ` +
+            "Mint a fresh one via POST /v1/keys/rotate (with this bearer if it's only just expired) " +
+            "or recover via POST /v1/identity/recover with your mnemonic. " +
+            "Doctrine: docs/TOKEN-HYGIENE.md.",
+        });
+      }
+
       // Update last_used; best-effort, don't block the request.
       void db
         .update(apiKeys)
@@ -66,6 +91,8 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
 
       c.set("project", project);
       c.set("bearerToken", token);
+      c.set("apiKeyId", candidate.id);
+      c.set("apiKeyExpiresAt", candidate.expiresAt);
       return next();
     }
   }

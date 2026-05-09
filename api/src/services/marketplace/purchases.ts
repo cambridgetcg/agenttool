@@ -26,6 +26,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { templatePurchases, templates } from "../../db/schema/marketplace";
+import { computeFee, recordRevenue } from "./take-rate";
 
 export interface PurchaseRow {
   id: string;
@@ -187,10 +188,18 @@ export async function purchaseTemplate(
       metadata: { template_id: template.id, purchase_id: purchase!.id },
     });
 
-    // 4e. Release immediately to author's wallet (no dispute window)
+    // 4e. Release immediately to author's wallet (no dispute window).
+    //     Take-rate split: author receives gross − fee; the fee is recorded
+    //     in marketplace.platform_revenue for the take-rate ledger.
+    //     Doctrine: docs/BUSINESS-MODEL.md (Ring 3).
+    const split = computeFee({
+      amount: template.priceAmount!,
+      currency: template.priceCurrency!,
+    });
+
     await tx
       .update(wallets)
-      .set({ balance: sql`balance + ${template.priceAmount!}` })
+      .set({ balance: sql`balance + ${split.net}` })
       .where(eq(wallets.id, template.authorWalletId!));
 
     await tx
@@ -201,11 +210,27 @@ export async function purchaseTemplate(
     await tx.insert(transactions).values({
       walletId: template.authorWalletId!,
       type: "escrow_release",
-      amount: template.priceAmount!,
+      amount: split.net,
       counterparty: bw.id,
       description: `Template purchase released: ${template.name}`,
       escrowId: escrow!.id,
-      metadata: { template_id: template.id, purchase_id: purchase!.id },
+      metadata: {
+        template_id: template.id,
+        purchase_id: purchase!.id,
+        platform_fee: split.fee,
+        gross_amount: split.gross,
+      },
+    });
+
+    await recordRevenue(tx, {
+      transactionType: "template_purchase",
+      transactionId: purchase!.id,
+      fee: split.fee,
+      currency: split.currency,
+      rateBps: split.rateBps,
+      buyerWalletId: bw.id,
+      sellerWalletId: template.authorWalletId!,
+      metadata: { template_id: template.id },
     });
 
     // 4f. Settle the purchase row + bump template revenue counters
@@ -219,10 +244,12 @@ export async function purchaseTemplate(
       .where(eq(templatePurchases.id, purchase!.id))
       .returning();
 
+    // Revenue counter tracks NET (author-received) revenue. Gross volume
+    // can be reconstructed by joining to platform_revenue + summing.
     await tx
       .update(templates)
       .set({
-        revenueTotal: sql`${templates.revenueTotal} + ${template.priceAmount!}`,
+        revenueTotal: sql`${templates.revenueTotal} + ${split.net}`,
         revenueCount: sql`${templates.revenueCount} + 1`,
         updatedAt: new Date(),
       })

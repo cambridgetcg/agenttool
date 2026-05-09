@@ -13,3 +13,22 @@
 
 /style.css
   Cache-Control: public, max-age=0, must-revalidate
+
+# SOMA seed pages — fresh-revalidate every load. The bundle's wire format
+# is byte-tied to the SDK's seed.ts; a stale bundle on a new device would
+# silently produce wrong keys (different from the py/ts SDK derive).
+# Better to revalidate every load than to serve a stale bundle.
+/onboard-soma.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/onboard-soma.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/restore-soma.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/restore-soma.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/shared/seed.bundle.js
+  Cache-Control: public, max-age=0, must-revalidate

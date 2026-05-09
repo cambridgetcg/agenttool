@@ -55,6 +55,15 @@ from .exceptions import (
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchResult, UsageStats
 from .register import register
+from .seed import (
+    DerivedBundle,
+    SeedClient,
+    derive,
+    derive_bridge_signing,
+    derive_wallet,
+    generate_mnemonic,
+    mnemonic_to_seed,
+)
 from .strands import StrandsClient, ThoughtsClient
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
@@ -107,6 +116,14 @@ __all__ = [
     "PulseClient",
     "ScrapeResult",
     "SearchResult",
+    # Seed protocol — BIP39 mnemonic-rooted identity (docs/IDENTITY-SEED.md)
+    "SeedClient",
+    "DerivedBundle",
+    "generate_mnemonic",
+    "mnemonic_to_seed",
+    "derive",
+    "derive_bridge_signing",
+    "derive_wallet",
     "UsageStats",
     "Trace",
     "TraceChain",
@@ -119,6 +136,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.6.5"
+__version__ = "0.6.6"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

@@ -559,8 +559,11 @@ async function connectOnce(opts: ConnectOpts, hashes: HashesModule): Promise<num
         console.log(`▸ ready · session_id=${msg.session_id} · serving crypto`);
       } else if (type === "crypto_request" && state === "ready") {
         const requestId = msg.request_id as string | undefined;
-        const op = msg.op as "encrypt" | "decrypt" | undefined;
-        if (!requestId || (op !== "encrypt" && op !== "decrypt")) {
+        const op = msg.op as "encrypt" | "decrypt" | "sign" | undefined;
+        if (
+          !requestId ||
+          (op !== "encrypt" && op !== "decrypt" && op !== "sign")
+        ) {
           if (requestId) {
             ws.send(
               JSON.stringify({
@@ -573,19 +576,34 @@ async function connectOnce(opts: ConnectOpts, hashes: HashesModule): Promise<num
           return;
         }
         try {
-          let result: { plaintext?: string; ciphertext?: string; nonce?: string };
+          let result: {
+            plaintext?: string;
+            ciphertext?: string;
+            nonce?: string;
+            signature?: string;
+          };
           if (op === "decrypt") {
             const ct = b64decode(msg.ciphertext as string);
             const nonce = b64decode(msg.nonce as string);
             const pt = await aesDecrypt(kMasterBytes, nonce, ct);
             result = { plaintext: b64encode(pt) };
-          } else {
+          } else if (op === "encrypt") {
             const pt = b64decode(msg.plaintext as string);
             const enc = await aesEncrypt(kMasterBytes, pt);
             result = {
               ciphertext: b64encode(enc.ciphertext),
               nonce: b64encode(enc.nonce),
             };
+          } else {
+            // op === "sign" — ed25519 over the bytes the orchestrator hands us.
+            // The orchestrator is responsible for assembling the canonical
+            // bytes (e.g. sha256(strand_id || ciphertext || nonce || kind) for
+            // a thought signature). The sidecar signs verbatim — keeps the
+            // signing key on the user's machine while letting the cloud-side
+            // think-worker write signed thoughts in `bridged` mode.
+            const message = b64decode(msg.message as string);
+            const sig = await ed25519Sign(signKeyBytes, message);
+            result = { signature: b64encode(sig) };
           }
 
           // HMAC: hmac(session_secret, request_id || canonical_json(result))

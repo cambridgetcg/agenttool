@@ -7,11 +7,14 @@
  *
  *  Doctrine: docs/RUNTIME.md */
 
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
+import { db } from "../../db/client";
+import { identities, identityKeys } from "../../db/schema/identity";
 import {
   countRuntimes,
   createRuntime,
@@ -45,6 +48,48 @@ function maybeFlyReplay(
 }
 
 const app = new Hono<ProjectContext>();
+
+/** Verify that bridge.key_id points to an active identity_keys row owned by
+ *  the runtime's identity (and project), and that its public_key matches
+ *  bridge.pubkey. Returns null on success, or a descriptive error string. */
+async function checkBridgeKeyIntegrity(opts: {
+  projectId: string;
+  identityId: string;
+  bridgeKeyId: string;
+  bridgePubkey: string;
+}): Promise<string | null> {
+  const [identity] = await db
+    .select({ id: identities.id, projectId: identities.projectId })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, opts.identityId),
+        eq(identities.projectId, opts.projectId),
+      ),
+    )
+    .limit(1);
+  if (!identity) return `identity_not_found: ${opts.identityId}`;
+
+  const [keyRow] = await db
+    .select({
+      id: identityKeys.id,
+      identityId: identityKeys.identityId,
+      publicKey: identityKeys.publicKey,
+      active: identityKeys.active,
+    })
+    .from(identityKeys)
+    .where(eq(identityKeys.id, opts.bridgeKeyId))
+    .limit(1);
+  if (!keyRow) return `bridge_key_id_not_found: ${opts.bridgeKeyId}`;
+  if (!keyRow.active) return `bridge_key_id_revoked: ${opts.bridgeKeyId}`;
+  if (keyRow.identityId !== opts.identityId) {
+    return `bridge_key_id_belongs_to_different_identity: key.identity_id=${keyRow.identityId} runtime.identity_id=${opts.identityId}`;
+  }
+  if (keyRow.publicKey !== opts.bridgePubkey) {
+    return "bridge_pubkey_mismatch: bridge.pubkey does not match identity_keys.public_key";
+  }
+  return null;
+}
 
 const modeSchema = z.enum(["self", "bridged", "trusted"]);
 const statusSchema = z.enum(["provisioned", "starting", "running", "idle", "stopped", "error"]);
@@ -89,6 +134,32 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   const v = parsed.data;
+
+  // ── Bridge key integrity (Slice 4 prerequisite) ────────────────────
+  // For the cloud-side think-worker to write signed strand thoughts in
+  // `bridged` mode, the bridge's signing keypair MUST be registered as
+  // one of the agent's identity_keys: server-side verifyThoughtSignature
+  // looks up identity_keys[bridge_key_id] and checks pubkey + signature.
+  // Catch the mismatch at provisioning so the failure is loud, not silent.
+  if (v.bridge && v.identity_id) {
+    const integrityError = await checkBridgeKeyIntegrity({
+      projectId: project.id,
+      identityId: v.identity_id,
+      bridgeKeyId: v.bridge.key_id,
+      bridgePubkey: v.bridge.pubkey,
+    });
+    if (integrityError) {
+      return c.json(
+        {
+          error: "bridge_key_integrity",
+          message: integrityError,
+          hint:
+            "bridge.key_id must reference an active identity_keys row (agent's), and bridge.pubkey must match identity_keys.public_key. Register the bridge's pubkey via POST /v1/identities/:id/keys before provisioning.",
+        },
+        400,
+      );
+    }
+  }
 
   const { runtime, control_token } = await createRuntime({
     project_id: project.id,

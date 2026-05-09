@@ -37,6 +37,13 @@ export const config = {
   // ── Stripe (economy) ────────────────────────────────────────────────────
   stripeSecretKey: env("STRIPE_SECRET_KEY", ""),
   stripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
+
+  // ── Marketplace · Ring 3 take-rate (BUSINESS-MODEL.md) ─────────────────
+  // Basis points charged on every settled Ring 3 transaction (template
+  // purchases · capability invocations · attestation grants). 500 = 5%.
+  // Range: 0–10000 (0% to 100%). Snapshot at transaction time, so rate
+  // changes don't retroactively shift past fees.
+  platformTakeRateBps: envInt("PLATFORM_TAKE_RATE_BPS", 500),
 } as const;
 
 // Note: payout broadcast config + boot guard live in `services/economy/config.ts`

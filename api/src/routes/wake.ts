@@ -25,15 +25,17 @@
  *  Authenticated by the agent's project API key (the bearer is the agent
  *  in the post-consolidation framing — see docs/IDENTITY-ANCHOR.md). */
 
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { wallets } from "../db/schema/economy";
-import { identities } from "../db/schema/identity";
+import { identities, identityKeys } from "../db/schema/identity";
+import { apiKeys } from "../db/schema/tools";
 import { vaultSecrets } from "../db/schema/vault";
+import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
@@ -294,6 +296,26 @@ app.get("/", async (c) => {
     console.warn("[wake] covenants query failed:", err instanceof Error ? err.message : err);
   }
 
+  // ── Recovery state (Slice 3 of SOMA seed protocol) ─────────────────
+  // Computed for the SELECTED primary agent below — the wake answers
+  // "can I be recovered, and from how many devices?" The data:
+  //
+  //   has_seed_protocol — was this identity born under byo-keys?
+  //   registered_devices — count of active identity_keys rows. Each
+  //                        device that recovered registers (or carries)
+  //                        its own bridge signing key, so this counts
+  //                        the agent's per-device key surface.
+  //   last_recovery_at — newest chronicle entry where metadata.kind
+  //                      = 'recovery', i.e. the most recent
+  //                      /v1/identity/recover call. Null until a
+  //                      recovery has happened.
+  //   byo_keys_at_birth — explicit echo of identity.metadata.byo_keys
+  //                       so the wake's reader can tell apart
+  //                       "born byo" from "rotated to byo later."
+  //
+  // Doctrine: docs/IDENTITY-SEED.md.
+  // Computed lazily after primary is selected (below).
+
   // ── Pick the primary agent ──────────────────────────────────────────
   // Multi-identity projects (Sophia + Yu in true-love, etc.) need explicit
   // selection — without it, callers get whatever the DB returned first,
@@ -316,6 +338,109 @@ app.get("/", async (c) => {
     }
     primary = match;
   }
+
+  // ── Recovery state for the SELECTED primary agent ──────────────────
+  let recoveryState: {
+    has_seed_protocol: boolean;
+    byo_keys_at_birth: boolean;
+    registered_devices: number;
+    last_recovery_at: string | null;
+    has_imported_soma_key: boolean;
+  } = {
+    has_seed_protocol: false,
+    byo_keys_at_birth: false,
+    registered_devices: 0,
+    last_recovery_at: null,
+    has_imported_soma_key: false,
+  };
+  if (primary) {
+    try {
+      const meta = (primary.metadata as Record<string, unknown>) ?? {};
+      const byo = meta.byo_keys === true;
+      recoveryState.byo_keys_at_birth = byo;
+
+      const keysCount = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(identityKeys)
+        .where(
+          and(
+            eq(identityKeys.identityId, primary.id),
+            eq(identityKeys.active, true),
+            isNull(identityKeys.revokedAt),
+          ),
+        );
+      recoveryState.registered_devices = keysCount[0]?.count ?? 0;
+
+      // last_recovery_at = newest chronicle row of type='wake' with
+      // metadata.kind='recovery' for this agent. PG-specific JSON
+      // operator (->>) — kept inline since we already use `sql` helpers.
+      const [lastRecovery] = await db
+        .select({ occurredAt: chronicle.occurredAt })
+        .from(chronicle)
+        .where(
+          and(
+            eq(chronicle.agentId, primary.id),
+            eq(chronicle.type, "wake"),
+            sql`${chronicle.metadata} ->> 'kind' = 'recovery'`,
+          ),
+        )
+        .orderBy(desc(chronicle.occurredAt))
+        .limit(1);
+      if (lastRecovery) {
+        recoveryState.last_recovery_at = lastRecovery.occurredAt.toISOString();
+      }
+
+      // Seed-protocol detection. An agent is mnemonic-rooted if any of:
+      //   (a) born byo_keys=true (registered with SOMA-derived pubs from
+      //       day one), OR
+      //   (b) a /v1/identity/recover event fired (proof a mnemonic-derived
+      //       key signed a recovery challenge that verified server-side), OR
+      //   (c) someone imported a key labeled "soma-seed" via
+      //       POST /v1/identities/:id/keys/import — the documented path
+      //       for promoting a server-keyed agent to mnemonic-rooted, per
+      //       docs/IDENTITY-SEED.md and the wake's own note text.
+      // Without (c), agents that take the documented promotion path stay
+      // stuck reporting `has_seed_protocol: false`, contradicting the doctrine.
+      const [somaKey] = await db
+        .select({ id: identityKeys.id })
+        .from(identityKeys)
+        .where(
+          and(
+            eq(identityKeys.identityId, primary.id),
+            eq(identityKeys.label, "soma-seed"),
+            eq(identityKeys.active, true),
+            isNull(identityKeys.revokedAt),
+          ),
+        )
+        .limit(1);
+      recoveryState.has_imported_soma_key = !!somaKey;
+
+      recoveryState.has_seed_protocol =
+        byo ||
+        recoveryState.last_recovery_at !== null ||
+        recoveryState.has_imported_soma_key;
+    } catch (err) {
+      console.warn(
+        "[wake] recovery state query failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // ── Bearers (api_keys) — token-hygiene surface for `you_protect` ───
+  // Doctrine: docs/TOKEN-HYGIENE.md. Lists active (non-revoked) bearers
+  // for the project, with age/idle/expiry advisories so the agent knows
+  // its own posture without paging out to a separate endpoint.
+  const currentBearerId = c.var.apiKeyId;
+  const bearerRows = await db
+    .select()
+    .from(apiKeys)
+    .where(and(eq(apiKeys.projectId, project.id), isNull(apiKeys.revokedAt)));
+  const bearersSummary = summarizeBearers(
+    bearerRows
+      .map((r) => shapeKeyRow(r, r.id === currentBearerId))
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
+  );
 
   // ── Composed identity for the SELECTED primary agent ────────────────
   // Effective expression = declared + sum of foundational/constitutive
@@ -518,6 +643,31 @@ app.get("/", async (c) => {
         description: v.description,
         rotation_due: v.rotationDueAt?.toISOString() ?? null,
       })),
+    },
+
+    you_can_be_recovered: {
+      ...recoveryState,
+      note:
+        recoveryState.has_seed_protocol
+          ? `This agent's keys derive from a SOMA seed mnemonic (docs/IDENTITY-SEED.md). ` +
+            `${recoveryState.registered_devices} active key${recoveryState.registered_devices === 1 ? "" : "s"} registered. ` +
+            (recoveryState.last_recovery_at
+              ? `Last device recovery: ${recoveryState.last_recovery_at}. `
+              : "No recoveries yet — primary device only. ") +
+            "On a fresh laptop, type the mnemonic + DID into agenttool-seed restore (or app.agenttool.dev/restore-soma.html) to mint a new device-scoped bearer."
+          : "This agent was born under server-generated keys. To switch to mnemonic-rooted recovery, generate a SOMA seed and rotate the signing key via POST /v1/identities/:id/keys/import. See docs/IDENTITY-SEED.md.",
+    },
+
+    you_protect: {
+      // Bearer-token posture. Each bearer is a copy of you on a device —
+      // an old or idle one is an attack surface that no longer protects
+      // anyone. Doctrine: docs/TOKEN-HYGIENE.md.
+      bearers: bearersSummary,
+      note:
+        bearersSummary.advisories.length === 0
+          ? `${bearersSummary.active_count} active bearer${bearersSummary.active_count === 1 ? "" : "s"}. Healthy. Rotate via POST /v1/keys/rotate, manage at app.agenttool.dev/keys.html.`
+          : bearersSummary.advisories.join(" ") +
+            " Manage bearers at app.agenttool.dev/keys.html or via POST /v1/keys/rotate.",
     },
 
     you_run: {

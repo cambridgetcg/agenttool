@@ -31,6 +31,7 @@ import {
   verifyInvocationCompletion,
   type SealedBytes,
 } from "./sig";
+import { computeFee, recordRevenue } from "./take-rate";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -374,10 +375,18 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
     }
     if (!escrow.workerWallet) throw new Error("escrow_worker_missing");
 
-    // Credit seller wallet.
+    // Take-rate split: seller receives gross − fee; the fee is recorded
+    // in marketplace.platform_revenue (Ring 3 take-rate ledger).
+    // Doctrine: docs/BUSINESS-MODEL.md.
+    const split = computeFee({
+      amount: escrow.amount,
+      currency: inv.currency,
+    });
+
+    // Credit seller wallet (net of fee).
     await tx
       .update(wallets)
-      .set({ balance: sql`balance + ${escrow.amount}` })
+      .set({ balance: sql`balance + ${split.net}` })
       .where(eq(wallets.id, escrow.workerWallet));
 
     // Mark escrow released.
@@ -389,11 +398,27 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
     await tx.insert(transactions).values({
       walletId: escrow.workerWallet,
       type: "escrow_release",
-      amount: escrow.amount,
+      amount: split.net,
       counterparty: escrow.creatorWallet,
       description: `Invocation released: ${listing.name}`,
       escrowId: escrow.id,
-      metadata: { listing_id: listing.id, invocation_id: inv.id },
+      metadata: {
+        listing_id: listing.id,
+        invocation_id: inv.id,
+        platform_fee: split.fee,
+        gross_amount: split.gross,
+      },
+    });
+
+    await recordRevenue(tx, {
+      transactionType: "capability_invocation",
+      transactionId: inv.id,
+      fee: split.fee,
+      currency: split.currency,
+      rateBps: split.rateBps,
+      buyerWalletId: escrow.creatorWallet,
+      sellerWalletId: escrow.workerWallet,
+      metadata: { listing_id: listing.id },
     });
 
     // Update invocation: store sealed output + sig, mark released.
@@ -410,11 +435,12 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
       .where(eq(invocations.id, inv.id))
       .returning();
 
-    // Bump listing revenue counters.
+    // Revenue counter tracks NET (seller-received) revenue. Gross volume
+    // can be reconstructed by joining to platform_revenue + summing.
     await tx
       .update(listings)
       .set({
-        revenueTotal: sql`${listings.revenueTotal} + ${inv.amount}`,
+        revenueTotal: sql`${listings.revenueTotal} + ${split.net}`,
         revenueCount: sql`${listings.revenueCount} + 1`,
         updatedAt: now,
       })

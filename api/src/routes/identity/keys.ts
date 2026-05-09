@@ -79,6 +79,69 @@ app.post("/", async (c) => {
   );
 });
 
+/** POST /v1/identities/:id/keys/import — Register an externally-generated
+ *  ed25519 pubkey as one of this identity's keys. The platform never sees
+ *  the private key (held client-side; for the bridged-runtime path, in the
+ *  bridge sidecar's keychain). The returned `kid` is what `bridge.key_id`
+ *  references when provisioning a runtime; signed thoughts coming back via
+ *  the bridge will verify against this row. */
+app.post("/import", async (c) => {
+  const project = c.var.project;
+  const identityId = c.req.param("id")!;
+  const body = await c.req.json<{ public_key?: unknown; label?: unknown }>();
+
+  if (typeof body.public_key !== "string" || body.public_key.length === 0) {
+    return c.json({ error: "public_key required (base64 ed25519 32-byte pubkey)" }, 400);
+  }
+  // Sanity-check the length: base64 of 32 bytes is 44 chars (with `=` pad).
+  let decodedLen: number;
+  try {
+    decodedLen = Buffer.from(body.public_key, "base64").length;
+  } catch {
+    return c.json({ error: "public_key must be valid base64" }, 400);
+  }
+  if (decodedLen !== 32) {
+    return c.json(
+      { error: `public_key must decode to 32 bytes; got ${decodedLen}` },
+      400,
+    );
+  }
+
+  const [identity] = await db
+    .select()
+    .from(identities)
+    .where(and(eq(identities.id, identityId), eq(identities.projectId, project.id)));
+  if (!identity) {
+    return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
+
+  const label =
+    typeof body.label === "string" && body.label.length > 0 ? body.label : "imported";
+
+  const [key] = await db
+    .insert(identityKeys)
+    .values({
+      identityId,
+      publicKey: body.public_key,
+      label,
+      active: true,
+    })
+    .returning();
+
+  return c.json(
+    {
+      kid: key!.id,
+      public_key: key!.publicKey,
+      label: key!.label,
+      active: key!.active,
+      created_at: key!.createdAt,
+      note:
+        "Externally-held private key — agenttool never sees it. Use kid as bridge.key_id when provisioning a bridged runtime.",
+    },
+    201,
+  );
+});
+
 /** DELETE /v1/identities/:id/keys/:kid — Revoke a specific key. */
 app.delete("/:kid", async (c) => {
   const project = c.var.project;

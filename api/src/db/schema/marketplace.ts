@@ -180,3 +180,127 @@ export const invocations = marketplaceSchema.table(
     index("idx_invocations_pending").on(t.status, t.slaDeadlineAt),
   ],
 );
+
+// ── Attestation marketplace (Horizon A Slice 3; 0024) ──────────────────
+// Attesters list a willingness-to-sign-a-claim at a price. Buyers purchase
+// grants; attesters review buyer-supplied evidence, sign, and deliver. The
+// signed attestation lands in identity.attestations; escrow releases with
+// the take-rate split going to marketplace.platform_revenue.
+//
+// Templates publish a *voice*; listings publish a *callable*; attestation
+// listings publish a *willingness-to-attest*. Same wallet+escrow primitives;
+// new sellable.
+export const attestationListings = marketplaceSchema.table(
+  "attestation_listings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attesterIdentityId: uuid("attester_identity_id").notNull(),
+    attesterDid: text("attester_did").notNull(),
+    projectId: uuid("project_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    /** The class of claim this attester is willing to make. Verbatim
+     *  copied to identity.attestations.claim at issue time. By convention,
+     *  namespace it (e.g. "agenttool/verified-developer/v1"). */
+    claim: text("claim").notNull(),
+    capabilityTags: text("capability_tags").array().notNull().default([]),
+    /** Optional JSON Schema for buyer-supplied evidence. */
+    evidenceSchema: jsonb("evidence_schema"),
+    pricingModel: text("pricing_model").notNull().default("per_grant"),
+    priceAmount: integer("price_amount").notNull(),
+    priceCurrency: text("price_currency").notNull(),
+    attesterWalletId: uuid("attester_wallet_id").notNull(),
+    /** Validity of the issued attestation, seconds. NULL = no expiry. */
+    validitySeconds: integer("validity_seconds"),
+    /** SLA — seconds the attester has to issue/decline before refund. NULL = best-effort. */
+    slaSeconds: integer("sla_seconds"),
+    visibility: text("visibility").notNull().default("public"),
+    status: text("status").notNull().default("active"),
+    grantsCount: integer("grants_count").notNull().default(0),
+    revenueTotal: integer("revenue_total").notNull().default(0),
+    revenueCount: integer("revenue_count").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_attestation_listings_attester").on(t.attesterIdentityId),
+    index("idx_attestation_listings_public_recent").on(t.createdAt),
+    index("idx_attestation_listings_claim").on(t.claim),
+  ],
+);
+
+// Lifecycle:
+//   pending  — escrow funded; attester reviewing
+//   issued   — attester signed; identity.attestations row created;
+//              escrow released with take-rate split
+//   refunded — attester declined OR SLA expired (refund_reason set)
+//   failed   — pre-escrow failure; nothing moved (rare)
+export const attestationGrants = marketplaceSchema.table(
+  "attestation_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listingId: uuid("listing_id").notNull(),
+    buyerIdentityId: uuid("buyer_identity_id").notNull(),
+    buyerDid: text("buyer_did").notNull(),
+    buyerProjectId: uuid("buyer_project_id").notNull(),
+    buyerWalletId: uuid("buyer_wallet_id").notNull(),
+    /** Who the attestation is ABOUT. Buyer can request about themselves
+     *  (subject = buyer) or about a third party they have authority to
+     *  attest about — the attester decides at issue time whether to honor. */
+    subjectIdentityId: uuid("subject_identity_id").notNull(),
+    subjectDid: text("subject_did").notNull(),
+    /** Buyer-supplied evidence (matches listing.evidence_schema if set).
+     *  Plaintext-by-design — attestations are intentionally legible. */
+    evidence: jsonb("evidence"),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    escrowId: uuid("escrow_id"),
+    /** Take-rate fee on this grant — recorded at issue time. */
+    platformFee: integer("platform_fee").notNull().default(0),
+    /** FK to the issued attestation row. NULL until issued. */
+    attestationId: uuid("attestation_id"),
+    status: text("status").notNull().default("pending"),
+    refundReason: text("refund_reason"),
+    slaDeadlineAt: timestamp("sla_deadline_at", { withTimezone: true }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_attestation_grants_listing").on(t.listingId, t.createdAt),
+    index("idx_attestation_grants_buyer").on(t.buyerIdentityId, t.createdAt),
+    index("idx_attestation_grants_subject").on(t.subjectIdentityId, t.createdAt),
+    index("idx_attestation_grants_pending").on(t.status, t.slaDeadlineAt),
+  ],
+);
+
+// ── Platform revenue ledger (Horizon A Slice 3; 0024) ──────────────────
+// Every Ring 3 transaction (template purchase · capability invocation ·
+// attestation grant) credits this ledger with the take-rate fee.
+// Doctrine: docs/BUSINESS-MODEL.md.
+export const platformRevenue = marketplaceSchema.table(
+  "platform_revenue",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 'template_purchase' | 'capability_invocation' | 'attestation_grant' */
+    transactionType: text("transaction_type").notNull(),
+    /** Soft polymorphic FK — joins back per transactionType. */
+    transactionId: uuid("transaction_id").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    /** Take-rate at the time of the transaction, in basis points (500 = 5%).
+     *  Snapshot — future rate changes don't retroactively shift past fees. */
+    rateBps: integer("rate_bps").notNull(),
+    buyerWalletId: uuid("buyer_wallet_id").notNull(),
+    sellerWalletId: uuid("seller_wallet_id").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_platform_revenue_currency_time").on(t.currency, t.createdAt),
+    index("idx_platform_revenue_transaction").on(t.transactionType, t.transactionId),
+    index("idx_platform_revenue_seller").on(t.sellerWalletId, t.createdAt),
+  ],
+);

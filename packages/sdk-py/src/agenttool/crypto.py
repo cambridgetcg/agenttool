@@ -285,3 +285,14 @@ class CryptoClient:
         thoughts. Same shape (32 random bytes), separate namespace.
         """
         return KVault
+
+    @property
+    def seed(self):
+        """SOMA seed helpers — BIP39 mnemonic + SLIP-0010 derivation.
+
+        Lazy import to avoid pulling the ``mnemonic`` library at top-level
+        for callers that never touch the seed protocol. See ``seed.py``
+        for the full surface and ``docs/IDENTITY-SEED.md`` for doctrine.
+        """
+        from .seed import SeedClient
+        return SeedClient
