@@ -69,10 +69,16 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `safe center` falls back to flex-start when the card is taller than the
+     viewport, so users can scroll to reach the bottom of the success reveal
+     instead of having "Open Dashboard →" clipped beneath the fold. */
+  justify-content: safe center;
   padding: 2rem;
   position: relative;
-  overflow: hidden;
+  /* Don't set overflow here — the radial-gradient on ::before is fully
+     contained by `inset: 0`, and `overflow-x: hidden` makes the browser
+     compute overflow-y as auto, which traps scroll inside this container
+     and breaks page-level scrolling. */
 }
 .onboarding::before {
   content: '';
@@ -123,8 +129,84 @@ body {
   outline: none;
   transition: border-color 0.2s;
 }
+.form-pre-hint {
+  margin-top: 0.85rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.55;
+  padding: 0 0.5rem;
+}
+.form-pre-hint strong { color: var(--text); }
+
+.name-uniqueness-hint:empty { display: none; }
+.name-uniqueness-hint.warn {
+  color: #fbbf24;
+}
+
+/* Bootstrap-mode chip in the overview hero meta line — flags
+   /v1/register/agent-born identities so operators can tell at a glance
+   which agents are autonomous vs which were created via the dashboard. */
+.hero-bootstrap-mode {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(167,139,250,0.12);
+  color: var(--accent-soft);
+  border: 1px solid rgba(167,139,250,0.25);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Capability chips — render below the input as user types, normalized
+   (lowercased, deduped, trimmed) so the user sees what the server gets. */
+.capability-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.capability-chips:empty { display: none; }
+.capability-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+  background: rgba(167,139,250,0.10);
+  color: var(--accent-soft);
+  border: 1px solid rgba(167,139,250,0.25);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+.capability-chip-overflow {
+  background: rgba(245,158,11,0.08);
+  color: #fbbf24;
+  border-color: rgba(245,158,11,0.25);
+}
+
 .form-input:focus { border-color: var(--accent-soft); }
+.form-input:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+  border-color: var(--accent-soft);
+}
 .form-input::placeholder { color: var(--muted); }
+
+/* Universal keyboard-only focus ring. Mouse clicks don't trigger
+   :focus-visible, so this is purely an a11y affordance. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+.btn:focus-visible,
+.key-copy:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 .form-hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.35rem; }
 
 .form-submit {
@@ -140,7 +222,15 @@ body {
 }
 .success-panel.visible { display: block; }
 .success-icon { font-size: 3rem; margin-bottom: 1rem; }
-.success-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
+.success-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
+.success-name {
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 0.95rem;
+  color: var(--accent-soft);
+  margin-bottom: 0.85rem;
+  letter-spacing: 0.01em;
+}
+.success-name:empty { display: none; }
 .success-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
 
 /* API key display */
@@ -166,25 +256,89 @@ body {
   color: var(--accent-soft);
   word-break: break-all;
   line-height: 1.5;
-  padding-right: 3rem;
+  padding-right: 0;
   user-select: all;
 }
+
+/* Action buttons stack — replaces the old single absolutely-positioned Copy
+   button now that we offer download options too. Sits below the value so the
+   key text isn't squeezed against multiple chips. */
+.key-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
 .key-copy {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--muted);
-  padding: 0.35rem 0.65rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 6px;
   font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s;
   font-family: inherit;
+  font-weight: 500;
 }
 .key-copy:hover { color: var(--text); border-color: var(--accent-soft); }
 .key-copy.copied { color: var(--green); border-color: var(--green); }
+
+/* Mark the private-key card as "this is special" — red-tinted border, lock
+   glyph, slightly heavier shadow. Distinct from the bearer card so a user
+   under stress doesn't confuse the two. */
+.key-display-secret {
+  border-color: rgba(239,68,68,0.35);
+  background: linear-gradient(180deg, rgba(239,68,68,0.05) 0%, var(--bg) 60%);
+  box-shadow: 0 0 0 1px rgba(239,68,68,0.08);
+}
+.key-display-secret .key-label {
+  color: var(--red, #fca5a5);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.key-lock { font-size: 0.85rem; }
+
+/* Save-key gate — keep the user from one-click-skipping past the key reveal.
+   Reads as a soft confirmation, not a blocker; ticking it is the only step
+   between the reveal and the dashboard. */
+.key-saved-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-bright, var(--border));
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.45;
+}
+.key-saved-gate:hover { border-color: var(--accent-soft); }
+.key-saved-gate input[type="checkbox"] {
+  margin-top: 0.15rem;
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+.key-saved-gate input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+/* Disabled CTA for the gated Open Dashboard link. Pure visual + a11y
+   treatment; click is short-circuited in JS via aria-disabled. */
+.btn.btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: auto; /* keep clickable so the JS guard can show a hint */
+  filter: saturate(0.6);
+}
+.btn.btn-disabled:hover { filter: saturate(0.6); }
 
 .key-warning {
   background: rgba(245,158,11,0.08);
@@ -222,6 +376,80 @@ body {
 }
 .onboard-footer a { color: var(--accent-soft); text-decoration: none; }
 .onboard-footer a:hover { text-decoration: underline; }
+
+/* Recovery affordance — Paste-bearer + SOMA on the bootstrap page. */
+.onboard-recovery { text-align: left; }
+.recovery-options {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+}
+.recovery-options[open] {
+  border-color: var(--border-bright, var(--border));
+}
+.recovery-options > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.recovery-options > summary::-webkit-details-marker { display: none; }
+.recovery-options > summary:hover { color: var(--text); }
+.recovery-summary-link { color: var(--accent-soft); }
+.recovery-section {
+  padding: 0.5rem 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+.recovery-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+.recovery-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+.recovery-row .form-input {
+  flex: 1;
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 0.8rem;
+}
+.recovery-row .btn { white-space: nowrap; padding: 0 1rem; }
+.recovery-status {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+  min-height: 1em;
+}
+.recovery-status.error { color: var(--red); }
+.recovery-status.success { color: var(--green); }
+.recovery-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--accent-soft);
+  text-decoration: none;
+}
+.recovery-link:hover { text-decoration: underline; }
+.recovery-hint {
+  margin-top: 0.85rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.55;
+}
 
 /* ─── Dashboard Layout ─── */
 
@@ -650,25 +878,6 @@ pre {
   .topbar { padding: 0 1rem; }
 }
 
-/* ─── Billing meters ─────────────────────────────────────── */
-.billing-meter { margin-bottom: 0.85rem; }
-.billing-meter-label {
-  display: flex; justify-content: space-between;
-  font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem;
-}
-.billing-meter-track {
-  height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden;
-}
-.billing-meter-fill {
-  height: 100%; border-radius: 4px; transition: width 0.6s ease;
-}
-.billing-meter-fill.purple { background: var(--accent); }
-.billing-meter-fill.blue   { background: var(--blue); }
-.billing-meter-fill.green  { background: var(--green); }
-
-/* Plan grid cards hover */
-#plan-grid > div { transition: border-color 0.15s; }
-#plan-grid > div:hover { border-color: var(--accent,#7c6cf0) !important; }
 
 /* ─── Agents section ─────────────────────────────────────── */
 .agents-list {

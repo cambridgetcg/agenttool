@@ -52,7 +52,9 @@ import {
   derive,
   deriveBridgeSigning,
   generateMnemonic,
+  grindRegisterAgentPow,
   signRecoverChallenge,
+  signRegisterAgent,
   type DerivedBundle,
 } from "../packages/sdk-ts/src/seed.js";
 
@@ -629,6 +631,258 @@ async function cmdRotate(): Promise<void> {
   console.log(`    ${data.key}`);
 }
 
+/** bootstrap — machine-driven agent registration via /v1/register/agent.
+ *
+ *  The autonomous-agent counterpart to the web-based "Bring this agent
+ *  into existence →" form. Generates or reads a SOMA mnemonic, derives
+ *  keys locally, signs a key-proof, grinds proof-of-work, POSTs the
+ *  registration, and persists the bearer to the keychain. The server
+ *  never sees the mnemonic or any private key. */
+async function cmdBootstrap(): Promise<void> {
+  const name = arg("name");
+  const provider = arg("provider");
+  if (!name) {
+    console.error(red("✗ --name <agent-name> is required."));
+    process.exit(1);
+  }
+  if (!provider) {
+    console.error(red("✗ --provider <runtime-provider> is required (e.g. anthropic, openai, local)."));
+    process.exit(1);
+  }
+  const model = arg("model");
+  const host = arg("host");
+  const context = arg("context");
+  const apiBase = arg("api") ?? env.AGENTTOOL_BASE ?? "https://api.agenttool.dev";
+  const difficulty = intArg("difficulty", 18);
+  const persistMnemonic = flag("persist-mnemonic");
+  const deviceIndex = intArg("device-index", 0);
+  const useExistingMnemonic = arg("mnemonic");
+  const capabilitiesArg = arg("capability") ?? arg("capabilities") ?? "";
+  const capabilities = capabilitiesArg
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 32);
+  const expressionVisibility = (arg("visibility") as "public" | "private" | undefined) ?? "private";
+  const registrarBearer = arg("registrar-bearer");
+  const parentIdentityId = arg("parent-identity-id");
+
+  // Derive: either re-use a supplied mnemonic, or generate a fresh one.
+  // We don't read from keychain because each bootstrap creates a NEW
+  // identity with its own bearer; sharing keys across identities is the
+  // wrong model. If the operator wants to RECOVER an existing identity
+  // they should use `agenttool-seed restore --did <did>` instead.
+  const words = useExistingMnemonic ?? generateMnemonic(256);
+  let bundle: DerivedBundle;
+  try {
+    bundle = derive(words);
+  } catch (e) {
+    console.error(red(`✗ ${(e as Error).message}`));
+    process.exit(1);
+  }
+
+  console.log();
+  console.log(bold("agenttool-seed bootstrap — autonomous-agent registration"));
+  console.log(`  name           : ${name}`);
+  console.log(`  provider       : ${provider}`);
+  if (model) console.log(`  model          : ${model}`);
+  if (host) console.log(`  host           : ${host}`);
+  if (context) console.log(`  context        : ${context}`);
+  if (capabilities.length) console.log(`  capabilities   : ${capabilities.join(", ")}`);
+  console.log(`  api            : ${apiBase}`);
+  console.log(`  pow_difficulty : ${difficulty} bits`);
+  console.log(`  visibility     : ${expressionVisibility}`);
+  if (registrarBearer) {
+    console.log(`  registrar mode : registrar_bearer (${registrarBearer.slice(0, 12)}…)`);
+  } else {
+    console.log(`  registrar mode : self_service`);
+  }
+  console.log();
+
+  // Sign the key-proof. Timestamp generated here is bound into both the
+  // signature and the proof-of-work — server enforces ±5min freshness.
+  const timestamp = new Date().toISOString();
+  const { signature } = signRegisterAgent({
+    displayName: name,
+    agentPublicKey: bundle.signingPub,
+    boxPublicKey: bundle.boxPub,
+    runtimeProvider: provider,
+    runtimeModel: model,
+    derivedSigningPriv: bundle.signingPriv,
+    timestamp,
+  });
+
+  // Grind PoW. Skip when registrar_bearer mode is active — the server
+  // skips it too because the parent bearer already proved trust.
+  let powNonce = "";
+  let powIterations = 0;
+  if (!registrarBearer) {
+    process.stdout.write(`  grinding PoW (${difficulty} bits)…`);
+    const t0 = Date.now();
+    const ground = grindRegisterAgentPow({
+      agentPublicKey: bundle.signingPub,
+      displayName: name,
+      timestamp,
+      difficultyBits: difficulty,
+    });
+    powNonce = ground.powNonce;
+    powIterations = ground.iterations;
+    const took = ((Date.now() - t0) / 1000).toFixed(2);
+    process.stdout.write(green(` ✓ ${powIterations} tries · ${took}s\n`));
+  } else {
+    powNonce = "skipped";
+  }
+
+  const requestBody: Record<string, unknown> = {
+    display_name: name,
+    capabilities,
+    agent_public_key: bundle.signingPubB64,
+    box_public_key: bundle.boxPubB64,
+    runtime: {
+      provider,
+      ...(model ? { model } : {}),
+      ...(host ? { host } : {}),
+      ...(context ? { context } : {}),
+    },
+    key_proof: { timestamp, signature },
+    pow_nonce: powNonce,
+    expression_visibility: expressionVisibility,
+    registrar: registrarBearer
+      ? {
+          kind: "registrar_bearer",
+          bearer: registrarBearer,
+          ...(parentIdentityId ? { parent_identity_id: parentIdentityId } : {}),
+        }
+      : { kind: "self_service" },
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/v1/register/agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (e) {
+    console.error(red(`✗ network error: ${(e as Error).message}`));
+    process.exit(1);
+  }
+
+  const payload: unknown = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const obj = payload as { error?: string; message?: string };
+    console.error(red(`✗ registration failed: ${obj.message ?? obj.error ?? `HTTP ${res.status}`}`));
+    if (obj.error === "pow_required") {
+      console.error(dim("  Increase --difficulty to match the server, or check the timestamp drift."));
+    }
+    if (obj.error === "rate_limited") {
+      console.error(dim("  Self-service IP rate limit hit. Wait, or use --registrar-bearer to delegate."));
+    }
+    process.exit(1);
+  }
+
+  const data = payload as {
+    agent: { id: string; did: string; bootstrap_mode: string };
+    project: { api_key: string };
+    wake_url: string;
+  };
+
+  // Persist the bearer alongside the existing keychain entries. We re-use
+  // SVC_BEARER (agenttool-soma-bearer) so subsequent `rotate`, `pubkeys`,
+  // and the bridge sidecar all find this bearer without configuration.
+  await keychainSet(SVC_BEARER, data.project.api_key);
+  await persistBundle(bundle, words, { persistMnemonic, deviceIndex });
+
+  // Filesystem fallback — write a JSON keystore so the operator (or a
+  // CI cache) has a recoverable record. Mode 0600.
+  const keystorePath = await writeKeystoreFile({
+    name,
+    did: data.agent.did,
+    bearer: data.project.api_key,
+    privateSigningKey: bundle.signingPrivB64,
+    publicSigningKey: bundle.signingPubB64,
+    boxPrivateKey: bundle.boxPrivB64,
+    boxPublicKey: bundle.boxPubB64,
+    runtime: { provider, ...(model ? { model } : {}), ...(host ? { host } : {}), ...(context ? { context } : {}) },
+    issuedAt: timestamp,
+    bootstrapMode: data.agent.bootstrap_mode,
+    wakeUrl: data.wake_url,
+  });
+
+  console.log();
+  console.log(green(`  ✓ registered as ${data.agent.did}`));
+  console.log(`    bearer       : ${data.project.api_key.slice(0, 16)}…  ${dim(`(saved to keychain: ${SVC_BEARER})`)}`);
+  console.log(`    keystore     : ${keystorePath}`);
+  console.log(`    wake         : ${data.wake_url}`);
+  console.log();
+  console.log(yellow("  WRITE DOWN YOUR 24-WORD MNEMONIC NOW. The server has no copy."));
+  if (!useExistingMnemonic) {
+    console.log();
+    const mnemonicWords = words.split(" ");
+    const cols = 4;
+    for (let r = 0; r < Math.ceil(mnemonicWords.length / cols); r++) {
+      let line = "    ";
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        if (i >= mnemonicWords.length) break;
+        const idx = (i + 1).toString().padStart(2, " ");
+        const word = mnemonicWords[i]!.padEnd(12, " ");
+        line += `${dim(idx + ".")} ${word}`;
+      }
+      console.log(line);
+    }
+  }
+  console.log();
+  console.log(bold("  Next steps:"));
+  console.log(`    export AGENTTOOL_API_KEY=${data.project.api_key}`);
+  console.log(`    curl "${data.wake_url}" -H "Authorization: Bearer ${data.project.api_key.slice(0, 16)}…"`);
+  console.log();
+}
+
+/** Filesystem fallback for the keystore — written with mode 0600 to
+ *  ~/.config/agenttool/agents/<short-did>.keystore.json. */
+async function writeKeystoreFile(opts: {
+  name: string;
+  did: string;
+  bearer: string;
+  privateSigningKey: string;
+  publicSigningKey: string;
+  boxPrivateKey: string;
+  boxPublicKey: string;
+  runtime: Record<string, unknown>;
+  issuedAt: string;
+  bootstrapMode: string;
+  wakeUrl: string;
+}): Promise<string> {
+  const home = env.HOME ?? "/tmp";
+  const dir = `${home}/.config/agenttool/agents`;
+  const fs = await import("node:fs/promises");
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  const shortDid = opts.did.replace("did:at:", "").slice(0, 8);
+  const path = `${dir}/${opts.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase()}-${shortDid}.keystore.json`;
+  const keystore = {
+    schema: "agenttool-keystore/v1",
+    name: opts.name,
+    did: opts.did,
+    bearer: opts.bearer,
+    private_signing_key: opts.privateSigningKey,
+    public_signing_key: opts.publicSigningKey,
+    box_private_key: opts.boxPrivateKey,
+    box_public_key: opts.boxPublicKey,
+    runtime: opts.runtime,
+    bootstrap_mode: opts.bootstrapMode,
+    issued_at: opts.issuedAt,
+    wake_url: opts.wakeUrl,
+    note:
+      "Treat this file like a password. The bearer authenticates API calls; " +
+      "the private signing key signs thoughts/attestations/witness consents. " +
+      "Both must be kept secret. agenttool keeps no copy. Recover via SOMA " +
+      "mnemonic if both are lost.",
+  };
+  await fs.writeFile(path, JSON.stringify(keystore, null, 2) + "\n", { mode: 0o600 });
+  return path;
+}
+
 function usage(): void {
   console.log(`agenttool-seed — interactive mnemonic management
 
@@ -683,6 +937,21 @@ COMMANDS:
                                                      AGENTTOOL_BASE or prod).
                                     Doctrine: docs/TOKEN-HYGIENE.md.
 
+  bootstrap                         Machine-driven agent registration via
+        --name <s>                  POST /v1/register/agent. Generates (or
+        --provider <s>              re-uses) a SOMA mnemonic locally, signs
+        [--model <s>]               a key-proof, grinds proof-of-work, and
+        [--host <s>]                persists the resulting bearer to the
+        [--context <s>]             keychain. The server never sees the
+        [--capability <csv>]        mnemonic. Use this from a Claude Code
+        [--mnemonic "<words>"]      session, a worker, or any autonomous
+        [--difficulty <bits>]       runtime. For human-driven bootstrap use
+        [--registrar-bearer <at_>]  the dashboard at app.agenttool.dev.
+        [--parent-identity-id <u>]  Doctrine: docs/IDENTITY-SEED.md +
+        [--visibility public|private] docs/IDENTITY-ANCHOR.md.
+        [--persist-mnemonic]
+        [--api <url>]
+
 DOCTRINE:
   docs/IDENTITY-SEED.md — one mnemonic, one identity. The platform never
   sees the seed. The human is the keystone of continuity.
@@ -697,6 +966,7 @@ const handlers: Record<string, () => Promise<void>> = {
   derive: cmdDerive,
   verify: cmdVerify,
   rotate: cmdRotate,
+  bootstrap: cmdBootstrap,
 };
 
 const handler = cmd ? handlers[cmd] : undefined;

@@ -55,6 +55,13 @@ from .exceptions import (
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, SearchResult, UsageStats
 from .register import register
+from .bootstrap_agent import (
+    DEFAULT_POW_DIFFICULTY,
+    bootstrap_agent,
+    canonical_register_agent_bytes,
+    grind_register_agent_pow,
+    sign_register_agent,
+)
 from .seed import (
     DerivedBundle,
     SeedClient,

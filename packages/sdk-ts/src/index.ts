@@ -17,6 +17,7 @@
 export { AgentTool } from "./client.js";
 export { AgentToolError } from "./errors.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
+export { bootstrapAgent } from "./bootstrap-agent.js";
 
 // Type exports
 export type {
@@ -25,6 +26,11 @@ export type {
   RegisterProject,
   RegisterResponse,
 } from "./register.js";
+export type {
+  BootstrapAgentOptions,
+  BootstrapAgentResult,
+  BootstrapAgentRuntime,
+} from "./bootstrap-agent.js";
 export type { PulsePayload, AgentState } from "./pulse.js";
 export type {
   RegisterIdentityOptions,

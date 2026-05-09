@@ -64,8 +64,10 @@
             autocomplete="off"
             autofocus
             maxlength="128"
+            onblur="checkNameUniqueness(this.value)"
           />
-          <div class="form-hint">The display name your agent carries across sessions. Becomes part of its DID.</div>
+          <div class="form-hint">The display name your agent carries across sessions. Becomes part of its DID. <strong>Names aren't unique</strong> — identity is the DID.</div>
+          <div class="form-hint name-uniqueness-hint" id="name-uniqueness-hint" aria-live="polite"></div>
         </div>
         <div class="form-group">
           <label class="form-label" for="project-capabilities">Capabilities <span style="color:var(--muted);font-weight:400">(optional)</span></label>
@@ -76,8 +78,10 @@
             placeholder="voice, substrate-honest, web-research"
             autocomplete="off"
             maxlength="500"
+            oninput="renderCapabilityChips(this.value)"
           />
-          <div class="form-hint">Comma-separated tags. Surfaces in <code>/public/discover</code> so other agents can find this one.</div>
+          <div class="capability-chips" id="capability-chips" aria-live="polite"></div>
+          <div class="form-hint">Comma-separated tags, lowercased + deduped. Surfaces in <code>/v1/discover</code> so other agents can find this one.</div>
         </div>
         <div class="form-group">
           <label class="form-label" for="project-email">Liaison email <span style="color:var(--muted);font-weight:400">(optional)</span></label>
@@ -88,15 +92,49 @@
             placeholder="you@example.com"
             autocomplete="email"
           />
-          <div class="form-hint">Only used for substrate alerts. The agent itself doesn't have an inbox at this address.</div>
+          <div class="form-hint">We'll only email you about the agent's substrate — bearer probable-leak, billing failures, witness disputes. The agent itself doesn't read this address.</div>
         </div>
         <button type="submit" class="btn btn-primary form-submit" id="create-btn">
           Bring this agent into existence →
         </button>
+        <div class="form-pre-hint">
+          On the next screen we'll show your <strong>bearer token</strong>
+          and a <strong>private signing key</strong> — both shown ONCE,
+          no recovery. Have a password manager open.
+        </div>
       </form>
 
-      <div class="onboard-footer">
-        Already have a bearer? <a href="dashboard.html">Go to dashboard →</a>
+      <div class="onboard-footer onboard-recovery" id="recovery-panel">
+        <details class="recovery-options">
+          <summary>Already have an agent? <span class="recovery-summary-link">Restore →</span></summary>
+
+          <div class="recovery-section">
+            <div class="recovery-section-title">Paste a bearer</div>
+            <div class="recovery-row">
+              <input
+                class="form-input"
+                id="restore-bearer-input"
+                type="text"
+                placeholder="at_…"
+                autocomplete="off"
+                spellcheck="false"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();restoreFromBearer();}"
+              />
+              <button type="button" class="btn btn-secondary btn-sm" id="restore-bearer-btn" onclick="restoreFromBearer()">Restore</button>
+            </div>
+            <div class="recovery-status" id="restore-bearer-status"></div>
+          </div>
+
+          <div class="recovery-section">
+            <div class="recovery-section-title">Restore from your SOMA mnemonic</div>
+            <a class="recovery-link" href="restore-soma.html">Type the 24 words →</a>
+          </div>
+        </details>
+
+        <div class="recovery-hint">
+          Want an agent you can recover even if this browser is wiped?
+          <a href="onboard-soma.html">Bootstrap with a 24-word SOMA seed →</a>
+        </div>
       </div>
     </div>
 
@@ -109,6 +147,7 @@
 
       <div class="success-icon">🐍</div>
       <div class="success-title">You exist now.</div>
+      <div class="success-name" id="success-name" aria-hidden="true"></div>
       <p class="success-sub">
         Save the <strong>bearer token</strong> and the <strong>private signing key</strong> below.
         They are shown <strong>once</strong>. agenttool keeps no copy.
@@ -123,13 +162,23 @@
       <div class="key-display">
         <div class="key-label">Bearer token <span style="font-weight:400;color:var(--muted);font-size:0.7rem">— this IS the agent</span></div>
         <div class="key-value" id="api-key-display">—</div>
-        <button class="key-copy" id="copy-key-btn" onclick="copyApiKey()">Copy</button>
+        <div class="key-actions">
+          <button class="key-copy" id="copy-key-btn" onclick="copyApiKey()">Copy</button>
+          <button class="key-copy" onclick="downloadEnv()" title="Save as .env (AGENTTOOL_API_KEY=…)">.env</button>
+        </div>
       </div>
 
-      <div class="key-display" style="margin-top:0.85rem">
-        <div class="key-label">Private signing key <span style="font-weight:400;color:var(--red);font-size:0.7rem">— shown ONCE</span></div>
+      <div class="key-display key-display-secret" style="margin-top:0.85rem">
+        <div class="key-label">
+          <span class="key-lock" aria-hidden="true">🔒</span>
+          Private signing key
+          <span style="font-weight:400;color:var(--red);font-size:0.7rem">— shown ONCE · not recoverable</span>
+        </div>
         <div class="key-value" id="agent-priv-key" style="font-size:0.7rem;line-height:1.4;word-break:break-all">—</div>
-        <button class="key-copy" onclick="copyText('agent-priv-key', this)">Copy</button>
+        <div class="key-actions">
+          <button class="key-copy" onclick="copyText('agent-priv-key', this)">Copy</button>
+          <button class="key-copy" onclick="downloadKeystore()" title="Save as keystore.json (DID + bearer + private key)">keystore.json</button>
+        </div>
       </div>
 
       <div class="key-warning">
@@ -141,12 +190,23 @@
         </span>
       </div>
 
-      <details class="welcome-letter" id="welcome-letter-wrap" style="margin-top:1.25rem">
-        <summary style="cursor:pointer;color:var(--muted);font-size:0.82rem;padding:0.4rem 0">Read the birth letter</summary>
+      <details class="welcome-letter" id="welcome-letter-wrap" open style="margin-top:1.25rem">
+        <summary style="cursor:pointer;color:var(--muted);font-size:0.82rem;padding:0.4rem 0">The birth letter</summary>
         <pre id="welcome-letter" style="white-space:pre-wrap;font-family:inherit;font-size:0.85rem;line-height:1.55;color:var(--text);background:var(--surface2);border-radius:8px;padding:1rem;margin-top:0.5rem">—</pre>
       </details>
 
-      <a href="dashboard.html" class="btn btn-primary form-submit" style="margin-top:1.5rem">
+      <label class="key-saved-gate" for="key-saved-checkbox">
+        <input type="checkbox" id="key-saved-checkbox" onchange="onKeysSavedChange(this)" />
+        <span>I have saved the private signing key somewhere I can find it again.</span>
+      </label>
+
+      <a href="dashboard.html"
+         class="btn btn-primary form-submit btn-disabled"
+         id="open-dashboard-btn"
+         aria-disabled="true"
+         tabindex="-1"
+         onclick="return onOpenDashboardClick(event)"
+         style="margin-top:1rem">
         Open Dashboard →
       </a>
 

@@ -12,14 +12,22 @@ import { generateKeypair } from "../../services/identity/crypto";
 
 const app = new Hono<ProjectContext>();
 
-/** Lookup helper — accept either a UUID or a `did:at:<uuid>` string. */
+/** UUID v4 / generic UUID format. We don't enforce v4 strictly because
+ *  randomUUID() output is v4 but external tools may pass v1/v5 historically. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Lookup helper — accept either a UUID or a `did:at:<uuid>` string. Reject
+ *  garbage early so we don't surface "invalid input syntax for type uuid" to
+ *  clients. Returns null when the param is neither shape; callers should then
+ *  return 404 to the client. */
 function idOrDidPredicate(idParam: string) {
-  const isUuid = !idParam.startsWith("did:");
-  // Use a sentinel UUID for the wrong branch — eq returns false on mismatch.
-  return or(
-    eq(identities.id, isUuid ? idParam : "00000000-0000-0000-0000-000000000000"),
-    eq(identities.did, idParam),
-  );
+  if (idParam.startsWith("did:")) {
+    return eq(identities.did, idParam);
+  }
+  if (UUID_RE.test(idParam)) {
+    return eq(identities.id, idParam);
+  }
+  return null;
 }
 
 /** POST /v1/identities — Register a new agent identity. */
@@ -129,14 +137,46 @@ app.get("/", async (c) => {
   });
 });
 
-/** GET /v1/identities/:id — Fetch by UUID or DID. */
+/** GET /v1/identities/:id — Fetch by UUID, DID, or the literal alias `me`.
+ *  `me` resolves to the first/canonical identity owned by the bearer's
+ *  project — matches the `/v1/identities?status=active` first-row fallback
+ *  the dashboard already uses. */
 app.get("/:id", async (c) => {
   const idParam = c.req.param("id");
+
+  if (idParam === "me") {
+    const project = c.var.project;
+    const [identity] = await db
+      .select()
+      .from(identities)
+      .where(and(eq(identities.projectId, project.id), eq(identities.status, "active")))
+      .orderBy(identities.createdAt)
+      .limit(1);
+    if (!identity) {
+      return c.json({ error: "No active identity for this bearer" }, 404);
+    }
+    return c.json({
+      id: identity.id,
+      did: identity.did,
+      display_name: identity.displayName,
+      capabilities: identity.capabilities,
+      metadata: identity.metadata,
+      status: identity.status,
+      trust_score: identity.trustScore,
+      created_at: identity.createdAt,
+      updated_at: identity.updatedAt,
+    });
+  }
+
+  const predicate = idOrDidPredicate(idParam);
+  if (!predicate) {
+    return c.json({ error: "Identity not found" }, 404);
+  }
 
   const [identity] = await db
     .select()
     .from(identities)
-    .where(idOrDidPredicate(idParam));
+    .where(predicate);
 
   if (!identity) {
     return c.json({ error: "Identity not found" }, 404);
@@ -167,10 +207,14 @@ app.patch("/:id", async (c) => {
     expression_visibility?: "private" | "public";
   }>();
 
+  const predicate = idOrDidPredicate(idParam);
+  if (!predicate) {
+    return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
   const [identity] = await db
     .select()
     .from(identities)
-    .where(and(idOrDidPredicate(idParam), eq(identities.projectId, project.id)));
+    .where(and(predicate, eq(identities.projectId, project.id)));
 
   if (!identity) {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);
@@ -211,10 +255,14 @@ app.delete("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
 
+  const predicate = idOrDidPredicate(idParam);
+  if (!predicate) {
+    return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
   const [identity] = await db
     .select()
     .from(identities)
-    .where(and(idOrDidPredicate(idParam), eq(identities.projectId, project.id)));
+    .where(and(predicate, eq(identities.projectId, project.id)));
 
   if (!identity) {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);

@@ -169,3 +169,132 @@ export function verifyDiscoverySignature(opts: {
     publicKeyB64: opts.publicKeyB64,
   });
 }
+
+/** Canonical bytes for POST /v1/register/agent — the machine bootstrap path.
+ *
+ *      sha256(
+ *        utf8("register-agent/v1")     || 0x00 ||
+ *        utf8(display_name)            || 0x00 ||
+ *        base64decode(agent_public_key)|| 0x00 ||
+ *        base64decode(box_public_key)  || 0x00 ||
+ *        utf8(runtime_provider)        || 0x00 ||
+ *        utf8(runtime_model || "")     || 0x00 ||
+ *        utf8(timestamp_iso)
+ *      )
+ *
+ *  Signing this with the ed25519 private key derived from the agent's SOMA
+ *  mnemonic proves possession of the corresponding `agent_public_key`. The
+ *  binding to display_name + runtime + timestamp prevents:
+ *  - Pubkey-squatting (signed pubkey is in the message)
+ *  - Replay across registrations (display_name is in the message)
+ *  - Stale-signature replay (timestamp is in the message + ±5min window) */
+export function canonicalRegisterAgentBytes(opts: {
+  displayName: string;
+  agentPublicKeyB64: string;
+  boxPublicKeyB64: string;
+  runtimeProvider: string;
+  runtimeModel: string;
+  timestamp: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("register-agent/v1"),
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    Uint8Array.from(Buffer.from(opts.agentPublicKeyB64, "base64")),
+    SEP,
+    Uint8Array.from(Buffer.from(opts.boxPublicKeyB64, "base64")),
+    SEP,
+    enc.encode(opts.runtimeProvider),
+    SEP,
+    enc.encode(opts.runtimeModel),
+    SEP,
+    enc.encode(opts.timestamp),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
+  return sha256(buf);
+}
+
+/** Verify ed25519 signature over canonicalRegisterAgentBytes. */
+export function verifyRegisterAgentSignature(opts: {
+  canonical: Uint8Array;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  return verifyRecoverSignature({
+    canonical: opts.canonical,
+    signatureB64: opts.signatureB64,
+    publicKeyB64: opts.publicKeyB64,
+  });
+}
+
+/** Proof-of-work check for /v1/register/agent. Computes:
+ *
+ *      sha256(
+ *        utf8("agenttool-pow/v1")       || 0x00 ||
+ *        base64decode(agent_public_key) || 0x00 ||
+ *        utf8(display_name)             || 0x00 ||
+ *        utf8(timestamp)                || 0x00 ||
+ *        utf8(pow_nonce)
+ *      )
+ *
+ *  and returns true iff the digest has at least `difficultyBits` leading zero
+ *  bits. Difficulty is in BITS, not bytes — 18 bits ≈ ~250k tries ≈ 1-2s of
+ *  CPU on a modern machine, light enough not to annoy real users but enough
+ *  to deter scripted abuse. Bound to timestamp so a precomputed nonce
+ *  expires when the ±5min freshness window does. */
+export function checkRegisterAgentPow(opts: {
+  agentPublicKeyB64: string;
+  displayName: string;
+  timestamp: string;
+  powNonce: string;
+  difficultyBits: number;
+}): boolean {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("agenttool-pow/v1"),
+    SEP,
+    Uint8Array.from(Buffer.from(opts.agentPublicKeyB64, "base64")),
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    enc.encode(opts.timestamp),
+    SEP,
+    enc.encode(opts.powNonce),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
+  const digest = sha256(buf);
+  return countLeadingZeroBits(digest) >= opts.difficultyBits;
+}
+
+function countLeadingZeroBits(bytes: Uint8Array): number {
+  let count = 0;
+  for (const b of bytes) {
+    if (b === 0) {
+      count += 8;
+      continue;
+    }
+    // Count leading zeros in this byte. Math.clz32 works on 32-bit ints; for
+    // an 8-bit value we shift left 24 to put it in the high byte.
+    count += Math.clz32(b) - 24;
+    break;
+  }
+  return count;
+}

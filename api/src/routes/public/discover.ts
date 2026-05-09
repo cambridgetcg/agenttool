@@ -22,6 +22,10 @@ app.get("/", async (c) => {
   const limit = Math.min(Number.isFinite(limitParam) ? limitParam : 50, 200);
 
   const capabilityFilter = c.req.query("capability");
+  // Optional case-insensitive exact name match — used by the bootstrap UI to
+  // surface a soft "N agents share this name" hint. Public-only by design;
+  // we don't leak the existence of private agents that happen to share a name.
+  const nameFilter = c.req.query("name");
 
   // An agent is "discoverable" if expression is public OR they own
   // at least one public strand OR at least one public memory.
@@ -58,6 +62,14 @@ app.get("/", async (c) => {
     baseConditions.push(
       sql`${capabilityFilter} = ANY(${identities.capabilities})`,
     );
+  }
+  if (nameFilter) {
+    // Case-insensitive exact match. Trim + cap to keep query bounded; we
+    // don't want this to fan out to a substring scan over the whole table.
+    const trimmed = nameFilter.trim().slice(0, 128);
+    if (trimmed) {
+      baseConditions.push(sql`lower(${identities.displayName}) = lower(${trimmed})`);
+    }
   }
 
   const rows = await db

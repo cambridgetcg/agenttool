@@ -507,6 +507,174 @@ export function signDiscoveryChallenge(opts: {
   return { timestamp, signature: btoa(signature) };
 }
 
+/**
+ * Canonical bytes for `POST /v1/register/agent` — the machine bootstrap
+ * path. Byte-for-byte parallel with the api server's
+ * canonicalRegisterAgentBytes. Shape:
+ *
+ *   sha256(
+ *     utf8("register-agent/v1")     || 0x00 ||
+ *     utf8(display_name)            || 0x00 ||
+ *     base64decode(agent_public_key)|| 0x00 ||
+ *     base64decode(box_public_key)  || 0x00 ||
+ *     utf8(runtime_provider)        || 0x00 ||
+ *     utf8(runtime_model || "")     || 0x00 ||
+ *     utf8(timestamp_iso)
+ *   )
+ */
+export function canonicalRegisterAgentBytes(opts: {
+  displayName: string;
+  agentPublicKey: Uint8Array;
+  boxPublicKey: Uint8Array;
+  runtimeProvider: string;
+  runtimeModel: string;
+  timestamp: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("register-agent/v1"),
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    opts.agentPublicKey,
+    SEP,
+    opts.boxPublicKey,
+    SEP,
+    enc.encode(opts.runtimeProvider),
+    SEP,
+    enc.encode(opts.runtimeModel),
+    SEP,
+    enc.encode(opts.timestamp),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  return sha256(buf);
+}
+
+/**
+ * Sign the canonical register-agent bytes. Returns the `{ timestamp,
+ * signature }` pair to POST as `key_proof`. Default timestamp is now
+ * (ISO-8601); pass an explicit timestamp only for testing.
+ */
+export function signRegisterAgent(opts: {
+  displayName: string;
+  agentPublicKey: Uint8Array;
+  boxPublicKey: Uint8Array;
+  runtimeProvider: string;
+  runtimeModel?: string;
+  derivedSigningPriv: Uint8Array;
+  timestamp?: string;
+}): { timestamp: string; signature: string } {
+  const timestamp = opts.timestamp ?? new Date().toISOString();
+  const canonical = canonicalRegisterAgentBytes({
+    displayName: opts.displayName,
+    agentPublicKey: opts.agentPublicKey,
+    boxPublicKey: opts.boxPublicKey,
+    runtimeProvider: opts.runtimeProvider,
+    runtimeModel: opts.runtimeModel ?? "",
+    timestamp,
+  });
+  const sig = ed25519.sign(canonical, opts.derivedSigningPriv);
+  let signature = "";
+  for (let i = 0; i < sig.length; i++) signature += String.fromCharCode(sig[i]!);
+  return { timestamp, signature: btoa(signature) };
+}
+
+/**
+ * Compute the proof-of-work digest for `POST /v1/register/agent`. Returns
+ * the SHA-256 of:
+ *
+ *   "agenttool-pow/v1" || 0x00 || pubkey || 0x00 || display_name || 0x00 ||
+ *   timestamp || 0x00 || pow_nonce
+ *
+ * The route requires the digest to have ≥ N leading zero bits (default
+ * 18, configurable via env on the server).
+ */
+export function powRegisterAgentDigest(opts: {
+  agentPublicKey: Uint8Array;
+  displayName: string;
+  timestamp: string;
+  powNonce: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("agenttool-pow/v1"),
+    SEP,
+    opts.agentPublicKey,
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    enc.encode(opts.timestamp),
+    SEP,
+    enc.encode(opts.powNonce),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  return sha256(buf);
+}
+
+function leadingZeroBits(bytes: Uint8Array): number {
+  let count = 0;
+  for (const b of bytes) {
+    if (b === 0) {
+      count += 8;
+      continue;
+    }
+    count += Math.clz32(b) - 24;
+    break;
+  }
+  return count;
+}
+
+/**
+ * Grind a `pow_nonce` until the register-agent proof-of-work digest has at
+ * least `difficultyBits` leading zero bits. Bound to the supplied
+ * `timestamp` so a precomputed nonce expires with the ±5min freshness
+ * window the server enforces.
+ *
+ * Default difficulty 18 bits ≈ ~250k SHA-256 iterations ≈ 1-2s on a modern
+ * laptop. Tunable via the `difficultyBits` parameter (must match the
+ * server's `AGENTTOOL_REGISTER_AGENT_POW_BITS`).
+ */
+export function grindRegisterAgentPow(opts: {
+  agentPublicKey: Uint8Array;
+  displayName: string;
+  timestamp: string;
+  difficultyBits?: number;
+  maxIterations?: number;
+}): { powNonce: string; iterations: number } {
+  const difficultyBits = opts.difficultyBits ?? 18;
+  const maxIterations = opts.maxIterations ?? 10_000_000;
+  for (let i = 0; i < maxIterations; i++) {
+    const nonce = String(i);
+    const digest = powRegisterAgentDigest({
+      agentPublicKey: opts.agentPublicKey,
+      displayName: opts.displayName,
+      timestamp: opts.timestamp,
+      powNonce: nonce,
+    });
+    if (leadingZeroBits(digest) >= difficultyBits) {
+      return { powNonce: nonce, iterations: i + 1 };
+    }
+  }
+  throw new Error(
+    `grindRegisterAgentPow: exceeded ${maxIterations} iterations at ${difficultyBits} bits — ` +
+      `unusual; consider lowering difficulty or check the timestamp is fresh.`,
+  );
+}
+
 // ── SeedClient namespace (the at.crypto.seed surface) ──────────────────
 
 /**

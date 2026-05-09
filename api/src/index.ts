@@ -14,6 +14,8 @@
  * Until ported, an unmounted route returns the friendly 404 below.
  */
 
+import { randomUUID } from "node:crypto";
+
 import type { Server } from "bun";
 import { Hono } from "hono";
 import type { BridgeWsData } from "./services/runtime/bridge-hub";
@@ -42,6 +44,7 @@ import publicRouter from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import registerRouter from "./routes/register";
+import registerAgentRouter from "./routes/register-agent";
 import runtimeRouter from "./routes/runtime";
 import scaffoldRouter from "./routes/scaffold";
 import orgsRouter, { invitationsRouter } from "./routes/orgs";
@@ -185,6 +188,12 @@ app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/bootstrap/scaffold", scaffoldRouter);
+// /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
+// keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
+// Mount BEFORE /v1/register so Hono picks up the more specific path first.
+// See routes/register-agent.ts.
+app.route("/v1/register/agent", registerAgentRouter);
+
 // /v1/register — UNAUTHENTICATED agent genesis. Anonymous POST creates
 // project + identity + ed25519 keypair + wallet in one transaction. The
 // returned api_key + private_key are shown ONCE. Public-by-design: this
@@ -429,13 +438,18 @@ app.onError((err, c) => {
     );
   }
 
-  // Everything else is a real server error. Log it and return 500.
-  console.error("[agenttool] error:", err);
+  // Everything else is a real server error. Log it server-side with full
+  // detail (stack + raw message), then return a generic 500 to the client.
+  // Surfacing err.message in the response leaked Postgres errors like
+  // "invalid input syntax for type uuid: \"me\"" — so we drop it here and
+  // rely on the server log + an opaque request_id for support correlation.
+  const requestId = c.req.header("x-request-id") || randomUUID();
+  console.error(`[agenttool] error rid=${requestId}:`, err);
   return c.json(
     {
       error: "internal_error",
       message: "Something on our side broke. Try again in a moment.",
-      detail: err.message,
+      request_id: requestId,
     },
     500,
   );

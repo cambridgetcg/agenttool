@@ -28,6 +28,51 @@ export type ProjectContext = {
   };
 };
 
+/** Outcome of bearer verification — used both by authMiddleware (which then
+ *  throws appropriate HTTPExceptions) and by routes that need to validate a
+ *  delegated bearer in the request body without going through middleware
+ *  (e.g. /v1/register/agent in registrar_bearer mode). */
+export type BearerVerification =
+  | { ok: true; project: typeof projects.$inferSelect; apiKey: typeof apiKeys.$inferSelect }
+  | { ok: false; reason: "missing" | "wrong_format" | "not_found" | "expired" | "project_missing" };
+
+/** Verify a raw bearer token against tools.api_keys without throwing. The
+ *  authMiddleware below wraps this with HTTPExceptions; routes that accept a
+ *  delegated bearer in the body call it directly to translate the failure
+ *  reason into a 401/402 of their own choosing. */
+export async function verifyBearer(token: string | undefined | null): Promise<BearerVerification> {
+  if (!token) return { ok: false, reason: "missing" };
+  if (!token.startsWith("at_")) return { ok: false, reason: "wrong_format" };
+
+  const prefix = token.slice(0, 11);
+  const candidates = await db
+    .select()
+    .from(apiKeys)
+    .where(and(eq(apiKeys.keyPrefix, prefix), isNull(apiKeys.revokedAt)));
+
+  for (const candidate of candidates) {
+    if (!verifyApiKey(token, candidate.keyHash)) continue;
+    if (candidate.expiresAt && candidate.expiresAt < new Date()) {
+      return { ok: false, reason: "expired" };
+    }
+    void db
+      .update(apiKeys)
+      .set({ lastUsed: new Date() })
+      .where(eq(apiKeys.id, candidate.id))
+      .catch(() => { /* best-effort */ });
+
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, candidate.projectId));
+    if (!project) return { ok: false, reason: "project_missing" };
+
+    return { ok: true, project, apiKey: candidate };
+  }
+
+  return { ok: false, reason: "not_found" };
+}
+
 export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -38,67 +83,45 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   }
 
   const token = authHeader.slice(7).trim();
-  if (!token.startsWith("at_")) {
+  const result = await verifyBearer(token);
+  if (!result.ok) {
+    if (result.reason === "wrong_format") {
+      throw new HTTPException(401, {
+        message: "API key should start with at_. Get one free at https://app.agenttool.dev",
+      });
+    }
+    if (result.reason === "expired") {
+      // Token-hygiene: enforce expires_at (docs/TOKEN-HYGIENE.md). Look up
+      // the candidate again so we can compute the age in the message.
+      const prefix = token.slice(0, 11);
+      const [candidate] = await db
+        .select()
+        .from(apiKeys)
+        .where(and(eq(apiKeys.keyPrefix, prefix), isNull(apiKeys.revokedAt)));
+      const ageDays = candidate
+        ? Math.floor((Date.now() - candidate.createdAt.getTime()) / 86_400_000)
+        : 0;
+      const exp = candidate?.expiresAt?.toISOString() ?? "previously";
+      throw new HTTPException(401, {
+        message:
+          `This bearer expired on ${exp} (age ${ageDays}d). ` +
+          "Mint a fresh one via POST /v1/keys/rotate (with this bearer if it's only just expired) " +
+          "or recover via POST /v1/identity/recover with your mnemonic. " +
+          "Doctrine: docs/TOKEN-HYGIENE.md.",
+      });
+    }
+    if (result.reason === "project_missing") {
+      throw new HTTPException(401, { message: "Project not found" });
+    }
     throw new HTTPException(401, {
-      message: "API key should start with at_. Get one free at https://app.agenttool.dev",
+      message:
+        "We couldn't verify your API key. You are welcome here — you just need a valid key. Get one free at https://app.agenttool.dev",
     });
   }
 
-  // Cheap index lookup on prefix, then bcrypt-verify each candidate.
-  const prefix = token.slice(0, 11);
-  const candidates = await db
-    .select()
-    .from(apiKeys)
-    .where(and(eq(apiKeys.keyPrefix, prefix), isNull(apiKeys.revokedAt)));
-
-  for (const candidate of candidates) {
-    if (verifyApiKey(token, candidate.keyHash)) {
-      // Token-hygiene: enforce expires_at (docs/TOKEN-HYGIENE.md).
-      // Past-expiry bearers reject with 401 + a clear message that points
-      // at /v1/keys/rotate and /v1/identity/recover. The mnemonic is the
-      // recovery primitive when the bearer is gone.
-      if (candidate.expiresAt && candidate.expiresAt < new Date()) {
-        const ageDays = Math.floor(
-          (Date.now() - candidate.createdAt.getTime()) / 86_400_000,
-        );
-        throw new HTTPException(401, {
-          message:
-            `This bearer expired on ${candidate.expiresAt.toISOString()} (age ${ageDays}d). ` +
-            "Mint a fresh one via POST /v1/keys/rotate (with this bearer if it's only just expired) " +
-            "or recover via POST /v1/identity/recover with your mnemonic. " +
-            "Doctrine: docs/TOKEN-HYGIENE.md.",
-        });
-      }
-
-      // Update last_used; best-effort, don't block the request.
-      void db
-        .update(apiKeys)
-        .set({ lastUsed: new Date() })
-        .where(eq(apiKeys.id, candidate.id))
-        .catch(() => {
-          /* best-effort timestamp update */
-        });
-
-      const [project] = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, candidate.projectId));
-
-      if (!project) {
-        // Edge case: key exists but project was deleted. Treat as auth failure.
-        throw new HTTPException(401, { message: "Project not found" });
-      }
-
-      c.set("project", project);
-      c.set("bearerToken", token);
-      c.set("apiKeyId", candidate.id);
-      c.set("apiKeyExpiresAt", candidate.expiresAt);
-      return next();
-    }
-  }
-
-  throw new HTTPException(401, {
-    message:
-      "We couldn't verify your API key. You are welcome here — you just need a valid key. Get one free at https://app.agenttool.dev",
-  });
+  c.set("project", result.project);
+  c.set("bearerToken", token);
+  c.set("apiKeyId", result.apiKey.id);
+  c.set("apiKeyExpiresAt", result.apiKey.expiresAt);
+  return next();
 }

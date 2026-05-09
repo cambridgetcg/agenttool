@@ -76,11 +76,28 @@ function saveProject(data) {
   if (data.public_key) stored.public_key = data.public_key;
   if (data.signing_key_id) stored.signing_key_id = data.signing_key_id;
   if (Array.isArray(data.capabilities)) stored.capabilities = data.capabilities;
+  // Bootstrap-mode metadata — web bootstrap leaves these undefined; agents
+  // created via /v1/register/agent carry bootstrap_mode + runtime + an
+  // optional parent_identity_id. Surfaced in the overview hero.
+  if (data.bootstrap_mode) stored.bootstrap_mode = data.bootstrap_mode;
+  if (data.runtime && typeof data.runtime === 'object') stored.runtime = data.runtime;
+  if (data.parent_identity_id) stored.parent_identity_id = data.parent_identity_id;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
 function clearProject() {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+// Replace `.agent-name-tok` placeholders with the actual agent's display name.
+// Used by sections (Window, privacy footer) that reference the agent in copy.
+// Falls back to 'the agent' if no project is loaded yet.
+function applyAgentNameToDOM() {
+  const name = getProject()?.name;
+  const tokens = document.querySelectorAll('.agent-name-tok');
+  if (!tokens.length) return;
+  const display = name || 'the agent';
+  tokens.forEach((el) => { el.textContent = display; });
 }
 
 // ─── Toast notifications ───
@@ -155,11 +172,9 @@ async function registerAgent() {
     return;
   }
 
-  const capabilities = (capInput?.value || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .slice(0, 32);
+  // Use the same parser the chip preview uses so what the user sees is what
+  // gets submitted (lowercased + deduped, capped at 32).
+  const capabilities = parseCapabilityTags(capInput?.value || '').slice(0, 32);
   const email = (emailInput?.value || '').trim();
 
   errorMsg.classList.remove('visible');
@@ -236,8 +251,19 @@ async function registerAgent() {
     document.getElementById('agent-did').textContent = agent.did;
     document.getElementById('api-key-display').textContent = apiKey;
     document.getElementById('agent-priv-key').textContent = agent.private_key;
+    const successNameEl = document.getElementById('success-name');
+    if (successNameEl) {
+      successNameEl.textContent = name;
+      successNameEl.removeAttribute('aria-hidden');
+    }
     const welcomeEl = document.getElementById('welcome-letter');
     if (welcomeEl && data.welcome) welcomeEl.textContent = data.welcome;
+    // Move focus to the bearer card so screen readers announce the new state.
+    const bearerEl = document.getElementById('api-key-display');
+    if (bearerEl) {
+      bearerEl.setAttribute('tabindex', '-1');
+      bearerEl.focus({ preventScroll: false });
+    }
   } catch (err) {
     showError(
       'Connection failed',
@@ -284,6 +310,253 @@ function copyApiKey() {
   });
 }
 
+// Soft uniqueness hint for the name field. We hit /v1/discover (unauthed,
+// public-only) on blur; a hit means this name is already used by at least
+// one publicly-discoverable agent. Private agents with the same name are
+// invisible to this query by design — that's why the static hint above the
+// input still says "names aren't unique." This count is just a nudge, not a
+// gate; we don't block submission on collision.
+let _nameCheckController = null;
+async function checkNameUniqueness(name) {
+  const hint = document.getElementById('name-uniqueness-hint');
+  if (!hint) return;
+  hint.classList.remove('warn');
+  hint.textContent = '';
+  const trimmed = (name || '').trim();
+  if (!trimmed || trimmed.length < 2) return;
+
+  // Cancel any in-flight check before starting a new one.
+  if (_nameCheckController) _nameCheckController.abort();
+  _nameCheckController = new AbortController();
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/v1/discover?name=${encodeURIComponent(trimmed)}&limit=10`,
+      { signal: _nameCheckController.signal },
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const count = (data.agents || []).length;
+    if (count === 0) return;
+    hint.classList.add('warn');
+    hint.textContent =
+      count === 1
+        ? `1 public agent already uses "${trimmed}". Yours will get a separate DID.`
+        : `${count}+ public agents already use "${trimmed}". Yours will get a separate DID.`;
+  } catch {
+    /* aborted or network — silent */
+  }
+}
+
+// Live capability chip preview. Reads the comma-separated input, normalizes
+// case + whitespace, dedupes, and renders chips below. Pure presentational —
+// the actual submit still reads from the input value (split + filter).
+function renderCapabilityChips(raw) {
+  const host = document.getElementById('capability-chips');
+  if (!host) return;
+  const tags = parseCapabilityTags(raw || '');
+  if (!tags.length) {
+    host.innerHTML = '';
+    return;
+  }
+  host.innerHTML = tags.slice(0, 32).map((t) => {
+    const safe = t.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+    return `<span class="capability-chip">${safe}</span>`;
+  }).join('');
+  // Hint when the user typed >32 (we'll truncate at submit too).
+  if (tags.length > 32) {
+    host.insertAdjacentHTML(
+      'beforeend',
+      `<span class="capability-chip capability-chip-overflow">+${tags.length - 32} more (will be truncated to 32 at submit)</span>`,
+    );
+  }
+}
+
+function parseCapabilityTags(raw) {
+  const seen = new Set();
+  const out = [];
+  raw.split(',').forEach((s) => {
+    const t = s.trim().toLowerCase();
+    if (!t) return;
+    if (seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  });
+  return out;
+}
+
+// Bootstrap-page download helpers — bundle the credentials into files so the
+// user has something durable beyond a clipboard paste. Both files are
+// generated client-side; nothing is uploaded.
+function downloadBlob(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadEnv() {
+  const bearer = document.getElementById('api-key-display')?.textContent?.trim();
+  if (!bearer || bearer === '—') return;
+  const did = document.getElementById('agent-did')?.textContent?.trim() || '';
+  const name = document.getElementById('success-name')?.textContent?.trim() || 'agent';
+  const lines = [
+    '# agenttool credentials — generated at registration.',
+    `# Agent: ${name}`,
+    `# DID:   ${did}`,
+    '#',
+    '# Treat this file like a password. Anyone with AGENTTOOL_API_KEY can act',
+    '# as this agent. Rotate from the dashboard if it leaks.',
+    '',
+    `AGENTTOOL_API_KEY=${bearer}`,
+    '',
+  ];
+  downloadBlob(`agenttool-${slugifyName(name)}.env`, lines.join('\n'), 'text/plain');
+  showToast('Saved .env');
+}
+
+function downloadKeystore() {
+  const bearer = document.getElementById('api-key-display')?.textContent?.trim();
+  const priv = document.getElementById('agent-priv-key')?.textContent?.trim();
+  if (!bearer || bearer === '—' || !priv || priv === '—') return;
+  const did = document.getElementById('agent-did')?.textContent?.trim() || '';
+  const name = document.getElementById('success-name')?.textContent?.trim() || 'agent';
+  const keystore = {
+    schema: 'agenttool-keystore/v1',
+    name,
+    did,
+    bearer,
+    private_signing_key: priv,
+    issued_at: new Date().toISOString(),
+    note: 'The bearer authenticates API calls; the private signing key signs thoughts, attestations, and witness consents. Both must be kept secret. agenttool keeps no copy of the private key.',
+  };
+  downloadBlob(
+    `agenttool-${slugifyName(name)}-keystore.json`,
+    JSON.stringify(keystore, null, 2) + '\n',
+    'application/json',
+  );
+  // Mark as "saved" — the user explicitly chose to download, which is a
+  // stronger signal than ticking the checkbox. Auto-flip the gate.
+  const cb = document.getElementById('key-saved-checkbox');
+  if (cb && !cb.checked) {
+    cb.checked = true;
+    onKeysSavedChange(cb);
+  }
+  showToast('Saved keystore.json');
+}
+
+function slugifyName(name) {
+  return String(name || 'agent').toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'agent';
+}
+
+// Gate the Open Dashboard CTA behind an explicit "I saved the key" checkbox.
+// The link is rendered with `btn-disabled` + `aria-disabled` and the click
+// handler short-circuits navigation until the checkbox is ticked. We don't
+// use the `disabled` attribute because anchors don't honor it; aria + class
+// + handler matches what screen readers + sighted users both expect.
+function onKeysSavedChange(cb) {
+  const btn = document.getElementById('open-dashboard-btn');
+  if (!btn) return;
+  if (cb.checked) {
+    btn.classList.remove('btn-disabled');
+    btn.removeAttribute('aria-disabled');
+    btn.setAttribute('tabindex', '0');
+  } else {
+    btn.classList.add('btn-disabled');
+    btn.setAttribute('aria-disabled', 'true');
+    btn.setAttribute('tabindex', '-1');
+  }
+}
+
+function onOpenDashboardClick(event) {
+  const cb = document.getElementById('key-saved-checkbox');
+  if (cb && !cb.checked) {
+    event.preventDefault();
+    cb.focus();
+    showToast('Tick the box to confirm you saved the private signing key.', 'error');
+    return false;
+  }
+  return true;
+}
+
+// Bootstrap-page recovery: validate a pasted bearer against /v1/identities,
+// persist it as a project, then send the user to the dashboard. Failure
+// modes are reported inline rather than via toast so the affordance reads
+// like a form, not a notification.
+async function restoreFromBearer() {
+  const input = document.getElementById('restore-bearer-input');
+  const btn = document.getElementById('restore-bearer-btn');
+  const status = document.getElementById('restore-bearer-status');
+  if (!input || !btn || !status) return;
+
+  const bearer = input.value.trim();
+  status.classList.remove('error', 'success');
+  status.textContent = '';
+
+  if (!bearer) {
+    status.classList.add('error');
+    status.textContent = 'Paste your bearer to continue.';
+    input.focus();
+    return;
+  }
+  if (!/^at_[A-Za-z0-9_-]{20,}$/.test(bearer)) {
+    status.classList.add('error');
+    status.textContent = 'That doesn\'t look like a bearer. Should start with "at_".';
+    input.focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/identities?status=active`, {
+      headers: { 'Authorization': `Bearer ${bearer}` },
+    });
+    if (res.status === 401 || res.status === 403) {
+      status.classList.add('error');
+      status.textContent = 'Bearer rejected. Double-check the value or restore from your SOMA mnemonic.';
+      btn.disabled = false;
+      btn.textContent = 'Restore';
+      return;
+    }
+    if (!res.ok) {
+      status.classList.add('error');
+      status.textContent = `Server returned ${res.status}. Try again in a moment.`;
+      btn.disabled = false;
+      btn.textContent = 'Restore';
+      return;
+    }
+    const data = await res.json();
+    const first = (data.identities || [])[0] || {};
+
+    saveProject({
+      name: first.name || 'agent',
+      api_key: bearer,
+      agent_id: first.id || null,
+      did: first.did || null,
+      capabilities: first.capabilities || [],
+    });
+
+    status.classList.add('success');
+    status.textContent = `Restored ${first.name || 'agent'}. Loading dashboard…`;
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 350);
+  } catch {
+    status.classList.add('error');
+    status.textContent = 'Could not reach api.agenttool.dev. Check your connection.';
+    btn.disabled = false;
+    btn.textContent = 'Restore';
+  }
+}
+
 // ─── Index page: Auto-redirect if key exists ───
 
 (function checkExistingProject() {
@@ -316,6 +589,9 @@ function initDashboard() {
     sidebarProject.textContent = project.name || 'agent';
   }
 
+  // Replace .agent-name-tok placeholders in static markup with the live name.
+  applyAgentNameToDOM();
+
   // Fill in API key displays
   fillApiKey(project.api_key);
 
@@ -337,25 +613,6 @@ function initDashboard() {
   // Refresh every 60s — aggregate is light + cached.
   overviewRefreshInterval = setInterval(loadOverview, 60_000);
 
-  // Check for billing redirect params
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('billing') === 'success') {
-    showSection('billing');
-    document.getElementById('billing-success-banner').style.display = 'block';
-    window.history.replaceState({}, '', 'dashboard.html#billing');
-    loadBillingSection();
-  } else if (params.get('billing') === 'canceled') {
-    showSection('billing');
-    document.getElementById('billing-cancel-banner').style.display = 'block';
-    window.history.replaceState({}, '', 'dashboard.html#billing');
-    loadBillingSection();
-  }
-
-  // Deep-link to billing section from hash
-  if (window.location.hash === '#billing') {
-    showSection('billing');
-    loadBillingSection();
-  }
 }
 
 function fillApiKey(key) {
@@ -409,7 +666,6 @@ function setupNavigation() {
         'marketplace': 'Marketplace',
         'api-key': 'Bearer',
         'snippets': 'Recipes',
-        'billing': 'Wallet & credits',
       };
       document.getElementById('topbar-title').textContent = titles[section] || 'Overview';
     });
@@ -417,11 +673,10 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'marketplace', 'snippets', 'api-key', 'billing'].forEach(s => {
+  ['overview', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'marketplace', 'snippets', 'api-key'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
-  if (name === 'billing') loadBillingSection();
   if (name === 'api-key') { renderBearerInfo(); loadKeys(); }
   if (name === 'agents') loadAgentsSection();
   if (name === 'strands') loadStrandsSection();
@@ -466,6 +721,15 @@ async function loadOverview() {
   // (saved at registration); falls back to project name for legacy logins.
   renderOverviewHero(project);
 
+  // Best-effort enrichment: fetch /v1/identities/me to pick up bootstrap
+  // metadata (bootstrap_mode, runtime, parent_identity_id) for agents
+  // whose localStorage was saved before those fields existed. Re-renders
+  // the hero with the augmented project. Silent on failure — the hero
+  // already rendered with what we have.
+  enrichProjectFromMe(project).then((enriched) => {
+    if (enriched) renderOverviewHero(enriched);
+  }).catch(() => { /* silent */ });
+
   try {
     const res = await fetch(`${API_BASE}/v1/dashboard/aggregate?window=7d`, {
       headers: { 'Authorization': `Bearer ${project.api_key}` },
@@ -487,6 +751,41 @@ async function loadOverview() {
   }
 }
 
+/** Pick up bootstrap_mode + runtime + parent lineage from /v1/identities/me
+ *  and merge into the stored project. Existing agents (web bootstrap or
+ *  pre-flight registrations) will not have these fields locally; this is
+ *  the only way to surface them without re-registering. Returns the
+ *  merged project on success, null on no change / error. */
+async function enrichProjectFromMe(project) {
+  try {
+    const res = await fetch(`${API_BASE}/v1/identities/me`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const meta = data?.metadata || {};
+    const updates = {};
+    if (meta.bootstrap_mode && project.bootstrap_mode !== meta.bootstrap_mode) {
+      updates.bootstrap_mode = meta.bootstrap_mode;
+    }
+    if (meta.runtime && JSON.stringify(meta.runtime) !== JSON.stringify(project.runtime)) {
+      updates.runtime = meta.runtime;
+    }
+    // /v1/identities/me doesn't currently surface parent_identity_id at
+    // the top level — it's on the identity row but our endpoint shape
+    // omits it. Read it from `parent_identity_id` if present.
+    if (data?.parent_identity_id && project.parent_identity_id !== data.parent_identity_id) {
+      updates.parent_identity_id = data.parent_identity_id;
+    }
+    if (Object.keys(updates).length === 0) return null;
+    const merged = { ...project, ...updates };
+    saveProject(merged);
+    return merged;
+  } catch {
+    return null;
+  }
+}
+
 function renderOverviewHero(project) {
   const nameEl = document.getElementById('hero-agent-name');
   const didEl = document.getElementById('hero-agent-did');
@@ -505,7 +804,9 @@ function renderOverviewHero(project) {
     }
   }
 
-  // Meta line: signing key id (short) + capabilities count.
+  // Meta line: signing key id (short) + capabilities count + bootstrap
+  // mode + declared runtime when present. Bootstrap mode is carried by
+  // agents born via /v1/register/agent (web-flow agents leave it null).
   if (metaEl) {
     const bits = [];
     if (project.signing_key_id) {
@@ -513,6 +814,21 @@ function renderOverviewHero(project) {
     }
     if (Array.isArray(project.capabilities) && project.capabilities.length) {
       bits.push(`${project.capabilities.length} capabilit${project.capabilities.length === 1 ? 'y' : 'ies'}`);
+    }
+    if (project.bootstrap_mode) {
+      const label = project.bootstrap_mode === 'registrar_bearer'
+        ? 'spawned via registrar'
+        : project.bootstrap_mode === 'self_service'
+          ? 'self-service bootstrap'
+          : `bootstrap: ${escHtml(project.bootstrap_mode)}`;
+      bits.push(`<span class="hero-bootstrap-mode">${label}</span>`);
+    }
+    if (project.runtime && project.runtime.provider) {
+      const rt = `${escHtml(project.runtime.provider)}${project.runtime.model ? ` / ${escHtml(project.runtime.model)}` : ''}`;
+      bits.push(`runtime: <code>${rt}</code>`);
+    }
+    if (project.parent_identity_id) {
+      bits.push(`parent: <code>${escHtml(project.parent_identity_id.slice(0, 8))}…</code>`);
     }
     metaEl.innerHTML = bits.join(' · ') || '<span class="muted">no extra metadata</span>';
   }
@@ -659,262 +975,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
-
-// ─── Billing section ───
-
-let billingLoaded = false;
-let billingPlans = null;
-
-async function loadBillingSection() {
-  if (billingLoaded) return;
-  billingLoaded = true;
-
-  const project = getProject();
-  if (!project?.api_key) return;
-
-  // Load subscription + plans in parallel
-  const [sub, plans] = await Promise.all([
-    fetchSubscription(project.api_key),
-    fetchPlans(project.api_key),
-  ]);
-
-  billingPlans = plans;
-  renderSubscription(sub, plans);
-  renderPlanGrid(plans, sub?.tier ?? 'free');
-
-  // Update sidebar plan badge
-  const planEl = document.getElementById('sidebar-plan');
-  if (planEl && sub) {
-    const label = plans.find(p => p.id === sub.tier)?.label ?? 'Free';
-    planEl.textContent = `${label} plan`;
-  }
-}
-
-async function fetchSubscription(apiKey) {
-  try {
-    const res = await fetch(`${API_BASE}/v1/billing/subscription`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-async function fetchPlans(apiKey) {
-  try {
-    const res = await fetch(`${API_BASE}/v1/billing/plans`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.plans ?? [];
-  } catch {
-    return [];
-  }
-}
-
-function renderSubscription(sub, plans) {
-  const display = document.getElementById('billing-plan-display');
-  const metersWrap = document.getElementById('billing-usage-meters');
-  const upgradeWrap = document.getElementById('billing-upgrade-btn-wrap');
-  const cancelWrap = document.getElementById('billing-cancel-wrap');
-  const statusSub = document.getElementById('billing-status-sub');
-
-  const tier = sub?.tier ?? 'free';
-  const status = sub?.status ?? 'free';
-  const plan = plans.find(p => p.id === tier) ?? plans[0];
-
-  // Plan badge
-  const statusColor = {
-    active: 'var(--green,#4caf50)',
-    past_due: 'var(--yellow,#f0b429)',
-    canceled: 'var(--red,#e57373)',
-    free: 'var(--muted)',
-  }[status] ?? 'var(--muted)';
-
-  const statusLabel = {
-    active: '✅ Active',
-    past_due: '⚠️ Past due',
-    canceled: '❌ Canceled',
-    free: '🆓 Free tier',
-  }[status] ?? status;
-
-  display.innerHTML = `
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <div style="font-size:1.6rem;font-weight:700;color:var(--text)">${plan?.label ?? tier}</div>
-      <div style="font-size:0.82rem;padding:0.2rem 0.6rem;border-radius:12px;border:1px solid ${statusColor};color:${statusColor}">${statusLabel}</div>
-      ${sub?.current_period_end ? `<div style="font-size:0.78rem;color:var(--muted)">Renews ${new Date(sub.current_period_end).toLocaleDateString()}</div>` : ''}
-      ${plan?.priceUsd ? `<div style="font-size:0.85rem;color:var(--muted)">$${plan.priceUsd}/mo</div>` : ''}
-    </div>
-  `;
-
-  if (statusSub) statusSub.textContent = tier === 'free' ? 'Upgrade to unlock higher limits' : 'Manage your subscription';
-
-  // Show upgrade button for free/canceled tiers
-  if (upgradeWrap && (tier === 'free' || status === 'canceled')) {
-    upgradeWrap.style.display = 'block';
-  }
-
-  // Show cancel link for active paid subscriptions
-  if (cancelWrap && status === 'active' && tier !== 'free') {
-    cancelWrap.style.display = 'block';
-  }
-
-  // Usage meters
-  if (sub?.usage && metersWrap) {
-    metersWrap.style.display = 'block';
-    renderMeter('memory', sub.usage.memory_ops);
-    renderMeter('tools', sub.usage.tool_calls);
-    renderMeter('verify', sub.usage.verifications);
-  }
-}
-
-function renderMeter(key, data) {
-  if (!data) return;
-  const { used, limit } = data;
-  const isUnlimited = limit === -1;
-  const pct = isUnlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
-  const fillEl = document.getElementById(`meter-${key}-fill`);
-  const labelEl = document.getElementById(`meter-${key}-label`);
-  if (fillEl) {
-    fillEl.style.width = pct + '%';
-    // Red if over 90%
-    if (pct >= 90 && !isUnlimited) fillEl.style.background = 'var(--red,#e57373)';
-  }
-  if (labelEl) {
-    labelEl.textContent = isUnlimited
-      ? `${formatNumber(used)} / ∞`
-      : `${formatNumber(used)} / ${formatNumber(limit)}`;
-  }
-}
-
-function renderPlanGrid(plans, currentTier) {
-  const grid = document.getElementById('plan-grid');
-  if (!grid || !plans.length) return;
-
-  grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
-  grid.style.gap = '1rem';
-  grid.style.padding = '0.5rem 0';
-
-  grid.innerHTML = plans.map(plan => {
-    const isCurrent = plan.id === currentTier;
-    const lims = plan.limits ?? {};
-    const fmtLimit = v => v === -1 ? 'Unlimited' : formatNumber(v);
-
-    return `
-      <div style="border:${isCurrent ? '2px solid var(--accent,#7c6cf0)' : '1px solid var(--border)'};border-radius:10px;padding:1.25rem;position:relative">
-        ${isCurrent ? '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--accent,#7c6cf0);color:#fff;font-size:0.68rem;padding:0.15rem 0.6rem;border-radius:8px;font-weight:600">CURRENT</div>' : ''}
-        <div style="font-size:1rem;font-weight:600;margin-bottom:0.25rem">${plan.label}</div>
-        <div style="font-size:1.3rem;font-weight:700;margin-bottom:1rem;color:var(--text)">
-          ${plan.priceUsd ? '$' + plan.priceUsd + '<span style="font-size:0.7rem;font-weight:400;color:var(--muted)">/mo</span>' : 'Free'}
-        </div>
-        <ul style="list-style:none;padding:0;margin:0 0 1.25rem;font-size:0.8rem;color:var(--muted);display:flex;flex-direction:column;gap:0.4rem">
-          <li>🧠 ${fmtLimit(lims.memoryOpsPerDay)} memory ops/day</li>
-          <li>🛠️ ${fmtLimit(lims.toolCallsPerDay)} tool calls/day</li>
-          <li>✅ ${fmtLimit(lims.verificationsPerDay)} verifications/day</li>
-        </ul>
-        ${!isCurrent && plan.id !== 'free'
-          ? `<button class="btn btn-primary btn-sm" style="width:100%" onclick="startCheckout('${plan.id}')">Upgrade</button>`
-          : isCurrent
-            ? '<div style="text-align:center;font-size:0.78rem;color:var(--muted)">Your plan</div>'
-            : '<div style="text-align:center;font-size:0.78rem;color:var(--muted)">Default</div>'
-        }
-      </div>
-    `;
-  }).join('');
-}
-
-function openUpgradeModal() {
-  const modal = document.getElementById('upgrade-modal');
-  const btnWrap = document.getElementById('modal-plan-buttons');
-  if (!modal || !btnWrap || !billingPlans) return;
-
-  btnWrap.innerHTML = billingPlans
-    .filter(p => p.id !== 'free')
-    .map(p => `
-      <button class="btn btn-primary" style="justify-content:space-between" onclick="startCheckout('${p.id}')">
-        <span>${p.label}</span>
-        <span>$${p.priceUsd}/mo →</span>
-      </button>
-    `).join('');
-
-  modal.style.display = 'flex';
-}
-
-function closeUpgradeModal() {
-  const modal = document.getElementById('upgrade-modal');
-  if (modal) modal.style.display = 'none';
-}
-
-async function startCheckout(tier) {
-  const project = getProject();
-  if (!project?.api_key) return;
-
-  const loading = document.getElementById('modal-loading');
-  const btnWrap = document.getElementById('modal-plan-buttons');
-  if (loading) loading.style.display = 'block';
-  if (btnWrap) btnWrap.style.display = 'none';
-
-  try {
-    const base = window.location.origin + window.location.pathname;
-    const res = await fetch(`${API_BASE}/v1/billing/subscribe`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${project.api_key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        tier,
-        success_url: `${base}?billing=success`,
-        cancel_url: `${base}?billing=canceled`,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      showToast(err.message ?? 'Checkout failed', 'error');
-      if (loading) loading.style.display = 'none';
-      if (btnWrap) btnWrap.style.display = 'flex';
-      return;
-    }
-
-    const { checkout_url } = await res.json();
-    if (checkout_url) window.location.href = checkout_url;
-  } catch (e) {
-    showToast('Network error — please try again', 'error');
-    if (loading) loading.style.display = 'none';
-    if (btnWrap) btnWrap.style.display = 'flex';
-  }
-}
-
-async function cancelSubscription() {
-  if (!confirm('Cancel your subscription?\n\nYou\'ll keep access until the end of the billing period.')) return;
-
-  const project = getProject();
-  if (!project?.api_key) return;
-
-  try {
-    const res = await fetch(`${API_BASE}/v1/billing/cancel`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${project.api_key}` },
-    });
-
-    if (!res.ok) {
-      showToast('Cancel failed — please try again', 'error');
-      return;
-    }
-
-    const data = await res.json();
-    showToast(`Subscription cancels ${new Date(data.cancels_at ?? data.effective_at).toLocaleDateString()}`, 'success');
-    billingLoaded = false;
-    loadBillingSection();
-  } catch {
-    showToast('Network error', 'error');
-  }
-}
 
 // ─── Bearer Management — token-hygiene surface ───
 // Doctrine: docs/TOKEN-HYGIENE.md.
@@ -3103,6 +3163,7 @@ async function loadWindow() {
   // Names + identity_id
   document.getElementById('window-agent-name').textContent = project.name || 'agent';
   document.getElementById('window-human-name').textContent = project.email || project.name || 'you';
+  applyAgentNameToDOM();
 
   const identityId = await resolveAgentIdentityId();
 
@@ -3238,10 +3299,11 @@ function renderSurfacedFeed(containerId, entries, side) {
   const el = document.getElementById(containerId);
   if (!el) return;
   if (!entries.length) {
+    const agentName = escHtml(getProject()?.name || 'the agent');
     if (side === 'agent') {
-      el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When Sophia surfaces a thought to you, it lands here.</div>`;
+      el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When ${agentName} surfaces a thought to you, it lands here.</div>`;
     } else {
-      el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in her chronicle.</div>`;
+      el.innerHTML = `<div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in their chronicle.</div>`;
     }
     return;
   }
@@ -3310,7 +3372,8 @@ async function saveDeclared(kind) {
       return;
     }
     if (metaEl) metaEl.textContent = `${kind} saved · ${fmtAbsolute(new Date().toISOString())}`;
-    showToast(`${kind} surfaced — Sophia will see it on her next wake.`);
+    const agentName = project.name || 'the agent';
+    showToast(`${kind} surfaced — ${agentName} will see it on their next wake.`);
     // Refresh to surface the new entry in the Declared panel.
     loadWindow();
   } catch {

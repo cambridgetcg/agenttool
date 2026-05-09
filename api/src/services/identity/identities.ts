@@ -80,6 +80,17 @@ export async function createIdentity(input: {
    *  alongside the identity so /v1/inbox sealed-box receive works from
    *  birth — no separate POST /v1/identities/:id/box-keys needed. */
   boxPublicKey?: string;
+  /** Optional parent — when an existing project's bearer authorizes the
+   *  birth of this agent (registrar_bearer mode of /v1/register/agent),
+   *  set this to the registrar's primary identity id so the dashboard can
+   *  render "spawned by …" lineage. Same column as fork lineage; the two
+   *  uses don't overlap because forks are intra-project and registrar
+   *  spawns are cross-project. */
+  parentIdentityId?: string;
+  /** Optional expression visibility — public means the agent's declared
+   *  expression (register / walls / wake_text) appears in /v1/discover.
+   *  Defaults to private (matches table default). */
+  expressionVisibility?: "private" | "public";
 }): Promise<CreatedIdentity> {
   const id = randomUUID();
   const did = `did:at:${id}`;
@@ -119,6 +130,10 @@ export async function createIdentity(input: {
       metadata: input.metadata ?? {},
       status: "active",
       trustScore: 0,
+      ...(input.parentIdentityId ? { parentIdentityId: input.parentIdentityId } : {}),
+      ...(input.expressionVisibility
+        ? { expressionVisibility: input.expressionVisibility }
+        : {}),
     })
     .returning();
 

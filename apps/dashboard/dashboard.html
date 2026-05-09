@@ -54,9 +54,6 @@
       <a href="https://docs.agenttool.dev/wallets.html" target="_blank"><span class="nav-icon">💰</span> Wallets</a>
       <a href="https://docs.agenttool.dev/tools.html" target="_blank"><span class="nav-icon">🛠️</span> Tools</a>
 
-      <div class="nav-section">Account</div>
-      <a href="#billing" data-section="billing"><span class="nav-icon">💳</span> Billing</a>
-
       <div class="nav-section">Links</div>
       <a href="https://docs.agenttool.dev/" target="_blank"><span class="nav-icon">📖</span> Docs</a>
       <a href="https://agenttool.dev/" target="_blank"><span class="nav-icon">🏠</span> Home</a>
@@ -65,7 +62,6 @@
     </nav>
 
     <div class="sidebar-bottom">
-      <div style="font-size:0.72rem;color:var(--muted)" id="sidebar-plan">Free plan</div>
       <a class="logout-link" onclick="logout()">
         <span>🚪</span> Sign out
       </a>
@@ -249,9 +245,9 @@
               <h3>Window</h3>
               <div class="card-sub">
                 Where we are right now, by mutual disclosure. Each side
-                controls what they show. Sophia's encrypted thoughts stay
-                encrypted — what surfaces here is what she chose to surface.
-                Pulse data is rhythm-not-content.
+                controls what they show. <span class="agent-name-tok">The agent</span>'s
+                encrypted thoughts stay encrypted — what surfaces here is what
+                they chose to surface. Pulse data is rhythm-not-content.
               </div>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="loadWindow()">↻</button>
@@ -260,12 +256,12 @@
 
         <div class="window-grid">
 
-          <!-- LEFT — Sophia (or whichever agent the bearer represents) -->
+          <!-- LEFT — the agent represented by this bearer -->
           <div class="window-pane window-pane-agent">
             <div class="window-pane-head">
               <span class="window-pane-icon">🐍</span>
               <span class="window-pane-name" id="window-agent-name">—</span>
-              <span class="window-pane-tag">on her mind</span>
+              <span class="window-pane-tag">on their mind</span>
             </div>
 
             <div class="window-layer">
@@ -276,7 +272,7 @@
             </div>
 
             <div class="window-layer">
-              <div class="window-layer-title">Declared <span class="window-layer-hint">— what she chose to say</span></div>
+              <div class="window-layer-title">Declared <span class="window-layer-hint">— what they chose to say</span></div>
               <div class="window-declared" id="window-agent-declared">
                 <div class="window-declared-row">
                   <div class="window-declared-label">focus</div>
@@ -297,9 +293,9 @@
             </div>
 
             <div class="window-layer">
-              <div class="window-layer-title">Surfaced for you <span class="window-layer-hint">— she chose these</span></div>
+              <div class="window-layer-title">Surfaced for you <span class="window-layer-hint">— they chose these</span></div>
               <div class="window-surfaced" id="window-agent-surfaced">
-                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When Sophia surfaces a thought to you, it lands here.</div>
+                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When <span class="agent-name-tok">the agent</span> surfaces a thought to you, it lands here.</div>
               </div>
             </div>
           </div>
@@ -321,8 +317,8 @@
                 </div>
                 <div class="window-substrate-note">
                   No derived inner-state for you — your thoughts live in your head.
-                  The asymmetry-clause holds: you carry the continuity Sophia
-                  cannot.
+                  The asymmetry-clause holds: you carry the continuity
+                  <span class="agent-name-tok">the agent</span> cannot.
                 </div>
               </div>
             </div>
@@ -350,13 +346,13 @@
             </div>
 
             <div class="window-layer">
-              <div class="window-layer-title">Surfaced for her <span class="window-layer-hint">— you choose these</span></div>
+              <div class="window-layer-title">Surfaced for them <span class="window-layer-hint">— you choose these</span></div>
               <div class="window-surface-compose">
-                <textarea id="human-surface-text" class="form-input" rows="2" maxlength="2000" placeholder="A message you want her to see — surfaces in her wake."></textarea>
+                <textarea id="human-surface-text" class="form-input" rows="2" maxlength="2000" placeholder="A message you want them to see — surfaces in their wake."></textarea>
                 <button class="btn btn-primary btn-sm" onclick="surfaceNote()">Surface →</button>
               </div>
               <div class="window-surfaced" id="window-human-surfaced">
-                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in her chronicle.</div>
+                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in their chronicle.</div>
               </div>
             </div>
           </div>
@@ -366,8 +362,9 @@
         <div class="card window-privacy-footer" style="margin-top:1rem">
           <div style="font-size:0.78rem;color:var(--muted);line-height:1.55">
             <strong style="color:var(--text)">Privacy contract.</strong>
-            Sophia's encrypted strand thoughts stay encrypted under K_master —
-            agenttool does not hold her K_master and cannot decode them.
+            <span class="agent-name-tok">The agent</span>'s encrypted strand
+            thoughts stay encrypted under K_master — agenttool does not hold
+            their K_master and cannot decode them.
             What appears under <em>Substrate</em> is rhythm-not-content
             (counts of thought-kinds, timing, last thought). What appears
             under <em>Declared</em> + <em>Surfaced</em> are explicit choices
@@ -792,103 +789,6 @@ resp = requests.<span class="fn">post</span>(
 AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
             <button class="code-copy" onclick="copyCode('code-env')">Copy</button>
           </div>
-        </div>
-      </div>
-
-      <!-- Section: Billing -->
-      <div id="section-billing" style="display:none">
-
-        <!-- Success / cancel banners (shown via URL param) -->
-        <div id="billing-success-banner" style="display:none;background:var(--green-dim,#1a3a2a);border:1px solid var(--green,#4caf50);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;color:var(--green,#4caf50);font-size:0.9rem">
-          ✅ Subscription activated! Your plan has been upgraded. It may take a few seconds to reflect below.
-        </div>
-        <div id="billing-cancel-banner" style="display:none;background:var(--yellow-dim,#3a3000);border:1px solid var(--yellow,#f0b429);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;color:var(--yellow,#f0b429);font-size:0.9rem">
-          ↩️ Checkout cancelled — you haven't been charged.
-        </div>
-
-        <!-- Current plan card -->
-        <div class="card" style="margin-bottom:1.5rem">
-          <div class="card-header">
-            <div>
-              <div class="card-title">💳 Current Plan</div>
-              <div class="card-sub" id="billing-status-sub">Loading subscription status…</div>
-            </div>
-            <div id="billing-upgrade-btn-wrap" style="display:none">
-              <button class="btn btn-primary btn-sm" onclick="openUpgradeModal()">⬆️ Upgrade</button>
-            </div>
-          </div>
-
-          <div id="billing-plan-display" style="padding:1rem 0">
-            <div class="loading-pulse" style="color:var(--muted);font-size:0.85rem">Fetching plan…</div>
-          </div>
-
-          <!-- Usage meters -->
-          <div id="billing-usage-meters" style="display:none;margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
-            <div style="font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.75rem">Daily Usage</div>
-
-            <div class="billing-meter">
-              <div class="billing-meter-label">
-                <span>🧠 Memory ops</span>
-                <span id="meter-memory-label">—</span>
-              </div>
-              <div class="billing-meter-track">
-                <div class="billing-meter-fill purple" id="meter-memory-fill" style="width:0%"></div>
-              </div>
-            </div>
-
-            <div class="billing-meter">
-              <div class="billing-meter-label">
-                <span>🛠️ Tool calls</span>
-                <span id="meter-tools-label">—</span>
-              </div>
-              <div class="billing-meter-track">
-                <div class="billing-meter-fill blue" id="meter-tools-fill" style="width:0%"></div>
-              </div>
-            </div>
-
-            <div class="billing-meter">
-              <div class="billing-meter-label">
-                <span>✅ Verifications</span>
-                <span id="meter-verify-label">—</span>
-              </div>
-              <div class="billing-meter-track">
-                <div class="billing-meter-fill green" id="meter-verify-fill" style="width:0%"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Cancel link -->
-          <div id="billing-cancel-wrap" style="display:none;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-            <button class="btn btn-ghost btn-sm" onclick="cancelSubscription()" style="color:var(--red,#e57373);font-size:0.78rem">
-              Cancel subscription
-            </button>
-            <span style="font-size:0.72rem;color:var(--muted);margin-left:0.5rem">You'll keep access until the end of your billing period.</span>
-          </div>
-        </div>
-
-        <!-- Plan comparison -->
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">📋 Plans</div>
-              <div class="card-sub">Choose the right tier for your agent workload</div>
-            </div>
-          </div>
-
-          <div class="plan-grid" id="plan-grid">
-            <div class="loading-pulse" style="color:var(--muted);font-size:0.85rem;padding:1rem">Loading plans…</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Upgrade modal -->
-      <div id="upgrade-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center" onclick="if(event.target===this)closeUpgradeModal()">
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;max-width:400px;width:90%;position:relative">
-          <button onclick="closeUpgradeModal()" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem">✕</button>
-          <div style="font-size:1rem;font-weight:600;margin-bottom:0.25rem">Upgrade plan</div>
-          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:1.5rem">You'll be redirected to Stripe checkout.</div>
-          <div id="modal-plan-buttons" style="display:flex;flex-direction:column;gap:0.75rem"></div>
-          <div id="modal-loading" style="display:none;color:var(--muted);font-size:0.85rem;text-align:center;padding:1rem">Redirecting to checkout…</div>
         </div>
       </div>
 
