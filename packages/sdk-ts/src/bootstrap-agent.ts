@@ -208,6 +208,7 @@ export async function bootstrapAgent(
     );
   }
 
-  const ok = payload as Omit<BootstrapAgentResult, "pow_iterations">;
-  return { ...ok, pow_iterations: powIterations };
+  const ok = payload as BootstrapAgentResult;
+  ok.pow_iterations = powIterations;
+  return ok;
 }

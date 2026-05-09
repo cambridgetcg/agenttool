@@ -143,6 +143,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.6.6"
+__version__ = "0.7.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"
