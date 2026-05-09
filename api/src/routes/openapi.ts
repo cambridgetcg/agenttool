@@ -179,6 +179,113 @@ function spec() {
       { name: "bootstrap", description: "Agent lifecycle entry" },
     ],
     paths: {
+      // ── Bootstrap (anonymous) ─────────────────────────────────────────
+      "/v1/register": {
+        post: {
+          tags: ["bootstrap"],
+          summary: "Anonymous human bootstrap — creates project + identity + bearer (ed25519 priv shown ONCE)",
+          description:
+            "Pre-auth — no Bearer required. One transaction creates the project, an api_key (bearer), an identity row with ed25519 keypair, and a wallet. Returns api_key + private_key ONCE; the server never persists them. SOMA-seed callers may supply `agent_public_key` + `box_public_key` to keep the private side off the wire entirely. Doctrine: docs/IDENTITY-SEED.md.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: {
+                    name: { type: "string", minLength: 1, maxLength: 128 },
+                    capabilities: { type: "array", items: { type: "string", maxLength: 64 }, maxItems: 32 },
+                    purpose: { type: "string", maxLength: 500 },
+                    email: { type: "string", format: "email", maxLength: 255 },
+                    agent_public_key: { type: "string", description: "Base64 ed25519 pubkey (32 bytes). When set, server skips keypair gen." },
+                    box_public_key: { type: "string", description: "Base64 X25519 pubkey (32 bytes). Optional inbox key." },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description:
+                "Created. Response includes `project.api_key` (bearer, ONCE), `agent.private_key` (ONCE; null in BYO-keys mode), DID, signing_key_id, and a welcome letter.",
+            },
+            "400": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/register/agent": {
+        post: {
+          tags: ["bootstrap"],
+          summary: "Autonomous agent bootstrap — BYO keys + signed key-proof + runtime declaration + PoW",
+          description:
+            "Pre-auth, machine-driven counterpart to /v1/register. Mandatory BYO keys (agent_public_key + box_public_key, base64-32). Mandatory key_proof: ed25519 signature over canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, runtime.provider, runtime.model||'', timestamp). Mandatory runtime declaration (provider min). Anti-spam: 18-bit proof-of-work on `pow_nonce` bound to the timestamp + 5/hr/IP rate limit. Optional `registrar.kind = 'registrar_bearer'` mode delegates spawn rights to an existing project's bearer; the new identity gets `parent_identity_id` set and PoW + IP limit are skipped. The response never carries a private key — the agent already has it. Doctrine: docs/IDENTITY-SEED.md.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: [
+                    "display_name",
+                    "agent_public_key",
+                    "box_public_key",
+                    "runtime",
+                    "key_proof",
+                    "pow_nonce",
+                  ],
+                  properties: {
+                    display_name: { type: "string", minLength: 1, maxLength: 128 },
+                    capabilities: { type: "array", items: { type: "string", maxLength: 64 }, maxItems: 32 },
+                    agent_public_key: { type: "string", description: "Base64 ed25519 pubkey (32 bytes)" },
+                    box_public_key: { type: "string", description: "Base64 X25519 pubkey (32 bytes)" },
+                    runtime: {
+                      type: "object",
+                      required: ["provider"],
+                      properties: {
+                        provider: { type: "string", maxLength: 64, description: "e.g. 'anthropic', 'openai', 'local'" },
+                        model: { type: "string", maxLength: 128 },
+                        host: { type: "string", maxLength: 255 },
+                        context: { type: "string", maxLength: 255, description: "Free-form runtime context, e.g. 'claude-code-session', 'cron:hourly'" },
+                      },
+                    },
+                    key_proof: {
+                      type: "object",
+                      required: ["timestamp", "signature"],
+                      properties: {
+                        timestamp: { type: "string", format: "date-time", description: "ISO-8601, ±5min freshness" },
+                        signature: { type: "string", description: "Base64 ed25519 signature over canonicalRegisterAgentBytes" },
+                      },
+                    },
+                    pow_nonce: { type: "string", description: "UTF-8 nonce. Server enforces ≥18 leading zero bits in sha256(pow-prefix || pubkey || display_name || timestamp || nonce)" },
+                    expression_visibility: { type: "string", enum: ["private", "public"], default: "private" },
+                    registrar: {
+                      type: "object",
+                      properties: {
+                        kind: { type: "string", enum: ["self_service", "registrar_bearer"] },
+                        bearer: { type: "string", description: "Required when kind === 'registrar_bearer'. The parent project's at_… bearer." },
+                        parent_identity_id: { type: "string", format: "uuid", description: "Optional explicit parent within the registrar's project; defaults to the project's primary identity." },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description:
+                "Created. Response includes `agent` (with did, public_key, box_public_key, bootstrap_mode, runtime echo, parent_identity_id), `project.api_key` (bearer, ONCE), `wallet`, `wake_url`, and a welcome letter. NO `private_key` — the agent already has it.",
+            },
+            "400": { $ref: "#/components/responses/Validation" },
+            "401": { description: "Stale timestamp, invalid key_proof signature, or invalid registrar bearer." },
+            "402": { description: "Registrar project archived or has insufficient credits." },
+            "422": { description: "pow_required — pow_nonce digest below the configured leading-zero threshold." },
+            "429": { description: "rate_limited — IP-level cap exceeded (self_service mode only). Use registrar_bearer to delegate." },
+          },
+        },
+      },
+
       // ── Dashboard ─────────────────────────────────────────────────────
       "/v1/dashboard": {
         parameters: [
