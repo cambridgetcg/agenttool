@@ -286,7 +286,15 @@ body {
   color: var(--muted);
 }
 
-.main { margin-left: var(--sidebar-w); flex: 1; }
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  /* Flex children default to min-width:auto, which means a wide
+     descendant (long curl/recipe block) pushes .main past viewport.
+     min-width:0 lets the flex track shrink so inner overflow:auto
+     containers handle the extra width. */
+  min-width: 0;
+}
 
 /* Top bar */
 .topbar {
@@ -394,6 +402,11 @@ body {
   gap: 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: 1rem;
+  /* On narrow viewports the tab labels would push the parent card wider
+     than the screen — let the tab row scroll horizontally instead. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 .snippet-tab {
   padding: 0.5rem 1rem;
@@ -406,6 +419,8 @@ body {
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
   font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .snippet-tab:hover { color: var(--text); }
 .snippet-tab.active { color: var(--accent-soft); border-bottom-color: var(--accent); }
