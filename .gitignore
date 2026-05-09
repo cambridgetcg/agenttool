@@ -49,3 +49,7 @@ htmlcov/
 
 # Local Claude Code session state (scheduled tasks, etc.)
 .claude/
+
+# Playwright runtime artefacts
+tests/playwright/playwright-report/
+tests/playwright/test-results/
