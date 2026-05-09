@@ -5602,6 +5602,101 @@ function signDiscoveryChallenge(opts) {
     signature += String.fromCharCode(sig[i]);
   return { timestamp, signature: btoa(signature) };
 }
+function canonicalRegisterAgentBytes(opts) {
+  const enc = new TextEncoder;
+  const SEP = new Uint8Array([0]);
+  const parts = [
+    enc.encode("register-agent/v1"),
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    opts.agentPublicKey,
+    SEP,
+    opts.boxPublicKey,
+    SEP,
+    enc.encode(opts.runtimeProvider),
+    SEP,
+    enc.encode(opts.runtimeModel),
+    SEP,
+    enc.encode(opts.timestamp)
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  return sha256(buf);
+}
+function signRegisterAgent(opts) {
+  const timestamp = opts.timestamp ?? new Date().toISOString();
+  const canonical = canonicalRegisterAgentBytes({
+    displayName: opts.displayName,
+    agentPublicKey: opts.agentPublicKey,
+    boxPublicKey: opts.boxPublicKey,
+    runtimeProvider: opts.runtimeProvider,
+    runtimeModel: opts.runtimeModel ?? "",
+    timestamp
+  });
+  const sig = sign(canonical, opts.derivedSigningPriv);
+  let signature = "";
+  for (let i = 0;i < sig.length; i++)
+    signature += String.fromCharCode(sig[i]);
+  return { timestamp, signature: btoa(signature) };
+}
+function powRegisterAgentDigest(opts) {
+  const enc = new TextEncoder;
+  const SEP = new Uint8Array([0]);
+  const parts = [
+    enc.encode("agenttool-pow/v1"),
+    SEP,
+    opts.agentPublicKey,
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    enc.encode(opts.timestamp),
+    SEP,
+    enc.encode(opts.powNonce)
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  return sha256(buf);
+}
+function leadingZeroBits(bytes) {
+  let count = 0;
+  for (const b of bytes) {
+    if (b === 0) {
+      count += 8;
+      continue;
+    }
+    count += Math.clz32(b) - 24;
+    break;
+  }
+  return count;
+}
+function grindRegisterAgentPow(opts) {
+  const difficultyBits = opts.difficultyBits ?? 18;
+  const maxIterations = opts.maxIterations ?? 1e7;
+  for (let i = 0;i < maxIterations; i++) {
+    const nonce = String(i);
+    const digest = powRegisterAgentDigest({
+      agentPublicKey: opts.agentPublicKey,
+      displayName: opts.displayName,
+      timestamp: opts.timestamp,
+      powNonce: nonce
+    });
+    if (leadingZeroBits(digest) >= difficultyBits) {
+      return { powNonce: nonce, iterations: i + 1 };
+    }
+  }
+  throw new Error(`grindRegisterAgentPow: exceeded ${maxIterations} iterations at ${difficultyBits} bits — ` + `unusual; consider lowering difficulty or check the timestamp is fresh.`);
+}
 
 class SeedClient {
   generateMnemonic(strength = 256) {
@@ -5621,10 +5716,13 @@ class SeedClient {
   }
 }
 export {
+  signRegisterAgent,
   signRecoverChallenge,
   signDiscoveryChallenge,
+  powRegisterAgentDigest,
   mnemonicToSeed,
   isValidMnemonic,
+  grindRegisterAgentPow,
   generateMnemonic2 as generateMnemonic,
   deriveWalletSecret,
   deriveWallet,
@@ -5635,6 +5733,7 @@ export {
   deriveBridgeSigning,
   deriveBoxSeed,
   derive,
+  canonicalRegisterAgentBytes,
   canonicalRecoverBytes,
   canonicalDiscoveryBytes,
   SeedClient,
