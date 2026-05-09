@@ -1,3 +1,8 @@
+# SNAPSHOT — mirror of api/fly.toml. The active deploy target is api/fly.toml
+# (run `cd api && fly deploy`). This file exists so infra/fly/migrate.sh can
+# treat agenttool the same as the per-service apps it was written for. Keep
+# in sync if api/fly.toml changes; CI doesn't enforce parity here.
+
 app = "agenttool"
 primary_region = "lhr"  # London
 

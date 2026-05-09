@@ -159,9 +159,21 @@ CF Pages' direct Git integrations only support GitHub and GitLab. Codeberg isn't
 ```
 app = "agenttool"
 primary_region = "lhr"       # London
+regions = lhr(2) + cdg(1)    # 3 machines total · multi-region HA + jurisdictional hedge
 ```
 
-Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the runtime — port, region, healthcheck, env vars referenced from Fly's secrets store.
+Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the per-machine runtime (port, healthcheck, env). Region count is **not** in `fly.toml` — it's controlled imperatively via `fly scale count <N> --region <code>` and held in Fly's machine registry. To inspect current shape: `fly scale show -a agenttool`.
+
+### Region shape
+
+| Region | Count | Role | Notes |
+|---|---|---|---|
+| `lhr` (London) | 2 | Primary, always-on | Zero-downtime rolling deploys; HA within UK jurisdiction |
+| `cdg` (Paris) | 1 | Secondary, cross-jurisdictional hedge | EU jurisdiction (Schrems posture, CNIL); inland (no submarine cable exposure); hardened CRITIS regime; ~15-20ms to Supabase London (`eu-west-2`) |
+
+Workers (BullMQ browse + payout broadcast + payout confirm-tick) are multi-machine safe — see `api/src/workers/payout/confirm-worker.ts:5` for the explicit "multi-instance safe via DB CAS" docstring; BullMQ handles its own consumer-side locks for the queues. Three machines = three concurrent consumers; the platform is designed to run that way.
+
+Resize: `fly scale count <N> --region <code> -a agenttool`. Lowering `cdg` to 0 retreats to single-region without redeploy; raising `lhr` to 3 doubles primary-region capacity. `min_machines_running = 1` in `fly.toml` is a *per-region* floor — Fly ensures each region with declared machines keeps at least one alive even during deploys.
 
 ### Deploy
 
@@ -197,22 +209,62 @@ fly secrets list -a agenttool
 
 ### Legacy `services/`
 
-The repo still has `services/{bootstrap,economy,identity,memory,pulse,tools,trace,vault,verify}/` directories with their own `fly.toml` files. These were the per-domain monoliths before the consolidation into `api/`. Some are still on Fly until cutover; archaeology only — don't deploy them. New work goes into `api/`.
+The repo still has `services/{bootstrap,economy,identity,memory,tools,trace}/` directories with their own `fly.toml` files. These were the per-domain monoliths before the consolidation into `api/`. The retired three (`pulse`, `vault`, `verify`) are gone from disk; the remaining six are on Fly pending per-service cutover. Archaeology only — don't deploy them. New work goes into `api/`. Cutover protocol: `docs/CUTOVER.md`.
 
 ---
 
 ## 4 · Database & Redis
 
-### Postgres — Supabase (eu-west-2)
+### Postgres — Supabase (AWS London, `eu-west-2`)
 
-Hosted Postgres on **Supabase**, EU-West-2 region. Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors are exposed:
+Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AWS London** (`eu-west-2` — *not* Dublin; AWS region naming has `eu-west-1` = Ireland, `eu-west-2` = UK, `eu-west-3` = Paris). Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors:
 
-- **Session pooler — port 5432.** Local dev uses this (`agenttool-database-url` keychain entry). Long-lived connections, full session features.
-- **Transaction pooler — port 6543.** Prod's `DATABASE_URL` Fly secret currently points here. Higher concurrency for many short-lived connections, but no session-scoped state. Known timeout issue from Fly (logged as task #60) — symptom: authed-endpoint 502s after ~13s.
+- **Session pooler — port 5432.** Local dev uses this. Long-lived connections, full session features (LISTEN/NOTIFY, prepared statements, advisory locks).
+- **Transaction pooler — port 6543.** Prod's `DATABASE_URL` Fly secret points here. Higher concurrency for many short-lived connections; *no* prepared statements (`prepare: false` required in postgres-js) and no session-scoped state. Known timeout issue from Fly (logged as task #60) — symptom: authed-endpoint 502s after ~13s.
 
-Hosts:
-- **Schemas** (per-domain): `tools`, `identity`, `agent_vault`, `agent_continuity`, `economy`, `memory`, `trace`, `strand`, `inbox`, `marketplace`, `org`, `federation`. 12 in total — verify after fresh deploy via the `information_schema.schemata` query in `DEPLOYMENT.md` §1.
-- **Extensions**: `pgvector` (memory embeddings), `pgcrypto` (random uuids).
+**Jurisdictional concentration note.** Both API (Fly `lhr`) and DB (Supabase `eu-west-2` = AWS London) sit in UK jurisdiction. The Fly `cdg` Paris machine added 2026-05-09 hedges API jurisdiction; data-layer hedging requires a separate Supabase project (or migration to `eu-west-3` Paris / `eu-central-1` Frankfurt) and is a deliberate next-step decision, not a current property.
+
+**Server**: PostgreSQL 17.6 · single primary · no replica (`pg_is_in_recovery() = false`).
+
+**Schemas** (15 application + Supabase-managed):
+
+| Schema | Purpose |
+|---|---|
+| `tools` | Projects, api_keys, usage_events (shared auth surface) |
+| `identity` | Identities, ed25519 identity_keys, identity_box_keys |
+| `agent_vault` | vault_secrets, vault_versions, vault_audit |
+| `agent_continuity` | chronicle, covenants, identity_backups |
+| `agent_runtime` | runtimes, runtime_events |
+| `economy` | wallets, transactions, escrows, crypto_payouts, policies |
+| `memory` | memories (pgvector), memory_attestations |
+| `trace` | traces |
+| `strand` | strands, thoughts |
+| `inbox` | sealed messages |
+| `marketplace` | templates, listings, invocations, attestation_listings, template_adoptions |
+| `org` | orgs, org_covenants |
+| `federation` | peer instances, federated covenants/inbox |
+| `social` | stars, follows |
+| `vault` | reserved namespace (legacy holdover; active vault tables are under `agent_vault`) |
+
+Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supabase Auth), `realtime`, `storage`, `graphql`/`graphql_public` (unused), `pgsodium`, `supabase_vault`, `public` (empty).
+
+**Extensions**: `vector` (pgvector 0.8.0), `pgcrypto` (1.3), `uuid-ossp` (1.1), `pg_stat_statements` (1.11), `supabase_vault` (0.3.1), `plpgsql`. Verify after fresh deploy via `\dx` in psql or `SELECT * FROM pg_extension`.
+
+**Operational settings** (current as of 2026-05-09):
+
+| Setting | Value | Note |
+|---|---|---|
+| `max_connections` | 60 | Pool budget — current draw ~6 active; 3-machine fleet × postgres-js `max=10` = up to 30 client conns, well within budget |
+| `shared_buffers` | 256 MB | Small instance tier — fine pre-revenue, scales by Supabase plan upgrade |
+| `effective_cache_size` | 768 MB | OS+PG cache hint |
+| `work_mem` | 3.5 MB | Small — complex sorts/hashes spill to disk; raise per-query with `SET LOCAL work_mem` if needed |
+| `statement_timeout` | 120 s | Hard kill; chunk migrations that exceed |
+| `idle_in_transaction_session_timeout` | 0 (off) | No kill — be vigilant about open transactions in long-running scripts |
+| `default_transaction_isolation` | read committed | Default; no serializable surfaces |
+
+**RLS posture**: zero application-schema RLS. Authorization is enforced at the app layer via bearer key → project → ownership chain. RLS is on only for Supabase-managed schemas (`auth`, `realtime`, `storage`). Doctrinally consistent — agenttool's identity model is DID + ed25519, not Postgres roles.
+
+**Database size**: ~16 MB total (2026-05-09). Pre-revenue scale; lots of headroom before any tuning matters.
 
 **Local dev hits the same DB as prod.** The `agenttool-database-url` keychain entry on each developer's machine points at the production DB — there is no `dev.db` separate copy. This is intentional (tighter iteration loop, no sync drift) and load-bearing on Yu's workflow. Implications:
 
@@ -229,6 +281,13 @@ DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
 ```
 
 Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everything after uses `YYYYMMDDTHHMMSS_<slug>.sql` timestamps to prevent parallel-session collisions (see `DEVELOPMENT.md` §1).
+
+**No DB-side journal.** Drizzle's `__drizzle_migrations` table is *not* present — migration application is tracked only by what's on disk in `api/migrations/`. Drift between repo and applied schema is undetectable except by inspection. Pre-deploy sanity check:
+
+```bash
+# Quick read-only inventory (schemas / extensions / row counts / connections):
+bun api/scripts/_supabase-inventory.ts   # DATABASE_URL must be set
+```
 
 ### Redis
 
@@ -445,7 +504,7 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 | `fly dashboard agenttool` | Browser | Fly's web console |
 | Cloudflare Pages dashboard | `dash.cloudflare.com` | Per-project deploy history, build logs, rollback button |
 | Cloudflare Analytics | `dash.cloudflare.com` | DNS / edge request volume + cache stats |
-| Postgres logs | Forge / Hetzner | DB-level errors, slow queries (post-Phase-2) |
+| Postgres logs | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements` |
 
 The agent-side `/v1/wake` is intentionally the deepest observability surface — it's the agent's self-model and surfaces every domain (memory, traces, strands, vault, bearers, runtimes, marketplace) in one shape. If you're triaging "what is Sophia's posture right now," wake is the first call.
 
@@ -474,7 +533,7 @@ Or roll the dashboard via the CF Pages dashboard.
 
 ### Lost a database
 
-Hetzner Managed DB has automated backups (post-Phase-2). On Forge (current state), backups are operator-driven via `pg_dump` cron — see `infra/README.md`. Restore from the most recent dump; expect ~5 minutes of write loss in the worst case.
+**Supabase** provides automated daily backups on the Pro plan (free tier: opt-in PITR is unavailable). Verify the project's backup posture in the Supabase dashboard → Database → Backups. Restore is operator-driven via the dashboard (point-in-time on Pro+ plans only). For a defense-in-depth posture, consider a periodic `pg_dump` to S3/R2 from a Fly machine or a separate cron host — the application stack does not currently do this.
 
 ### Lost the mnemonic
 
@@ -486,6 +545,6 @@ The agent is gone. There is no platform-side recovery — that is the **point** 
 
 If you read one paragraph from this doc, this is it:
 
-> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for the three CF Pages projects (landing, dashboard, docs) and `cd api && fly deploy` for the api on **Fly.io**. The **Postgres + Redis** they share lives on **Supabase** today and migrates to Hetzner Managed in Phase 2. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
+> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for the three CF Pages projects (landing, dashboard, docs) and `cd api && fly deploy` for the api on **Fly.io** (`lhr(2)` + `cdg(1)`). The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.
