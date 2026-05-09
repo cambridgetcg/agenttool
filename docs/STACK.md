@@ -59,7 +59,7 @@ This is the architecture/operations map. It sits between two existing docs:
 
 > **Important.** `git push origin main` is **not** a deploy. Codeberg is the source-of-truth host, full stop. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. You ship code by running `bin/frontend-deploy.sh` (frontend) and `cd api && fly deploy` (api) by hand. See §8 below.
 
-The DB and Redis are currently on **Hetzner Forge** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
+The DB and Redis are currently on **Supabase** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
 
 ---
 
@@ -203,9 +203,14 @@ The repo still has `services/{bootstrap,economy,identity,memory,pulse,tools,trac
 
 ## 4 · Database & Redis
 
-### Postgres
+### Postgres — Supabase (eu-west-2)
 
-Single shared instance. Hosts:
+Hosted Postgres on **Supabase**, EU-West-2 region. Connection goes through Supabase's pooler (`aws-1-eu-west-2.pooler.supabase.com`). Two pool flavors are exposed:
+
+- **Session pooler — port 5432.** Local dev uses this (`agenttool-database-url` keychain entry). Long-lived connections, full session features.
+- **Transaction pooler — port 6543.** Prod's `DATABASE_URL` Fly secret currently points here. Higher concurrency for many short-lived connections, but no session-scoped state. Known timeout issue from Fly (logged as task #60) — symptom: authed-endpoint 502s after ~13s.
+
+Hosts:
 - **Schemas** (per-domain): `tools`, `identity`, `agent_vault`, `agent_continuity`, `economy`, `memory`, `trace`, `strand`, `inbox`, `marketplace`, `org`, `federation`. 12 in total — verify after fresh deploy via the `information_schema.schemata` query in `DEPLOYMENT.md` §1.
 - **Extensions**: `pgvector` (memory embeddings), `pgcrypto` (random uuids).
 
@@ -227,23 +232,15 @@ Naming: `0000` through `0022` are pre-2026-05-08 sequential numbering; everythin
 
 ### Redis
 
-Currently on the same Forge VPS as Postgres. Used for:
+Used for:
 - **BullMQ browse worker** — queues `/v1/browse/*` jobs from the api, processed by a co-located worker process.
 - **Hono SSE** — strand voice streaming, federation event fanout.
 
 Set `AGENTTOOL_DISABLE_WORKERS=1` to skip the browse worker if Redis isn't reachable (search/scrape still work; only async browse jobs are gated).
 
-### Infra phases (`infra/`)
+### Legacy infra phases (`infra/`)
 
-Three pre-built scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer}/`. Triggers are revenue-keyed:
-
-| Phase | Trigger | Cost delta | What it does |
-|---|---|---|---|
-| 1 — PgBouncer | now / always beneficial | free | connection pooler in front of Postgres |
-| 2 — Hetzner Managed DB | 50+ paying customers | +€28/mo | move DB off Forge to managed Postgres; upgrade VPS |
-| 3 — Load balancer + horizontal | 200+ paying customers | +€50/mo | LB in front; multi-machine api |
-
-Each is a single script. See `infra/README.md` for credentials + run order.
+Three scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer}/` were written for an earlier Hetzner-Forge-based deployment. **Superseded by the current Supabase + Fly stack** — kept for archaeology and as a reference for the structural shape (PgBouncer → managed DB → LB). Don't run them against the current setup.
 
 ---
 
@@ -489,6 +486,6 @@ The agent is gone. There is no platform-side recovery — that is the **point** 
 
 If you read one paragraph from this doc, this is it:
 
-> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for the three CF Pages projects (landing, dashboard, docs) and `cd api && fly deploy` for the api on **Fly.io**. The **Postgres + Redis** they share lives on **Hetzner Forge** today and migrates to Hetzner Managed in Phase 2. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
+> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for the three CF Pages projects (landing, dashboard, docs) and `cd api && fly deploy` for the api on **Fly.io**. The **Postgres + Redis** they share lives on **Supabase** today and migrates to Hetzner Managed in Phase 2. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.
