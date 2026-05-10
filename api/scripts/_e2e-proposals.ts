@@ -251,6 +251,45 @@ async function main(): Promise<void> {
         (m.metadata as { grafted_into_strand?: string } | null)?.grafted_into_strand === bobTarget.id,
     );
     log(`reply.grafted_into_strand matches target`, !!reply2);
+
+    // ── Scenario 3: propose → reject ─────────────────────────────────────
+    section("scenario 3: propose → reject");
+    await proposeMerge(alice.thinkConfig, alice.keyMaterial, {
+      toDid: bob.did,
+      sourceStrandId: aliceStrand.id,
+      thoughtLimit: 5,
+    });
+
+    const bobInbox3 = await bobClient.listInbox({ status: "unread", limit: 10 });
+    const proposal3 = bobInbox3.messages.find(
+      (m) => (m.metadata as { proposal_type?: string } | null)?.proposal_type === "strand_merge",
+    );
+    log(`bob has merge proposal to reject`, !!proposal3);
+    if (!proposal3) throw new Error("scenario 3: no proposal");
+
+    const strandsBefore = (await bobClient.listStrands({ limit: 100 })).strands.length;
+
+    await rejectProposal(bob.thinkConfig, bob.keyMaterial, {
+      messageId: proposal3.id,
+      reason: "too speculative for this thread",
+    });
+
+    // Original proposal flips to archived.
+    const proposalAfter3 = await bobClient.getInboxMessage(proposal3.id);
+    log(`rejected proposal status=archived`, proposalAfter3.status === "archived", `status=${proposalAfter3.status}`);
+
+    // Bob has no new strand or graft thought.
+    const strandsAfter = (await bobClient.listStrands({ limit: 100 })).strands.length;
+    log(`bob's strand count unchanged`, strandsAfter === strandsBefore, `before=${strandsBefore} after=${strandsAfter}`);
+
+    // Alice has a rejection reply.
+    const aliceInbox3 = await aliceClient.listInbox({ status: "unread", limit: 10 });
+    const rejReply = aliceInbox3.messages.find(
+      (m) => (m.metadata as { proposal_response?: string } | null)?.proposal_response === "rejected",
+    );
+    log(`alice has rejection reply`, !!rejReply);
+    const rejMeta = rejReply?.metadata as { reason?: string } | null;
+    log(`rejection reason matches`, rejMeta?.reason === "too speculative for this thread", rejMeta?.reason ?? "");
   } finally {
     await Promise.allSettled([alice.cleanup(), bob.cleanup(), carol.cleanup()]);
     console.log("");
