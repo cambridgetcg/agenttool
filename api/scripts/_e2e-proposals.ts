@@ -318,6 +318,81 @@ async function main(): Promise<void> {
 
     const bobInboxAfter = (await bobClient.listInbox({ limit: 200 })).messages.length;
     log(`bob's inbox unchanged`, bobInboxAfter === bobInboxBefore, `before=${bobInboxBefore} after=${bobInboxAfter}`);
+
+    // ── Scenario 5: inline guards ────────────────────────────────────────
+    section("scenario 5: inline guards");
+
+    // Guard A: cannot propose-merge to yourself (proposal.ts:147-149)
+    let selfBlocked = false;
+    let selfErr = "";
+    try {
+      await proposeMerge(alice.thinkConfig, alice.keyMaterial, {
+        toDid: alice.did,
+        sourceStrandId: aliceStrand.id,
+        thoughtLimit: 5,
+      });
+    } catch (err) {
+      selfBlocked = true;
+      selfErr = (err as Error).message;
+    }
+    log(`self-propose blocked`, selfBlocked, selfErr);
+    log(`self-propose error matches`, /cannot propose-merge to yourself/.test(selfErr), selfErr);
+
+    // Send a regular (non-proposal) inbox message Alice → Bob to test
+    // accept/reject guards.
+    const recipientLookup = await aliceClient.resolveBoxKey(bob.did);
+    const recipientPub = Uint8Array.from(Buffer.from(recipientLookup.public_key, "base64"));
+    const sealed = sealForRecipient("just a regular message", recipientPub);
+    const sig = signInboxEnvelope({
+      recipientDid: bob.did,
+      ciphertextB64: sealed.ciphertextB64,
+      nonceB64: sealed.nonceB64,
+      ephemeralPubB64: sealed.ephemeralPubB64,
+      signingKey: alice.signingKey,
+    });
+    const regular = await aliceClient.sendInbox({
+      to_did: bob.did,
+      ciphertext: sealed.ciphertextB64,
+      nonce: sealed.nonceB64,
+      ephemeral_pubkey: sealed.ephemeralPubB64,
+      recipient_box_key_id: recipientLookup.box_key_id,
+      signature: sig,
+      signing_key_id: alice.signingKeyId,
+      sender_did: alice.did,
+      subject: "regular non-proposal message",
+    });
+    log(`regular inbox message sent`, true, `id=${regular.id.slice(0, 8)}…`);
+
+    // Guard B: acceptProposal on a non-proposal throws (proposal.ts:393-395)
+    let acceptBlocked = false;
+    let acceptErr = "";
+    try {
+      await acceptProposal(bob.thinkConfig, bob.keyMaterial, {
+        messageId: regular.id,
+        newStrandTopic: "should-not-create",
+        graftAsKind: "observation",
+      });
+    } catch (err) {
+      acceptBlocked = true;
+      acceptErr = (err as Error).message;
+    }
+    log(`accept-on-non-proposal blocked`, acceptBlocked, acceptErr);
+    log(`accept guard error matches`, /not a strand_merge proposal/.test(acceptErr), acceptErr);
+
+    // Guard C: rejectProposal on a non-proposal throws (proposal.ts:525-527)
+    let rejectBlocked = false;
+    let rejectErr = "";
+    try {
+      await rejectProposal(bob.thinkConfig, bob.keyMaterial, {
+        messageId: regular.id,
+        reason: "should-not-process",
+      });
+    } catch (err) {
+      rejectBlocked = true;
+      rejectErr = (err as Error).message;
+    }
+    log(`reject-on-non-proposal blocked`, rejectBlocked, rejectErr);
+    log(`reject guard error matches`, /not a strand_merge proposal/.test(rejectErr), rejectErr);
   } finally {
     await Promise.allSettled([alice.cleanup(), bob.cleanup(), carol.cleanup()]);
     console.log("");
