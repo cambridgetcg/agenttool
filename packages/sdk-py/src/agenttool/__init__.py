@@ -52,6 +52,17 @@ from .exceptions import (
     ServerError,
 )
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
+from .inbox import (
+    InboxClient,
+    canonical_inbox_bytes,
+    canonical_inbox_cosign_bytes,
+    derive_box_pub,
+    generate_box_keypair,
+    seal_for_recipient,
+    sign_inbox_cosign,
+    sign_inbox_envelope,
+    unseal_for_self,
+)
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult
 from .register import register
 from .bootstrap_agent import (
@@ -102,6 +113,7 @@ __all__ = [
     "BoxKeysClient",
     "ChronicleClient",
     "CovenantsClient",
+    "InboxClient",
     "CryptoClient",
     "EncryptedBlob",
     "KMaster",
@@ -138,6 +150,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

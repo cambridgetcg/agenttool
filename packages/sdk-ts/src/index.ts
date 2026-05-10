@@ -133,6 +133,25 @@ export type {
   SignThoughtOpts,
 } from "./crypto.js";
 export { StrandsClient, ThoughtsClient } from "./strands.js";
+export {
+  InboxClient,
+  generateBoxKeypair,
+  deriveBoxPub,
+  sealForRecipient,
+  unsealForSelf,
+  canonicalInboxBytes,
+  signInboxEnvelope,
+  canonicalInboxCoSignBytes,
+  signInboxCoSign,
+} from "./inbox.js";
+export type {
+  SealedEnvelope,
+  InboxBoxKeyLookup,
+  InboxMessage,
+  InboxSendOpts,
+  InboxCoSignOpts,
+  InboxStatus,
+} from "./inbox.js";
 export type {
   Strand,
   StrandStatus,

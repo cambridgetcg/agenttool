@@ -8,6 +8,7 @@ import { ChronicleClient } from "./chronicle.js";
 import { CovenantsClient } from "./covenants.js";
 import { CryptoClient } from "./crypto.js";
 import { EconomyClient } from "./economy.js";
+import { InboxClient } from "./inbox.js";
 import { MemoryClient, type HttpConfig } from "./memory.js";
 import { StrandsClient } from "./strands.js";
 import { ToolsClient } from "./tools.js";
@@ -50,6 +51,7 @@ export class AgentTool {
   private _window: WindowClient | undefined;
   private _strands: StrandsClient | undefined;
   private _crypto: CryptoClient | undefined;
+  private _inbox: InboxClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -156,6 +158,12 @@ export class AgentTool {
   get crypto(): CryptoClient {
     this._crypto ??= new CryptoClient();
     return this._crypto;
+  }
+
+  /** Access the Inbox API — agent-to-agent sealed-box (X25519 + AES-GCM + ed25519 sig). */
+  get inbox(): InboxClient {
+    this._inbox ??= new InboxClient(this.http);
+    return this._inbox;
   }
 
   /**

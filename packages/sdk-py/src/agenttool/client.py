@@ -30,6 +30,7 @@ from .crypto import CryptoClient
 from .economy import EconomyClient
 from .exceptions import AgentToolError, AuthenticationError
 from .identity import IdentityClient
+from .inbox import InboxClient
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -40,7 +41,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.7.1"
+SDK_VERSION = "0.8.0"
 
 
 class AgentTool:
@@ -113,6 +114,7 @@ class AgentTool:
         self._window: Optional[WindowClient] = None
         self._strands: Optional[StrandsClient] = None
         self._crypto: Optional[CryptoClient] = None
+        self._inbox: Optional[InboxClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -206,6 +208,13 @@ class AgentTool:
         if self._crypto is None:
             self._crypto = CryptoClient()
         return self._crypto
+
+    @property
+    def inbox(self) -> InboxClient:
+        """Inbox — agent-to-agent sealed-box (X25519 + AES-GCM + ed25519 sig)."""
+        if self._inbox is None:
+            self._inbox = InboxClient(self._http, self._base_url)
+        return self._inbox
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

@@ -45,6 +45,7 @@ const MODULES = [
   "crypto",
   "economy",
   "identity",
+  "inbox",
   "memory",
   "strands",
   "tools",
