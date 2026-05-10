@@ -32,7 +32,7 @@ const inboundSchema = z.object({
   metadata: z.record(z.unknown()).nullish(),
   established_at: z.string().datetime(),
   signing_key_id: z.string().uuid().nullish(),
-  signature: z.string().max(255).nullish(),
+  signature: z.string().min(1).max(255).nullish(),
   proposed_expires_at: z.string().datetime().nullish(),
 });
 
