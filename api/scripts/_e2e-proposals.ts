@@ -143,8 +143,70 @@ async function main(): Promise<void> {
 
   // ── Cleanup at end ──────────────────────────────────────────────────
   try {
-    // Scenarios run here in subsequent tasks.
     log("setup complete", true);
+
+    // ── Scenario 1: propose → accept --new-strand ────────────────────────
+    section("scenario 1: propose → accept --new-strand");
+    await proposeMerge(alice.thinkConfig, alice.keyMaterial, {
+      toDid: bob.did,
+      sourceStrandId: aliceStrand.id,
+      thoughtLimit: 5,
+    });
+
+    // Bob's inbox now has the proposal.
+    const bobClient = new AgenttoolClient(bob.thinkConfig);
+    const bobInbox = await bobClient.listInbox({ status: "unread", limit: 10 });
+    const proposal = bobInbox.messages.find(
+      (m) => (m.metadata as { proposal_type?: string } | null)?.proposal_type === "strand_merge",
+    );
+    log(`bob has unread merge proposal`, !!proposal, proposal ? `id=${proposal.id.slice(0, 8)}…` : "");
+    if (!proposal) throw new Error("scenario 1: no proposal found in bob's inbox");
+
+    await acceptProposal(bob.thinkConfig, bob.keyMaterial, {
+      messageId: proposal.id,
+      newStrandTopic: "Yu's working file: USDC double-charge",
+      graftAsKind: "observation",
+    });
+
+    // Verify graft: a new strand exists on bob with the synthesis as a thought.
+    const bobStrandsRes = await fetch(`${BASE}/v1/strands?status=active`, {
+      headers: { Authorization: `Bearer ${bob.bearer}` },
+    });
+    const bobStrandsData = (await bobStrandsRes.json()) as { strands: Array<{ id: string; topic: string | null; metadata?: any }> };
+    const newStrand = bobStrandsData.strands.find(
+      (s) => s.metadata?.accepted_proposal_id === proposal.id,
+    );
+    log(`bob has new strand from proposal`, !!newStrand, newStrand?.id.slice(0, 8) ?? "");
+    if (!newStrand) throw new Error("scenario 1: no grafted strand on bob");
+
+    const graftThoughtsRes = await bobClient.listThoughts(newStrand.id, { limit: 10 });
+    log(`graft strand has 1 thought`, graftThoughtsRes.thoughts.length === 1, `count=${graftThoughtsRes.thoughts.length}`);
+
+    const graft = graftThoughtsRes.thoughts[0];
+    const graftRefs = (graft?.refs as Array<{ kind: string; ref: string }> | null) ?? [];
+    const hasInboxRef = graftRefs.some((r) => r.kind === "inbox" && r.ref === proposal.id);
+    const hasAgentRef = graftRefs.some((r) => r.kind === "agent" && r.ref === alice.did);
+    const hasStrandExtRef = graftRefs.some((r) => r.kind === "strand_external" && r.ref === aliceStrand.id);
+    log(`graft thought refs include inbox→proposal`, hasInboxRef);
+    log(`graft thought refs include agent→alice.did`, hasAgentRef);
+    log(`graft thought refs include strand_external→aliceStrand`, hasStrandExtRef);
+
+    // Verify reply: alice has an inbox message with proposal_response=accepted.
+    const aliceClient = new AgenttoolClient(alice.thinkConfig);
+    const aliceInbox = await aliceClient.listInbox({ status: "unread", limit: 10 });
+    const reply = aliceInbox.messages.find(
+      (m) => (m.metadata as { proposal_response?: string; in_reply_to?: string } | null)?.proposal_response === "accepted",
+    );
+    log(`alice has acceptance reply`, !!reply);
+    const replyMeta = reply?.metadata as
+      | { grafted_into_strand?: string; grafted_thought_id?: string }
+      | null;
+    log(`reply.grafted_into_strand matches`, replyMeta?.grafted_into_strand === newStrand.id);
+    log(`reply.grafted_thought_id present`, !!replyMeta?.grafted_thought_id);
+
+    // Verify original proposal status flipped to read.
+    const proposalAfter = await bobClient.getInboxMessage(proposal.id);
+    log(`original proposal status=read`, proposalAfter.status === "read", `status=${proposalAfter.status}`);
   } finally {
     await Promise.allSettled([alice.cleanup(), bob.cleanup(), carol.cleanup()]);
     console.log("");

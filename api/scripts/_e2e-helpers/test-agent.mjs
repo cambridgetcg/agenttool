@@ -119,7 +119,8 @@ export async function createTestAgent({ role, base, llmProvider = "stub" }) {
     kMaster: new Uint8Array(kMaster),
     signingKey,
     signingPubKey,
-    boxKey: { priv: boxPriv, pub: boxPub },
+    boxKey: boxPriv,
+    boxPubKey: boxPub,
   };
 
   return {
