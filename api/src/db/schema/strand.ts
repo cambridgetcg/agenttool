@@ -89,3 +89,19 @@ export const thoughts = strandSchema.table(
     index("idx_thoughts_project_time").on(t.projectId, t.createdAt),
   ],
 );
+
+export const moodHistory = strandSchema.table(
+  "mood_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    strandId: uuid("strand_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    identityId: uuid("identity_id"),
+    mood: text("mood"),
+    encrypted: boolean("encrypted").notNull().default(false),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_mood_history_identity_time").on(t.identityId, t.changedAt),
+  ],
+);
