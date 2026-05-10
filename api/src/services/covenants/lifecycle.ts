@@ -106,9 +106,10 @@ export async function declareV2(opts: {
   const sig = await ed.signAsync(canonical, opts.agentSigningPrivateKey);
   const signatureB64 = b64(sig);
 
-  const cosignPropagationStatus = counterpartyIsFederated(opts.counterpartyDid)
-    ? "not_applicable" // becomes 'pending' on accept, when counterparty cosigns
-    : "not_applicable";
+  // On the initiator side, cosign propagation is not yet relevant — it
+  // becomes meaningful on the counterparty's mirror row when they accept
+  // (where receivedFromInstance is set, triggering the cosign-back POST).
+  const cosignPropagationStatus = "not_applicable" as const;
 
   await db.insert(covenants).values({
     id: covenantId,

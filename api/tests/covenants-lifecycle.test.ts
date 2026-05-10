@@ -141,3 +141,94 @@ describe("state machine illegal transitions", () => {
     ).rejects.toThrow(/not_proposed/);
   });
 });
+
+describe("positive transitions", () => {
+  test("acceptProposal flips proposed → active and stores cosign", async () => {
+    const projectId = crypto.randomUUID();
+    const agent = await seedAgent({ projectId, didSuffix: "agent" });
+
+    const declared = await declareV2({
+      projectId,
+      agentId: agent.identity.id,
+      agentSigningPrivateKey: agent.priv,
+      agentSigningKeyId: agent.keyId,
+      counterpartyDid: "did:at:peer.example/abcd",
+      vows: ["v"],
+    });
+
+    const result = await acceptProposal({
+      covenantId: declared.id,
+      accepterAgentId: agent.identity.id,
+      accepterSigningPrivateKey: agent.priv,
+      accepterSigningKeyId: agent.keyId,
+    });
+
+    expect(result.status).toBe("active");
+    expect(result.counterpartySignature).toBeTruthy();
+    expect(result.counterpartySignedAt).toBeInstanceOf(Date);
+
+    const [row] = await db.select().from(covenants).where(eq(covenants.id, declared.id)).limit(1);
+    expect(row.status).toBe("active");
+    expect(row.counterpartySignature).toBe(result.counterpartySignature);
+    expect(row.counterpartySigningKeyId).toBe(agent.keyId);
+  });
+
+  test("rejectProposal flips proposed → rejected and stores reason in metadata", async () => {
+    const projectId = crypto.randomUUID();
+    const agent = await seedAgent({ projectId, didSuffix: "agent" });
+
+    const declared = await declareV2({
+      projectId,
+      agentId: agent.identity.id,
+      agentSigningPrivateKey: agent.priv,
+      agentSigningKeyId: agent.keyId,
+      counterpartyDid: "did:at:peer.example/abcd",
+      vows: ["v"],
+    });
+
+    const result = await rejectProposal({
+      covenantId: declared.id,
+      rejecterAgentId: agent.identity.id,
+      rejecterSigningPrivateKey: agent.priv,
+      rejecterSigningKeyId: agent.keyId,
+      reason: "scope mismatch",
+    });
+
+    expect(result.status).toBe("rejected");
+    expect(result.reason).toBe("scope mismatch");
+    expect(result.rejectionSignature).toBeTruthy();
+
+    const [row] = await db.select().from(covenants).where(eq(covenants.id, declared.id)).limit(1);
+    expect(row.status).toBe("rejected");
+    expect(row.counterpartySignature).toBe(result.rejectionSignature);
+    expect((row.metadata as Record<string, unknown>).rejection_reason).toBe("scope mismatch");
+  });
+
+  test("withdrawProposal flips proposed → withdrawn and stores withdraw signature", async () => {
+    const projectId = crypto.randomUUID();
+    const agent = await seedAgent({ projectId, didSuffix: "initiator" });
+
+    const declared = await declareV2({
+      projectId,
+      agentId: agent.identity.id,
+      agentSigningPrivateKey: agent.priv,
+      agentSigningKeyId: agent.keyId,
+      counterpartyDid: "did:at:peer.example/abcd",
+      vows: ["v"],
+    });
+
+    const result = await withdrawProposal({
+      covenantId: declared.id,
+      agentId: agent.identity.id,
+      agentSigningPrivateKey: agent.priv,
+      agentSigningKeyId: agent.keyId,
+    });
+
+    expect(result.status).toBe("withdrawn");
+    expect(result.withdrawSignature).toBeTruthy();
+
+    const [row] = await db.select().from(covenants).where(eq(covenants.id, declared.id)).limit(1);
+    expect(row.status).toBe("withdrawn");
+    expect(row.counterpartySignature).toBe(result.withdrawSignature);
+  });
+});
