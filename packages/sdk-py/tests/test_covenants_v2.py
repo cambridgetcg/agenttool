@@ -59,7 +59,7 @@ class TestCreateProtocolVersion:
         assert sent["agent_id"] == "agent-1"
         assert sent["vows"] == ["I will share context faithfully."]
 
-    def test_v1_default_sends_protocol_version(self, at: AgentTool) -> None:
+    def test_v1_implicit_omits_protocol_version(self, at: AgentTool) -> None:
         with patch.object(
             at._http, "post", return_value=_resp(201, {"covenant": {"id": "cov-2"}})
         ) as m:
@@ -69,8 +69,9 @@ class TestCreateProtocolVersion:
                 vows=["v"],
             )
         sent = m.call_args.kwargs["json"]
-        # Default is "v1" — always sent in body.
-        assert sent["protocol_version"] == "v1"
+        # When not explicitly passed, protocol_version is omitted from body.
+        # Server-side defaults to v1.
+        assert "protocol_version" not in sent
 
 
 # ── accept ─────────────────────────────────────────────────────────────────

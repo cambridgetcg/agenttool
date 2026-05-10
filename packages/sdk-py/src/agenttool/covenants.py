@@ -66,7 +66,7 @@ class CovenantsClient:
         notes: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         org_id: Optional[str] = None,
-        protocol_version: Literal["v1", "v2"] = "v1",
+        protocol_version: Optional[Literal["v1", "v2"]] = None,
     ) -> Dict[str, Any]:
         """Create a new covenant.
 
@@ -78,8 +78,9 @@ class CovenantsClient:
             notes: Optional context (e.g. ceremony reference).
             metadata: Arbitrary JSON.
             org_id: Optional org scope (caller must own org).
-            protocol_version: ``"v1"`` (default, immediate active) or ``"v2"``
+            protocol_version: Optional ``"v1"`` (immediate active) or ``"v2"``
                 (federated proposal flow — proposed → accepted/rejected).
+                If omitted, server defaults to v1.
 
         Returns:
             ``{"covenant": {id, agent_id, counterparty_did, vows, status,
@@ -94,7 +95,6 @@ class CovenantsClient:
             "agent_id": agent_id,
             "counterparty_did": counterparty_did,
             "vows": vows,
-            "protocol_version": protocol_version,
         }
         if counterparty_name is not None:
             body["counterparty_name"] = counterparty_name
@@ -104,6 +104,8 @@ class CovenantsClient:
             body["metadata"] = metadata
         if org_id is not None:
             body["org_id"] = org_id
+        if protocol_version is not None:
+            body["protocol_version"] = protocol_version
 
         resp = self._http.post(self._url("/v1/covenants"), json=body)
         if resp.status_code not in (200, 201):
