@@ -109,7 +109,19 @@ export async function createTestAgent({ name, base, llmProvider = "stub" }) {
 
 ## Success criteria
 
-- `node api/scripts/_e2e-proposals.mjs` exits 0 against a healthy api (live or local)
+- `bun api/scripts/_e2e-proposals.ts` exits 0 against a healthy api (live or local)
 - All 5 scenarios pass deterministically (no flake from stub LLM, no race on fire-and-forget reply — the reply send is awaited, not voided)
 - `_e2e-helpers/test-agent.mjs` is consumed by witness-gate-v2 e2e when that lands (validation deferred to that spec)
-- Top-of-file header comment in `_e2e-proposals.mjs` documents env vars + invocation, matching the convention in `_e2e-cross-instance-covenants.mjs`
+- Top-of-file header comment in `_e2e-proposals.ts` documents env vars + invocation, matching the convention in `_e2e-cross-instance-covenants.mjs`
+
+## Deviations from this spec discovered during implementation
+
+For future consumers of `_e2e-helpers/test-agent.mjs` (notably the witness-gate-v2 e2e):
+
+1. **`keyMaterial.boxKey` is a flat `Uint8Array`, not `{ priv, pub }`.** The `KeyMaterial` interface in `cli/think/src/keys.ts:32-40` uses flat `boxKey: Uint8Array` (X25519 private seed, 32 bytes) + `boxPubKey: Uint8Array` (X25519 public, 32 bytes). The spec's architecture sketch showed a nested `{ priv, pub }` object; the actual shape was caught and corrected in commit `0b3b5b6`. **When constructing `KeyMaterial`, use flat fields.** The top-level convenience field on the `TestAgent` return object (`agent.boxKey: { priv, pub }`) is a separate ergonomic accessor and is kept nested.
+
+2. **File extension is `.ts`, not `.mjs`.** The e2e script imports TypeScript modules from `cli/think/src/modes/proposal.ts`; pure node cannot resolve `.ts` without a loader. Run with `bun api/scripts/_e2e-proposals.ts`. This matches the convention already used by `api/scripts/witness.ts`, `remember.ts`, etc.
+
+3. **`createTestAgent({ role, ... })` not `{ name, ... }`.** The helper constructs `name` internally as `e2e-${role}-${Date.now()}` for namespacing; callers pass the short `role` label (e.g. `"prop-alice"`).
+
+4. **Stub LLM still requires a vault entry.** `proposeMerge` calls `client.getVaultSecret(config.llmKeyVaultName)` *before* `buildProvider`. The factory PUTs a dummy `value: "stub-key-not-used"` into the vault so the lookup succeeds; the stub provider ignores the value.
