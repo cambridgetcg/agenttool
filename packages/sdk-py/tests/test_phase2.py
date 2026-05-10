@@ -146,13 +146,17 @@ class TestIdentitySurface:
                         "completed": 0, "abandoned": 0},
             "thought_rate": {"5m": 0, "1h": 0, "24h": 0},
             "consolidation": {"last_at": None, "overflow_count": 0},
-            "mood": None,
+            "mood": "focused",
+            "mood_drift": {"from": "anxious", "to": "focused",
+                           "at": "2026-05-10T12:00:00Z"},
             "kinds_24h": {},
         }
         with patch.object(at._http, "get", return_value=_resp(200, body)) as m:
             out = at.identity.pulse("id-1")
         assert out["agent"]["did"] == "did:at:id-1"
         assert "/v1/identities/id-1/pulse" in m.call_args[0][0]
+        assert out["mood_drift"]["to"] == "focused"
+        assert out["mood_drift"]["from"] == "anxious"
 
     def test_lineage(self, at: AgentTool) -> None:
         body = {
