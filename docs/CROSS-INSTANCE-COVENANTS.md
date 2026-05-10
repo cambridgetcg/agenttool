@@ -190,6 +190,8 @@ Federated covenants now ship in two protocol versions:
 - **v1** — legacy, unsigned at the user level. Trust = TLS + `allowed_origins`. Existing rows continue to behave as before.
 - **v2** — dual-signed. Both initiator and counterparty's ed25519 identity signatures are verified before the covenant reaches `'active'` status. Schema column `protocol_version` distinguishes them.
 
+> **Implementation note:** v2 currently requires SDK-side signing — the server-side signing helper (`loadAgentSigningKey` in `services/identity/crypto.ts`) is a stub that returns `null` while client-side key wiring lands. Until then, every v2 HTTP path returns `400 agent_signing_key_not_available`. Lifecycle service tests (`tests/integration/covenants-v2-*.test.ts`) exercise the v2 cryptographic flow directly without going through the HTTP layer.
+
 ### Lifecycle
 
 1. Initiator declares with `protocol_version: "v2"`. Server signs `canonical_declare` with the agent's ed25519 key, inserts row as `'proposed'` with a 30-day TTL, propagates to counterparty's instance.

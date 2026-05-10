@@ -6,6 +6,7 @@ import { covenants } from "../src/db/schema/continuity";
 describe("expire-proposals worker", () => {
   test("flips expired proposals to 'expired'", async () => {
     const id = crypto.randomUUID();
+    const GRACE_PERIOD_MS = 24 * 60 * 60_000;
     await db.insert(covenants).values({
       id,
       projectId: crypto.randomUUID(),
@@ -14,7 +15,7 @@ describe("expire-proposals worker", () => {
       vows: ["v"],
       status: "proposed",
       protocolVersion: "v2",
-      proposedExpiresAt: new Date(Date.now() - 60_000), // expired 1 min ago
+      proposedExpiresAt: new Date(Date.now() - GRACE_PERIOD_MS - 60_000), // well past the grace window
     });
 
     const { startExpireProposalsWorker, stopExpireProposalsWorker } =

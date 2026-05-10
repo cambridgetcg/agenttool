@@ -101,7 +101,7 @@ describe("v2 expire path (TTL)", () => {
       counterpartyDid: "did:at:peer.example/bbbb",
       vows: ["v"], status: "proposed", protocolVersion: "v2",
       establishedAt: new Date(),
-      proposedExpiresAt: new Date(Date.now() - 60_000),
+      proposedExpiresAt: new Date(Date.now() - 25 * 60 * 60_000), // 25 hours ago — well past the 24h grace period
     });
 
     const { startExpireProposalsWorker, stopExpireProposalsWorker } =

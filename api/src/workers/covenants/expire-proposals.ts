@@ -11,6 +11,7 @@ import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
 
 const TICK_MS = 5 * 60_000; // 5 minutes
+const GRACE_PERIOD_MS = 24 * 60 * 60_000; // 24h: gives late cosigns time to land before expiry kicks in
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function startExpireProposalsWorker(): void {
@@ -35,7 +36,7 @@ async function tick(): Promise<void> {
   }).where(and(
     eq(covenants.status, "proposed"),
     isNotNull(covenants.proposedExpiresAt),
-    lt(covenants.proposedExpiresAt, now),
+    lt(covenants.proposedExpiresAt, new Date(now.getTime() - GRACE_PERIOD_MS)),
     or(
       eq(covenants.cosignPropagationStatus, "not_applicable"),
       eq(covenants.cosignPropagationStatus, "rejected"),
