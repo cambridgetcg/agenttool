@@ -61,6 +61,48 @@ interface TestAgent {
   cleanup: () => Promise<void>;
 }
 
+async function seedStrand(
+  agent: TestAgent,
+  topic: string,
+  thoughtCount: number,
+): Promise<{ id: string; topic: string }> {
+  const client = new AgenttoolClient(agent.thinkConfig);
+  const strand = await client.createStrand({
+    topic,
+    importance: 0.5,
+    metadata: { e2e: "proposal-flow" },
+  });
+
+  // Real wire shape: encrypt + sign each thought as a real orchestrator would.
+  const seedThoughts = [
+    { kind: "observation", content: "I notice the queue empties faster than it fills." },
+    { kind: "question", content: "Why does base/USDC charge double the others?" },
+    { kind: "conjecture", content: "Maybe Alchemy reports USDC.e separately." },
+    { kind: "resolution", content: "Confirmed — they conflate native + bridged." },
+    { kind: "drift", content: "Reminds me of the SerpAPI confusion last week." },
+  ].slice(0, thoughtCount);
+
+  for (const t of seedThoughts) {
+    const blob = encryptThought(t.content, agent.kMaster);
+    const sig = signThought({
+      strandId: strand.id,
+      ciphertextB64: blob.ciphertextB64,
+      nonceB64: blob.nonceB64,
+      kind: t.kind,
+      signingKey: agent.signingKey,
+    });
+    await client.addThought(strand.id, {
+      ciphertext: blob.ciphertextB64,
+      nonce: blob.nonceB64,
+      kind: t.kind,
+      signature: sig,
+      signing_key_id: agent.signingKeyId,
+    });
+  }
+
+  return { id: strand.id, topic };
+}
+
 async function main(): Promise<void> {
   console.log("");
   console.log(`  agenttool · proposal flow e2e`);
@@ -90,10 +132,19 @@ async function main(): Promise<void> {
   });
   log(`POST /v1/covenants 201`, covRes.status === 201, `status=${covRes.status}`);
 
+  // ── Seed Alice's source strand ──────────────────────────────────────
+  section("setup: seed Alice's source strand");
+  const aliceStrand = await seedStrand(
+    alice,
+    "Why is base/USDC charging double?",
+    5,
+  );
+  log(`source strand seeded`, true, `id=${aliceStrand.id.slice(0, 8)}… · 5 thoughts`);
+
   // ── Cleanup at end ──────────────────────────────────────────────────
   try {
     // Scenarios run here in subsequent tasks.
-    log("setup complete — scenarios pending implementation", true);
+    log("setup complete", true);
   } finally {
     await Promise.allSettled([alice.cleanup(), bob.cleanup(), carol.cleanup()]);
     console.log("");
