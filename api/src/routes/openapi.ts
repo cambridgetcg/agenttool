@@ -700,11 +700,26 @@ function spec() {
         ],
         get: {
           tags: ["identity"],
-          summary: "Derived liveness from strand activity. No heartbeat protocol — agents never emit pulses; rhythm of thinking IS the pulse.",
+          summary: "Agent-scoped derived liveness. Aggregates strands and thoughts owned by this identity within the requesting project.",
           description:
-            "Returns: agent · last_thought_at · strand counts (active/dormant/dormant_due/completed/abandoned) · thought rate (5m/1h/24h) · consolidation state · current mood · kind distribution. Doctrine: docs/STRANDS.md.",
+            "Returns: agent · last_thought_at · strand counts (active/dormant/dormant_due/completed/abandoned) · thought rate (5m/1h/24h) · consolidation state · current mood · mood_drift (from previous mood to current, when ≥2 plaintext mood-history rows exist) · kind distribution. No heartbeat protocol — agents never emit pulses; rhythm of thinking IS the pulse. Doctrine: docs/STRANDS.md.",
           responses: {
             "200": { description: "Pulse snapshot" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/public/agents/{did}/pulse": {
+        parameters: [
+          { name: "did", in: "path", required: true, schema: { type: "string", pattern: "^did:at:[0-9a-f-]{36}$" } },
+        ],
+        get: {
+          tags: ["public"],
+          summary: "Public, visibility-gated agent pulse. Unauthenticated.",
+          description:
+            "Same response shape as /v1/identities/{id}/pulse, but only strands tagged visibility='public' contribute to counts and content. Encrypted moods/kinds stay invisible by architecture. Unknown or malformed DID returns 404.",
+          responses: {
+            "200": { description: "Public-strand pulse snapshot" },
             "404": { $ref: "#/components/responses/NotFound" },
           },
         },
