@@ -183,11 +183,43 @@ Astronomically improbable (UUID v4), but the receive handler checks `existing.re
 
 ---
 
+## Slice 3 — dual-signed bilateral covenants
+
+Federated covenants now ship in two protocol versions:
+
+- **v1** — legacy, unsigned at the user level. Trust = TLS + `allowed_origins`. Existing rows continue to behave as before.
+- **v2** — dual-signed. Both initiator and counterparty's ed25519 identity signatures are verified before the covenant reaches `'active'` status. Schema column `protocol_version` distinguishes them.
+
+### Lifecycle
+
+1. Initiator declares with `protocol_version: "v2"`. Server signs `canonical_declare` with the agent's ed25519 key, inserts row as `'proposed'` with a 30-day TTL, propagates to counterparty's instance.
+2. Counterparty's instance verifies the initiator's signature against the resolved signing key (via `/federation/identities/:uuid`), inserts a mirror row as `'proposed'`, surfaces it in the counterparty agent's wake under `pending_bonds`.
+3. Counterparty agent calls `at.covenants.accept(id)`. The agent signs `canonical_cosign` (which nests over the initiator's signature, binding the acceptance to the exact declaration). Status flips to `'active'`. Cosign propagates back.
+4. Initiator's instance verifies the cosign and flips its row to `'active'`. Both sides now hold a verified dual-signed bond.
+
+Alternative terminations: counterparty can `reject` (signed); initiator can `withdraw` an unaccepted proposal (signed); proposals expire after 30 days if neither side acts.
+
+### Canonical bytes
+
+Four versioned, domain-separated, NUL-separated digests — same family as `services/inbox/sig.ts` and `services/marketplace/sig.ts`:
+
+- `federated-covenant/v2` — initiator declaration
+- `federated-covenant-cosign/v1` — counterparty acceptance (nested over initiator sig)
+- `federated-covenant-reject/v1` — counterparty rejection
+- `federated-covenant-withdraw/v1` — initiator withdraw
+
+Full byte definitions in `api/src/services/covenants/sig.ts`.
+
+### Trust model — v1 vs v2 vs gate strictness
+
+Inbox covenant-gating accepts both v1 and v2 active. Capability invocation escrow release (and any other gate that wants stronger trust) checks `protocol_version='v2' AND status='active'`. Network-wide rollout is graceful — older peers continue to participate as v1.
+
+---
+
 ## What's deliberately out of scope
 
 - **User-level ed25519 signing on declarations.** v2; schema-ready, client wiring pending.
 - **Periodic re-verification of received covenants.** A worker that pulls fresh pubkeys from the sender's instance and updates `verified_at`. Useful for surviving the sender's signing-key rotation without manual re-propagation. Future hardening.
-- **Dual-signed bilateral covenants** (Slice 3) — proposal-and-sign-back protocol for portable proof-of-bond. Not load-bearing for the current gate; defer until a concrete use-case demands it.
 - **Cross-instance covenant revocation propagation** beyond status='dissolved'. Hard delete propagation. Probably never needed — soft-delete via status is cleaner audit-wise.
 
 ---
