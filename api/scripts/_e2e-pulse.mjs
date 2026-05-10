@@ -94,6 +94,9 @@ console.log(`   public pulse: ${JSON.stringify(publicPulse, null, 2)}`);
 assert(publicPulse.agent.did === did, "agent.did echoes back");
 assert(publicPulse.strands.active >= 1, "active count includes the public strand");
 assert(publicPulse.mood === "focused", `public mood is "${publicPulse.mood}", expected "focused"`);
+assert(publicPulse.mood_drift !== null, "public pulse: mood_drift is not null");
+assert(publicPulse.mood_drift.from === "anxious", `public pulse: drift.from is "${publicPulse.mood_drift?.from}"`);
+assert(publicPulse.mood_drift.to === "focused", `public pulse: drift.to is "${publicPulse.mood_drift?.to}"`);
 
 // 6. Bad DID -> 404
 console.log("6. GET /public/agents/did:at:not-a-uuid/pulse...");

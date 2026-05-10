@@ -90,6 +90,16 @@ export const thoughts = strandSchema.table(
   ],
 );
 
+/** Append-only mood transition log. Populated by a trigger on
+ *  strand.strands; consumed by aggregatePulse() for mood_drift.
+ *
+ *  Migration `20260510T180000_strand_mood_history.sql` is authoritative
+ *  for:
+ *    - the partial index predicate `WHERE encrypted = false AND mood IS NOT NULL`
+ *    - the `strand_id` FK with `ON DELETE CASCADE`
+ *  Neither is expressible in Drizzle 0.36's `index()` / `references()`
+ *  helpers as used elsewhere in this file. The Drizzle export is for
+ *  type-safe query construction only. */
 export const moodHistory = strandSchema.table(
   "mood_history",
   {

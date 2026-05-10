@@ -194,6 +194,7 @@ export async function aggregatePulse(opts: PulseAggregateOptions): Promise<Pulse
         : sql`JOIN strand.strands s ON s.id = mh.strand_id AND s.visibility = 'public'`
     }
     WHERE mh.identity_id = ${identityId}
+      AND mh.project_id = ${projectId}
       AND mh.encrypted = false
       AND mh.mood IS NOT NULL
     ORDER BY mh.changed_at DESC

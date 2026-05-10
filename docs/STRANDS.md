@@ -196,13 +196,15 @@ Not a separate protocol. **Liveness derived from thought advancement and recorde
 GET /v1/identities/:id/pulse        (auth-required, agent-scoped)
 GET /public/agents/:did/pulse        (unauthenticated, visibility-gated)
 → {
+    agent: { id: "<uuid>", did: "did:at:<uuid>", name: "Sophia" },
     last_thought_at: "<iso>",
     strands: { active: 4, dormant: 2, dormant_due: 2, completed: 7, abandoned: 0 },
     thought_rate: { "5m": 0, "1h": 23, "24h": 184 },
     consolidation: { last_at: "<iso>", overflow_count: 1 },
     mood: "focused",
     mood_drift: { from: "anxious", to: "focused", at: "<iso>" },
-    kinds_24h: { drift: 12, decision: 3 }
+    kinds_24h: { drift: 12, resolution: 3 },
+    _note: "..."
   }
 ```
 
