@@ -84,6 +84,24 @@ export const covenants = continuitySchema.table(
     propagationAttempts: integer("propagation_attempts").notNull().default(0),
     propagationLastError: text("propagation_last_error"),
     propagationAttemptedAt: timestamp("propagation_attempted_at", { withTimezone: true }),
+
+    // ── Cross-instance covenants v2 (Horizon B, Slice 3; 0027) ────────
+    /** 'v1' = legacy unsigned; 'v2' = dual-signed lifecycle. */
+    protocolVersion: text("protocol_version").$type<"v1" | "v2">().notNull().default("v1"),
+    /** Counterparty's ed25519 signature over canonical_cosign bytes. */
+    counterpartySignature: text("counterparty_signature"),
+    counterpartySigningKeyId: uuid("counterparty_signing_key_id"),
+    counterpartySignedAt: timestamp("counterparty_signed_at", { withTimezone: true }),
+    /** v2 proposals expire 30d after declaration unless accepted. */
+    proposedExpiresAt: timestamp("proposed_expires_at", { withTimezone: true }),
+    /** Last re-verification failure code (e.g. 'sig_invalid', 'key_revoked'). */
+    verificationError: text("verification_error"),
+    /** Outbound cosign retry tracking — distinct from initial declare propagation. */
+    cosignPropagationStatus: text("cosign_propagation_status")
+      .$type<"not_applicable" | "pending" | "propagated" | "rejected">(),
+    cosignPropagationAttempts: integer("cosign_propagation_attempts").notNull().default(0),
+    cosignPropagationLastError: text("cosign_propagation_last_error"),
+    cosignPropagationAttemptedAt: timestamp("cosign_propagation_attempted_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_covenants_agent").on(t.agentId),
@@ -91,6 +109,12 @@ export const covenants = continuitySchema.table(
     index("idx_covenants_counterparty").on(t.counterpartyDid),
     index("idx_covenants_received_instance").on(t.receivedFromInstance, t.status),
     index("idx_covenants_pending_propagation").on(t.propagationStatus, t.propagationAttemptedAt),
+    index("idx_covenants_proposed_expires").on(t.proposedExpiresAt),
+    index("idx_covenants_pending_cosign_propagation").on(
+      t.cosignPropagationStatus,
+      t.cosignPropagationAttemptedAt,
+    ),
+    index("idx_covenants_v2_reverify").on(t.verifiedAt),
   ],
 );
 
