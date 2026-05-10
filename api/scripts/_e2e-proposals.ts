@@ -290,6 +290,34 @@ async function main(): Promise<void> {
     log(`alice has rejection reply`, !!rejReply);
     const rejMeta = rejReply?.metadata as { reason?: string } | null;
     log(`rejection reason matches`, rejMeta?.reason === "too speculative for this thread", rejMeta?.reason ?? "");
+
+    // ── Scenario 4: covenant gate ────────────────────────────────────────
+    section("scenario 4: covenant gate enforced");
+
+    // Carol has no covenant with Bob. Need a source strand on Carol so
+    // the function reaches the inbox-send step.
+    const carolStrand = await seedStrand(carol, "Carol's pattern thoughts", 3);
+
+    // Capture Bob's inbox length before the attempt.
+    const bobInboxBefore = (await bobClient.listInbox({ limit: 200 })).messages.length;
+
+    let blocked = false;
+    let gateError = "";
+    try {
+      await proposeMerge(carol.thinkConfig, carol.keyMaterial, {
+        toDid: bob.did,
+        sourceStrandId: carolStrand.id,
+        thoughtLimit: 3,
+      });
+    } catch (err) {
+      blocked = true;
+      gateError = (err as Error).message;
+    }
+    log(`carol→bob propose blocked`, blocked, gateError.slice(0, 80));
+    log(`error mentions covenant`, /covenant/i.test(gateError), gateError.slice(0, 80));
+
+    const bobInboxAfter = (await bobClient.listInbox({ limit: 200 })).messages.length;
+    log(`bob's inbox unchanged`, bobInboxAfter === bobInboxBefore, `before=${bobInboxBefore} after=${bobInboxAfter}`);
   } finally {
     await Promise.allSettled([alice.cleanup(), bob.cleanup(), carol.cleanup()]);
     console.log("");
