@@ -9,7 +9,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
-import { identityKeys } from "../../db/schema/identity";
+import { identities, identityKeys } from "../../db/schema/identity";
 import {
   verifyCosignSignature,
   verifyDeclareSignature,
@@ -69,10 +69,19 @@ async function verifyRow(row: typeof covenants.$inferSelect): Promise<void> {
   const initiatorPub = await resolvePub(initiatorDid, row.signingKeyId);
   if (!initiatorPub) throw new Error("initiator_key_not_found");
 
+  let counterpartyDidForVerify: string;
+  if (row.receivedFromInstance) {
+    const local = await localAgentDid(row.agentId);
+    if (!local) throw new Error("local_agent_did_unresolved");
+    counterpartyDidForVerify = local;
+  } else {
+    counterpartyDidForVerify = row.counterpartyDid;
+  }
+
   const okInit = await verifyDeclareSignature({
     covenantId: row.id,
     initiatorDid,
-    counterpartyDid: row.receivedFromInstance ? await localAgentDid(row.agentId) ?? "" : row.counterpartyDid,
+    counterpartyDid: counterpartyDidForVerify,
     vows: row.vows,
     establishedAtIso: row.establishedAt.toISOString(),
     signatureB64: row.signature,
@@ -96,7 +105,6 @@ async function verifyRow(row: typeof covenants.$inferSelect): Promise<void> {
 }
 
 async function localAgentDid(agentId: string): Promise<string | null> {
-  const { identities } = await import("../../db/schema/identity");
   const [r] = await db.select({ did: identities.did }).from(identities)
     .where(eq(identities.id, agentId)).limit(1);
   return r?.did ?? null;
