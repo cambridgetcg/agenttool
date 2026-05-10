@@ -59,7 +59,10 @@ export const covenants = continuitySchema.table(
     vows: text("vows").array().notNull().default([]), // each vow as a one-line string
     notes: text("notes"),
     metadata: jsonb("metadata").default({}),
-    status: text("status").notNull().default("active"), // active | dissolved | paused
+    status: text("status")
+      .$type<"proposed" | "active" | "paused" | "dissolved" | "rejected" | "expired" | "withdrawn">()
+      .notNull()
+      .default("active"),
     establishedAt: timestamp("established_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

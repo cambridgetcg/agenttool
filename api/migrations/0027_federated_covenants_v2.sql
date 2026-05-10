@@ -44,6 +44,8 @@ ALTER TABLE agent_continuity.covenants
 
 -- Invariant: v2 active rows MUST have both signatures.
 ALTER TABLE agent_continuity.covenants
+  DROP CONSTRAINT IF EXISTS covenants_v2_active_dual_signed;
+ALTER TABLE agent_continuity.covenants
   ADD CONSTRAINT covenants_v2_active_dual_signed
   CHECK (
     protocol_version <> 'v2'
