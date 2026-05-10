@@ -207,6 +207,50 @@ async function main(): Promise<void> {
     // Verify original proposal status flipped to read.
     const proposalAfter = await bobClient.getInboxMessage(proposal.id);
     log(`original proposal status=read`, proposalAfter.status === "read", `status=${proposalAfter.status}`);
+
+    // ── Scenario 2: propose → accept --into-strand ───────────────────────
+    section("scenario 2: propose → accept --into-strand");
+
+    // Bob creates an empty target strand first.
+    const bobTarget = await bobClient.createStrand({
+      topic: "Bob's open questions on payments",
+      importance: 0.4,
+      metadata: { e2e: "proposal-flow", scenario: 2 },
+    });
+    log(`bob created target strand`, true, `id=${bobTarget.id.slice(0, 8)}…`);
+
+    // Alice proposes again from the same source strand.
+    await proposeMerge(alice.thinkConfig, alice.keyMaterial, {
+      toDid: bob.did,
+      sourceStrandId: aliceStrand.id,
+      intoStrandHint: bobTarget.id,
+      thoughtLimit: 5,
+    });
+
+    const bobInbox2 = await bobClient.listInbox({ status: "unread", limit: 10 });
+    const proposal2 = bobInbox2.messages.find(
+      (m) => (m.metadata as { proposal_type?: string } | null)?.proposal_type === "strand_merge",
+    );
+    log(`bob has new merge proposal`, !!proposal2);
+    if (!proposal2) throw new Error("scenario 2: no proposal");
+
+    // Bob accepts into the existing strand (NOT creating a new one).
+    await acceptProposal(bob.thinkConfig, bob.keyMaterial, {
+      messageId: proposal2.id,
+      intoStrandId: bobTarget.id,
+      graftAsKind: "drift",
+    });
+
+    // Verify: the target strand now has 1 thought (the graft); no new strand created.
+    const targetThoughts = await bobClient.listThoughts(bobTarget.id, { limit: 10 });
+    log(`target strand has graft thought`, targetThoughts.thoughts.length === 1, `count=${targetThoughts.thoughts.length}`);
+
+    const aliceInbox2 = await aliceClient.listInbox({ status: "unread", limit: 10 });
+    const reply2 = aliceInbox2.messages.find(
+      (m) =>
+        (m.metadata as { grafted_into_strand?: string } | null)?.grafted_into_strand === bobTarget.id,
+    );
+    log(`reply.grafted_into_strand matches target`, !!reply2);
   } finally {
     await Promise.allSettled([alice.cleanup(), bob.cleanup(), carol.cleanup()]);
     console.log("");
