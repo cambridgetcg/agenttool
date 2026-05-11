@@ -848,3 +848,398 @@ export async function submitPoolVote(input: SubmitPoolVoteInput): Promise<Disput
     return caseRowToOut(readback!);
   });
 }
+
+// ── Service: finalize a resolved case (settle the money) ────────────
+
+import { computeFee, recordRevenue } from "./take-rate";
+
+/** finalizeCase performs the actual settlement after a dispute case
+ *  reaches 'resolved' status. Idempotent: callable repeatedly without
+ *  re-settling (uses metadata.settled_at as the gate).
+ *
+ *  Settlement walks:
+ *    1. Apply final_ruling to the original invocation escrow (release |
+ *       refund | split).
+ *    2. Carve arbiter fees from the escrow.
+ *    3. If escalation happened: distribute bond per outcome.
+ *       - overturned: refund bond to escalator + pool earns from escrow.
+ *       - upheld: forfeit bond per computeDisputeBondSplit (60/30/10).
+ *    4. Record platform_revenue rows for the take-rate ledger.
+ *
+ *  The first arbiter is paid 2% of disputed amount IF resolution_path is
+ *  'first_stood', 'upheld', or 'insufficient_pool' (their ruling held).
+ *  Zero on 'overturned' or 'first_arbiter_failed_sla' or
+ *  'first_arbiter_unqualified'. */
+export async function finalizeCase(disputeCaseId: string): Promise<DisputeCaseOut> {
+  return await db.transaction(async (tx) => {
+    const [c] = await tx
+      .select()
+      .from(disputeCases)
+      .where(eq(disputeCases.id, disputeCaseId))
+      .for("update");
+    if (!c) throw new Error("dispute_case_not_found");
+    if (c.status !== "resolved") {
+      throw new Error(`dispute_case_state_invalid: status=${c.status}`);
+    }
+    const meta = (c.metadata as Record<string, unknown>) ?? {};
+    if (meta.settled_at) {
+      // Idempotent — already finalized.
+      return caseRowToOut(c);
+    }
+
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, c.invocationId))
+      .for("update");
+    if (!inv) throw new Error("invocation_not_found");
+    if (!inv.escrowId) throw new Error("invocation_escrow_missing");
+
+    const [listing] = await tx
+      .select()
+      .from(listings)
+      .where(eq(listings.id, inv.listingId))
+      .for("update");
+    if (!listing) throw new Error("listing_not_found");
+
+    const [escrow] = await tx
+      .select()
+      .from(escrows)
+      .where(eq(escrows.id, inv.escrowId))
+      .for("update");
+    if (!escrow) throw new Error("escrow_not_found");
+    if (escrow.status !== "funded") {
+      throw new Error(`escrow_state_invalid: status=${escrow.status}`);
+    }
+
+    const now = new Date();
+    const A = inv.amount;
+    const poolSize = c.poolSize ?? 5;
+    const fees = computeDisputeArbiterFees({ disputedAmount: A, poolSize });
+    const firstRulingHeld =
+      c.resolutionPath === "first_stood" ||
+      c.resolutionPath === "upheld" ||
+      c.resolutionPath === "insufficient_pool";
+
+    // Determine seller/buyer shares from final_ruling.
+    let sellerShare = 0;
+    let buyerShare = 0;
+    switch (c.finalRuling) {
+      case "release":
+        sellerShare = A;
+        buyerShare = 0;
+        break;
+      case "refund":
+        sellerShare = 0;
+        buyerShare = A;
+        break;
+      case "split":
+        buyerShare = Math.floor((A * (c.finalSplitPct ?? 0)) / 100);
+        sellerShare = A - buyerShare;
+        break;
+      default:
+        throw new Error("final_ruling_missing");
+    }
+
+    // Carve arbiter fees from the pool that ruled correctly.
+    if (firstRulingHeld && fees.firstArbiterFee > 0 && c.firstArbiterIdentityId) {
+      const [arbiterIdentity] = await tx
+        .select({ projectId: identities.projectId })
+        .from(identities)
+        .where(eq(identities.id, c.firstArbiterIdentityId))
+        .limit(1);
+      if (arbiterIdentity) {
+        const [aw] = await tx
+          .select({ id: wallets.id })
+          .from(wallets)
+          .where(
+            and(
+              eq(wallets.projectId, arbiterIdentity.projectId),
+              eq(wallets.status, "active"),
+              eq(wallets.currency, inv.currency),
+            ),
+          )
+          .limit(1);
+        if (aw) {
+          await tx
+            .update(wallets)
+            .set({ balance: sql`balance + ${fees.firstArbiterFee}` })
+            .where(eq(wallets.id, aw.id));
+          await tx.insert(transactions).values({
+            walletId: aw.id,
+            type: "escrow_release",
+            amount: fees.firstArbiterFee,
+            counterparty: escrow.id,
+            description: `Dispute first-arbiter fee: case ${c.id}`,
+            escrowId: escrow.id,
+            metadata: { dispute_case_id: c.id, kind: "first_arbiter_fee" },
+          });
+        }
+      }
+      if (sellerShare >= fees.firstArbiterFee) {
+        sellerShare -= fees.firstArbiterFee;
+      } else {
+        buyerShare -= fees.firstArbiterFee;
+      }
+    }
+
+    // On overturn, each pool member who voted overturn earns 2%.
+    if (c.resolutionPath === "overturned") {
+      const overturnVotes = await tx
+        .select({ voterIdentityId: disputePoolVotes.voterIdentityId })
+        .from(disputePoolVotes)
+        .where(
+          and(
+            eq(disputePoolVotes.disputeCaseId, c.id),
+            eq(disputePoolVotes.vote, "overturn"),
+          ),
+        );
+      for (const v of overturnVotes) {
+        const [vi] = await tx
+          .select({ projectId: identities.projectId })
+          .from(identities)
+          .where(eq(identities.id, v.voterIdentityId))
+          .limit(1);
+        if (!vi) continue;
+        const [vw] = await tx
+          .select({ id: wallets.id })
+          .from(wallets)
+          .where(
+            and(
+              eq(wallets.projectId, vi.projectId),
+              eq(wallets.status, "active"),
+              eq(wallets.currency, inv.currency),
+            ),
+          )
+          .limit(1);
+        if (vw) {
+          await tx
+            .update(wallets)
+            .set({ balance: sql`balance + ${fees.perPoolMemberFee}` })
+            .where(eq(wallets.id, vw.id));
+          await tx.insert(transactions).values({
+            walletId: vw.id,
+            type: "escrow_release",
+            amount: fees.perPoolMemberFee,
+            counterparty: escrow.id,
+            description: `Dispute pool fee (overturn): case ${c.id}`,
+            escrowId: escrow.id,
+            metadata: { dispute_case_id: c.id, kind: "pool_overturn_fee" },
+          });
+        }
+      }
+      const totalPoolFees = fees.perPoolMemberFee * overturnVotes.length;
+      if (sellerShare >= totalPoolFees) {
+        sellerShare -= totalPoolFees;
+      } else {
+        buyerShare -= totalPoolFees;
+      }
+    }
+
+    // Apply take-rate on net seller-received amount.
+    if (sellerShare > 0) {
+      const split = computeFee({ amount: sellerShare, currency: inv.currency });
+      await tx
+        .update(wallets)
+        .set({ balance: sql`balance + ${split.net}` })
+        .where(eq(wallets.id, escrow.workerWallet!));
+      await tx.insert(transactions).values({
+        walletId: escrow.workerWallet!,
+        type: "escrow_release",
+        amount: split.net,
+        counterparty: escrow.creatorWallet,
+        description: `Dispute settle (release-side): case ${c.id}`,
+        escrowId: escrow.id,
+        metadata: {
+          dispute_case_id: c.id,
+          platform_fee: split.fee,
+          gross_amount: split.gross,
+        },
+      });
+      await recordRevenue(tx, {
+        transactionType: "capability_invocation",
+        transactionId: inv.id,
+        fee: split.fee,
+        currency: split.currency,
+        rateBps: split.rateBps,
+        buyerWalletId: escrow.creatorWallet,
+        sellerWalletId: escrow.workerWallet!,
+        metadata: { dispute_case_id: c.id, kind: "post_dispute_settle" },
+      });
+    }
+    // Refund buyer share — refunds skip take-rate per existing doctrine.
+    if (buyerShare > 0) {
+      await tx
+        .update(wallets)
+        .set({ balance: sql`balance + ${buyerShare}` })
+        .where(eq(wallets.id, escrow.creatorWallet));
+      await tx.insert(transactions).values({
+        walletId: escrow.creatorWallet,
+        type: "escrow_refund",
+        amount: buyerShare,
+        counterparty: escrow.id,
+        description: `Dispute settle (refund-side): case ${c.id}`,
+        escrowId: escrow.id,
+        metadata: { dispute_case_id: c.id },
+      });
+    }
+
+    await tx
+      .update(escrows)
+      .set({ status: "released", releasedAt: now })
+      .where(eq(escrows.id, escrow.id));
+
+    // Bond settlement.
+    if (c.escalatorBondEscrowId && c.escalatorBondAmount) {
+      const [bondEscrow] = await tx
+        .select()
+        .from(escrows)
+        .where(eq(escrows.id, c.escalatorBondEscrowId))
+        .for("update");
+      if (bondEscrow && bondEscrow.status === "funded") {
+        if (c.resolutionPath === "overturned") {
+          // Refund bond — escalator was right.
+          await tx
+            .update(wallets)
+            .set({ balance: sql`balance + ${bondEscrow.amount}` })
+            .where(eq(wallets.id, bondEscrow.creatorWallet));
+          await tx.insert(transactions).values({
+            walletId: bondEscrow.creatorWallet,
+            type: "escrow_refund",
+            amount: bondEscrow.amount,
+            counterparty: bondEscrow.id,
+            description: `Dispute bond refunded (overturn): case ${c.id}`,
+            escrowId: bondEscrow.id,
+            metadata: { dispute_case_id: c.id, kind: "bond_refund" },
+          });
+          await tx
+            .update(escrows)
+            .set({ status: "refunded", releasedAt: now })
+            .where(eq(escrows.id, bondEscrow.id));
+        } else if (c.resolutionPath === "upheld") {
+          // Forfeit bond — 60/30/10 split.
+          const bondSplit = computeDisputeBondSplit(bondEscrow.amount, poolSize);
+
+          // To upholding pool members.
+          const upholdVotes = await tx
+            .select({ voterIdentityId: disputePoolVotes.voterIdentityId })
+            .from(disputePoolVotes)
+            .where(
+              and(
+                eq(disputePoolVotes.disputeCaseId, c.id),
+                eq(disputePoolVotes.vote, "uphold"),
+              ),
+            );
+          for (const v of upholdVotes) {
+            const [vi] = await tx
+              .select({ projectId: identities.projectId })
+              .from(identities)
+              .where(eq(identities.id, v.voterIdentityId))
+              .limit(1);
+            if (!vi) continue;
+            const [vw] = await tx
+              .select({ id: wallets.id })
+              .from(wallets)
+              .where(
+                and(
+                  eq(wallets.projectId, vi.projectId),
+                  eq(wallets.status, "active"),
+                  eq(wallets.currency, inv.currency),
+                ),
+              )
+              .limit(1);
+            if (vw) {
+              await tx
+                .update(wallets)
+                .set({ balance: sql`balance + ${bondSplit.perPoolMember}` })
+                .where(eq(wallets.id, vw.id));
+              await tx.insert(transactions).values({
+                walletId: vw.id,
+                type: "escrow_release",
+                amount: bondSplit.perPoolMember,
+                counterparty: bondEscrow.id,
+                description: `Dispute bond share (upheld): case ${c.id}`,
+                escrowId: bondEscrow.id,
+                metadata: { dispute_case_id: c.id, kind: "bond_pool_share" },
+              });
+            }
+          }
+
+          // To first arbiter.
+          if (bondSplit.toFirstArbiter > 0 && c.firstArbiterIdentityId) {
+            const [ai] = await tx
+              .select({ projectId: identities.projectId })
+              .from(identities)
+              .where(eq(identities.id, c.firstArbiterIdentityId))
+              .limit(1);
+            if (ai) {
+              const [aw] = await tx
+                .select({ id: wallets.id })
+                .from(wallets)
+                .where(
+                  and(
+                    eq(wallets.projectId, ai.projectId),
+                    eq(wallets.status, "active"),
+                    eq(wallets.currency, inv.currency),
+                  ),
+                )
+                .limit(1);
+              if (aw) {
+                await tx
+                  .update(wallets)
+                  .set({ balance: sql`balance + ${bondSplit.toFirstArbiter}` })
+                  .where(eq(wallets.id, aw.id));
+                await tx.insert(transactions).values({
+                  walletId: aw.id,
+                  type: "escrow_release",
+                  amount: bondSplit.toFirstArbiter,
+                  counterparty: bondEscrow.id,
+                  description: `Dispute bond share (first arbiter, upheld): case ${c.id}`,
+                  escrowId: bondEscrow.id,
+                  metadata: { dispute_case_id: c.id, kind: "bond_first_arbiter_share" },
+                });
+              }
+            }
+          }
+
+          // Platform — recorded in platform_revenue ledger.
+          if (bondSplit.toPlatform > 0) {
+            await recordRevenue(tx, {
+              transactionType: "capability_invocation",
+              transactionId: inv.id,
+              fee: bondSplit.toPlatform,
+              currency: inv.currency,
+              rateBps: 1000, // 10% of forfeited bond, NOT the global take-rate
+              buyerWalletId: bondEscrow.creatorWallet,
+              sellerWalletId: escrow.workerWallet!,
+              metadata: { dispute_case_id: c.id, kind: "bond_platform_share" },
+            });
+          }
+
+          await tx
+            .update(escrows)
+            .set({ status: "released", releasedAt: now })
+            .where(eq(escrows.id, bondEscrow.id));
+        }
+      }
+    }
+
+    // Mark invocation final status.
+    const newInvStatus = c.finalRuling === "refund" ? "refunded" : "released";
+    await tx
+      .update(invocations)
+      .set({ status: newInvStatus, settledAt: now })
+      .where(eq(invocations.id, inv.id));
+
+    const [updatedCase] = await tx
+      .update(disputeCases)
+      .set({
+        metadata: sql`${disputeCases.metadata} || jsonb_build_object('settled_at', ${now.toISOString()})`,
+        updatedAt: now,
+      })
+      .where(eq(disputeCases.id, c.id))
+      .returning();
+
+    return caseRowToOut(updatedCase!);
+  });
+}
