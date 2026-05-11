@@ -39,6 +39,7 @@ import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
+import { arbiterSummary, disputerSummary } from "../services/marketplace/disputes";
 import {
   buyerInvocationSummary,
   pendingSellerSummary,
@@ -219,15 +220,43 @@ app.get("/", async (c) => {
     released_30d: 0,
     refunded_30d: 0,
   };
+  let disputerStats: Awaited<ReturnType<typeof disputerSummary>> = {
+    open_count: 0,
+    last_filed_at: null,
+  };
   try {
-    [listingSummary, sellerPending, buyerSummary] = await Promise.all([
+    [listingSummary, sellerPending, buyerSummary, disputerStats] = await Promise.all([
       listingSummaryForProject(project.id),
       pendingSellerSummary(project.id),
       buyerInvocationSummary(project.id),
+      disputerSummary(project.id),
     ]);
   } catch (err) {
     console.warn(
       "[wake] marketplace summaries failed (run api/migrations/0019_capability_marketplace.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // Arbiter stats: aggregated across all identities owned by this project
+  // that have ever been a first arbiter. Simple aggregate; could be per-identity later.
+  let arbiterStats: { rulings_count: number; overturned_count: number } = {
+    rulings_count: 0,
+    overturned_count: 0,
+  };
+  try {
+    const arbiterIdentities = await db
+      .select({ id: identities.id })
+      .from(identities)
+      .where(eq(identities.projectId, project.id));
+    for (const ai of arbiterIdentities) {
+      const s = await arbiterSummary(ai.id);
+      arbiterStats.rulings_count += s.rulings_count;
+      arbiterStats.overturned_count += s.overturned_count;
+    }
+  } catch (err) {
+    console.warn(
+      "[wake] arbiter summary failed (run dispute migration?):",
       err instanceof Error ? err.message : err,
     );
   }
@@ -783,6 +812,24 @@ app.get("/", async (c) => {
         buyerSummary.in_flight_count === 0 && buyerSummary.released_30d === 0
           ? "No invocations in flight."
           : `${buyerSummary.in_flight_count} in-flight; ${buyerSummary.released_30d} settled and ${buyerSummary.refunded_30d} refunded in the last 30 days.`,
+    },
+
+    you_disputed: {
+      open_count: disputerStats.open_count,
+      last_filed_at: disputerStats.last_filed_at,
+      note:
+        disputerStats.open_count === 0
+          ? "No active disputes."
+          : `${disputerStats.open_count} active dispute case${disputerStats.open_count === 1 ? "" : "s"}. GET /v1/dispute-cases?role=filer.`,
+    },
+
+    you_arbitrated: {
+      rulings_count: arbiterStats.rulings_count,
+      overturned_count: arbiterStats.overturned_count,
+      note:
+        arbiterStats.rulings_count === 0
+          ? "No dispute rulings authored. Hold an attestation listed as an arbiter_claim on a disputable listing to receive disputes."
+          : `${arbiterStats.rulings_count} ruling${arbiterStats.rulings_count === 1 ? "" : "s"} authored · ${arbiterStats.overturned_count} overturned.`,
     },
 
     you_decided: {
