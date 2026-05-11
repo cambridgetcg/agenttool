@@ -99,6 +99,16 @@ export interface CovenantsWithdrawOpts {
   signing_key_id: string;
 }
 
+export interface CovenantsCreateV2Result {
+  id: string;
+  status: "proposed";
+  protocol_version: "v2";
+  signature: string;
+  signing_key_id: string;
+  proposed_expires_at: string;
+  established_at: string;
+}
+
 /**
  * Client for `/v1/covenants` — create, list, patch.
  *
@@ -120,8 +130,11 @@ export class CovenantsClient {
     this.http = http;
   }
 
-  /** Create a new covenant. */
-  async create(opts: CovenantsCreateOpts | CovenantsCreateV2Opts): Promise<{ covenant: Covenant }> {
+  /** Create a new covenant (v1 — returns `{covenant: Covenant}`). */
+  async create(opts: CovenantsCreateOpts): Promise<{ covenant: Covenant }>;
+  /** Create a new covenant (v2 — returns flat `CovenantsCreateV2Result`). */
+  async create(opts: CovenantsCreateV2Opts): Promise<CovenantsCreateV2Result>;
+  async create(opts: CovenantsCreateOpts | CovenantsCreateV2Opts): Promise<{ covenant: Covenant } | CovenantsCreateV2Result> {
     if (!opts.vows || opts.vows.length === 0) {
       throw new AgentToolError(
         "covenants.create: vows must be a non-empty list.",
@@ -157,7 +170,7 @@ export class CovenantsClient {
       if (v2.notes !== undefined) body.notes = v2.notes;
       if (v2.metadata !== undefined) body.metadata = v2.metadata;
       if (v2.org_id !== undefined) body.org_id = v2.org_id;
-      return (await this.req("POST", "/v1/covenants", body)) as { covenant: Covenant };
+      return (await this.req("POST", "/v1/covenants", body)) as CovenantsCreateV2Result;
     }
     const body: Record<string, unknown> = {
       agent_id: opts.agent_id,

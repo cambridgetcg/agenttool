@@ -59,7 +59,7 @@ describe("covenants v2 SDK signs requests", () => {
       signing_key_id: "00000000-0000-0000-0000-000000000002",
     });
 
-    expect((r as any).status).toBe("proposed");
+    expect(r.status).toBe("proposed");
     expect(capturedBody.signature).toBeTruthy();
     const ok = await ed.verifyAsync(
       Buffer.from(capturedBody.signature, "base64"),

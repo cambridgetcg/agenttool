@@ -106,6 +106,7 @@ export type {
   Covenant,
   CovenantsCreateOpts,
   CovenantsCreateV2Opts,
+  CovenantsCreateV2Result,
   CovenantsListOpts,
   CovenantsPatchOpts,
   CovenantsAcceptOpts,

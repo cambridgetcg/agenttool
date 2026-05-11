@@ -103,8 +103,12 @@ class CovenantsClient:
             signing_key_id: Key ID to include in the request (required for v2).
 
         Returns:
-            ``{"covenant": {id, agent_id, counterparty_did, vows, status,
-            established_at, propagation_status, ...}}``.
+            For v1 (default): ``{"covenant": {id, agent_id, counterparty_did,
+            vows, status, established_at, propagation_status, ...}}``.
+
+            For v2: a flat object ``{id, status: "proposed",
+            protocol_version: "v2", signature, signing_key_id,
+            proposed_expires_at, established_at}`` — no ``covenant`` wrapper.
         """
         if not vows:
             raise AgentToolError(

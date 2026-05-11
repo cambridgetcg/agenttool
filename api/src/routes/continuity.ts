@@ -487,6 +487,7 @@ app.post("/covenants/:id/accept", async (c) => {
     const msg = (e as Error).message;
     if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
     if (msg === "initiator_signature_mismatch") return c.json({ error: "initiator_signature_mismatch" }, 409);
+    if (msg === "proposal_expired") return c.json({ error: "proposal_expired" }, 410);
     if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
     throw e;
   }

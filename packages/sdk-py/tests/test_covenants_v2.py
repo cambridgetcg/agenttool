@@ -35,16 +35,15 @@ def at() -> AgentTool:
 
 class TestCreateProtocolVersion:
     def test_v2_sends_protocol_version(self, at: AgentTool) -> None:
+        # v2 server returns a flat object — no "covenant" wrapper.
         body = {
-            "covenant": {
-                "id": "cov-1",
-                "status": "proposed",
-                "protocol_version": "v2",
-                "signature": "sig",
-                "signing_key_id": "k1",
-                "proposed_expires_at": "2026-06-09T12:00:00Z",
-                "established_at": "2026-05-10T12:00:00Z",
-            }
+            "id": "cov-1",
+            "status": "proposed",
+            "protocol_version": "v2",
+            "signature": "sig",
+            "signing_key_id": "k1",
+            "proposed_expires_at": "2026-06-09T12:00:00Z",
+            "established_at": "2026-05-10T12:00:00Z",
         }
         with patch.object(at._http, "post", return_value=_resp(201, body)) as m:
             out = at.covenants.create(
@@ -56,7 +55,7 @@ class TestCreateProtocolVersion:
                 signing_key=b"\x01" * 32,
                 signing_key_id="00000000-0000-0000-0000-000000000099",
             )
-        assert out["covenant"]["status"] == "proposed"
+        assert out["status"] == "proposed"
         sent = m.call_args.kwargs["json"]
         assert sent["protocol_version"] == "v2"
         assert sent["agent_id"] == "agent-1"

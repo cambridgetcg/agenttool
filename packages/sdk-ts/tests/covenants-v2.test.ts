@@ -70,11 +70,9 @@ describe("covenants v2 — SDK surface", () => {
     expect(init.method).toBe("POST");
     const b = bodyOf(init);
     expect(b.protocol_version).toBe("v2");
-    // The create method wraps in { covenant } for v1 shape; for v2 the server
-    // may return a flat object. The method returns whatever the server sends.
-    // We assert on the raw returned value — the mock returns the flat shape.
-    expect((r as unknown as { status: string }).status).toBe("proposed");
-    expect((r as unknown as { protocol_version: string }).protocol_version).toBe("v2");
+    // v2 create returns the flat CovenantsCreateV2Result shape (no covenant wrapper).
+    expect(r.status).toBe("proposed");
+    expect(r.protocol_version).toBe("v2");
   });
 
   test("accept POSTs to /accept", async () => {
