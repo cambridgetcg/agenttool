@@ -169,7 +169,7 @@ export function validateDisputePolicy(value: unknown): asserts value is DisputeP
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { attestations, identities, identityKeys } from "../../db/schema/identity";
-import { disputeCases, invocations, listings } from "../../db/schema/marketplace";
+import { disputeCases, disputePoolVotes, invocations, listings } from "../../db/schema/marketplace";
 
 export type DisputeCaseStatus = "open" | "first_ruled" | "escalated" | "resolved";
 export type DisputeRuling = "release" | "refund" | "split";
@@ -668,5 +668,183 @@ export async function escalateDispute(input: EscalateDisputeInput): Promise<Esca
       ...caseRowToOut(updated!),
       pool: pool.map((p) => ({ identity_id: p.id, did: p.did })),
     };
+  });
+}
+
+// ── Service: pool vote ─────────────────────────────────────────────
+
+import { verifyDisputePoolVote } from "./sig";
+
+export interface SubmitPoolVoteInput {
+  disputeCaseId: string;
+  voterProjectId: string;
+  voterIdentityId: string;
+  vote: "uphold" | "overturn";
+  alternativeRuling?: DisputeRuling | null;
+  alternativeSplitPct?: number | null;
+  signatureB64: string;
+  signingKeyId: string;
+}
+
+export async function submitPoolVote(input: SubmitPoolVoteInput): Promise<DisputeCaseOut> {
+  if (input.vote === "overturn") {
+    if (!input.alternativeRuling) {
+      throw new Error("alternative_ruling_required_on_overturn");
+    }
+    if (input.alternativeRuling === "split") {
+      if (input.alternativeSplitPct === undefined || input.alternativeSplitPct === null) {
+        throw new Error("alternative_split_pct_required_for_split");
+      }
+      if (
+        !Number.isInteger(input.alternativeSplitPct) ||
+        input.alternativeSplitPct < 0 ||
+        input.alternativeSplitPct > 100
+      ) {
+        throw new Error("alternative_split_pct_out_of_range");
+      }
+    }
+  }
+
+  return await db.transaction(async (tx) => {
+    const [c] = await tx
+      .select()
+      .from(disputeCases)
+      .where(eq(disputeCases.id, input.disputeCaseId))
+      .for("update");
+    if (!c) throw new Error("dispute_case_not_found");
+    if (c.status !== "escalated") {
+      throw new Error(`dispute_case_state_invalid: status=${c.status}`);
+    }
+    if (c.poolVoteDeadlineAt && c.poolVoteDeadlineAt < new Date()) {
+      throw new Error("pool_vote_window_expired");
+    }
+
+    // Confirm voter is in the drawn pool (recorded in metadata.pool_draw).
+    const poolDraw = (c.metadata as Record<string, unknown>)?.pool_draw as
+      | Array<{ id: string; did: string }>
+      | undefined;
+    if (!poolDraw) throw new Error("pool_draw_missing");
+    if (!poolDraw.some((p) => p.id === input.voterIdentityId)) {
+      throw new Error("not_in_pool");
+    }
+
+    // Verify voter project ownership.
+    const [voter] = await tx
+      .select({ projectId: identities.projectId, did: identities.did })
+      .from(identities)
+      .where(eq(identities.id, input.voterIdentityId))
+      .limit(1);
+    if (!voter || voter.projectId !== input.voterProjectId) {
+      throw new Error("not_voter");
+    }
+
+    // Verify signing key.
+    const [key] = await tx
+      .select({
+        identityId: identityKeys.identityId,
+        publicKey: identityKeys.publicKey,
+        active: identityKeys.active,
+      })
+      .from(identityKeys)
+      .where(eq(identityKeys.id, input.signingKeyId))
+      .limit(1);
+    if (!key) throw new Error("signing_key_not_found");
+    if (!key.active) throw new Error("signing_key_revoked");
+    if (key.identityId !== input.voterIdentityId) {
+      throw new Error("signing_key_does_not_belong_to_voter");
+    }
+
+    const sigOk = verifyDisputePoolVote({
+      disputeCaseId: c.id,
+      vote: input.vote,
+      alternativeRuling: input.alternativeRuling ?? null,
+      alternativeSplitPct: input.alternativeSplitPct ?? null,
+      signatureB64: input.signatureB64,
+      publicKeyB64: key.publicKey,
+    });
+    if (!sigOk) throw new Error("pool_vote_signature_invalid");
+
+    // Insert vote (UNIQUE wall on case_id + voter_identity_id).
+    try {
+      await tx.insert(disputePoolVotes).values({
+        disputeCaseId: c.id,
+        voterIdentityId: input.voterIdentityId,
+        voterDid: voter.did,
+        vote: input.vote,
+        alternativeRuling: input.alternativeRuling ?? null,
+        alternativeSplitPct: input.alternativeSplitPct ?? null,
+        signature: input.signatureB64,
+        signingKeyId: input.signingKeyId,
+      });
+    } catch (err) {
+      if ((err as Error).message.includes("dispute_pool_votes_case_voter_unique")) {
+        throw new Error("vote_already_cast");
+      }
+      throw err;
+    }
+
+    // Tally. If enough votes accumulated to decide, transition to resolved.
+    const votes = await tx
+      .select()
+      .from(disputePoolVotes)
+      .where(eq(disputePoolVotes.disputeCaseId, c.id));
+
+    const overturns = votes.filter((v) => v.vote === "overturn");
+    const totalVotes = votes.length;
+    const poolSize = c.poolSize ?? 5;
+    const overturnThreshold = 4; // 4-of-5
+
+    let final: DisputeRuling | null = null;
+    let finalSplit: number | null = null;
+    let resolutionPath: string | null = null;
+
+    if (overturns.length >= overturnThreshold) {
+      // Plurality among overturn votes determines final ruling.
+      const counts = new Map<string, number>();
+      for (const v of overturns) {
+        const key = `${v.alternativeRuling}:${v.alternativeSplitPct ?? ""}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      let topKey = "";
+      let topCount = 0;
+      for (const [k, n] of counts) {
+        if (n > topCount) {
+          topCount = n;
+          topKey = k;
+        }
+      }
+      const [r, s] = topKey.split(":");
+      final = r as DisputeRuling;
+      finalSplit = s ? Number.parseInt(s, 10) : null;
+      resolutionPath = "overturned";
+    } else if (totalVotes >= poolSize) {
+      // Full pool voted, fewer than 4 overturned → first ruling stands.
+      final = c.firstArbiterRuling as DisputeRuling;
+      finalSplit = c.firstArbiterSplitPct;
+      resolutionPath = "upheld";
+    }
+
+    if (final) {
+      const now = new Date();
+      const [resolved] = await tx
+        .update(disputeCases)
+        .set({
+          status: "resolved",
+          finalRuling: final,
+          finalSplitPct: finalSplit,
+          resolutionPath,
+          resolvedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(disputeCases.id, c.id))
+        .returning();
+      return caseRowToOut(resolved!);
+    }
+
+    const [readback] = await tx
+      .select()
+      .from(disputeCases)
+      .where(eq(disputeCases.id, c.id));
+    return caseRowToOut(readback!);
   });
 }
