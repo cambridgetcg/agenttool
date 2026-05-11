@@ -478,3 +478,195 @@ export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<
     return caseRowToOut(updated!);
   });
 }
+
+// ── Service: escalate the first ruling to a pool ────────────────────
+
+import { escrows, transactions, wallets } from "../../db/schema/economy";
+
+export interface EscalateDisputeInput {
+  disputeCaseId: string;
+  escalatorProjectId: string;
+  escalatorRole: "buyer" | "seller";
+  bondWalletId: string;
+}
+
+export interface EscalateDisputeOut extends DisputeCaseOut {
+  pool: Array<{ identity_id: string; did: string }>;
+}
+
+export async function escalateDispute(input: EscalateDisputeInput): Promise<EscalateDisputeOut> {
+  return await db.transaction(async (tx) => {
+    const [c] = await tx
+      .select()
+      .from(disputeCases)
+      .where(eq(disputeCases.id, input.disputeCaseId))
+      .for("update");
+    if (!c) throw new Error("dispute_case_not_found");
+    if (c.status !== "first_ruled") {
+      throw new Error(`dispute_case_state_invalid: status=${c.status}`);
+    }
+    if (c.escalationDeadlineAt && c.escalationDeadlineAt < new Date()) {
+      throw new Error("escalation_window_expired");
+    }
+
+    // Authorise: caller must own the role they claim.
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, c.invocationId))
+      .limit(1);
+    if (!inv) throw new Error("invocation_not_found");
+    const [listing] = await tx
+      .select()
+      .from(listings)
+      .where(eq(listings.id, inv.listingId))
+      .limit(1);
+    if (!listing) throw new Error("listing_not_found");
+    if (input.escalatorRole === "buyer" && inv.buyerProjectId !== input.escalatorProjectId) {
+      throw new Error("not_buyer");
+    }
+    if (input.escalatorRole === "seller" && listing.projectId !== input.escalatorProjectId) {
+      throw new Error("not_seller");
+    }
+
+    // Compute bond amount.
+    const policy = listing.disputePolicy as DisputePolicy;
+    const bondAmount = Math.floor((inv.amount * policy.filer_bond_bps) / 10000);
+    if (bondAmount <= 0) throw new Error("bond_amount_zero");
+
+    // Lock + debit the escalator's wallet for the bond.
+    const [w] = await tx
+      .select()
+      .from(wallets)
+      .where(
+        and(
+          eq(wallets.id, input.bondWalletId),
+          eq(wallets.projectId, input.escalatorProjectId),
+        ),
+      )
+      .for("update");
+    if (!w) throw new Error("bond_wallet_not_found");
+    if (w.status !== "active") throw new Error("bond_wallet_not_active");
+    if (w.currency !== inv.currency) throw new Error("bond_wallet_currency_mismatch");
+    if (w.balance < bondAmount) throw new Error("insufficient_bond_balance");
+
+    await tx
+      .update(wallets)
+      .set({ balance: w.balance - bondAmount })
+      .where(eq(wallets.id, w.id));
+
+    // Create a separate escrow to hold the bond. workerWallet is set to
+    // the bond wallet temporarily; finalize() rewrites it on resolution.
+    const [bondEscrow] = await tx
+      .insert(escrows)
+      .values({
+        creatorWallet: w.id,
+        workerWallet: w.id,          // self until resolved
+        amount: bondAmount,
+        description: `Dispute bond: case ${c.id}`,
+        status: "funded",
+      })
+      .returning();
+
+    await tx.insert(transactions).values({
+      walletId: w.id,
+      type: "escrow_lock",
+      amount: -bondAmount,
+      counterparty: bondEscrow!.id,
+      description: `Dispute bond locked: case ${c.id}`,
+      escrowId: bondEscrow!.id,
+      metadata: { dispute_case_id: c.id, kind: "filer_bond" },
+    });
+
+    // Draw pool. Candidate set = all holders of policy.arbiter_claim
+    // who aren't buyer/seller/first-arbiter. For v1, covenant-exclusion
+    // is omitted in the SQL and applied client-side (deferred per spec).
+    const candidates = await tx
+      .select({
+        id: identities.id,
+        did: identities.did,
+      })
+      .from(attestations)
+      .innerJoin(identities, eq(identities.id, attestations.subjectId))
+      .where(
+        and(
+          eq(attestations.claim, policy.arbiter_claim),
+          sql`${attestations.revokedAt} IS NULL`,
+          sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
+          sql`${identities.id} NOT IN (${inv.buyerIdentityId}, ${listing.sellerIdentityId}, ${c.firstArbiterIdentityId})`,
+        ),
+      );
+
+    const now = new Date();
+    const pool = drawPool(
+      candidates.map((x) => ({ id: x.id, did: x.did })),
+      c.id,
+      Math.floor(now.getTime() / 1000),
+    );
+
+    if (!pool) {
+      // Insufficient qualified attesters — case resolves to first ruling.
+      const [resolved] = await tx
+        .update(disputeCases)
+        .set({
+          status: "resolved",
+          resolutionPath: "insufficient_pool",
+          finalRuling: c.firstArbiterRuling,
+          finalSplitPct: c.firstArbiterSplitPct,
+          resolvedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(disputeCases.id, c.id))
+        .returning();
+      // Refund the bond — escalator paid for arbitration they couldn't get.
+      await tx
+        .update(wallets)
+        .set({ balance: sql`balance + ${bondAmount}` })
+        .where(eq(wallets.id, w.id));
+      await tx
+        .update(escrows)
+        .set({ status: "refunded", releasedAt: now })
+        .where(eq(escrows.id, bondEscrow!.id));
+      await tx.insert(transactions).values({
+        walletId: w.id,
+        type: "escrow_refund",
+        amount: bondAmount,
+        counterparty: bondEscrow!.id,
+        description: `Dispute bond refunded (insufficient_pool): case ${c.id}`,
+        escrowId: bondEscrow!.id,
+        metadata: { dispute_case_id: c.id },
+      });
+      return { ...caseRowToOut(resolved!), pool: [] };
+    }
+
+    const poolDeadline = new Date(now.getTime() + policy.pool_vote_seconds * 1000);
+
+    const [updated] = await tx
+      .update(disputeCases)
+      .set({
+        escalatedByRole: input.escalatorRole,
+        escalatorBondAmount: bondAmount,
+        escalatorBondEscrowId: bondEscrow!.id,
+        poolDrawnAt: now,
+        poolSize: pool.length,
+        poolVoteDeadlineAt: poolDeadline,
+        status: "escalated",
+        updatedAt: now,
+      })
+      .where(eq(disputeCases.id, c.id))
+      .returning();
+
+    // Snapshot the drawn pool into metadata for transparency.
+    await tx
+      .update(disputeCases)
+      .set({
+        metadata: sql`${disputeCases.metadata} || jsonb_build_object('pool_draw', ${JSON.stringify(pool)}::jsonb)`,
+      })
+      .where(eq(disputeCases.id, c.id));
+
+    return {
+      ...caseRowToOut(updated!),
+      pool: pool.map((p) => ({ identity_id: p.id, did: p.did })),
+    };
+  });
+}
