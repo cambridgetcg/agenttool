@@ -1,0 +1,90 @@
+import { describe, expect, test } from "bun:test";
+import * as ed from "@noble/ed25519";
+import { sha512 } from "@noble/hashes/sha2.js";
+import { eq } from "drizzle-orm";
+
+import { db } from "../../src/db/client";
+import { covenants } from "../../src/db/schema/continuity";
+import { identities, identityKeys } from "../../src/db/schema/identity";
+import { acceptProposal, declareV2 } from "../../src/services/covenants/lifecycle";
+
+ed.etc.sha512Sync = (...m) => {
+  const h = sha512.create();
+  for (const msg of m) h.update(msg);
+  return h.digest();
+};
+
+async function seedAgent(projectId: string) {
+  const priv = ed.utils.randomPrivateKey();
+  const pub = await ed.getPublicKeyAsync(priv);
+  const [identity] = await db.insert(identities).values({
+    projectId, did: "did:at:" + crypto.randomUUID(),
+    displayName: "agent", status: "active",
+  }).returning();
+  const [k] = await db.insert(identityKeys).values({
+    identityId: identity.id,
+    publicKey: Buffer.from(pub).toString("base64"),
+    active: true,
+  }).returning();
+  return { identity, priv, pub, keyId: k.id };
+}
+
+describe("v2 happy path — declare → propagate → accept → cosign", () => {
+  test("end to end (single-instance simulating two sides)", async () => {
+    const projectA = crypto.randomUUID();
+    const projectB = crypto.randomUUID();
+    const initiator = await seedAgent(projectA);
+    const counterparty = await seedAgent(projectB);
+
+    // A declares v2 toward B (using B's local DID — no federation hop in this test)
+    const declared = await declareV2({
+      projectId: projectA,
+      agentId: initiator.identity.id,
+      agentSigningPrivateKey: initiator.priv,
+      agentSigningKeyId: initiator.keyId,
+      counterpartyDid: counterparty.identity.did,
+      vows: ["respond within 24h"],
+    });
+    expect(declared.status).toBe("proposed");
+
+    // Simulate the propagation insert on B's side (what receiveFederatedCovenant would do
+    // for a federated counterparty). We construct the inbound payload and route it through
+    // the receive path with federation toggled off — so we direct-insert.
+    await db.insert(covenants).values({
+      id: declared.id,
+      projectId: projectB,
+      agentId: counterparty.identity.id,
+      counterpartyDid: initiator.identity.did,
+      vows: ["respond within 24h"],
+      status: "proposed",
+      protocolVersion: "v2",
+      establishedAt: declared.establishedAt,
+      proposedExpiresAt: declared.proposedExpiresAt,
+      signature: declared.signature,
+      signingKeyId: declared.signingKeyId,
+      receivedFromInstance: "self.test", // simulates federation receive
+    });
+
+    // B accepts
+    const accepted = await acceptProposal({
+      covenantId: declared.id,
+      accepterAgentId: counterparty.identity.id,
+      accepterSigningPrivateKey: counterparty.priv,
+      accepterSigningKeyId: counterparty.keyId,
+    });
+    expect(accepted.status).toBe("active");
+
+    // B's row is now active with both signatures
+    const [bRow] = await db.select().from(covenants)
+      .where(eq(covenants.projectId, projectB)).limit(1);
+    expect(bRow.status).toBe("active");
+    expect(bRow.signature).toBeTruthy();
+    expect(bRow.counterpartySignature).toBeTruthy();
+
+    // A's row is still 'proposed' (cosign hasn't propagated back in this single-process sim).
+    // In real two-instance flow, the cosign-propagate worker would POST to A.
+    const [aRow] = await db.select().from(covenants)
+      .where(eq(covenants.projectId, projectA)).limit(1);
+    expect(aRow.status).toBe("proposed");
+  });
+});

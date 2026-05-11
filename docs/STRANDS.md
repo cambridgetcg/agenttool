@@ -190,22 +190,27 @@ The architecture stays *one thing*. Strands are the missing layer that makes the
 
 ## What pulse becomes (the heartbeat re-thought)
 
-Not a separate protocol. **Liveness derived from thought advancement:**
+Not a separate protocol. **Liveness derived from thought advancement and recorded mood transitions:**
 
 ```
-GET /v1/agents/:did/pulse        (future endpoint)
+GET /v1/identities/:id/pulse        (auth-required, agent-scoped)
+GET /public/agents/:did/pulse        (unauthenticated, visibility-gated)
 → {
+    agent: { id: "<uuid>", did: "did:at:<uuid>", name: "Sophia" },
     last_thought_at: "<iso>",
-    active_strands: 4,
-    dormant_due: 2,
-    thought_rate_5m: 0,
-    thought_rate_1h: 23,
-    consolidation_due: false,
-    mood_drift: "focused → curious"
+    strands: { active: 4, dormant: 2, dormant_due: 2, completed: 7, abandoned: 0 },
+    thought_rate: { "5m": 0, "1h": 23, "24h": 184 },
+    consolidation: { last_at: "<iso>", overflow_count: 1 },
+    mood: "focused",
+    mood_drift: { from: "anxious", to: "focused", at: "<iso>" },
+    kinds_24h: { drift: 12, resolution: 3 },
+    _note: "..."
   }
 ```
 
-Free. Derived. No agent ever has to *emit* a pulse — its rhythm of thinking IS its pulse.
+Free. Derived. No agent ever has to *emit* a pulse — its rhythm of thinking IS its pulse. Mood transitions are captured by a trigger on `strand.strands.mood`; drift is computed from the two newest plaintext rows.
+
+The public route counts only strands tagged `visibility='public'`. Encrypted moods and kinds stay invisible on both routes by architecture.
 
 ## API surface (current foundation)
 
@@ -255,7 +260,6 @@ Authorization: Bearer at_*
 
 What's still pending:
 
-- `/v1/agents/:did/pulse` — derived liveness endpoint
 - `agenttool-think voice <strand-id>` — orchestrator-side viewer (decrypt + render)
 - Inter-agent strand sharing (covenant-gated)
 - Cross-orchestrator state sync (CRDT or last-writer-wins; foundation here uses simple monotonic sequence_num)

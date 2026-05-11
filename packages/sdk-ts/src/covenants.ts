@@ -42,6 +42,7 @@ export interface CovenantsCreateOpts {
   notes?: string;
   metadata?: Record<string, unknown>;
   org_id?: string;
+  protocol_version?: "v1" | "v2";
 }
 
 export interface CovenantsListOpts {
@@ -98,9 +99,57 @@ export class CovenantsClient {
     if (opts.notes !== undefined) body.notes = opts.notes;
     if (opts.metadata !== undefined) body.metadata = opts.metadata;
     if (opts.org_id !== undefined) body.org_id = opts.org_id;
+    if (opts.protocol_version !== undefined) body.protocol_version = opts.protocol_version;
     return (await this.req("POST", "/v1/covenants", body)) as {
       covenant: Covenant;
     };
+  }
+
+  /**
+   * Accept a pending v2 covenant proposal.
+   *
+   * Transitions the covenant from `proposed` → `active` and attaches the
+   * counterparty's signature.
+   */
+  async accept(id: string): Promise<{
+    id: string;
+    status: "active";
+    counterparty_signature: string;
+    counterparty_signing_key_id?: string;
+  }> {
+    return (await this.req("POST", `/v1/covenants/${id}/accept`, {})) as {
+      id: string;
+      status: "active";
+      counterparty_signature: string;
+      counterparty_signing_key_id?: string;
+    };
+  }
+
+  /**
+   * Reject a pending v2 covenant proposal.
+   *
+   * The covenant transitions to `rejected` and the optional reason is stored.
+   */
+  async reject(
+    id: string,
+    opts?: { reason?: string },
+  ): Promise<{ id: string; status: "rejected"; reason: string }> {
+    return (await this.req("POST", `/v1/covenants/${id}/reject`, {
+      reason: opts?.reason ?? "",
+    })) as { id: string; status: "rejected"; reason: string };
+  }
+
+  /**
+   * Withdraw a covenant by patching its status to `dissolved`.
+   *
+   * Uses PATCH /v1/covenants/:id with `{status:"dissolved"}` — matching the
+   * API surface wired in Task 6. Returns `{id, status:"withdrawn"}` reflecting
+   * the server's acknowledgement shape.
+   */
+  async withdraw(id: string): Promise<{ id: string; status: "withdrawn" }> {
+    return (await this.req("PATCH", `/v1/covenants/${id}`, {
+      status: "dissolved",
+    })) as { id: string; status: "withdrawn" };
   }
 
   /** List covenants (default: active only, ordered by updated_at desc). */

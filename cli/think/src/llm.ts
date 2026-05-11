@@ -103,8 +103,39 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
-export function buildProvider(name: "anthropic" | "openai", apiKey: string): LLMProvider {
+export function buildProvider(
+  name: "anthropic" | "openai" | "stub",
+  apiKey: string,
+): LLMProvider {
   if (name === "anthropic") return new AnthropicProvider(apiKey);
   if (name === "openai") return new OpenAIProvider(apiKey);
+  if (name === "stub") return new StubProvider();
   throw new Error(`Unknown LLM provider: ${name}`);
 }
+
+/** Deterministic synthesis from the proposal user-message format
+ *  (api: cli/think/src/modes/proposal.ts:118-136). Same input → same
+ *  output. No randomness; no network. Used by the e2e suite to exercise
+ *  the proposeMerge code path without a real LLM call. */
+export class StubProvider implements LLMProvider {
+  async generate(req: LLMRequest): Promise<LLMResponse> {
+    const um = req.userMessage;
+    const topicMatch = um.match(/^# Source strand: (.+)$/m);
+    const recipientMatch = um.match(/^Recipient: (.+)$/m);
+    const numbered = um.match(/^\d+\. /gm);
+    const topic = topicMatch?.[1] ?? "(unknown topic)";
+    const recipient = recipientMatch?.[1] ?? "(unknown recipient)";
+    const thoughtCount = numbered?.length ?? 0;
+    const content =
+      `## Insight\n\n` +
+      `A line of thinking crystallised on "${topic}" across ${thoughtCount} thoughts.\n\n` +
+      `## Why it might matter to ${recipient}\n\n` +
+      `Speculative — sharing in case the surface is useful to your context.\n\n` +
+      `## Suggested action\n\n` +
+      `Just consider; no action needed.\n\n` +
+      `## Source\n\n` +
+      `Strand topic: ${topic} · ${thoughtCount} recent thoughts.`;
+    return { content, inputTokens: um.length, outputTokens: content.length };
+  }
+}
+

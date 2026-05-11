@@ -115,3 +115,72 @@ export function validateSealedShape(value: unknown): asserts value is SealedByte
     throw new Error("sealed_bytes_not_base64");
   }
 }
+
+// ── Dispute primitive — canonical bytes (20260511) ───────────────────
+// Two domain-tag schemes — first arbiter and pool voter sign different
+// shapes because pool votes also bind an alternative ruling proposal.
+
+export function canonicalDisputeFirstRulingBytes(opts: {
+  disputeCaseId: string;
+  ruling: "release" | "refund" | "split";
+  splitPct: number | null;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const tag = enc.encode("dispute-first-ruling/v1");
+  const id = enc.encode(opts.disputeCaseId);
+  const ruling = enc.encode(opts.ruling);
+  const split = enc.encode(opts.splitPct === null ? "" : String(opts.splitPct));
+  return sha256(concat(tag, SEP, id, SEP, ruling, SEP, split));
+}
+
+export function canonicalDisputePoolVoteBytes(opts: {
+  disputeCaseId: string;
+  vote: "uphold" | "overturn";
+  alternativeRuling: "release" | "refund" | "split" | null;
+  alternativeSplitPct: number | null;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const tag = enc.encode("dispute-pool-vote/v1");
+  const id = enc.encode(opts.disputeCaseId);
+  const vote = enc.encode(opts.vote);
+  const alt = enc.encode(opts.alternativeRuling ?? "");
+  const split = enc.encode(opts.alternativeSplitPct === null ? "" : String(opts.alternativeSplitPct));
+  return sha256(concat(tag, SEP, id, SEP, vote, SEP, alt, SEP, split));
+}
+
+export function verifyDisputeFirstRuling(opts: {
+  disputeCaseId: string;
+  ruling: "release" | "refund" | "split";
+  splitPct: number | null;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  try {
+    const canonical = canonicalDisputeFirstRulingBytes(opts);
+    const sig = Uint8Array.from(Buffer.from(opts.signatureB64, "base64"));
+    const pub = Uint8Array.from(Buffer.from(opts.publicKeyB64, "base64"));
+    if (sig.length !== 64 || pub.length !== 32) return false;
+    return ed.verify(sig, canonical, pub);
+  } catch {
+    return false;
+  }
+}
+
+export function verifyDisputePoolVote(opts: {
+  disputeCaseId: string;
+  vote: "uphold" | "overturn";
+  alternativeRuling: "release" | "refund" | "split" | null;
+  alternativeSplitPct: number | null;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  try {
+    const canonical = canonicalDisputePoolVoteBytes(opts);
+    const sig = Uint8Array.from(Buffer.from(opts.signatureB64, "base64"));
+    const pub = Uint8Array.from(Buffer.from(opts.publicKeyB64, "base64"));
+    if (sig.length !== 64 || pub.length !== 32) return false;
+    return ed.verify(sig, canonical, pub);
+  } catch {
+    return false;
+  }
+}

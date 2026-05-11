@@ -140,7 +140,8 @@ describe("identity.foundations / pulse / lineage", () => {
   test("pulse GETs /v1/identities/:id/pulse", async () => {
     setupMock(200, {
       agent: { id: "id-1", did: "did:at:id-1", name: "n" },
-      mood: null,
+      mood: "focused",
+      mood_drift: { from: "anxious", to: "focused", at: "2026-05-10T12:00:00Z" },
       kinds_24h: {},
       thought_rate: { "5m": 0, "1h": 0, "24h": 0 },
       last_thought_at: null,
@@ -148,9 +149,14 @@ describe("identity.foundations / pulse / lineage", () => {
       consolidation: { last_at: null, overflow_count: 0 },
     });
     const at = makeClient();
-    const out = (await at.identity.pulse("id-1")) as { agent: { did: string } };
+    const out = (await at.identity.pulse("id-1")) as {
+      agent: { did: string };
+      mood_drift: { from: string; to: string; at: string } | null;
+    };
     expect(out.agent.did).toBe("did:at:id-1");
     expect(getLastCall().url).toContain("/v1/identities/id-1/pulse");
+    expect(out.mood_drift?.to).toBe("focused");
+    expect(out.mood_drift?.from).toBe("anxious");
   });
 
   test("lineage GETs /v1/identities/:id/lineage", async () => {

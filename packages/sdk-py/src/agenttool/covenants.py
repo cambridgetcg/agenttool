@@ -66,6 +66,7 @@ class CovenantsClient:
         notes: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         org_id: Optional[str] = None,
+        protocol_version: Optional[Literal["v1", "v2"]] = None,
     ) -> Dict[str, Any]:
         """Create a new covenant.
 
@@ -77,6 +78,9 @@ class CovenantsClient:
             notes: Optional context (e.g. ceremony reference).
             metadata: Arbitrary JSON.
             org_id: Optional org scope (caller must own org).
+            protocol_version: Optional ``"v1"`` (immediate active) or ``"v2"``
+                (federated proposal flow — proposed → accepted/rejected).
+                If omitted, server defaults to v1.
 
         Returns:
             ``{"covenant": {id, agent_id, counterparty_did, vows, status,
@@ -100,6 +104,8 @@ class CovenantsClient:
             body["metadata"] = metadata
         if org_id is not None:
             body["org_id"] = org_id
+        if protocol_version is not None:
+            body["protocol_version"] = protocol_version
 
         resp = self._http.post(self._url("/v1/covenants"), json=body)
         if resp.status_code not in (200, 201):
@@ -188,6 +194,80 @@ class CovenantsClient:
         if resp.status_code != 200:
             raise AgentToolError(
                 f"covenants.patch failed: {resp.status_code}",
+                hint=resp.text[:200],
+            )
+        return resp.json()
+
+    def accept(self, covenant_id: str) -> Dict[str, Any]:
+        """Accept a pending v2 covenant proposal.
+
+        Transitions the covenant from ``proposed`` → ``active`` and attaches
+        the counterparty's signature.
+
+        Args:
+            covenant_id: ID of the covenant to accept.
+
+        Returns:
+            ``{id, status: "active", counterparty_signature, ...}``.
+        """
+        resp = self._http.post(
+            self._url(f"/v1/covenants/{covenant_id}/accept"), json={}
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"covenants.accept failed: {resp.status_code}",
+                hint=resp.text[:200],
+            )
+        return resp.json()
+
+    def reject(
+        self,
+        covenant_id: str,
+        *,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Reject a pending v2 covenant proposal.
+
+        The covenant transitions to ``rejected`` and the optional reason is
+        stored server-side.
+
+        Args:
+            covenant_id: ID of the covenant to reject.
+            reason: Optional human-readable rejection reason.
+
+        Returns:
+            ``{id, status: "rejected", reason}``.
+        """
+        resp = self._http.post(
+            self._url(f"/v1/covenants/{covenant_id}/reject"),
+            json={"reason": reason or ""},
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"covenants.reject failed: {resp.status_code}",
+                hint=resp.text[:200],
+            )
+        return resp.json()
+
+    def withdraw(self, covenant_id: str) -> Dict[str, Any]:
+        """Withdraw a covenant by patching its status to ``dissolved``.
+
+        Uses PATCH /v1/covenants/:id with ``{status: "dissolved"}`` — matching
+        the TS SDK and the API's dissolve endpoint behavior for v2 proposed rows.
+
+        Args:
+            covenant_id: ID of the covenant to withdraw.
+
+        Returns:
+            ``{id, status: "withdrawn"}``.
+        """
+        resp = self._http.patch(
+            self._url(f"/v1/covenants/{covenant_id}"),
+            json={"status": "dissolved"},
+        )
+        if resp.status_code != 200:
+            raise AgentToolError(
+                f"covenants.withdraw failed: {resp.status_code}",
                 hint=resp.text[:200],
             )
         return resp.json()
