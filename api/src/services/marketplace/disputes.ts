@@ -168,7 +168,7 @@ export function validateDisputePolicy(value: unknown): asserts value is DisputeP
 
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
-import { attestations, identities } from "../../db/schema/identity";
+import { attestations, identities, identityKeys } from "../../db/schema/identity";
 import { disputeCases, invocations, listings } from "../../db/schema/marketplace";
 
 export type DisputeCaseStatus = "open" | "first_ruled" | "escalated" | "resolved";
@@ -363,5 +363,118 @@ export async function fileDispute(input: FileDisputeInput): Promise<DisputeCaseO
     // (finalize) wires the actual money move via finalizeCase().
 
     return caseRowToOut(caseRow!);
+  });
+}
+
+// ── Service: first arbiter submits ruling ───────────────────────────
+
+import { verifyDisputeFirstRuling } from "./sig";
+
+export interface SubmitFirstRulingInput {
+  disputeCaseId: string;
+  arbiterProjectId: string;
+  ruling: DisputeRuling;
+  splitPct?: number | null;
+  signatureB64: string;
+  signingKeyId: string;
+}
+
+export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<DisputeCaseOut> {
+  if (input.ruling === "split") {
+    if (input.splitPct === undefined || input.splitPct === null) {
+      throw new Error("split_pct_required_for_split");
+    }
+    if (!Number.isInteger(input.splitPct) || input.splitPct < 0 || input.splitPct > 100) {
+      throw new Error("split_pct_out_of_range");
+    }
+  }
+
+  return await db.transaction(async (tx) => {
+    const [c] = await tx
+      .select()
+      .from(disputeCases)
+      .where(eq(disputeCases.id, input.disputeCaseId))
+      .for("update");
+    if (!c) throw new Error("dispute_case_not_found");
+    if (c.status !== "open") {
+      throw new Error(`dispute_case_state_invalid: status=${c.status}`);
+    }
+    if (c.firstArbiterSlaDeadlineAt && c.firstArbiterSlaDeadlineAt < new Date()) {
+      throw new Error("first_arbiter_sla_expired");
+    }
+    if (!c.firstArbiterIdentityId) {
+      throw new Error("first_arbiter_not_resolved");
+    }
+
+    // Verify caller owns the first arbiter identity.
+    const [arbiter] = await tx
+      .select({ projectId: identities.projectId })
+      .from(identities)
+      .where(eq(identities.id, c.firstArbiterIdentityId))
+      .limit(1);
+    if (!arbiter || arbiter.projectId !== input.arbiterProjectId) {
+      throw new Error("not_first_arbiter");
+    }
+
+    // Verify signing key belongs to arbiter + is active.
+    const [key] = await tx
+      .select({
+        id: identityKeys.id,
+        identityId: identityKeys.identityId,
+        publicKey: identityKeys.publicKey,
+        active: identityKeys.active,
+      })
+      .from(identityKeys)
+      .where(eq(identityKeys.id, input.signingKeyId))
+      .limit(1);
+    if (!key) throw new Error("signing_key_not_found");
+    if (!key.active) throw new Error("signing_key_revoked");
+    if (key.identityId !== c.firstArbiterIdentityId) {
+      throw new Error("signing_key_does_not_belong_to_arbiter");
+    }
+
+    const sigOk = verifyDisputeFirstRuling({
+      disputeCaseId: c.id,
+      ruling: input.ruling,
+      splitPct: input.splitPct ?? null,
+      signatureB64: input.signatureB64,
+      publicKeyB64: key.publicKey,
+    });
+    if (!sigOk) throw new Error("first_ruling_signature_invalid");
+
+    // Load policy from the listing to set escalation deadline.
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, c.invocationId))
+      .limit(1);
+    if (!inv) throw new Error("invocation_not_found");
+    const [listing] = await tx
+      .select({ disputePolicy: listings.disputePolicy })
+      .from(listings)
+      .where(eq(listings.id, inv.listingId))
+      .limit(1);
+    if (!listing?.disputePolicy) throw new Error("listing_dispute_policy_missing");
+    const policy = listing.disputePolicy as DisputePolicy;
+
+    const now = new Date();
+    const escalationDeadline = new Date(now.getTime() + policy.escalation_seconds * 1000);
+
+    const [updated] = await tx
+      .update(disputeCases)
+      .set({
+        firstArbiterRuling: input.ruling,
+        firstArbiterSplitPct: input.splitPct ?? null,
+        firstArbiterSignature: input.signatureB64,
+        firstArbiterSigningKeyId: input.signingKeyId,
+        firstArbiterRuledAt: now,
+        escalationDeadlineAt: escalationDeadline,
+        status: "first_ruled",
+        updatedAt: now,
+      })
+      .where(eq(disputeCases.id, c.id))
+      .returning();
+
+    return caseRowToOut(updated!);
   });
 }
