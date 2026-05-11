@@ -108,3 +108,58 @@ export function computeDisputeArbiterFees(opts: {
     totalPoolFees: perPoolMemberFee * opts.poolSize,
   };
 }
+
+// ── Dispute policy validation (pure) ────────────────────────────────
+
+export interface DisputePolicy {
+  arbiter_claim: string;
+  first_arbiter_did: string;
+  buyer_review_seconds: number;
+  first_arbiter_sla_seconds: number;
+  escalation_seconds: number;
+  pool_vote_seconds: number;
+  filer_bond_bps: number;
+}
+
+export const DEFAULT_DISPUTE_POLICY: Omit<DisputePolicy, "arbiter_claim" | "first_arbiter_did"> = {
+  buyer_review_seconds: 259200,       // 72h
+  first_arbiter_sla_seconds: 172800,  // 48h
+  escalation_seconds: 172800,         // 48h
+  pool_vote_seconds: 86400,           // 24h
+  filer_bond_bps: 2500,               // 25%
+};
+
+/** Validate the shape of a dispute_policy payload before the listing
+ *  service stores it. Throws on any malformed field with a specific
+ *  message the route maps to HTTP. Defaults are applied by the caller
+ *  AFTER validation passes — this helper only checks what was provided. */
+export function validateDisputePolicy(value: unknown): asserts value is DisputePolicy {
+  if (!value || typeof value !== "object") {
+    throw new Error("dispute_policy_must_be_object");
+  }
+  const p = value as Record<string, unknown>;
+
+  if (typeof p.arbiter_claim !== "string" || p.arbiter_claim.length === 0) {
+    throw new Error("dispute_policy_arbiter_claim_required");
+  }
+  if (typeof p.first_arbiter_did !== "string" || p.first_arbiter_did.length === 0) {
+    throw new Error("dispute_policy_first_arbiter_did_required");
+  }
+
+  for (const field of [
+    "buyer_review_seconds",
+    "first_arbiter_sla_seconds",
+    "escalation_seconds",
+    "pool_vote_seconds",
+  ] as const) {
+    const v = p[field];
+    if (typeof v !== "number" || !Number.isInteger(v) || v <= 0) {
+      throw new Error(`dispute_policy_duration_invalid: ${field}`);
+    }
+  }
+
+  const bps = p.filer_bond_bps;
+  if (typeof bps !== "number" || !Number.isInteger(bps) || bps < 0 || bps > 10000) {
+    throw new Error("dispute_policy_filer_bond_bps_invalid");
+  }
+}

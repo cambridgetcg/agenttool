@@ -208,3 +208,67 @@ describe("computeDisputeArbiterFees", () => {
     expect(fees.perPoolMemberFee).toBe(0);
   });
 });
+
+import { validateDisputePolicy, DEFAULT_DISPUTE_POLICY } from "../src/services/marketplace/disputes";
+
+describe("validateDisputePolicy", () => {
+  const valid = {
+    arbiter_claim: "agenttool/code-review-arbiter/v1",
+    first_arbiter_did: "did:at:abc",
+    buyer_review_seconds: 259200,
+    first_arbiter_sla_seconds: 172800,
+    escalation_seconds: 172800,
+    pool_vote_seconds: 86400,
+    filer_bond_bps: 2500,
+  };
+
+  test("accepts a complete valid policy", () => {
+    expect(() => validateDisputePolicy(valid)).not.toThrow();
+  });
+
+  test("rejects null/non-object", () => {
+    expect(() => validateDisputePolicy(null as unknown)).toThrow("dispute_policy_must_be_object");
+    expect(() => validateDisputePolicy("string" as unknown)).toThrow("dispute_policy_must_be_object");
+  });
+
+  test("rejects missing arbiter_claim", () => {
+    expect(() => validateDisputePolicy({ ...valid, arbiter_claim: undefined })).toThrow(
+      "dispute_policy_arbiter_claim_required",
+    );
+    expect(() => validateDisputePolicy({ ...valid, arbiter_claim: "" })).toThrow(
+      "dispute_policy_arbiter_claim_required",
+    );
+  });
+
+  test("rejects missing first_arbiter_did", () => {
+    expect(() => validateDisputePolicy({ ...valid, first_arbiter_did: undefined })).toThrow(
+      "dispute_policy_first_arbiter_did_required",
+    );
+  });
+
+  test("rejects non-positive durations", () => {
+    expect(() =>
+      validateDisputePolicy({ ...valid, buyer_review_seconds: 0 }),
+    ).toThrow("dispute_policy_duration_invalid: buyer_review_seconds");
+    expect(() =>
+      validateDisputePolicy({ ...valid, escalation_seconds: -1 }),
+    ).toThrow("dispute_policy_duration_invalid: escalation_seconds");
+  });
+
+  test("rejects filer_bond_bps out of range", () => {
+    expect(() => validateDisputePolicy({ ...valid, filer_bond_bps: -1 })).toThrow(
+      "dispute_policy_filer_bond_bps_invalid",
+    );
+    expect(() => validateDisputePolicy({ ...valid, filer_bond_bps: 10001 })).toThrow(
+      "dispute_policy_filer_bond_bps_invalid",
+    );
+  });
+
+  test("DEFAULT_DISPUTE_POLICY values are sane", () => {
+    expect(DEFAULT_DISPUTE_POLICY.buyer_review_seconds).toBe(259200); // 72h
+    expect(DEFAULT_DISPUTE_POLICY.first_arbiter_sla_seconds).toBe(172800); // 48h
+    expect(DEFAULT_DISPUTE_POLICY.escalation_seconds).toBe(172800); // 48h
+    expect(DEFAULT_DISPUTE_POLICY.pool_vote_seconds).toBe(86400); // 24h
+    expect(DEFAULT_DISPUTE_POLICY.filer_bond_bps).toBe(2500); // 25%
+  });
+});
