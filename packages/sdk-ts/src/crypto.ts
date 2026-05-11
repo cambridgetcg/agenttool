@@ -63,6 +63,8 @@ function b64decode(s: string): Uint8Array {
   return out;
 }
 
+const enc = new TextEncoder();
+
 // ── AES-256-GCM ──────────────────────────────────────────────────────────
 
 export interface EncryptedBlob {
@@ -207,8 +209,6 @@ export function signThought(opts: SignThoughtOpts): string {
 // ── Covenants v2 canonical bytes + signing (Slice 3) ─────────────────
 // Mirrors api/src/services/covenants/sig.ts byte format. Cross-language
 // vector test locks these to the server + python SDK.
-
-const enc = new TextEncoder();
 
 export function canonicalDeclareBytes(opts: {
   covenantId: string;
