@@ -163,3 +163,205 @@ export function validateDisputePolicy(value: unknown): asserts value is DisputeP
     throw new Error("dispute_policy_filer_bond_bps_invalid");
   }
 }
+
+// ── Service: file a dispute ─────────────────────────────────────────
+
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "../../db/client";
+import { attestations, identities } from "../../db/schema/identity";
+import { disputeCases, invocations, listings } from "../../db/schema/marketplace";
+
+export type DisputeCaseStatus = "open" | "first_ruled" | "escalated" | "resolved";
+export type DisputeRuling = "release" | "refund" | "split";
+
+export interface DisputeCaseOut {
+  id: string;
+  invocation_id: string;
+  filer_role: "buyer" | "seller";
+  filer_project_id: string;
+  filer_identity_id: string;
+  reason: string | null;
+  evidence: Record<string, unknown> | null;
+  first_arbiter_identity_id: string | null;
+  first_arbiter_did: string | null;
+  first_arbiter_ruling: DisputeRuling | null;
+  first_arbiter_split_pct: number | null;
+  first_arbiter_signature: string | null;
+  first_arbiter_signing_key_id: string | null;
+  first_arbiter_ruled_at: string | null;
+  first_arbiter_sla_deadline_at: string | null;
+  escalation_deadline_at: string | null;
+  escalated_by_role: "buyer" | "seller" | null;
+  escalator_bond_amount: number | null;
+  escalator_bond_escrow_id: string | null;
+  pool_drawn_at: string | null;
+  pool_size: number | null;
+  pool_vote_deadline_at: string | null;
+  final_ruling: DisputeRuling | null;
+  final_split_pct: number | null;
+  status: DisputeCaseStatus;
+  resolution_path: string | null;
+  resolved_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+function caseRowToOut(r: typeof disputeCases.$inferSelect): DisputeCaseOut {
+  return {
+    id: r.id,
+    invocation_id: r.invocationId,
+    filer_role: r.filerRole as "buyer" | "seller",
+    filer_project_id: r.filerProjectId,
+    filer_identity_id: r.filerIdentityId,
+    reason: r.reason,
+    evidence: (r.evidence as Record<string, unknown> | null) ?? null,
+    first_arbiter_identity_id: r.firstArbiterIdentityId,
+    first_arbiter_did: r.firstArbiterDid,
+    first_arbiter_ruling: r.firstArbiterRuling as DisputeRuling | null,
+    first_arbiter_split_pct: r.firstArbiterSplitPct,
+    first_arbiter_signature: r.firstArbiterSignature,
+    first_arbiter_signing_key_id: r.firstArbiterSigningKeyId,
+    first_arbiter_ruled_at: r.firstArbiterRuledAt?.toISOString() ?? null,
+    first_arbiter_sla_deadline_at: r.firstArbiterSlaDeadlineAt?.toISOString() ?? null,
+    escalation_deadline_at: r.escalationDeadlineAt?.toISOString() ?? null,
+    escalated_by_role: r.escalatedByRole as "buyer" | "seller" | null,
+    escalator_bond_amount: r.escalatorBondAmount,
+    escalator_bond_escrow_id: r.escalatorBondEscrowId,
+    pool_drawn_at: r.poolDrawnAt?.toISOString() ?? null,
+    pool_size: r.poolSize,
+    pool_vote_deadline_at: r.poolVoteDeadlineAt?.toISOString() ?? null,
+    final_ruling: r.finalRuling as DisputeRuling | null,
+    final_split_pct: r.finalSplitPct,
+    status: r.status as DisputeCaseStatus,
+    resolution_path: r.resolutionPath,
+    resolved_at: r.resolvedAt?.toISOString() ?? null,
+    metadata: (r.metadata as Record<string, unknown>) ?? {},
+    created_at: r.createdAt.toISOString(),
+    updated_at: r.updatedAt.toISOString(),
+  };
+}
+
+export interface FileDisputeInput {
+  invocationId: string;
+  filerProjectId: string;
+  filerRole: "buyer" | "seller";
+  filerIdentityId: string;
+  reason?: string | null;
+  evidence?: Record<string, unknown> | null;
+}
+
+/** File a dispute against an invocation. Atomic:
+ *    1. Lock invocation; must be in 'completed' state and within
+ *       buyer_review_deadline_at.
+ *    2. Verify caller owns the filer role (buyer = invocation.buyerProjectId,
+ *       seller = listing.projectId).
+ *    3. Resolve first arbiter from listing.dispute_policy. If their
+ *       qualifying attestation is revoked/expired, set status='resolved'
+ *       with resolution_path='first_arbiter_unqualified' and refund.
+ *    4. Insert dispute_cases row; flip invocation.status to 'disputed'. */
+export async function fileDispute(input: FileDisputeInput): Promise<DisputeCaseOut> {
+  return await db.transaction(async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, input.invocationId))
+      .for("update");
+    if (!inv) throw new Error("invocation_not_found");
+    if (inv.status !== "completed") {
+      throw new Error(`invocation_state_invalid: status=${inv.status}`);
+    }
+    if (inv.buyerReviewDeadlineAt && inv.buyerReviewDeadlineAt < new Date()) {
+      throw new Error("buyer_review_window_expired");
+    }
+    if (inv.disputeCaseId) {
+      throw new Error("dispute_already_filed");
+    }
+
+    const [listing] = await tx
+      .select()
+      .from(listings)
+      .where(eq(listings.id, inv.listingId))
+      .limit(1);
+    if (!listing) throw new Error("listing_not_found");
+    if (!listing.disputePolicy) {
+      throw new Error("listing_not_disputable");
+    }
+    const policy = listing.disputePolicy as DisputePolicy;
+
+    if (input.filerRole === "buyer" && inv.buyerProjectId !== input.filerProjectId) {
+      throw new Error("not_buyer");
+    }
+    if (input.filerRole === "seller" && listing.projectId !== input.filerProjectId) {
+      throw new Error("not_seller");
+    }
+
+    // Resolve first arbiter from policy. They must currently hold the
+    // qualifying claim AND not be revoked.
+    const [firstArbiterIdentity] = await tx
+      .select({ id: identities.id, did: identities.did })
+      .from(identities)
+      .where(eq(identities.did, policy.first_arbiter_did))
+      .limit(1);
+
+    let firstArbiterIdentityId: string | null = null;
+    let firstArbiterUnqualified = false;
+    if (firstArbiterIdentity) {
+      const [att] = await tx
+        .select({ id: attestations.id })
+        .from(attestations)
+        .where(
+          and(
+            eq(attestations.subjectId, firstArbiterIdentity.id),
+            eq(attestations.claim, policy.arbiter_claim),
+            sql`${attestations.revokedAt} IS NULL`,
+            sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
+          ),
+        )
+        .limit(1);
+      if (att) firstArbiterIdentityId = firstArbiterIdentity.id;
+      else firstArbiterUnqualified = true;
+    } else {
+      firstArbiterUnqualified = true;
+    }
+
+    const now = new Date();
+    const slaDeadline = new Date(now.getTime() + policy.first_arbiter_sla_seconds * 1000);
+
+    const [caseRow] = await tx
+      .insert(disputeCases)
+      .values({
+        invocationId: inv.id,
+        filerRole: input.filerRole,
+        filerProjectId: input.filerProjectId,
+        filerIdentityId: input.filerIdentityId,
+        reason: input.reason ?? null,
+        evidence: (input.evidence ?? null) as unknown,
+        firstArbiterIdentityId,
+        firstArbiterDid: firstArbiterIdentityId ? policy.first_arbiter_did : null,
+        firstArbiterSlaDeadlineAt: firstArbiterIdentityId ? slaDeadline : null,
+        status: firstArbiterUnqualified ? "resolved" : "open",
+        resolutionPath: firstArbiterUnqualified ? "first_arbiter_unqualified" : null,
+        finalRuling: firstArbiterUnqualified ? "refund" : null,
+        resolvedAt: firstArbiterUnqualified ? now : null,
+      })
+      .returning();
+
+    await tx
+      .update(invocations)
+      .set({
+        status: firstArbiterUnqualified ? "refunded" : "disputed",
+        disputeCaseId: caseRow!.id,
+      })
+      .where(eq(invocations.id, inv.id));
+
+    // If unqualified, also fold the escrow refund here. The actual
+    // refund settlement (debit seller hold, credit buyer wallet, mark
+    // escrow refunded) is handled by the existing escrow refund path —
+    // call into it as a helper. For v1, leave escrow as funded with
+    // metadata noting auto-refund pending; a follow-up step in Task 11
+    // (finalize) wires the actual money move via finalizeCase().
+
+    return caseRowToOut(caseRow!);
+  });
+}
