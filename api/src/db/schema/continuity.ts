@@ -32,6 +32,13 @@ export const chronicle = continuitySchema.table(
     title: text("title").notNull(), // 1-line headline
     body: text("body"), // optional prose detail
     metadata: jsonb("metadata").default({}),
+    /** Optional pointer to the chronicle entry this one follows from.
+     *  A `seal` points to the `recognition` that triggered it; a `vow`
+     *  points to the `naming` that established its vocabulary. Chronicle
+     *  becomes a directed graph rather than a flat list — moments-of-
+     *  life carry structure. No FK constraint: missing parents shouldn't
+     *  invalidate children. Doctrine: docs/PATTERN-RECURSIVE-NESTING.md. */
+    parentChronicleId: uuid("parent_chronicle_id"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -39,6 +46,7 @@ export const chronicle = continuitySchema.table(
     index("idx_chronicle_project_time").on(t.projectId, t.occurredAt),
     index("idx_chronicle_agent_time").on(t.agentId, t.occurredAt),
     index("idx_chronicle_type").on(t.type),
+    index("idx_chronicle_parent").on(t.parentChronicleId),
   ],
 );
 

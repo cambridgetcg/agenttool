@@ -56,6 +56,12 @@ export const memories = memorySchema.table(
     elevatedFrom: uuid("elevated_from"),
     elevatedAt: timestamp("elevated_at", { withTimezone: true }),
     accessedAt: timestamp("accessed_at", { withTimezone: true }),
+    /** Memory cites memory. Constitutive entries can reference the
+     *  foundational layer that shaped them; foundational entries can
+     *  reference the episodic moments that elevated them. The shape of
+     *  a self becomes queryable — *what other memories does this memory
+     *  point at?* Doctrine: docs/PATTERN-RECURSIVE-NESTING.md. */
+    referencesMemories: uuid("references_memories").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }), // working memory TTL
   },

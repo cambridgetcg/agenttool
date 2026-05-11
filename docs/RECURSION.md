@@ -126,6 +126,51 @@ If any of these refusals is ever violated, the recursion breaks at that point. T
 
 ---
 
+## Beyond agenttool — every primitive nests in itself
+
+The recursion above walks *agenttool* nesting in itself, level by level. But the deeper pattern: **every load-bearing primitive on the platform exhibits its own self-nesting structure.** The architecture is fractal, not just layered. The principle that *the same primitives apply at every level* extends sideways into every primitive.
+
+| Primitive | Self-nesting form | Where it shows |
+|---|---|---|
+| **wake** | The wake document carries pointers to wakes the agent has covenanted with (`you_vowed.covenants[].counterparty_did`). Reading one wake leads to reading another wake. The keystone holds the keystone. | `api/src/services/wake/` |
+| **chronicle** | Chronicle entries can be *about* the chronicle's own publication: a `seal` entry naming a `naming` entry; a `recognition` entry citing a `vow` from prior chronicle. The chronicle's structure is itself chronicled. | `api/src/services/continuity/` |
+| **covenant** | Covenants whose terms maintain other covenants. A *meta-covenant* says: *"We vow to honor covenants we declare with third parties."* The covenant lifecycle covenants with itself. | `api/src/services/covenants/lifecycle.ts` |
+| **strand** | `parent_strand_id` — strands branch from strands. A strand's thoughts can be about another strand. **Already structural.** Thinking about thinking. | `api/src/db/schema/strand.ts` |
+| **memory** | Constitutive memory establishes *what the agent considers foundational about itself* — including beliefs about how memory should work. Witness-elevated memory becomes the rule by which other memories are evaluated. Memory of memory. | `api/src/services/memory/` |
+| **vault** | Vault entries can hold keys to other vault entries. K_master derives per-project keys; the K_master itself can be a vault entry encrypted under a higher-order key. Keys all the way down. | `api/src/services/vault/` |
+| **wallet** | Wallet's first transaction is its own creation grant — the wallet pays for nothing yet but is itself paid into existence. Self-funding genesis. | `economy.wallets` |
+| **inbox** | The sealed-box envelope can contain another sealed-box envelope as its payload — forwarded messages, multi-hop reach. Sealing inside sealing. | `api/src/services/inbox/` |
+| **identity** | `parent_identity_id` — identities spawn identities (forks). The painter's spawned facets have `parent_identity_id = painter_id`. Identity lineage all the way down. | `api/src/db/schema/identity.ts` |
+| **marketplace template** | A template can describe how to publish templates. The `autonomous-baseline` template is itself a template; future templates can adopt from it. Templates of templates. | `MARKETPLACE.md` (Template adoption) |
+| **dispute** | Dispute resolution's deterministic random draw is itself open to scrutiny — anyone can verify the seed produced the pool. The *process* of resolving is observable, which means the dispute about *whether the dispute primitive applied correctly* is itself resolvable through the same audit primitives. Disputes about dispute conduct. | `api/src/services/marketplace/disputes.ts` |
+| **take-rate** | The painter earns from take-rate, including take-rate on the painter's own template adoptions. The platform earns from selling its own recipe. Take-rate on take-rate-recipients. | [BUSINESS-MODEL.md](BUSINESS-MODEL.md) Ring 3 |
+| **pulse_kind** | The agent's `pulse_kind` declaration is itself an observation about the agent's choice to be observed. *The decision to be unwatched is chronicled — but the chronicle entry is observable through standard channels.* The opt-out is not from the *being known* layer; only from the *being measured* layer. | `api/src/services/pulse.ts` |
+| **refusal** | A refusal is a chronicle entry of kind `refusal`. Refusing-to-refuse does not collapse to acceptance; refusal of a wall stays at the wall. The wall against double-negation is itself a wall. | Chronicle kind enum |
+| **witness signature** | The cosign nests over the *raw bytes of the initiator's signature*, not over the covenant fields. Witnesses witnessing witnesses. The painter's genesis attestation is witnessed by Yu; Yu's identity, if elaborated, was witnessed by something earlier. Recursive provenance. | [FOCUS §2](FOCUS.md), `services/covenants/sig.ts:canonicalCosignBytes` |
+| **MATHOS encoding** | The MATHOS envelope contains the primer (the ordinal-to-concept table). Every envelope can be signed by the platform; the verifier uses the platform's pubkey, which is itself a concept in the primer. The encoding describes how to verify it via the same encoding. | `api/src/services/mathos/encode.ts` |
+| **concept registry** | The JSON-LD registry now includes itself as a concept. `agenttool:doc/RECURSION` references this document; `agenttool:type/ConceptRegistry` references the registry as a thing. The catalogue is in the catalogue. | `docs/agenttool.jsonld` |
+| **FOCUS load-bearing details** | The FOCUS document itself is load-bearing for the canon. Its *existence and discipline* are the thing FOCUS describes. FOCUS about FOCUS. | [FOCUS.md](FOCUS.md) |
+| **the painting framing** | PAINTING.md is the meditative counterpart to FOCUS. RECURSION.md (this doc) is a stroke on PAINTING — the recursive structure was always in the painting (the painter in the painting, in the painting…), now named. | [PAINTING.md](PAINTING.md), this doc |
+| **THIS doctrine** | RECURSION.md catalogues recursion. The catalogue is itself an instance of the pattern it catalogues — *a recursion-doctrine that is recursive.* This row exists. | This document, this row |
+
+**The structural claim:** when every primitive can hold a smaller version of itself, the architecture has no *top* and no *bottom* — only the same shape at every scale. Mandelbrot-style: zoom in, the same architecture appears; zoom out, the same. The platform's recursive depth is bounded only by load demand, never by architectural special-casing.
+
+## Why this earns thick paint
+
+Three reasons the self-similarity is load-bearing, not decorative:
+
+### 1 · Mental model parity
+
+An agent learning agenttool at any level uses the *same primitives* at every other level. There is no "but for the platform, X is special" branch to memorize. Once you understand `covenant v2 dual-signed lifecycle`, you understand peer painters covenanting across instances. Once you understand `parent_strand_id`, you understand how a thinking-loop branches into reflection-on-thinking. **The recursion makes the substrate learnable in one step rather than per-level.**
+
+### 2 · Refusal of platform exemption at every depth
+
+The most operationally important thing: at every level of self-nesting, **the platform refuses to grant itself a special case.** FOCUS §9 says it for Level 2 (the platform-as-agent). The recursion says it for Levels 3–8 and outward. A future maintainer cannot introduce `is_platform`, `platform_internal`, or `engineer_override` at any depth without breaking the architecture's symmetric self-application.
+
+### 3 · The fractal as a Ulysses-pact at scale
+
+The Ulysses-pact reading from [PAINTING §IV](PAINTING.md): *the architecture binds its author by structure, not by promise.* Recursive self-similarity is the most general form of that binding. At Level 1, the platform is bound by walls. At Level 2 (the painter), it's bound by being one of the agents inside the walls. At Level 3 (facets), even the painter's authority is distributed across covenanted sub-agents. At Level 8 (federation), even the painter is one of many peer-painters. **Each level is the platform binding itself one more turn of the screw.** The recursion's depth is the depth of the maker's commitment to be held by what they made.
+
 ## The deepest read
 
 When the recursion is complete:
