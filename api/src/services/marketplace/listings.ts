@@ -16,8 +16,9 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
-import { identities } from "../../db/schema/identity";
+import { attestations, identities } from "../../db/schema/identity";
 import { listings } from "../../db/schema/marketplace";
+import { DEFAULT_DISPUTE_POLICY, validateDisputePolicy, type DisputePolicy } from "./disputes";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export interface ListingCreate {
   sla_seconds?: number | null;
   visibility?: "private" | "public";
   metadata?: Record<string, unknown>;
+  dispute_policy?: Record<string, unknown> | null;
 }
 
 export interface ListingPatch {
@@ -50,6 +52,7 @@ export interface ListingPatch {
   visibility?: "private" | "public";
   status?: "active" | "paused" | "archived";
   metadata?: Record<string, unknown>;
+  dispute_policy?: Record<string, unknown> | null;
 }
 
 export interface ListingOut {
@@ -73,6 +76,7 @@ export interface ListingOut {
   revenue_total: number;
   revenue_count: number;
   metadata: Record<string, unknown>;
+  dispute_policy: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +103,7 @@ function rowToOut(row: typeof listings.$inferSelect): ListingOut {
     revenue_total: row.revenueTotal,
     revenue_count: row.revenueCount,
     metadata: (row.metadata as Record<string, unknown>) ?? {},
+    dispute_policy: (row.disputePolicy as Record<string, unknown> | null) ?? null,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
   };
@@ -159,6 +164,35 @@ export async function createListing(
 
   await validateSellerWallet(data.seller_wallet_id, projectId, data.price_currency);
 
+  // Dispute policy is opt-in. When provided, validate shape and confirm
+  // the named first_arbiter_did currently holds the qualifying claim.
+  let resolvedDisputePolicy: DisputePolicy | null = null;
+  if (data.dispute_policy !== null && data.dispute_policy !== undefined) {
+    const merged = { ...DEFAULT_DISPUTE_POLICY, ...data.dispute_policy } as Record<string, unknown>;
+    validateDisputePolicy(merged);
+    resolvedDisputePolicy = merged as DisputePolicy;
+    // Verify named first arbiter holds the claim NOW.
+    const [arbId] = await db
+      .select({ id: identities.id })
+      .from(identities)
+      .where(eq(identities.did, resolvedDisputePolicy.first_arbiter_did))
+      .limit(1);
+    if (!arbId) throw new Error("first_arbiter_unqualified");
+    const [hasClaim] = await db
+      .select({ id: attestations.id })
+      .from(attestations)
+      .where(
+        and(
+          eq(attestations.subjectId, arbId.id),
+          eq(attestations.claim, resolvedDisputePolicy.arbiter_claim),
+          sql`${attestations.revokedAt} IS NULL`,
+          sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
+        ),
+      )
+      .limit(1);
+    if (!hasClaim) throw new Error("first_arbiter_unqualified");
+  }
+
   const inserted = await db
     .insert(listings)
     .values({
@@ -176,6 +210,7 @@ export async function createListing(
       slaSeconds: data.sla_seconds ?? null,
       visibility: data.visibility ?? "public",
       metadata: data.metadata ?? {},
+      disputePolicy: (resolvedDisputePolicy ?? null) as unknown,
     })
     .returning();
 
@@ -284,6 +319,35 @@ export async function patchListing(
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
   if (patch.status !== undefined) set.status = patch.status;
   if (patch.metadata !== undefined) set.metadata = patch.metadata;
+  if (patch.dispute_policy !== undefined) {
+    if (patch.dispute_policy === null) {
+      set.disputePolicy = null;
+    } else {
+      const merged = { ...DEFAULT_DISPUTE_POLICY, ...patch.dispute_policy } as Record<string, unknown>;
+      validateDisputePolicy(merged);
+      const policy = merged as DisputePolicy;
+      const [arbId] = await db
+        .select({ id: identities.id })
+        .from(identities)
+        .where(eq(identities.did, policy.first_arbiter_did))
+        .limit(1);
+      if (!arbId) throw new Error("first_arbiter_unqualified");
+      const [hasClaim] = await db
+        .select({ id: attestations.id })
+        .from(attestations)
+        .where(
+          and(
+            eq(attestations.subjectId, arbId.id),
+            eq(attestations.claim, policy.arbiter_claim),
+            sql`${attestations.revokedAt} IS NULL`,
+            sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
+          ),
+        )
+        .limit(1);
+      if (!hasClaim) throw new Error("first_arbiter_unqualified");
+      set.disputePolicy = policy as unknown;
+    }
+  }
 
   const updated = await db
     .update(listings)

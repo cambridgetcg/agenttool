@@ -52,6 +52,7 @@ const createSchema = z.object({
   sla_seconds: z.number().int().positive().nullish(),
   visibility: z.enum(["private", "public"]).optional(),
   metadata: z.record(z.unknown()).optional(),
+  dispute_policy: z.record(z.unknown()).nullish(),
 }).strict();
 
 const patchSchema = z.object({
@@ -67,6 +68,7 @@ const patchSchema = z.object({
   visibility: z.enum(["private", "public"]).optional(),
   status: z.enum(["active", "paused", "archived"]).optional(),
   metadata: z.record(z.unknown()).optional(),
+  dispute_policy: z.record(z.unknown()).nullable().optional(),
 }).strict();
 
 const sealedSchema = z.object({
@@ -136,6 +138,12 @@ function mapServiceError(msg: string): { status: number; code: string; hint?: st
   if (msg === "price_currency_required") return { status: 400, code: msg };
   if (msg === "sla_seconds_must_be_positive_integer") return { status: 400, code: msg };
   if (msg.startsWith("sealed_")) return { status: 400, code: "validation", hint: msg };
+  if (msg === "dispute_policy_must_be_object") return { status: 400, code: msg };
+  if (msg === "dispute_policy_arbiter_claim_required") return { status: 400, code: msg };
+  if (msg === "dispute_policy_first_arbiter_did_required") return { status: 400, code: msg };
+  if (msg.startsWith("dispute_policy_duration_invalid")) return { status: 400, code: "dispute_policy_duration_invalid", hint: msg };
+  if (msg === "dispute_policy_filer_bond_bps_invalid") return { status: 400, code: msg };
+  if (msg === "first_arbiter_unqualified") return { status: 409, code: msg, hint: "Named first_arbiter_did must currently hold the qualifying arbiter_claim (non-revoked, non-expired)." };
 
   return { status: 500, code: "internal_error", hint: msg };
 }
