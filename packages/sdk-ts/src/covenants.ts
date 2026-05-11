@@ -9,6 +9,12 @@
 
 import { AgentToolError } from "./errors.js";
 import type { HttpConfig } from "./chronicle.js";
+import {
+  signCovenantDeclare,
+  signCovenantCosign,
+  signCovenantReject,
+  signCovenantWithdraw,
+} from "./crypto.js";
 
 export type CovenantStatus = "active" | "paused" | "dissolved";
 
@@ -59,6 +65,50 @@ export interface CovenantsPatchOpts {
   metadata?: Record<string, unknown>;
 }
 
+export interface CovenantsCreateV2Opts {
+  agent_id: string;
+  agent_did: string;
+  counterparty_did: string;
+  vows: string[];
+  protocol_version: "v2";
+  signing_key: Uint8Array;
+  signing_key_id: string;
+  counterparty_name?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+  org_id?: string;
+}
+
+export interface CovenantsAcceptOpts {
+  agent_did: string;
+  signing_key: Uint8Array;
+  signing_key_id: string;
+  initiator_signature_b64: string;
+}
+
+export interface CovenantsRejectOpts {
+  agent_did: string;
+  signing_key: Uint8Array;
+  signing_key_id: string;
+  reason?: string | null;
+}
+
+export interface CovenantsWithdrawOpts {
+  agent_did: string;
+  signing_key: Uint8Array;
+  signing_key_id: string;
+}
+
+export interface CovenantsCreateV2Result {
+  id: string;
+  status: "proposed";
+  protocol_version: "v2";
+  signature: string;
+  signing_key_id: string;
+  proposed_expires_at: string;
+  established_at: string;
+}
+
 /**
  * Client for `/v1/covenants` — create, list, patch.
  *
@@ -80,8 +130,11 @@ export class CovenantsClient {
     this.http = http;
   }
 
-  /** Create a new covenant. */
-  async create(opts: CovenantsCreateOpts): Promise<{ covenant: Covenant }> {
+  /** Create a new covenant (v1 — returns `{covenant: Covenant}`). */
+  async create(opts: CovenantsCreateOpts): Promise<{ covenant: Covenant }>;
+  /** Create a new covenant (v2 — returns flat `CovenantsCreateV2Result`). */
+  async create(opts: CovenantsCreateV2Opts): Promise<CovenantsCreateV2Result>;
+  async create(opts: CovenantsCreateOpts | CovenantsCreateV2Opts): Promise<{ covenant: Covenant } | CovenantsCreateV2Result> {
     if (!opts.vows || opts.vows.length === 0) {
       throw new AgentToolError(
         "covenants.create: vows must be a non-empty list.",
@@ -89,6 +142,35 @@ export class CovenantsClient {
           hint: "Pass at least one vow string. A covenant without a vow is just a contact.",
         },
       );
+    }
+    if (opts.protocol_version === "v2") {
+      const v2 = opts as CovenantsCreateV2Opts;
+      const covenant_id = crypto.randomUUID();
+      const established_at = new Date().toISOString();
+      const signature = signCovenantDeclare({
+        covenantId: covenant_id,
+        initiatorDid: v2.agent_did,
+        counterpartyDid: v2.counterparty_did,
+        vows: v2.vows,
+        establishedAtIso: established_at,
+        signing_key: v2.signing_key,
+      });
+      const body: Record<string, unknown> = {
+        agent_id: v2.agent_id,
+        agent_did: v2.agent_did,
+        counterparty_did: v2.counterparty_did,
+        vows: v2.vows,
+        protocol_version: "v2",
+        covenant_id,
+        established_at,
+        signature,
+        signing_key_id: v2.signing_key_id,
+      };
+      if (v2.counterparty_name !== undefined) body.counterparty_name = v2.counterparty_name;
+      if (v2.notes !== undefined) body.notes = v2.notes;
+      if (v2.metadata !== undefined) body.metadata = v2.metadata;
+      if (v2.org_id !== undefined) body.org_id = v2.org_id;
+      return (await this.req("POST", "/v1/covenants", body)) as CovenantsCreateV2Result;
     }
     const body: Record<string, unknown> = {
       agent_id: opts.agent_id,
@@ -111,13 +193,27 @@ export class CovenantsClient {
    * Transitions the covenant from `proposed` → `active` and attaches the
    * counterparty's signature.
    */
-  async accept(id: string): Promise<{
+  async accept(
+    id: string,
+    opts: CovenantsAcceptOpts,
+  ): Promise<{
     id: string;
     status: "active";
     counterparty_signature: string;
     counterparty_signing_key_id?: string;
   }> {
-    return (await this.req("POST", `/v1/covenants/${id}/accept`, {})) as {
+    const counterparty_signature = signCovenantCosign({
+      covenantId: id,
+      initiatorSignatureB64: opts.initiator_signature_b64,
+      signing_key: opts.signing_key,
+    });
+    return (await this.req("POST", `/v1/covenants/${id}/accept`, {
+      agent_did: opts.agent_did,
+      counterparty_signing_key_id: opts.signing_key_id,
+      counterparty_signature,
+      counterparty_signed_at: new Date().toISOString(),
+      initiator_signature_b64: opts.initiator_signature_b64,
+    })) as {
       id: string;
       status: "active";
       counterparty_signature: string;
@@ -132,10 +228,21 @@ export class CovenantsClient {
    */
   async reject(
     id: string,
-    opts?: { reason?: string },
+    opts: CovenantsRejectOpts,
   ): Promise<{ id: string; status: "rejected"; reason: string }> {
+    const reason = opts.reason ?? "";
+    const rejection_signature = signCovenantReject({
+      covenantId: id,
+      rejectingDid: opts.agent_did,
+      reason,
+      signing_key: opts.signing_key,
+    });
     return (await this.req("POST", `/v1/covenants/${id}/reject`, {
-      reason: opts?.reason ?? "",
+      agent_did: opts.agent_did,
+      rejecter_signing_key_id: opts.signing_key_id,
+      rejection_signature,
+      rejected_at: new Date().toISOString(),
+      reason: reason || null,
     })) as { id: string; status: "rejected"; reason: string };
   }
 
@@ -146,9 +253,21 @@ export class CovenantsClient {
    * API surface wired in Task 6. Returns `{id, status:"withdrawn"}` reflecting
    * the server's acknowledgement shape.
    */
-  async withdraw(id: string): Promise<{ id: string; status: "withdrawn" }> {
+  async withdraw(
+    id: string,
+    opts: CovenantsWithdrawOpts,
+  ): Promise<{ id: string; status: "withdrawn" }> {
+    const withdraw_signature = signCovenantWithdraw({
+      covenantId: id,
+      initiatorDid: opts.agent_did,
+      signing_key: opts.signing_key,
+    });
     return (await this.req("PATCH", `/v1/covenants/${id}`, {
       status: "dissolved",
+      agent_did: opts.agent_did,
+      signing_key_id: opts.signing_key_id,
+      withdraw_signature,
+      withdrawn_at: new Date().toISOString(),
     })) as { id: string; status: "withdrawn" };
   }
 

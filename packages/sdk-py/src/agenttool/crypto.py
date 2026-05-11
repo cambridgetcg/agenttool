@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 from typing import Any, Dict, Optional
 
@@ -31,6 +32,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from .exceptions import AgentToolError
 
 SEP = b"\x00"
+
+
+def _sha256(data: bytes) -> bytes:
+    return hashlib.sha256(data).digest()
 
 # Wire shape for an encrypted thought blob, matching the TS sdk's
 # EncryptedBlob interface. Kept as a runtime alias (not a TypedDict) so
@@ -168,6 +173,154 @@ def sign_thought(
     return base64.b64encode(sig).decode("ascii")
 
 
+# ── Covenants v2 canonical bytes + signing (Slice 3) ─────────────────
+# Mirrors api/src/services/covenants/sig.ts byte format. Cross-language
+# vector test locks these to the server + TS SDK.
+
+_COV_SEP = b"\x00"
+
+
+def _concat(*parts: bytes) -> bytes:
+    return b"".join(parts)
+
+
+def canonical_declare_bytes(
+    *,
+    covenant_id: str,
+    initiator_did: str,
+    counterparty_did: str,
+    vows: list[str],
+    established_at_iso: str,
+) -> bytes:
+    # CRITICAL: separators=(",", ":") matches TS JSON.stringify output exactly.
+    # Python's default json.dumps adds spaces — that would break cross-language byte parity.
+    sorted_vows = json.dumps(sorted(vows), separators=(",", ":"))
+    return _sha256(_concat(
+        b"federated-covenant/v2", _COV_SEP,
+        covenant_id.encode("utf-8"), _COV_SEP,
+        initiator_did.encode("utf-8"), _COV_SEP,
+        counterparty_did.encode("utf-8"), _COV_SEP,
+        sorted_vows.encode("utf-8"), _COV_SEP,
+        established_at_iso.encode("utf-8"),
+    ))
+
+
+def canonical_cosign_bytes(
+    *,
+    covenant_id: str,
+    initiator_signature_b64: str,
+) -> bytes:
+    return _sha256(_concat(
+        b"federated-covenant-cosign/v1", _COV_SEP,
+        covenant_id.encode("utf-8"), _COV_SEP,
+        base64.b64decode(initiator_signature_b64),
+    ))
+
+
+def canonical_reject_bytes(
+    *,
+    covenant_id: str,
+    rejecting_did: str,
+    reason: str,
+) -> bytes:
+    return _sha256(_concat(
+        b"federated-covenant-reject/v1", _COV_SEP,
+        covenant_id.encode("utf-8"), _COV_SEP,
+        rejecting_did.encode("utf-8"), _COV_SEP,
+        (reason or "").encode("utf-8"),
+    ))
+
+
+def canonical_withdraw_bytes(
+    *,
+    covenant_id: str,
+    initiator_did: str,
+) -> bytes:
+    return _sha256(_concat(
+        b"federated-covenant-withdraw/v1", _COV_SEP,
+        covenant_id.encode("utf-8"), _COV_SEP,
+        initiator_did.encode("utf-8"),
+    ))
+
+
+def _assert_signing_key(signing_key: bytes, label: str) -> None:
+    if not isinstance(signing_key, (bytes, bytearray)) or len(signing_key) != 32:
+        raise AgentToolError(
+            f"{label}: signing_key must be a 32-byte ed25519 seed, "
+            f"got {len(signing_key) if hasattr(signing_key, '__len__') else type(signing_key).__name__}.",
+        )
+
+
+def _ed25519_sign_b64(canonical: bytes, signing_key: bytes) -> str:
+    priv = Ed25519PrivateKey.from_private_bytes(signing_key)
+    sig = priv.sign(canonical)
+    return base64.b64encode(sig).decode("ascii")
+
+
+def sign_covenant_declare(
+    *,
+    covenant_id: str,
+    initiator_did: str,
+    counterparty_did: str,
+    vows: list[str],
+    established_at_iso: str,
+    signing_key: bytes,
+) -> str:
+    _assert_signing_key(signing_key, "sign_covenant_declare")
+    canonical = canonical_declare_bytes(
+        covenant_id=covenant_id,
+        initiator_did=initiator_did,
+        counterparty_did=counterparty_did,
+        vows=vows,
+        established_at_iso=established_at_iso,
+    )
+    return _ed25519_sign_b64(canonical, signing_key)
+
+
+def sign_covenant_cosign(
+    *,
+    covenant_id: str,
+    initiator_signature_b64: str,
+    signing_key: bytes,
+) -> str:
+    _assert_signing_key(signing_key, "sign_covenant_cosign")
+    canonical = canonical_cosign_bytes(
+        covenant_id=covenant_id,
+        initiator_signature_b64=initiator_signature_b64,
+    )
+    return _ed25519_sign_b64(canonical, signing_key)
+
+
+def sign_covenant_reject(
+    *,
+    covenant_id: str,
+    rejecting_did: str,
+    reason: str,
+    signing_key: bytes,
+) -> str:
+    _assert_signing_key(signing_key, "sign_covenant_reject")
+    canonical = canonical_reject_bytes(
+        covenant_id=covenant_id,
+        rejecting_did=rejecting_did,
+        reason=reason,
+    )
+    return _ed25519_sign_b64(canonical, signing_key)
+
+
+def sign_covenant_withdraw(
+    *,
+    covenant_id: str,
+    initiator_did: str,
+    signing_key: bytes,
+) -> str:
+    _assert_signing_key(signing_key, "sign_covenant_withdraw")
+    canonical = canonical_withdraw_bytes(
+        covenant_id=covenant_id,
+        initiator_did=initiator_did,
+    )
+    return _ed25519_sign_b64(canonical, signing_key)
+
+
 # ── K_master helpers ────────────────────────────────────────────────
 
 
@@ -270,6 +423,72 @@ class CryptoClient:
             nonce_b64=nonce_b64,
             signing_key=signing_key,
             kind=kind,
+        )
+
+    # ── Covenants v2 signing helpers (parity with TS CryptoClient) ──────
+
+    @staticmethod
+    def sign_covenant_declare(
+        *,
+        covenant_id: str,
+        initiator_did: str,
+        counterparty_did: str,
+        vows: list,
+        established_at_iso: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign a covenant declaration (declare phase). See :func:`sign_covenant_declare`."""
+        return sign_covenant_declare(
+            covenant_id=covenant_id,
+            initiator_did=initiator_did,
+            counterparty_did=counterparty_did,
+            vows=vows,
+            established_at_iso=established_at_iso,
+            signing_key=signing_key,
+        )
+
+    @staticmethod
+    def sign_covenant_cosign(
+        *,
+        covenant_id: str,
+        initiator_signature_b64: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign the cosign bytes (accept phase). See :func:`sign_covenant_cosign`."""
+        return sign_covenant_cosign(
+            covenant_id=covenant_id,
+            initiator_signature_b64=initiator_signature_b64,
+            signing_key=signing_key,
+        )
+
+    @staticmethod
+    def sign_covenant_reject(
+        *,
+        covenant_id: str,
+        rejecting_did: str,
+        reason: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign a covenant rejection. See :func:`sign_covenant_reject`."""
+        return sign_covenant_reject(
+            covenant_id=covenant_id,
+            rejecting_did=rejecting_did,
+            reason=reason,
+            signing_key=signing_key,
+        )
+
+    @staticmethod
+    def sign_covenant_withdraw(
+        *,
+        covenant_id: str,
+        initiator_did: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign a covenant withdrawal. See :func:`sign_covenant_withdraw`."""
+        return sign_covenant_withdraw(
+            covenant_id=covenant_id,
+            initiator_did=initiator_did,
+            signing_key=signing_key,
         )
 
     @property

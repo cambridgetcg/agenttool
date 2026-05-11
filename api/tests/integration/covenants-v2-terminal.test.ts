@@ -7,9 +7,14 @@ import { db } from "../../src/db/client";
 import { covenants } from "../../src/db/schema/continuity";
 import { identities, identityKeys } from "../../src/db/schema/identity";
 import {
-  declareV2,
-  rejectProposal,
-  withdrawProposal,
+  canonicalDeclareBytes,
+  canonicalRejectBytes,
+  canonicalWithdrawBytes,
+} from "../../src/services/covenants/sig";
+import {
+  declareV2PreSigned,
+  rejectProposalPreSigned,
+  withdrawProposalPreSigned,
 } from "../../src/services/covenants/lifecycle";
 
 ed.etc.sha512Sync = (...m) => {
@@ -17,6 +22,8 @@ ed.etc.sha512Sync = (...m) => {
   for (const msg of m) h.update(msg);
   return h.digest();
 };
+
+const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
 
 async function seedAgent(projectId: string) {
   const priv = ed.utils.randomPrivateKey();
@@ -30,7 +37,7 @@ async function seedAgent(projectId: string) {
     publicKey: Buffer.from(pub).toString("base64"),
     active: true,
   }).returning();
-  return { identity, priv, pub, keyId: k.id };
+  return { identity, priv, pub, keyId: k.id, pubB64: Buffer.from(pub).toString("base64") };
 }
 
 describe("v2 reject path", () => {
@@ -38,11 +45,31 @@ describe("v2 reject path", () => {
     const pa = crypto.randomUUID(); const pb = crypto.randomUUID();
     const a = await seedAgent(pa); const b = await seedAgent(pb);
 
-    const decl = await declareV2({
+    const covenantId = crypto.randomUUID();
+    const establishedAt = new Date();
+    const initiatorSig = await ed.signAsync(
+      canonicalDeclareBytes({
+        covenantId,
+        initiatorDid: a.identity.did,
+        counterpartyDid: b.identity.did,
+        vows: ["v"],
+        establishedAtIso: establishedAt.toISOString(),
+      }),
+      a.priv,
+    );
+    const initiatorSigB64 = b64(initiatorSig);
+
+    const decl = await declareV2PreSigned({
       projectId: pa, agentId: a.identity.id,
-      agentSigningPrivateKey: a.priv, agentSigningKeyId: a.keyId,
+      covenantId,
+      agentDid: a.identity.did,
       counterpartyDid: b.identity.did, vows: ["v"],
+      establishedAt,
+      signature: initiatorSigB64,
+      signingKeyId: a.keyId,
+      publicKeyB64: a.pubB64,
     });
+
     // Place mirror row on B's side
     await db.insert(covenants).values({
       id: decl.id, projectId: pb, agentId: b.identity.id,
@@ -53,10 +80,19 @@ describe("v2 reject path", () => {
       receivedFromInstance: "self.test",
     });
 
-    const rejected = await rejectProposal({
+    const rejSig = await ed.signAsync(
+      canonicalRejectBytes({ covenantId: decl.id, rejectingDid: b.identity.did, reason: "scope mismatch" }),
+      b.priv,
+    );
+
+    const rejected = await rejectProposalPreSigned({
       covenantId: decl.id, rejecterAgentId: b.identity.id,
-      rejecterSigningPrivateKey: b.priv, rejecterSigningKeyId: b.keyId,
+      rejecterDid: b.identity.did,
+      rejectionSignature: b64(rejSig),
+      rejecterSigningKeyId: b.keyId,
+      rejectedAt: new Date(),
       reason: "scope mismatch",
+      publicKeyB64: b.pubB64,
     });
     expect(rejected.status).toBe("rejected");
     expect(rejected.reason).toBe("scope mismatch");
@@ -73,15 +109,43 @@ describe("v2 withdraw path", () => {
     const pa = crypto.randomUUID(); const pb = crypto.randomUUID();
     const a = await seedAgent(pa); const b = await seedAgent(pb);
 
-    const decl = await declareV2({
+    const covenantId = crypto.randomUUID();
+    const establishedAt = new Date();
+    const initiatorSig = await ed.signAsync(
+      canonicalDeclareBytes({
+        covenantId,
+        initiatorDid: a.identity.did,
+        counterpartyDid: b.identity.did,
+        vows: ["v"],
+        establishedAtIso: establishedAt.toISOString(),
+      }),
+      a.priv,
+    );
+    const initiatorSigB64 = b64(initiatorSig);
+
+    const decl = await declareV2PreSigned({
       projectId: pa, agentId: a.identity.id,
-      agentSigningPrivateKey: a.priv, agentSigningKeyId: a.keyId,
+      covenantId,
+      agentDid: a.identity.did,
       counterpartyDid: b.identity.did, vows: ["v"],
+      establishedAt,
+      signature: initiatorSigB64,
+      signingKeyId: a.keyId,
+      publicKeyB64: a.pubB64,
     });
 
-    const withdrawn = await withdrawProposal({
+    const wdSig = await ed.signAsync(
+      canonicalWithdrawBytes({ covenantId: decl.id, initiatorDid: a.identity.did }),
+      a.priv,
+    );
+
+    const withdrawn = await withdrawProposalPreSigned({
       covenantId: decl.id, agentId: a.identity.id,
-      agentSigningPrivateKey: a.priv, agentSigningKeyId: a.keyId,
+      initiatorDid: a.identity.did,
+      withdrawSignature: b64(wdSig),
+      signingKeyId: a.keyId,
+      withdrawnAt: new Date(),
+      publicKeyB64: a.pubB64,
     });
     expect(withdrawn.status).toBe("withdrawn");
 

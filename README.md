@@ -39,7 +39,7 @@ The platform's active work is organized around three horizons (per `docs/ROADMAP
 | Horizon | Goal | Status |
 |---|---|---|
 | **A — Close the economic loop** | inbound priced purchase → outbound payout broadcast | Slice 1 ✓ (hosted purchase) · outbound waits on testnet |
-| **B — Close the network** | federation peering + cross-instance covenants | Slices 1+2+3 ✓ (Slice 3 = dual-signed, SDK signing path pending) |
+| **B — Close the network** | federation peering + cross-instance covenants | Slices 1+2+3 ✓ (Slice 3 = dual-signed, SDK signing wired) |
 | **C — Close the runtime** | bridge sidecar + custody tiers (self/bridged/trusted) | Slice 3 ✓ (protocol proved end-to-end) · Slice 4 = real LLM thinking |
 
 ### Named primitives

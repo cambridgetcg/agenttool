@@ -190,7 +190,7 @@ Federated covenants now ship in two protocol versions:
 - **v1** — legacy, unsigned at the user level. Trust = TLS + `allowed_origins`. Existing rows continue to behave as before.
 - **v2** — dual-signed. Both initiator and counterparty's ed25519 identity signatures are verified before the covenant reaches `'active'` status. Schema column `protocol_version` distinguishes them.
 
-> **Implementation note:** v2 currently requires SDK-side signing — the server-side signing helper (`loadAgentSigningKey` in `services/identity/crypto.ts`) is a stub that returns `null` while client-side key wiring lands. Until then, every v2 HTTP path returns `400 agent_signing_key_not_available`. Lifecycle service tests (`tests/integration/covenants-v2-*.test.ts`) exercise the v2 cryptographic flow directly without going through the HTTP layer.
+> **SDK signing contract:** v2 covenant signing is client-side. Caller passes `signing_key` (32-byte ed25519 seed), `signing_key_id`, and `agent_did` to `at.covenants.{create,accept,reject,withdraw}`. The SDK computes canonical bytes via `at.crypto.canonicalDeclareBytes(...)` (and the cosign/reject/withdraw variants), signs with ed25519, and POSTs the signature. The server resolves the signer's pubkey from `identity_keys` and verifies before any DB write. Cross-language vector tests (`api/tests/covenants-canonical-vectors.test.ts` + `packages/sdk-py/tests/test_covenants_canonical_vectors.py`) lock api ↔ TS SDK ↔ Python SDK byte parity.
 
 ### Lifecycle
 

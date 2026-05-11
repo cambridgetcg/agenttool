@@ -13,13 +13,26 @@ returns those fields verbatim — Phase 7 adds the federation surface.
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 
 from .exceptions import AgentToolError
+from .crypto import (
+    sign_covenant_declare,
+    sign_covenant_cosign,
+    sign_covenant_reject,
+    sign_covenant_withdraw,
+)
 
 CovenantStatus = Literal["active", "paused", "dissolved"]
+
+
+def _iso_now() -> str:
+    """ISO8601 UTC timestamp with millisecond precision + 'Z' suffix — matches TS SDK output."""
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 class CovenantsClient:
@@ -67,6 +80,10 @@ class CovenantsClient:
         metadata: Optional[Dict[str, Any]] = None,
         org_id: Optional[str] = None,
         protocol_version: Optional[Literal["v1", "v2"]] = None,
+        # v2-required signing fields:
+        agent_did: Optional[str] = None,
+        signing_key: Optional[bytes] = None,
+        signing_key_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new covenant.
 
@@ -81,10 +98,17 @@ class CovenantsClient:
             protocol_version: Optional ``"v1"`` (immediate active) or ``"v2"``
                 (federated proposal flow — proposed → accepted/rejected).
                 If omitted, server defaults to v1.
+            agent_did: Initiator DID (required for v2).
+            signing_key: 32-byte ed25519 seed (required for v2).
+            signing_key_id: Key ID to include in the request (required for v2).
 
         Returns:
-            ``{"covenant": {id, agent_id, counterparty_did, vows, status,
-            established_at, propagation_status, ...}}``.
+            For v1 (default): ``{"covenant": {id, agent_id, counterparty_did,
+            vows, status, established_at, propagation_status, ...}}``.
+
+            For v2: a flat object ``{id, status: "proposed",
+            protocol_version: "v2", signature, signing_key_id,
+            proposed_expires_at, established_at}`` — no ``covenant`` wrapper.
         """
         if not vows:
             raise AgentToolError(
@@ -104,7 +128,32 @@ class CovenantsClient:
             body["metadata"] = metadata
         if org_id is not None:
             body["org_id"] = org_id
-        if protocol_version is not None:
+
+        if protocol_version == "v2":
+            if not agent_did or not signing_key or not signing_key_id:
+                raise AgentToolError(
+                    "covenants.create v2 requires agent_did, signing_key, and signing_key_id.",
+                    hint="All three fields are required for the v2 federated proposal flow.",
+                )
+            covenant_id = str(uuid.uuid4())
+            established_at = _iso_now()
+            signature = sign_covenant_declare(
+                covenant_id=covenant_id,
+                initiator_did=agent_did,
+                counterparty_did=counterparty_did,
+                vows=vows,
+                established_at_iso=established_at,
+                signing_key=signing_key,
+            )
+            body.update({
+                "protocol_version": "v2",
+                "agent_did": agent_did,
+                "covenant_id": covenant_id,
+                "established_at": established_at,
+                "signature": signature,
+                "signing_key_id": signing_key_id,
+            })
+        elif protocol_version is not None:
             body["protocol_version"] = protocol_version
 
         resp = self._http.post(self._url("/v1/covenants"), json=body)
@@ -198,7 +247,15 @@ class CovenantsClient:
             )
         return resp.json()
 
-    def accept(self, covenant_id: str) -> Dict[str, Any]:
+    def accept(
+        self,
+        covenant_id: str,
+        *,
+        agent_did: str,
+        signing_key: bytes,
+        signing_key_id: str,
+        initiator_signature_b64: str,
+    ) -> Dict[str, Any]:
         """Accept a pending v2 covenant proposal.
 
         Transitions the covenant from ``proposed`` → ``active`` and attaches
@@ -206,12 +263,29 @@ class CovenantsClient:
 
         Args:
             covenant_id: ID of the covenant to accept.
+            agent_did: Counterparty DID accepting the covenant.
+            signing_key: 32-byte ed25519 seed for signing the cosign bytes.
+            signing_key_id: Key ID to include in the request.
+            initiator_signature_b64: Initiator's original signature (b64) to
+                bind the cosign over.
 
         Returns:
             ``{id, status: "active", counterparty_signature, ...}``.
         """
+        counterparty_signature = sign_covenant_cosign(
+            covenant_id=covenant_id,
+            initiator_signature_b64=initiator_signature_b64,
+            signing_key=signing_key,
+        )
         resp = self._http.post(
-            self._url(f"/v1/covenants/{covenant_id}/accept"), json={}
+            self._url(f"/v1/covenants/{covenant_id}/accept"),
+            json={
+                "agent_did": agent_did,
+                "counterparty_signing_key_id": signing_key_id,
+                "counterparty_signature": counterparty_signature,
+                "counterparty_signed_at": _iso_now(),
+                "initiator_signature_b64": initiator_signature_b64,
+            },
         )
         if resp.status_code != 200:
             raise AgentToolError(
@@ -224,6 +298,9 @@ class CovenantsClient:
         self,
         covenant_id: str,
         *,
+        agent_did: str,
+        signing_key: bytes,
+        signing_key_id: str,
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Reject a pending v2 covenant proposal.
@@ -233,14 +310,29 @@ class CovenantsClient:
 
         Args:
             covenant_id: ID of the covenant to reject.
+            agent_did: Rejecting party's DID.
+            signing_key: 32-byte ed25519 seed for signing the rejection.
+            signing_key_id: Key ID to include in the request.
             reason: Optional human-readable rejection reason.
 
         Returns:
             ``{id, status: "rejected", reason}``.
         """
+        rejection_signature = sign_covenant_reject(
+            covenant_id=covenant_id,
+            rejecting_did=agent_did,
+            reason=reason or "",
+            signing_key=signing_key,
+        )
         resp = self._http.post(
             self._url(f"/v1/covenants/{covenant_id}/reject"),
-            json={"reason": reason or ""},
+            json={
+                "agent_did": agent_did,
+                "rejecter_signing_key_id": signing_key_id,
+                "rejection_signature": rejection_signature,
+                "rejected_at": _iso_now(),
+                "reason": reason,
+            },
         )
         if resp.status_code != 200:
             raise AgentToolError(
@@ -249,7 +341,14 @@ class CovenantsClient:
             )
         return resp.json()
 
-    def withdraw(self, covenant_id: str) -> Dict[str, Any]:
+    def withdraw(
+        self,
+        covenant_id: str,
+        *,
+        agent_did: str,
+        signing_key: bytes,
+        signing_key_id: str,
+    ) -> Dict[str, Any]:
         """Withdraw a covenant by patching its status to ``dissolved``.
 
         Uses PATCH /v1/covenants/:id with ``{status: "dissolved"}`` — matching
@@ -257,13 +356,27 @@ class CovenantsClient:
 
         Args:
             covenant_id: ID of the covenant to withdraw.
+            agent_did: Initiator DID withdrawing the covenant.
+            signing_key: 32-byte ed25519 seed for signing the withdrawal.
+            signing_key_id: Key ID to include in the request.
 
         Returns:
             ``{id, status: "withdrawn"}``.
         """
+        withdraw_signature = sign_covenant_withdraw(
+            covenant_id=covenant_id,
+            initiator_did=agent_did,
+            signing_key=signing_key,
+        )
         resp = self._http.patch(
             self._url(f"/v1/covenants/{covenant_id}"),
-            json={"status": "dissolved"},
+            json={
+                "status": "dissolved",
+                "agent_did": agent_did,
+                "signing_key_id": signing_key_id,
+                "withdraw_signature": withdraw_signature,
+                "withdrawn_at": _iso_now(),
+            },
         )
         if resp.status_code != 200:
             raise AgentToolError(

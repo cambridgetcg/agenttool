@@ -105,8 +105,13 @@ export type {
   CovenantStatus,
   Covenant,
   CovenantsCreateOpts,
+  CovenantsCreateV2Opts,
+  CovenantsCreateV2Result,
   CovenantsListOpts,
   CovenantsPatchOpts,
+  CovenantsAcceptOpts,
+  CovenantsRejectOpts,
+  CovenantsWithdrawOpts,
 } from "./covenants.js";
 export { WindowClient } from "./window.js";
 export type {
@@ -126,11 +131,23 @@ export {
   signThought,
   kMaster,
   kVault,
+  canonicalDeclareBytes,
+  canonicalCosignBytes,
+  canonicalRejectBytes,
+  canonicalWithdrawBytes,
+  signCovenantDeclare,
+  signCovenantCosign,
+  signCovenantReject,
+  signCovenantWithdraw,
 } from "./crypto.js";
 export type {
   EncryptedBlob,
   CanonicalThoughtOpts,
   SignThoughtOpts,
+  SignCovenantDeclareOpts,
+  SignCovenantCosignOpts,
+  SignCovenantRejectOpts,
+  SignCovenantWithdrawOpts,
 } from "./crypto.js";
 export { StrandsClient, ThoughtsClient } from "./strands.js";
 export {
