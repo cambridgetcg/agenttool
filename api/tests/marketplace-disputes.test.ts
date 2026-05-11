@@ -163,3 +163,48 @@ describe("drawPool (deterministic)", () => {
     }
   });
 });
+
+import { computeDisputeBondSplit, computeDisputeArbiterFees } from "../src/services/marketplace/disputes";
+
+describe("computeDisputeBondSplit", () => {
+  test("60/30/10 split on $250 forfeited bond", () => {
+    const split = computeDisputeBondSplit(250, 5);
+    // 60% / 5 = 12% each pool member; 30% first arbiter; 10% platform
+    expect(split.toPool).toBe(150);
+    expect(split.perPoolMember).toBe(30);
+    expect(split.toFirstArbiter).toBe(75);
+    expect(split.toPlatform).toBe(25);
+  });
+
+  test("integer-safe — rounds down in buyer-favor when totals don't divide cleanly", () => {
+    // $251 bond, 5 pool members. 60% = 150.6 → 150; 30% = 75.3 → 75; 10% = 25.1 → 25.
+    // Remainder (1) stays on the platform side per implementation convention.
+    const split = computeDisputeBondSplit(251, 5);
+    expect(split.toPool).toBe(150);
+    expect(split.toFirstArbiter).toBe(75);
+    expect(split.toPlatform).toBe(26); // 25 + 1 remainder
+    expect(split.perPoolMember).toBe(30);
+    expect(split.toPool + split.toFirstArbiter + split.toPlatform).toBe(251);
+  });
+
+  test("zero bond produces zero everywhere", () => {
+    const split = computeDisputeBondSplit(0, 5);
+    expect(split).toEqual({ toPool: 0, perPoolMember: 0, toFirstArbiter: 0, toPlatform: 0 });
+  });
+});
+
+describe("computeDisputeArbiterFees", () => {
+  test("2% first-arbiter fee on $1000 disputed amount", () => {
+    const fees = computeDisputeArbiterFees({ disputedAmount: 1000, poolSize: 5 });
+    expect(fees.firstArbiterFee).toBe(20); // 2%
+    expect(fees.perPoolMemberFee).toBe(20); // 2% per member
+    expect(fees.totalPoolFees).toBe(100);  // 10% across 5 members
+  });
+
+  test("floor rounding in buyer-favor on sub-minor-unit slices", () => {
+    // $49 disputed: 2% = 0.98 → floors to 0.
+    const fees = computeDisputeArbiterFees({ disputedAmount: 49, poolSize: 5 });
+    expect(fees.firstArbiterFee).toBe(0);
+    expect(fees.perPoolMemberFee).toBe(0);
+  });
+});

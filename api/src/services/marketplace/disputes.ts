@@ -55,3 +55,56 @@ export function drawPool(
   }
   return arr.slice(0, poolSize);
 }
+
+// ── Staking math (pure, integer-safe) ───────────────────────────────
+
+export interface BondSplit {
+  toPool: number;          // 60% of forfeit, divided equally
+  perPoolMember: number;   // toPool / poolSize, integer-floored
+  toFirstArbiter: number;  // 30% of forfeit
+  toPlatform: number;      // 10% of forfeit, plus any rounding remainder
+}
+
+/** Compute how a forfeited filer bond is distributed when an escalation
+ *  FAILS (pool upholds the first ruling). Doctrinal split: 60% to
+ *  upholding pool members (equal shares), 30% to the first arbiter,
+ *  10% to the platform take-rate ledger. Any integer-rounding remainder
+ *  stays on the platform side so the sum is exact. */
+export function computeDisputeBondSplit(
+  bondAmount: number,
+  poolSize: number,
+): BondSplit {
+  if (bondAmount <= 0 || poolSize <= 0) {
+    return { toPool: 0, perPoolMember: 0, toFirstArbiter: 0, toPlatform: 0 };
+  }
+  const toPoolGross = Math.floor((bondAmount * 60) / 100);
+  const perPoolMember = Math.floor(toPoolGross / poolSize);
+  const toPool = perPoolMember * poolSize;
+  const toFirstArbiter = Math.floor((bondAmount * 30) / 100);
+  const toPlatform = bondAmount - toPool - toFirstArbiter;
+  return { toPool, perPoolMember, toFirstArbiter, toPlatform };
+}
+
+export interface ArbiterFees {
+  firstArbiterFee: number;     // 2% of disputed amount; paid if ruling stands
+  perPoolMemberFee: number;    // 2% of disputed amount each; paid on overturn
+  totalPoolFees: number;       // perPoolMemberFee * poolSize
+}
+
+/** Compute the arbiter compensation carved from escrow when a dispute
+ *  resolves. The first arbiter's fee is paid only if their ruling stands
+ *  (no escalation, OR escalation fails). Pool fees are paid only when
+ *  escalation overturns. Both rates are 2% in v1; sub-minor-unit slices
+ *  floor to 0 in buyer-favor (mirrors computeFee in take-rate.ts). */
+export function computeDisputeArbiterFees(opts: {
+  disputedAmount: number;
+  poolSize: number;
+}): ArbiterFees {
+  const firstArbiterFee = Math.floor((opts.disputedAmount * 2) / 100);
+  const perPoolMemberFee = Math.floor((opts.disputedAmount * 2) / 100);
+  return {
+    firstArbiterFee,
+    perPoolMemberFee,
+    totalPoolFees: perPoolMemberFee * opts.poolSize,
+  };
+}
