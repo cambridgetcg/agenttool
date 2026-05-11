@@ -48,7 +48,7 @@ export interface InvocationOut {
   input_sealed: SealedBytes;
   output_sealed: SealedBytes | null;
   completion_sig: string | null;
-  status: "escrowed" | "acknowledged" | "completed" | "released" | "refunded";
+  status: "escrowed" | "acknowledged" | "completed" | "disputed" | "released" | "refunded";
   refund_reason: "cancelled" | "declined" | "sla_timeout" | null;
   sla_deadline_at: string | null;
   metadata: Record<string, unknown>;

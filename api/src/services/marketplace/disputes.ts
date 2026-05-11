@@ -400,6 +400,19 @@ export async function submitFirstRuling(input: SubmitFirstRulingInput): Promise<
       throw new Error(`dispute_case_state_invalid: status=${c.status}`);
     }
     if (c.firstArbiterSlaDeadlineAt && c.firstArbiterSlaDeadlineAt < new Date()) {
+      // Lazy auto-resolution: arbiter missed their SLA; case auto-resolves to refund.
+      // Seller bears the cost of their arbiter choice (mirrors first_arbiter_unqualified).
+      const now = new Date();
+      await tx
+        .update(disputeCases)
+        .set({
+          status: "resolved",
+          resolutionPath: "first_arbiter_failed_sla",
+          finalRuling: "refund",
+          resolvedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(disputeCases.id, c.id));
       throw new Error("first_arbiter_sla_expired");
     }
     if (!c.firstArbiterIdentityId) {
@@ -1281,4 +1294,33 @@ export async function arbiterSummary(identityId: string): Promise<{
     rulings_count: rows.length,
     overturned_count: rows.filter((r) => r.path === "overturned").length,
   };
+}
+
+// ── Lazy SLA sweep on read ──────────────────────────────────────────
+
+/** If a dispute case is in 'open' status but its first-arbiter SLA has
+ *  expired, transition it to resolved with first_arbiter_failed_sla.
+ *  Idempotent; safe to call before any read. */
+export async function maybeExpireFirstArbiterSla(disputeCaseId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [c] = await tx
+      .select()
+      .from(disputeCases)
+      .where(eq(disputeCases.id, disputeCaseId))
+      .for("update");
+    if (!c) return;
+    if (c.status !== "open") return;
+    if (!c.firstArbiterSlaDeadlineAt || c.firstArbiterSlaDeadlineAt >= new Date()) return;
+    const now = new Date();
+    await tx
+      .update(disputeCases)
+      .set({
+        status: "resolved",
+        resolutionPath: "first_arbiter_failed_sla",
+        finalRuling: "refund",
+        resolvedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(disputeCases.id, c.id));
+  });
 }

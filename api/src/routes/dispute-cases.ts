@@ -17,11 +17,13 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import { db } from "../db/client";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { disputeCases } from "../db/schema/marketplace";
+import { identities } from "../db/schema/identity";
 import {
   escalateDispute,
   finalizeCase,
+  maybeExpireFirstArbiterSla,
   submitFirstRuling,
   submitPoolVote,
 } from "../services/marketplace/disputes";
@@ -85,6 +87,7 @@ function mapServiceError(msg: string): { status: number; code: string; hint?: st
   if (msg === "bond_wallet_not_active") return { status: 409, code: msg };
   if (msg === "bond_wallet_currency_mismatch") return { status: 409, code: msg };
 
+  if (msg === "bond_amount_zero") return { status: 400, code: msg };
   if (msg === "split_pct_required_for_split") return { status: 400, code: msg };
   if (msg === "split_pct_out_of_range") return { status: 400, code: msg };
   if (msg === "alternative_ruling_required_on_overturn") return { status: 400, code: msg };
@@ -184,13 +187,38 @@ app.post("/:id/finalize", async (c) => {
 
 // GET /v1/dispute-cases/:id
 app.get("/:id", async (c) => {
+  await maybeExpireFirstArbiterSla(c.req.param("id"));
   const [r] = await db
     .select()
     .from(disputeCases)
     .where(eq(disputeCases.id, c.req.param("id")))
     .limit(1);
   if (!r) throw new HTTPException(404, { message: "dispute_case_not_found" });
-  if (r.filerProjectId !== c.var.project.id) {
+
+  // Access: filer, first arbiter, or pool member. Otherwise 404.
+  let allowed = r.filerProjectId === c.var.project.id;
+  if (!allowed && r.firstArbiterIdentityId) {
+    const [arb] = await db
+      .select({ projectId: identities.projectId })
+      .from(identities)
+      .where(eq(identities.id, r.firstArbiterIdentityId))
+      .limit(1);
+    if (arb?.projectId === c.var.project.id) allowed = true;
+  }
+  if (!allowed) {
+    const poolDraw = (r.metadata as Record<string, unknown>)?.pool_draw as
+      | Array<{ id: string; did: string }>
+      | undefined;
+    if (poolDraw && poolDraw.length > 0) {
+      const poolIds = poolDraw.map((p) => p.id);
+      const poolMembers = await db
+        .select({ id: identities.id, projectId: identities.projectId })
+        .from(identities)
+        .where(sql`${identities.id} = ANY(${poolIds}::uuid[])`);
+      if (poolMembers.some((m) => m.projectId === c.var.project.id)) allowed = true;
+    }
+  }
+  if (!allowed) {
     throw new HTTPException(404, { message: "dispute_case_not_found" });
   }
   return c.json(r);
