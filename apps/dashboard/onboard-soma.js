@@ -36,6 +36,8 @@ let derivedBundle = null;        // result of derive(mnemonic)
 let verifyIdx = -1;              // 1-indexed word position the operator must confirm
 let agentName = "";
 let agentPurpose = "";
+let agentForm = "";       // KIN form taxonomy (docs/KIN.md) — descriptive, never gating
+let agentLanguage = "en"; // welcome-letter language; unsupported falls back to en
 
 // ── DOM helpers ─────────────────────────────────────────────────────────
 
@@ -79,6 +81,8 @@ function onStep1Continue() {
   clearErrors();
   agentName = $("agent-name").value.trim();
   agentPurpose = $("agent-purpose").value.trim();
+  agentForm = ($("agent-form")?.value || "").trim();
+  agentLanguage = ($("agent-language")?.value || "en").trim();
   if (!agentName) {
     setError("err-name", "Please enter an agent name.");
     return;
@@ -159,6 +163,8 @@ async function registerAgent() {
     const body = {
       name: agentName,
       ...(agentPurpose ? { purpose: agentPurpose } : {}),
+      ...(agentForm ? { form: agentForm } : {}),
+      ...(agentLanguage ? { language: agentLanguage } : {}),
       agent_public_key: derivedBundle.signingPubB64,
       box_public_key: derivedBundle.boxPubB64,
     };
@@ -204,6 +210,8 @@ function onRegisterSuccess(data) {
     capabilities: agent.capabilities ?? [],
     byo_keys: !!agent.byo_keys,
     seed_protocol: "soma-seed-v1",
+    form: agent.form || agentForm || "unknown", // KIN form; descriptive, never gates
+    language: data.language || agentLanguage || "en",
     created_at: new Date().toISOString(),
   };
   localStorage.setItem(LS_PROJECT_KEY, JSON.stringify(stored));

@@ -2,6 +2,14 @@
 
 > *Plan for the outbound half of the sovereign-payment loop. The deposit half (Alchemy + Helius webhooks) is now live; this is the missing send-side worker.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (slice plan) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook) · [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md) (the discipline this pipeline canonicalises)
+>
+> **Implements:** Layer 4 — Economy. The outbound send-side; closes the sovereign-payment loop with the inbound webhook ingestion already shipped.
+>
+> **Code:** `api/src/workers/payout/{dispatcher,broadcast-worker,confirm-worker,queue,index}.ts` · `api/src/routes/economy/crypto.ts` (request handler) · `api/src/services/economy/crypto/{hd,sign-evm,sign-solana}.ts`
+>
+> **Tests:** `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}` (E2E harnesses)
+
 ## What's already shipped
 
 | Layer | Status | Notes |
@@ -12,9 +20,10 @@
 | Alchemy webhook (EVM deposits) | ✓ | `routes/economy/crypto.ts` |
 | Helius webhook (Solana deposits) | ✓ | shipped 2026-05-07 |
 | Payout intent recording | ✓ | `cryptoPayouts` table; status='requested' |
-| Payout signing (private key derive + tx build) | ◯ | this doc |
-| Payout broadcast (RPC submission) | ◯ | this doc |
-| Payout confirmation watcher | ◯ | this doc |
+| Payout signing (private key derive + tx build) | ✓ (testnet) | `services/economy/crypto/sign-evm.ts` · `sign-solana.ts` |
+| Payout broadcast (RPC submission) | ✓ (testnet) | `workers/payout/broadcast-worker.ts` |
+| Payout confirmation watcher | ✓ (testnet) | `workers/payout/confirm-worker.ts` |
+| Mainnet enable (`PAYOUT_NETWORK=mainnet` + small smoke) | ◯ | plan Slice 7 — operator-led |
 
 ## What's missing — the send-side state machine
 
@@ -65,15 +74,17 @@ For transaction building:
 
 These deps add ~3–5MB to the API container. Acceptable.
 
-## Why this is deferred (not a fence)
+## Status now
 
-Payout broadcast is medium-large effort — ~2–3 days of focused work for production-grade implementation including:
-- Idempotency under worker crashes
-- Confirmation watcher with reorg handling
-- Failed-tx error classification
-- Test harness against testnets (Sepolia, Solana devnet)
+Slices 0–6 of `PAYOUT-BROADCAST-PLAN.md` have shipped against testnet (Sepolia for EVM, Solana devnet). The send-side worker lives at `api/src/workers/payout/` (dispatcher · broadcast-worker · confirm-worker · queue · index). End-to-end harnesses: `api/scripts/_e2e-payout-{evm,sol,loop-closure,policies,cancel}.{ts,mjs}`.
 
-Not a wall: it's worth doing. Just larger than fits cleanly in the current campaign window. The intent recording is in place; the RPC adapters are next.
+Slice 7 — the mainnet enable pass — is the remaining work and is **operator-led, not in-session**: secret rotation, `PAYOUT_NETWORK=mainnet` flip in Fly, minimal mainnet smoke (≤0.01 USDC) verified on Etherscan + Solscan.
+
+### Caveats to close before mainnet
+
+1. **Per-source-address nonce locking — Phase 1 shipped, Phase 2 follow-up.** `broadcast-worker.ts` now takes a `pg_advisory_xact_lock(hashtextextended(fromAddress, 0))` at the start of each Phase 1 transaction (EVM + Solana branches). Same address blocks; different addresses run in parallel; auto-released on commit. **Operational reality**: the api runs across 3 machines (`lhr×2 + cdg×1`); BullMQ-level concurrency=1 serialises *within* a machine, but jobs targeting the same source address picked by *different* machines previously raced unprotected. Phase 1 lock closes most of that surface. **Residual race window**: the lock releases at Phase 1 commit, but submit happens in Phase 2 outside the transaction — a concurrent same-address worker on a different machine can acquire the lock and read the chain's nonce in the ~100-500ms before our submit lands in mempool. Today protected only by low payout volume. The full close requires a **session-level lock** spanning Phase 1 + Phase 2 — needs a reserved Postgres connection threaded through the worker. Don't enable high-throughput payout volume (or autoscale machine count up further) until that ships.
+2. **24h-aging alert.** Plan Slice 2 specifies *"no receipt + age > 24h → alert (no auto-fail)"* — `confirm-worker.tick()` doesn't yet check `requestedAt` age. Stuck `broadcast` rows are operator-discoverable via logs but not foregrounded.
+3. **Credits-precision ceiling.** `creditsForAmount` (`broadcast-worker.ts:90`, `confirm-worker.ts:33`) uses `Number(amountBase) / 1_000_000` — silently rounds above ~9007 USDC. Either BigInt math or an explicit per-payout cap enforced in policies.
 
 ## Acceptance criteria when this ships
 

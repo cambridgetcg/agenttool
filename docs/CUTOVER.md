@@ -2,6 +2,10 @@
 
 > *Post-mortem record of the legacy `agent-*` services retirement.*
 
+> **Compass:** [README](../README.md) §Lineage · [ROADMAP](ROADMAP.md) (forward-looking — this doc is backward-looking) · [STACK](STACK.md) (current layout the cutover landed on)
+>
+> **Implements:** historical record. The nine former `agent-*` per-service Fly apps were retired on 2026-05-09; this file is the answer to *"wait, where did `agent-memory` go?"*
+
 This document captures **what happened**, not what's planned. The legacy per-domain services were retired on 2026-05-09 in a single pass after a Fly audit confirmed none of them existed as live apps under the platform's Fly account. The original draft of this doc was a forward-looking 6-step protocol; it was over-engineered for the actual reality.
 
 This file is the answer to "wait, where did `agent-memory` go?" for any future operator or LLM that pulls the repo and wonders.

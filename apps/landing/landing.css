@@ -309,76 +309,60 @@ section.lp-section {
   .strands { grid-template-columns: 1fr; padding: 2rem 1.5rem; }
 }
 
-/* ── Pricing ───────────────────────────────────────────────────── */
-.pricing-head {
-  display: flex; align-items: end; justify-content: space-between;
-  gap: 2rem; margin-bottom: 3rem; flex-wrap: wrap;
-}
-.pricing-head .right { color: var(--text-muted); font-size: 0.95rem; max-width: 380px; }
-.pricing {
+/* ── Business model rings ──────────────────────────────────────── */
+.rings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
+  margin: 2.5rem 0 1.5rem;
 }
-.price-card {
+.ring-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1.75rem 1.5rem;
-  display: flex; flex-direction: column;
 }
-.price-card.featured {
+.ring-card.ring-inner {
   border-color: var(--violet);
   background: linear-gradient(180deg, rgba(167,139,250,0.06), var(--surface));
-  position: relative;
 }
-.featured-badge {
-  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-  background: var(--violet); color: #fff;
-  font-family: var(--mono); font-size: 0.65rem; font-weight: 600;
-  padding: 0.3rem 0.85rem; border-radius: var(--r-pill);
-  letter-spacing: 0.12em; text-transform: uppercase;
-}
-.plan-name { font-weight: 700; font-size: 1rem; margin-bottom: 0.4rem; letter-spacing: -0.01em; }
-.plan-price {
-  font-family: var(--serif);
-  font-size: 2.3rem; font-weight: 600;
-  letter-spacing: -0.02em; line-height: 1;
-  margin-bottom: 0.3rem;
-}
-.plan-price sub { font-size: 0.85rem; font-weight: 400; color: var(--text-muted); font-family: var(--sans); }
-.plan-desc { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; line-height: 1.45; }
-.plan-features { list-style: none; margin: 0 0 1.5rem; padding: 0; flex: 1; }
-.plan-features li {
-  font-size: 0.85rem;
-  padding: 0.45rem 0;
-  display: flex; align-items: flex-start; gap: 0.5rem;
-  border-bottom: 1px dashed var(--border);
-  color: var(--text-muted);
-}
-.plan-features li:last-child { border-bottom: none; }
-.plan-features li::before {
-  content: '⊙';
-  color: var(--violet);
+.ring-num {
+  font-family: var(--mono);
   font-size: 0.7rem;
-  margin-top: 0.2rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
 }
-.plan-cta {
-  display: block; text-align: center;
-  padding: 0.75rem; border-radius: var(--r-pill);
-  font-weight: 600; font-size: 0.88rem;
-  transition: opacity 0.2s, transform 0.2s;
+.ring-label {
+  font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em;
+  margin-bottom: 0.35rem;
 }
-.plan-cta.primary {
-  background: linear-gradient(135deg, var(--violet-deep), #6d28d9);
-  color: #fff;
+.ring-price {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--violet);
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px dashed var(--border);
 }
-.plan-cta.secondary {
-  background: transparent;
-  border: 1px solid var(--border-bright);
-  color: var(--text);
+.ring-card p {
+  font-size: 0.88rem; line-height: 1.55;
+  color: var(--text-muted); margin: 0;
 }
-.plan-cta:hover { transform: translateY(-1px); }
+.ring-card p strong {
+  color: var(--text); font-weight: 600;
+}
+.ring-coda {
+  font-size: 0.95rem; color: var(--text-muted);
+  text-align: center; margin: 1rem auto 0; max-width: 720px;
+}
+.ring-coda em {
+  color: var(--text); font-style: normal; font-weight: 500;
+}
+@media (max-width: 880px) {
+  .rings-grid { grid-template-columns: 1fr; }
+}
 
 /* ── Final CTA ─────────────────────────────────────────────────── */
 .cta-final {

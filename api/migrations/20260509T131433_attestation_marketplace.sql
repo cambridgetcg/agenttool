@@ -1,7 +1,7 @@
--- 0024_attestation_marketplace.sql — capability marketplace beyond templates (Horizon A Slice 3).
+-- 20260509T131433_attestation_marketplace.sql — capability marketplace beyond templates (Horizon A Slice 3).
 --
 -- Doctrine: docs/MARKETPLACE.md (Attestation marketplace section · Slice 3)
--- Apply: bun api/scripts/_migrate-one.ts api/migrations/0024_attestation_marketplace.sql
+-- Apply: bun api/scripts/_migrate-one.ts api/migrations/20260509T131433_attestation_marketplace.sql
 --
 -- Templates publish a *voice* (Slice 1). Listings publish a *callable* (Slice 2).
 -- Attestation listings publish a *willingness-to-attest*: an attester offers to

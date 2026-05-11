@@ -81,6 +81,12 @@ class AnthropicProvider implements LLMProvider {
       headers["x-api-key"] = this.token;
     }
 
+    // GAP (persist-identity): no request ID persisted before this POST.
+    // Lost response → caller retry → token double-spend, possibly
+    // divergent generation. Anthropic accepts an idempotency-key header;
+    // wire it and store an `llm_requests` row keyed on
+    // hash(model + messages) before calling. Same gap exists in the
+    // OpenAI path below. See docs/PATTERN-PERSIST-IDENTITY.md.
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers,

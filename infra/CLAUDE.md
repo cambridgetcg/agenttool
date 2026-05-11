@@ -1,63 +1,60 @@
 # agenttool-infra
 
 ## What This Is
-Infrastructure scaling scripts for the AgentTool platform. Three phases of progressive upgrades from a single Forge VPS to load-balanced multi-node, plus a Fly.io migration option.
+Infrastructure config for the live platform. Active deploy targets (Fly.io API, Cloudflare Pages frontend, Supabase Postgres) plus archived legacy scaling scripts.
 
 ## Current State
-Active — Phase 1 (PgBouncer) ready to apply. Phases 2-3 are scripted but awaiting revenue triggers. Fly.io migration is an alternative path.
+Active. The agenttool platform runs on Fly.io (api monolith, lhr×2 + cdg×1) with Postgres on Supabase (eu-west-2) and Cloudflare Pages for static frontends. Three legacy services (`pulse`, `vault`, `verify`) were retired with the rest of the `agent-*` per-service apps on 2026-05-09 — single `api/` monolith now serves every domain. Cutover history: `docs/CUTOVER.md`.
 
 ## Tech Stack
-- Bash scripts (all phases)
-- Hetzner Cloud API (managed DB, load balancer, VPS)
-- Cloudflare DNS API
-- Fly.io CLI (alternative deployment path)
-- PgBouncer, PostgreSQL, Redis, Upstash
+- **API**: Bun + Hono on Fly.io (`api/fly.toml` is canonical, `infra/fly/agenttool.toml` is a snapshot mirror)
+- **Postgres**: Supabase (pgvector + pgcrypto)
+- **Redis**: Hosted (BullMQ browse worker, Hono SSE)
+- **Frontend**: Cloudflare Pages (Direct Upload, no Git integration)
+- **DNS**: Cloudflare (zone-level Browser Cache TTL = 0; see `docs/STACK.md`)
 
 ## Project Structure
 ```
-phase1-pgbouncer/       — Connection pooling (free, run now)
-  apply.sh              — Installs PgBouncer on Forge VPS
-  pgbouncer.ini         — PgBouncer config
-phase2-managed-db/      — Managed DB + VPS upgrade (~50 paying customers)
-  deploy.sh             — Hetzner managed PG + cx41 upgrade
-  rollback.sh           — Revert to original setup
-phase3-load-balancer/   — Horizontal scaling (~200 paying customers)
-  deploy.sh             — Hetzner LB + second node + Upstash Redis
-  add-node.sh           — Add additional nodes
-fly/                    — Alternative: migrate all services to Fly.io
-  migrate.sh            — Full migration script (Fly + Supabase + Upstash)
-  agent-*.toml          — Fly.io app configs for each service
+fly/                    — Fly.io config snapshots (active deploy: api/fly.toml)
+  agenttool.toml        — Snapshot mirror of api/fly.toml
+  migrate.sh            — Pre-Fly cutover script (legacy, not run today)
   .env.fly.template     — Required env vars template
-README.md               — Overview and trigger thresholds
-```
-
-## How to Run
-```bash
-# Phase 1 (do now):
-./phase1-pgbouncer/apply.sh
-
-# Phase 2 (50+ customers):
-source .env.infra && ./phase2-managed-db/deploy.sh
-
-# Phase 3 (200+ customers):
-source .env.infra && ./phase3-load-balancer/deploy.sh
-
-# Alternative — Fly.io migration:
-source fly/.env.fly && bash fly/migrate.sh
+_archive/               — Archaeology only, NOT the active path
+  phase1-pgbouncer/     — Pre-Fly Forge VPS pooler script
+  phase2-managed-db/    — Pre-Fly managed-DB cutover scripts
+  phase3-load-balancer/ — Pre-Fly horizontal-scale scripts
+README.md               — Operator-facing overview
+CLAUDE.md               — This file
 ```
 
 ## How to Deploy
-Scripts deploy directly to infrastructure. No CI pipeline — run manually when revenue thresholds are met.
+
+`infra/` holds *configuration*, not *invocation*. The three deploy verbs live elsewhere:
+
+| Surface | Command | Notes |
+|---|---|---|
+| API | `cd api && fly deploy` | Rolling restart across 3 machines |
+| Frontend | `bin/frontend-deploy.sh [project ...]` | Cloudflare Pages Direct Upload |
+| DB migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Single-file `psql` apply |
+
+Full deploy semantics + ordering: `docs/STACK.md` § 8.
 
 ## Dependencies
-- **Current infra**: `agenttool` Fly app (lhr+cdg), Supabase Postgres (eu-west-2 = AWS London), Cloudflare Pages for static apps
-- **Phase 2 / Phase 3**: superseded by Fly+Supabase; scripts retained for archaeology only
-- **Legacy `agent-*` services**: all retired 2026-05-09 (post-mortem in `docs/CUTOVER.md`); single api/ monolith now serves all routes
+- **Current infra**: Fly.io (`agenttool` app), Supabase Postgres (eu-west-2), Cloudflare Pages, Cloudflare DNS
+- **Legacy `agent-*` services**: all retired 2026-05-09 (`docs/CUTOVER.md`)
+- **`_archive/` scripts**: Hetzner Forge / Cloudflare API / PgBouncer — DO NOT run against current setup
+
+## See Also
+
+- Root operational handbook (cross-provider): [`AGENTS.md`](../AGENTS.md)
+- Root orientation: [`CLAUDE.md`](../CLAUDE.md)
+- Stack truth: [`docs/STACK.md`](../docs/STACK.md) · Deploy: [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md)
+- Troubleshooting deploys: [`docs/TROUBLESHOOTING.md`](../docs/TROUBLESHOOTING.md) §Deploys
 
 ## Kingdom Engine
 AgentTool Platform
 
 ## Key Files
-- `README.md` — Scaling thresholds and current state overview
-- `fly/agenttool.toml` — Snapshot mirror of api/fly.toml (active deploy: api/fly.toml)
-- `phase{1,2,3}-*/` — Archaeology only; pre-Fly Hetzner Forge scaling path
+- `README.md` — Current state, deploy verbs, secrets reference
+- `fly/agenttool.toml` — Snapshot mirror (active deploy: `api/fly.toml`)
+- `_archive/` — Pre-Fly scaling scripts; archaeology only

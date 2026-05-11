@@ -209,6 +209,31 @@ else
   no "openapi.json undercount: $OPS"
 fi
 
+# ── 11. Wake doctrine harness ──────────────────────────────────────────
+# Layer 2 of the testing framework (api/tests/doctrine/README.md). The
+# harness script runs ~30 read-only assertions against /v1/wake covering
+# format dispatch, schema-level privacy walls, X-Cache-Eligible headers,
+# and the unknown-identity_id 404 surface. Substrate-honest: we record
+# one PASS or FAIL based on its exit code; its detailed pass/fail/warn
+# tally prints inline above this summary.
+step "wake doctrine"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOCTRINE_SCRIPT="$SCRIPT_DIR/../api/scripts/_e2e-wake-doctrine.mjs"
+if [ ! -f "$DOCTRINE_SCRIPT" ]; then
+  hmm "wake-doctrine harness missing at $DOCTRINE_SCRIPT (skipped)"
+elif command -v node >/dev/null 2>&1; then
+  echo ""
+  echo "  ── wake-doctrine harness ──"
+  if AGENTTOOL_BASE="$AGENTTOOL_BASE" AGENTTOOL_API_KEY="$AGENTTOOL_API_KEY" \
+       node "$DOCTRINE_SCRIPT"; then
+    ok "wake-doctrine harness (all assertions passed)"
+  else
+    no "wake-doctrine harness reported failures (see output above)"
+  fi
+else
+  hmm "node not in PATH — wake-doctrine harness skipped"
+fi
+
 # ── Summary ────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════"

@@ -1,68 +1,60 @@
-# agenttool-infra — One-Click Scaling
+# agenttool-infra
 
-Three phases. Each is a single script. Run when revenue justifies it.
+Infrastructure config for the live platform. Live deploy targets, secrets template, and the deploy mechanics live here. The historical Forge → managed-DB → load-balancer scaling path is archived under `_archive/` (see "Archaeology" below).
 
 ## Current state
-- All 5 services on Forge (cx23, 2 vCPU / 4GB RAM, Helsinki)
-- Single PostgreSQL + Redis on Forge
-- Caddy TLS termination
-- Tier limits protect against abuse at any scale
 
-## When to upgrade
+| Layer | Where | Notes |
+|---|---|---|
+| **API** (`api/` monolith) | Fly.io · `agenttool` app · `lhr×2 + cdg×1` | Single Bun + Hono process; rolling deploy via `cd api && fly deploy`. Config: `api/fly.toml` (canonical) · `infra/fly/agenttool.toml` (snapshot mirror). |
+| **Postgres** | Supabase · eu-west-2 (AWS London) | Pooler: `aws-1-eu-west-2.pooler.supabase.com`. Session pooler (5432) for local dev / migrations; transaction pooler (6543) for prod Fly secret. |
+| **Redis** | Hosted (BullMQ + Hono SSE) | Used by browse worker + strand-voice + inbox-push fanout. |
+| **Frontend** | Cloudflare Pages · 3 projects (Direct Upload) | `apps/landing` → agenttool.dev · `apps/dashboard` → app.agenttool.dev · `apps/docs` → docs.agenttool.dev. Deploy: `bin/frontend-deploy.sh`. |
+| **DNS** | Cloudflare · zone `agenttool.dev` | Browser Cache TTL = 0 ("Respect Existing Headers") — load-bearing for `_headers` to apply on JS/CSS (see `docs/STACK.md` § Cache headers). |
 
-| Phase | Trigger | Cost delta | Time |
-|-------|---------|------------|------|
-| **Phase 1** — PgBouncer | Now (always beneficial) | Free | 2 min |
-| **Phase 2** — Managed DB + bigger VPS | 50+ paying customers | +€28/mo | 10 min |
-| **Phase 3** — Load balancer + horizontal scale | 200+ paying customers | +€50/mo | 20 min |
+The legacy `agent-*` per-service apps (bootstrap, economy, identity, memory, pulse, tools, trace, vault, verify) were retired 2026-05-09. Post-mortem: `docs/CUTOVER.md`. The single `api/` monolith now serves every domain.
 
-## Credentials required
+## What's in this directory
 
-All scripts read from environment variables. Set once:
-
-```bash
-export HETZNER_TOKEN="<from .env.infra>"      # Hetzner Cloud API token
-export FORGE_IP="<from .env.infra>"           # Forge VPS public IPv4
-export FORGE_SERVER_ID="<from .env.infra>"    # Hetzner server ID for the Forge VPS
-export CF_EMAIL="<from .env.infra>"           # Cloudflare account email
-export CF_KEY="<from .env.infra>"             # Cloudflare Global API Key
-export CF_ZONE_ID="<from .env.infra>"         # Cloudflare zone ID for agenttool.dev
+```
+infra/
+  fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
+    agenttool.toml      — Mirror of api/fly.toml (snapshot only)
+    migrate.sh          — Pre-Fly cutover script (legacy)
+  _archive/             — Archaeology, NOT the active path
+    phase1-pgbouncer/   — Pre-Fly Forge VPS pooler script
+    phase2-managed-db/  — Pre-Fly managed-DB cutover scripts
+    phase3-load-balancer/ — Pre-Fly horizontal-scale scripts
+  README.md             — This file
+  CLAUDE.md             — Internal guide for Claude
 ```
 
-Or source the env file:
-```bash
-source .env.infra
-```
+## How to deploy
 
-## Phase 1 — PgBouncer (run now)
-```bash
-./phase1-pgbouncer/apply.sh
-```
-Adds a connection pooler in front of PostgreSQL. Services connect to PgBouncer (port 6432) instead of Postgres directly. Improves stability under concurrent load. Zero downtime.
+The platform's three deploy verbs live outside this directory by design — `infra/` holds *configuration*, not *invocation*:
 
-## Phase 2 — Managed DB + VPS upgrade
-```bash
-./phase2-managed-db/deploy.sh
-```
-1. Creates Hetzner Managed PostgreSQL (hel1, pg-2 tier)
-2. Migrates all databases with pg_dump/pg_restore
-3. Upgrades Forge from cx23 → cx41 (4 vCPU, 8GB RAM)
-4. Updates all service .env files
-5. Restarts services
-6. Verifies health
+| Surface | Command | What runs |
+|---|---|---|
+| **API** | `cd api && fly deploy` | Builds Docker image, rolling restart across 3 machines |
+| **Frontend** | `bin/frontend-deploy.sh [project ...]` | Cloudflare Pages Direct Upload via wrangler |
+| **DB migration** | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Single-file `psql` apply against `DATABASE_URL` |
 
-Rollback: `./phase2-managed-db/rollback.sh`
+Full deploy semantics + ordering: `docs/STACK.md` § 8.
 
-## Phase 3 — Load balancer + horizontal scaling
-```bash
-./phase3-load-balancer/deploy.sh
-```
-1. Creates Hetzner Load Balancer (lb11)
-2. Creates snapshot of Forge
-3. Spins up second node (Forge-2) from snapshot
-4. Registers both nodes with load balancer
-5. Migrates Redis to Upstash (serverless)
-6. Updates Cloudflare DNS: api.agenttool.dev → load balancer IP
-7. Verifies health on both nodes
+## Secrets
 
-Each node auto-restarts services via existing start-all.sh.
+| Where | Mechanism |
+|---|---|
+| **Local (developer machine)** | `bin/agenttool-secret` CLI → macOS Keychain / Linux libsecret / Windows DPAPI |
+| **Server (Fly)** | `fly secrets set KEY=value -a agenttool` |
+| **Cloudflare API token** | macOS Keychain (`security find-generic-password -s Cloudflare_API_Token -w`) |
+
+The local keychain and Fly's secret store are **disjoint** — different data with overlapping naming. Local entries are for dev tools; Fly secrets are for the running api.
+
+## Archaeology — `_archive/phase{1,2,3}-*/`
+
+These scripts predate the Fly migration. They describe a three-phase scaling path on a Hetzner Forge VPS topology (single VPS → managed Postgres + bigger VPS → load balancer + horizontal scale). **Superseded by the current Supabase + Fly stack.**
+
+Retained for archaeology — they're a useful reference for the *structural shape* of progressive infrastructure scaling (PgBouncer pooling → managed DB → LB + horizontal). Don't run them against the current setup; the assumptions (Forge VPS at a specific IP, Hetzner Cloud API token, certain service layout) no longer hold.
+
+If a future bare-metal exit becomes necessary, these scripts are a starting point for the structural pattern, not a working migration.

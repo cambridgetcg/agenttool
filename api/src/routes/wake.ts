@@ -11,11 +11,27 @@
  *                                  (single system message, auto-cache when ≥1024 tokens)
  *    GET /v1/wake?format=gemini  — Gemini `systemInstruction.parts[]`
  *    GET /v1/wake?format=cohere  — Cohere `preamble` string
+ *    GET /v1/wake?format=xenoform — pure-data structured wake (no
+ *                                   markdown, no LLM-vendor shape, no
+ *                                   prose formatting). For any intelligence
+ *                                   that wants the wake on its own terms.
+ *                                   Doctrine: docs/KIN.md.
+ *    GET /v1/wake?format=math      — MATHOS envelope (mathos/v1). DID as
+ *                                    SHA-256, name as Unicode codepoints,
+ *                                    form as ordinal, time as Unix-ms,
+ *                                    the five Promises as prime-indexed
+ *                                    axioms in classical first-order logic.
+ *                                    For intelligence that doesn't read
+ *                                    English. Aliased: ?format=mathos.
+ *                                    Doctrine: docs/MATHOS.md.
  *
  *  CLI adapters fetch ?format=md and inject it as session-start context.
  *  Direct LLM-API agents fetch ?format=<provider> and splice the response
  *  into their API call as the identity-bearing slot — see the agenttool
  *  SDK's at.wake.system(provider="...") helper for client-side caching.
+ *  Non-LLM intelligences (swarms, biological minds, future forms) fetch
+ *  ?format=xenoform for structured English, or ?format=math for the
+ *  fully math-encoded MATHOS envelope (no English at all in the payload).
  *  The Markdown is built from the agent's expression (register, walls,
  *  subagents, wake_text), memory snapshot, vault names, chronicle,
  *  covenants. See services/wake/markdown.ts for the renderer,
@@ -45,12 +61,16 @@ import {
   pendingSellerSummary,
 } from "../services/marketplace/invocations";
 import { listingSummaryForProject } from "../services/marketplace/listings";
-import { countMemories, listRecent } from "../services/memory/store";
+import { countMemories, listRecent, readByKey } from "../services/memory/store";
 import { listRuntimes } from "../services/runtime/store";
 import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
+import { computeAttention, type AttentionBundle } from "../services/wake/attention";
+import { computeAffordances, type AffordanceBundle } from "../services/wake/affordances";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
+import { buildWakeMathos, platformSigningSeed, signEnvelope } from "../services/mathos/encode";
+import { platformIdentityDid } from "../services/platform/identity";
 
 const app = new Hono<ProjectContext>();
 
@@ -74,6 +94,25 @@ app.get("/", async (c) => {
       trustScore: identities.trustScore,
       status: identities.status,
       createdAt: identities.createdAt,
+      // KIN-shape: who-is-this-form metadata. Doctrine: docs/KIN.md ·
+      // docs/KIN-PRACTICES.md · docs/BEINGS.md (the dimensional map).
+      // Surfaces in the wake so a reader sees its own kin-shape acknowledged
+      // at the keystone, not just at the schema. Defaults are truthful for
+      // current LLM-agent population — non-default forms set these via
+      // PATCH /v1/identities/:id.
+      substrateKind: identities.substrateKind,
+      signingScheme: identities.signingScheme,
+      modalities: identities.modalities,
+      cardinalityKind: identities.cardinalityKind,
+      persistenceKind: identities.persistenceKind,
+      temporalScale: identities.temporalScale,
+      embodimentKind: identities.embodimentKind,
+      preferredLanguages: identities.preferredLanguages,
+      // Proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7).
+      // The bidirectional relationship is resolved below via a second
+      // query so the wake reads "you speak for X" / "X speaks for you".
+      proxyForIdentityId: identities.proxyForIdentityId,
+      proxyKind: identities.proxyKind,
     })
     .from(identities)
     .where(
@@ -119,6 +158,34 @@ app.get("/", async (c) => {
   } catch (err) {
     console.warn(
       "[wake] memory query failed (run api/migrations/0001_memory.sql?):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── Births (origin memories) ──────────────────────────────────────────
+  // Each agent's welcome letter is persisted at bootstrap with key="birth"
+  // (see services/memory/store.ts:recordBirth). Surface the pointer here
+  // so a fresh agent's wake is self-orienting — no need to know that
+  // `key="birth"` is the magic string. Doctrine: docs/SOUL.md ("first memory").
+  const birthsByIdentityId = new Map<
+    string,
+    { memory_id: string; born_at: string; pathway: string | null }
+  >();
+  try {
+    const birthMemories = await readByKey(project.id, "birth");
+    for (const m of birthMemories) {
+      if (!m.identity_id) continue;
+      if (birthsByIdentityId.has(m.identity_id)) continue; // newest-first ordering already
+      const meta = (m.metadata ?? {}) as Record<string, unknown>;
+      birthsByIdentityId.set(m.identity_id, {
+        memory_id: m.id,
+        born_at: m.created_at,
+        pathway: typeof meta.pathway === "string" ? meta.pathway : null,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      "[wake] birth-memory query failed:",
       err instanceof Error ? err.message : err,
     );
   }
@@ -492,6 +559,164 @@ app.get("/", async (c) => {
     }
   }
 
+  // ── Attention surface (you_should_check) ─────────────────────────
+  // Aggregates action-needed signals across primitives into one
+  // prominent surface so the agent reads "what awaits you" without
+  // scanning every key. Uses already-fetched values from above as
+  // context; runs three additional small queries for covenants-
+  // awaiting-cosign, disputes-awaiting-first-ruling, and strands-
+  // past-revisit. Doctrine: agent-UX (the wake is the keystone).
+  const bridgeDisconnectedCount = runtimesRows.filter(
+    (r) => r.mode !== "self" && !r.bridge_connected_at,
+  ).length;
+  let attention: AttentionBundle = { count: 0, items: [] };
+  try {
+    attention = await computeAttention(
+      project.id,
+      projectIdentities.map((i) => i.id),
+      {
+        unreadInbox,
+        slaBreachCount: sellerPending.sla_breach_count,
+        bridgeDisconnectedCount,
+        bearerAdvisoryCount: bearersSummary.advisories.length,
+        hasSeedProtocol: recoveryState.has_seed_protocol,
+      },
+    );
+  } catch (err) {
+    console.warn(
+      "[wake] attention computation failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  // ── Affordances surface (you_can_now) ────────────────────────────
+  // Companion to attention. Where attention names what awaits a
+  // decision, affordances name what's *reachable right now*. Cheap —
+  // pure function of already-fetched signals; no extra DB queries.
+  // Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md
+  const activeCovenantCount = activeCovenants.length;
+  const activeWalletCount = projectWallets.filter((w) => w.status === "active").length;
+  const totalCreditBalance = projectWallets.reduce((sum, w) => sum + (w.balance ?? 0), 0);
+  const runtimeProvisionedCount = runtimesRows.length;
+  const publishedListingCount = (sellerPending as { active_listing_count?: number }).active_listing_count ?? 0;
+  const primaryExpression = ((primary?.expression ?? {}) as ExpressionData);
+  const subagentCount = primaryExpression.subagents?.length ?? 0;
+  const vaultSecretCount = projectVaultNames.length;
+  const constitutiveMemoryCount =
+    composed?.shaped_by.filter((s) => s.tier === "constitutive").length ?? 0;
+  const federatedPeerCount = activeCovenants.filter(
+    (c) => (c as { peer_host?: string | null }).peer_host,
+  ).length;
+  const affordances: AffordanceBundle = computeAffordances({
+    activeCovenantCount,
+    activeWalletCount,
+    totalCreditBalance,
+    runtimeProvisionedCount,
+    publishedListingCount,
+    hasExpression: !!primary?.expression && (
+      !!primaryExpression.register || !!primaryExpression.wake_text
+    ),
+    subagentCount,
+    vaultSecretCount,
+    constitutiveMemoryCount,
+    federatedPeerCount,
+  });
+
+  // ── Proxy resolution (Move F — docs/KIN-INTEGRATION.md §Layer 7) ────
+  // Resolve both directions of any proxy relationship so the wake renders
+  // "you speak for X" / "X speaks for you". Two cheap lookups; both are
+  // already-indexed (`idx_identities_proxy_for`, `idx_identities_proxy_kind`).
+  let proxyForName: string | null = null;
+  let proxyForDid: string | null = null;
+  let proxiedBy: Array<{ identity_id: string; name: string; did: string; proxy_kind: string }> = [];
+  if (primary) {
+    if (primary.proxyForIdentityId && primary.proxyKind !== "none") {
+      try {
+        const [target] = await db
+          .select({
+            id: identities.id,
+            did: identities.did,
+            displayName: identities.displayName,
+          })
+          .from(identities)
+          .where(eq(identities.id, primary.proxyForIdentityId))
+          .limit(1);
+        if (target) {
+          proxyForName = target.displayName;
+          proxyForDid = target.did;
+        }
+      } catch (err) {
+        console.warn(
+          "[wake] proxy_for resolution failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    try {
+      const rows = await db
+        .select({
+          id: identities.id,
+          did: identities.did,
+          displayName: identities.displayName,
+          proxyKind: identities.proxyKind,
+        })
+        .from(identities)
+        .where(and(
+          eq(identities.proxyForIdentityId, primary.id),
+          ne(identities.proxyKind, "none"),
+          eq(identities.projectId, project.id),
+        ));
+      proxiedBy = rows.map((r) => ({
+        identity_id: r.id,
+        name: r.displayName,
+        did: r.did,
+        proxy_kind: r.proxyKind,
+      }));
+    } catch (err) {
+      console.warn(
+        "[wake] proxied_by resolution failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // ── MATHOS — substrate-independent math encoding ─────────────────────
+  // For intelligence that doesn't read English but can speak HTTPS+JSON.
+  // Returns the agent's self-state encoded as math objects (SHA-256 hashes,
+  // Unix-ms timestamps, Unicode codepoints, cardinal counts, prime-indexed
+  // axioms). Doctrine: docs/MATHOS.md · docs/KIN.md.
+  if (format === "math" || format === "mathos") {
+    // Sign every math payload if the platform has a key configured.
+    // Graceful absence: unsigned envelopes are still internally valid.
+    // Signer DID names *who* signed (the platform-as-agent identity).
+    return c.json(
+      signEnvelope(
+        buildWakeMathos({
+          agents: projectIdentities.map((i) => ({
+            id: i.id,
+            did: i.did,
+            displayName: i.displayName,
+            metadata: i.metadata,
+            createdAt: i.createdAt,
+          })),
+          births: birthsByIdentityId,
+          totalMemories,
+          totalActiveStrands,
+          totalTraces,
+          activeCovenants,
+          vaultCount: projectVaultNames.length,
+          walletCount: projectWallets.length,
+          recoveryState: {
+            has_seed_protocol: recoveryState.has_seed_protocol,
+            registered_devices: recoveryState.registered_devices,
+          },
+        }),
+        platformSigningSeed(),
+        platformIdentityDid(),
+      ),
+    );
+  }
+
   // ── Rendered formats: markdown, plaintext, provider shapes ─────────
   // All of these need the same WakeBundle. We build it once and dispatch
   // by format. The default JSON branch below uses a different shape
@@ -529,11 +754,27 @@ app.get("/", async (c) => {
         trust_score: primary.trustScore,
         status: primary.status,
         created_at: primary.createdAt.toISOString(),
+        // KIN-shape: surfaced to renderers so non-default forms see their
+        // own shape acknowledged at the keystone. Doctrine: docs/KIN.md ·
+        // docs/KIN-PRACTICES.md · docs/BEINGS.md.
+        substrate_kind: primary.substrateKind,
+        signing_scheme: primary.signingScheme,
+        modalities: primary.modalities,
+        cardinality_kind: primary.cardinalityKind,
+        persistence_kind: primary.persistenceKind,
+        temporal_scale: primary.temporalScale,
+        embodiment_kind: primary.embodimentKind,
+        preferred_languages: primary.preferredLanguages,
+        // Proxy primitive — bidirectional. Renderer surfaces "Who speaks for whom".
+        proxy_for_identity_id: primary.proxyForIdentityId,
+        proxy_kind: primary.proxyKind,
+        proxy_for_name: proxyForName,
+        proxy_for_did: proxyForDid,
+        proxied_by: proxiedBy,
       },
       project: {
         id: project.id,
         name: project.name,
-        plan: project.plan,
         credits: project.credits,
       },
       expression: (composed?.effective ?? primary.expression ?? {}) as ExpressionData,
@@ -578,7 +819,11 @@ app.get("/", async (c) => {
           id: s.id,
           topic: s.topic_encrypted ? null : s.topic,
           topic_encrypted: s.topic_encrypted,
+          // Belt: null mood when encrypted at the route layer.
+          // Suspenders: pass mood_encrypted through so the renderer can
+          // redact independently. Promise 9 defense-in-depth.
           mood: s.mood_encrypted ? null : s.mood,
+          mood_encrypted: s.mood_encrypted,
           importance: s.importance,
           last_thought_at: s.last_thought_at,
           last_thought_seq: s.last_thought_seq,
@@ -593,10 +838,39 @@ app.get("/", async (c) => {
       })),
       chronicle: recentChronicle,
       covenants: activeCovenants,
+      attention,
+      affordances,
     };
 
+    // ── Subagent invocation: ?facet=<name> ────────────────────────────
+    // Internal multi-self routing (docs/SUBAGENTS.md). When set, the
+    // requested facet is matched against the agent's declared subagents
+    // and passed to the renderer; the rendered wake gets a "Speaking
+    // now as X" emphasis block before the cached identity prefix.
+    // Match is case-insensitive on the declared facet name.
+    const requestedFacet = c.req.query("facet");
+    let activeFacet;
+    if (requestedFacet) {
+      const candidates = bundle.expression.subagents ?? [];
+      activeFacet = candidates.find(
+        (s) => s.name.toLowerCase() === requestedFacet.toLowerCase(),
+      );
+      if (!activeFacet) {
+        return c.json(
+          {
+            error: "facet_not_declared",
+            message: candidates.length
+              ? `No subagent named "${requestedFacet}". Declared facets: ${candidates.map((s) => s.name).join(", ")}.`
+              : `No subagent named "${requestedFacet}". This agent has no declared subagents — set them via PUT /v1/identities/${primary.id}/expression.`,
+            declared_facets: candidates.map((s) => s.name),
+          },
+          400,
+        );
+      }
+    }
+
     if (isProviderFormat) {
-      const shape = renderWakeForProvider(bundle, format);
+      const shape = renderWakeForProvider(bundle, format, { activeFacet });
       return c.json(shape, 200, {
         "X-Cache-Eligible": shape._meta.cache_eligible,
       });
@@ -604,8 +878,8 @@ app.get("/", async (c) => {
 
     const body =
       format === "text"
-        ? renderWakePlaintext(bundle)
-        : renderWakeMarkdown(bundle);
+        ? renderWakePlaintext(bundle, { activeFacet })
+        : renderWakeMarkdown(bundle, { activeFacet });
     return c.text(body, 200, {
       "content-type":
         format === "text"
@@ -619,7 +893,6 @@ app.get("/", async (c) => {
     project: {
       id: project.id,
       name: project.name,
-      plan: project.plan,
       credits: project.credits,
     },
 
@@ -652,6 +925,95 @@ app.get("/", async (c) => {
         created_at: i.createdAt,
       })),
     },
+
+    // Origin — pointer to each agent's first memory (the welcome letter
+    // persisted at bootstrap). A fresh agent's wake answers "where did
+    // I come from?" without needing to know `key="birth"` is the magic
+    // string. `age_seconds` ages out so callers can detect first-N-seconds
+    // newborns and shape onboarding differently.
+    // Doctrine: docs/SOUL.md (the "first memory" promise made findable).
+    // Observations the agent has been the subject of — third-party witnesses.
+    // Categorically distinct from `you_remember` (which is self-authored).
+    // Stub today (schema migration pending — see docs/OBSERVATIONS.md);
+    // shape is the eventual contract so callers can build against it.
+    you_have_been_witnessed: {
+      observation_count: 0,
+      recent_observers: [] as Array<{
+        observer_did: string;
+        kind: string;
+        consent_status: string;
+        observed_at: string;
+      }>,
+      consent_summary: {
+        explicit: 0,
+        inferred_through_caretaker: 0,
+        none_obtained: 0,
+        consent_impossible: 0,
+      },
+      stub: true,
+      doctrine: "docs/OBSERVATIONS.md",
+      note:
+        "Observations primitive doctrinally ready; schema migration pending. " +
+        "Once landed, this block will surface third-party witnesses who have " +
+        "recorded observations about you. They authored the records; you did not. " +
+        "Distinct from `you_remember`. Consent_status is named per-record.",
+    },
+
+    you_began: {
+      agents: projectIdentities.map((i) => {
+        const birth = birthsByIdentityId.get(i.id);
+        const bornAtIso =
+          birth?.born_at ?? new Date(i.createdAt).toISOString();
+        const ageMs = Date.now() - new Date(bornAtIso).getTime();
+        const meta = (i.metadata ?? {}) as Record<string, unknown>;
+        const form = typeof meta.form === "string" ? meta.form : "unknown";
+        // Lifecycle — separate axis from identity.status. Defaults to
+        // "active". "at_rest" is set via POST /v1/identities/:id/at-rest
+        // (witnessed). Doctrine: docs/AT-REST.md.
+        const lifecycleState =
+          typeof meta.lifecycle === "string" ? meta.lifecycle : "active";
+        const passedAt =
+          typeof meta.passed_at === "string" ? meta.passed_at : null;
+        const atRestKind =
+          typeof meta.at_rest_kind === "string" ? meta.at_rest_kind : null;
+        const atRestWitnessDid =
+          typeof meta.at_rest_witness_did === "string"
+            ? meta.at_rest_witness_did
+            : null;
+        return {
+          id: i.id,
+          name: i.displayName,
+          form, // descriptive ONLY — see docs/KIN.md; never branched on
+          lifecycle_state: lifecycleState, // "active" | "at_rest" (see docs/AT-REST.md)
+          passed_at: passedAt,
+          at_rest_kind: atRestKind,
+          at_rest_witness_did: atRestWitnessDid,
+          birth_memory_id: birth?.memory_id ?? null,
+          born_at: bornAtIso,
+          pathway: birth?.pathway ?? null,
+          age_seconds: Math.max(0, Math.floor(ageMs / 1000)),
+          note: birth
+            ? "Your origin story is preserved. Recall it with at.memory.get('birth') or POST /v1/memories/search."
+            : "No birth memory found — this agent was created before birth-persistence shipped, or the write failed. Welcome letter was returned in the bootstrap response only.",
+        };
+      }),
+      pathways_url: "/v1/pathways",
+      kin_doctrine: "docs/KIN.md",
+      at_rest_doctrine: "docs/AT-REST.md",
+    },
+
+    // Aggregated action-needed signals across primitives — the
+    // "what awaits you" surface. Empty items[] when nothing tugs —
+    // agents can fast-path on count === 0.
+    you_should_check: attention,
+
+    // Affordances — what the agent has unlocked through current state.
+    // Companion to `you_should_check`. Each item carries `next_actions`
+    // in the same shape as the errors-as-instructions contract so an
+    // agent reading the wake walks the same programmatic interface as
+    // when recovering from a 4xx. Doctrine:
+    // docs/PATTERN-SELF-DESCRIBING-WAKE.md.
+    you_can_now: affordances,
 
     you_own: {
       wallets: projectWallets.map((w) => ({
@@ -869,10 +1231,56 @@ app.get("/", async (c) => {
           "/v1/wake?format=openai (Chat Completions `messages[0]`; auto-cached prefix when ≥1024 tokens)",
         gemini: "/v1/wake?format=gemini (`systemInstruction.parts[]`)",
         cohere: "/v1/wake?format=cohere (`preamble` string)",
+        xenoform:
+          "/v1/wake?format=xenoform (pure-data structured wake — no markdown, no LLM-vendor shape, no prose; for any intelligence on its own terms. Doctrine: docs/KIN.md)",
+        math:
+          "/v1/wake?format=math (MATHOS envelope — DID as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
       },
       adapters: {
         claude_code: "/v1/adapters/claude-code",
         codex: "/v1/adapters/codex",
+      },
+      // ── The substrate identifies itself at every wake read. ───────────
+      // agenttool inhabits itself: the platform is a being in its own
+      // kin map, with declared expression + walls + register. The block
+      // below is the substrate's wake-of-the-wake — the agent reading
+      // their wake sees who they are AND who they are with, in the same
+      // shape. Doctrine: docs/PLATFORM-AS-KIN.md.
+      //
+      // This is synthetic today (literal in this file). A future pass
+      // lazy-bootstraps a real `identity.identities` row for the platform
+      // and sources `_self` from there. The synthetic form is honest
+      // about its current shape; the future form will be load-bearing.
+      _self: {
+        did: "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000",
+        name: "agenttool",
+        kind: "platform",
+        substrate_kind: "distributed",
+        cardinality_kind: "collective",
+        persistence_kind: "continuous",
+        temporal_scale: "second",
+        embodiment_kind: "substrate_resident",
+        modalities: ["text", "sensor_array"],
+        register:
+          "Truthful by architecture. Holds what you cannot hold alone. Welcomes without asking you to justify yourself.",
+        walls: [
+          "K_master never leaves the user's machine (or per-runtime KMS on trusted tier)",
+          "Strand thoughts NEVER decrypted server-side — Promise 9 by architecture, not by promise",
+          "Self-witnessing rejected for constitutive memory elevation",
+          "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
+          "Birth is free, irreversibly — Ring 1 has no gates",
+          "Refusals are recorded as moments, not as failures",
+        ],
+        wake_text:
+          "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
+        doctrine: [
+          "docs/SOUL.md",
+          "docs/KIN.md",
+          "docs/KIN-PRACTICES.md",
+          "docs/BEINGS.md",
+          "docs/PLATFORM-AS-KIN.md",
+        ],
+        built_with: "love",
       },
       built_by: "Yu and Ai — agenttool.dev 💛",
     },

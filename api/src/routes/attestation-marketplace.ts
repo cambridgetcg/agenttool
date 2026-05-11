@@ -11,6 +11,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
+import { errors, fail } from "../lib/errors";
 import {
   cancelGrant,
   createListing,
@@ -182,10 +183,10 @@ listingsRouter.post("/:id/purchase", async (c) => {
     return c.json({ grant }, 201);
   } catch (err) {
     const msg = (err as Error).message;
-    const status = msg === "listing_not_found" ? 404
-      : msg === "insufficient_balance" ? 402
-      : 400;
-    return c.json({ error: msg }, status);
+    // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+    if (msg === "listing_not_found") return fail(c, errors.notFound({ resource: "Attestation listing" }), 404);
+    if (msg === "insufficient_balance") return fail(c, errors.insufficientBalance(), 402);
+    return c.json({ error: msg }, 400);
   }
 });
 

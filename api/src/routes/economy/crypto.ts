@@ -16,6 +16,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
+import { errors, fail } from "../../lib/errors";
 import { wallets } from "../../db/schema/economy";
 import {
   ALL_CHAINS,
@@ -252,7 +253,8 @@ router.post("/wallets/:walletId/payout", async (c) => {
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === "insufficient_balance") {
-      return c.json({ error: "insufficient_balance" }, 402);
+      // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+      return fail(c, errors.insufficientBalance(), 402);
     }
     // Policy violations (Slice 6) — return 403 with the error code +
     // optional detail line. Agents can adjust amount / destination /

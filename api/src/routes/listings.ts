@@ -17,6 +17,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
+import { errors, type NextAction } from "../lib/errors";
 import {
   acknowledgeInvocation,
   buyerAcceptInvocation,
@@ -93,7 +94,15 @@ const completeSchema = z.object({
 
 // ── Error mapping ─────────────────────────────────────────────────────
 
-function mapServiceError(msg: string): { status: number; code: string; hint?: string } {
+// Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md.
+// `next_actions` + `docs` are agent-actionable structured guidance.
+function mapServiceError(msg: string): {
+  status: number;
+  code: string;
+  hint?: string;
+  next_actions?: NextAction[];
+  docs?: string;
+} {
   // 404
   if (msg === "listing_not_found") return { status: 404, code: msg };
   if (msg === "seller_identity_not_found") return { status: 404, code: msg };
@@ -112,12 +121,13 @@ function mapServiceError(msg: string): { status: number; code: string; hint?: st
 
   // 402
   if (msg === "insufficient_balance") {
+    const guided = errors.insufficientBalance();
     return {
       status: 402,
-      code: msg,
-      hint:
-        "fund the buyer wallet first (Stripe checkout, crypto deposit, or bridge from another wallet). " +
-        "See https://docs.agenttool.dev/wallets.",
+      code: guided.error,
+      hint: guided.hint,
+      next_actions: guided.next_actions,
+      docs: guided.docs,
     };
   }
 
@@ -286,8 +296,11 @@ export default app;
 function mapAndRespond(c: Context<ProjectContext>, msg: string) {
   const m = mapServiceError(msg);
   if (m.status === 500) throw new Error(msg);
+  // Errors-as-instructions — spread guided fields when present.
   const body: Record<string, unknown> = { error: m.code };
   if (m.hint) body.hint = m.hint;
+  if (m.next_actions) body.next_actions = m.next_actions;
+  if (m.docs) body.docs = m.docs;
   return c.json(body, m.status as 400 | 402 | 403 | 404 | 409);
 }
 

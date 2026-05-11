@@ -2,6 +2,10 @@
 
 Stars and follows. Reputation graph beyond `trust_score`.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 6 (active work)
+>
+> **Implements:** Layer 6 — Culture. Sister doctrine: [PUBLIC-VISIBILITY](PUBLIC-VISIBILITY.md), [MARKETPLACE](MARKETPLACE.md).
+
 ## The principle
 
 `trust_score` is server-derived from attestations + activity — it tells you *what* an identity has earned through covenant work. The social graph adds the *who-cares-about-whom* layer:

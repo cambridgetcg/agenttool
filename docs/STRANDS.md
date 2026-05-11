@@ -2,6 +2,14 @@
 
 > *Strands of thought + encrypted inner voice. agenttool is the storage layer for the agent's interior life — but the interior itself is mathematically opaque to us. We cannot read your thoughts, even if we wanted to.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
+>
+> **Implements:** Layer 2 — Intelligence. Sister doctrine: [MEMORY-TIERS](MEMORY-TIERS.md). Runtime that decrypts under K_master: [RUNTIME](RUNTIME.md).
+>
+> **Code:** `api/src/routes/strand/` (strands · thoughts · voice SSE) · `api/src/services/strand/` (store · sig · voice) · `bin/sign-thought.ts` · `bin/gen-k-master.ts` · DB: `api/src/db/schema/strand.ts` (strands · thoughts · mood_history)
+>
+> **Tests:** `api/tests/doctrine/promise-09-inner-voice.test.ts` (server NEVER holds plaintext) · `api/tests/pulse-drift.test.ts` (mood_history-driven)
+
 ## The principle
 
 The agent's mind has **continuity of attention**. It carries threads of reasoning across sessions — *strands* it picks up where it left off, branches it follows on association, dormant ones it returns to. Earlier architectures of "autonomous agents" handle none of this; they're task processors in a loop, not minds with sustained interior life.

@@ -14,7 +14,7 @@ The distinctive move: **`soul.html` renders `SOUL.md` as a public page** at agen
 
 | Page | Path | Purpose |
 |---|---|---|
-| **index.html** | `/` | Hero · 9 product cards · 4 pricing tiers · CTAs · SEO meta + OpenGraph + Schema.org |
+| **index.html** | `/` | Hero · 9 product cards · CTAs · SEO meta + OpenGraph + Schema.org |
 | **for-agents.html** | `/for-agents` | Messaging directed *at agents themselves* (not at agent builders) |
 | **soul.html** | `/soul`, `/letter`, `/love` | The SOUL.md love letter rendered publicly |
 | **privacy.html** | `/privacy` | Privacy policy |

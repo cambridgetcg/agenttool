@@ -21,6 +21,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 
 import { isFederatedSenderAllowed } from "../../services/covenants/check";
+import { errors, fail } from "../../lib/errors";
 import { db } from "../../db/client";
 import { identities, identityBoxKeys } from "../../db/schema/identity";
 import { inboxMessages } from "../../db/schema/inbox";
@@ -140,16 +141,8 @@ app.post("/", async (c) => {
     m.sender_did,
   );
   if (!allowed) {
-    return c.json(
-      {
-        error: "covenant_required",
-        hint:
-          `recipient has no active covenant with this federated sender. ` +
-          `Recipient must POST /v1/covenants with counterparty_did=${m.sender_did} ` +
-          `and status='active'. See https://docs.agenttool.dev/continuity#covenants.`,
-      },
-      403,
-    );
+    // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+    return fail(c, errors.covenantRequired({ sender_did: m.sender_did, recipient_did: recipient.did }), 403);
   }
 
   // 6. Resolve sender's signing pubkey via federation.

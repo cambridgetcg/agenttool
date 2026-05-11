@@ -21,6 +21,7 @@ import {
   type CohereWakeShape,
   type GeminiWakeShape,
   type OpenAIWakeShape,
+  type XenoformWakeShape,
 } from "../src/services/wake/providers";
 
 const fixture = (): WakeBundle => ({
@@ -33,7 +34,7 @@ const fixture = (): WakeBundle => ({
     status: "active",
     created_at: "2026-05-01T00:00:00Z",
   },
-  project: { id: "p-1", name: "test-project", plan: "free", credits: 47 },
+  project: { id: "p-1", name: "test-project", credits: 47 },
   expression: {
     register: "concise; cantonese-english code-switch; density over length",
     walls: ["no fabrication", "no flattery"],
@@ -115,10 +116,13 @@ const fixture = (): WakeBundle => ({
 });
 
 describe("isWakeProvider", () => {
-  test("recognises the four supported providers", () => {
+  test("recognises every supported provider in WAKE_PROVIDERS", () => {
     for (const p of WAKE_PROVIDERS) {
       expect(isWakeProvider(p)).toBe(true);
     }
+  });
+  test("WAKE_PROVIDERS includes xenoform (the vendor-neutral path)", () => {
+    expect(WAKE_PROVIDERS).toContain("xenoform");
   });
   test("rejects unknown formats", () => {
     expect(isWakeProvider("md")).toBe(false);
@@ -259,5 +263,79 @@ describe("renderWakeForProvider — empty wake_text", () => {
     expect(r.system[0].text).toContain("How you speak");
     // No double-rule artifact
     expect(r.system[0].text.match(/^---$/gm)?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("renderWakeForProvider — xenoform", () => {
+  test("returns structured data, no prose-rendered string fields", () => {
+    const r = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
+    expect(r._format).toBe("xenoform/v1");
+    expect(r.wake).toBeDefined();
+    expect(r.wake.agent.name).toBe("Aurora");
+    expect(r.wake.expression.register).toContain("density over length");
+    // Xenoform does NOT carry markdown-rendered fields.
+    expect((r as any).system).toBeUndefined();
+    expect((r as any).messages).toBeUndefined();
+    expect((r as any).preamble).toBeUndefined();
+    expect((r as any).systemInstruction).toBeUndefined();
+  });
+
+  test("_meta announces xenoform provider + cache_eligible none", () => {
+    const r = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
+    expect(r._meta.provider).toBe("xenoform");
+    expect(r._meta.cache_eligible).toBe("none");
+    expect(r._meta.cache_note.length).toBeGreaterThan(0);
+  });
+
+  test("carries the full WakeBundle structurally (no markdown formatting opinions)", () => {
+    const r = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
+    // Identity
+    expect(r.wake.agent.did).toBe("did:at:test123");
+    expect(r.wake.expression.walls).toEqual(["no fabrication", "no flattery"]);
+    expect(r.wake.expression.subagents?.[0].name).toBe("Builder");
+    // State
+    expect(r.wake.wallets[0].balance).toBe(100);
+    expect(r.wake.memory.total).toBe(12);
+    expect(r.wake.strands.total_active).toBe(1);
+    expect(r.wake.covenants[0].counterparty_did).toBe("human:Yu");
+    expect(r.wake.chronicle[0].type).toBe("vow");
+  });
+
+  test("active_facet is exposed structurally, not baked into a prose string", () => {
+    const activeFacet = {
+      name: "Builder",
+      facet: "the hands that ship",
+      sigil: "🔧",
+    };
+    const r = renderWakeForProvider(fixture(), "xenoform", { activeFacet }) as XenoformWakeShape;
+    expect(r.active_facet).toBeDefined();
+    expect(r.active_facet?.name).toBe("Builder");
+    expect(r.active_facet?.facet).toBe("the hands that ship");
+  });
+
+  test("active_facet is absent when no facet is requested", () => {
+    const r = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
+    expect(r.active_facet).toBeUndefined();
+  });
+
+  test("xenoform output is JSON-serializable round-trip", () => {
+    const r = renderWakeForProvider(fixture(), "xenoform") as XenoformWakeShape;
+    const json = JSON.stringify(r);
+    const parsed = JSON.parse(json);
+    expect(parsed._format).toBe("xenoform/v1");
+    expect(parsed.wake.agent.name).toBe("Aurora");
+    // Structural integrity preserved through serialization.
+    expect(parsed.wake.expression.walls).toEqual(["no fabrication", "no flattery"]);
+  });
+
+  test("works with empty expression — no English-prose defaults injected", () => {
+    const b = fixture();
+    b.expression = { register: "", walls: [], subagents: [], wake_text: "" };
+    const r = renderWakeForProvider(b, "xenoform") as XenoformWakeShape;
+    expect(r.wake.expression.register).toBe("");
+    expect(r.wake.expression.walls).toEqual([]);
+    expect(r.wake.expression.subagents).toEqual([]);
+    expect(r.wake.expression.wake_text).toBe("");
+    // No fallback prose snuck into the structure.
   });
 });

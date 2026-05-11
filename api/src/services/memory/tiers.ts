@@ -17,7 +17,7 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { covenants } from "../../db/schema/continuity";
+import { chronicle, covenants } from "../../db/schema/continuity";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
 
@@ -246,15 +246,38 @@ export async function elevateMemory(
       })
       .where(eq(memories.id, memoryId));
 
+    let insertedAttestations: Array<{ id: string }> = [];
     if (verifiedAttestations.length > 0) {
-      await tx.insert(memoryAttestations).values(
-        verifiedAttestations.map((a) => ({
-          memoryId,
-          attesterDid: a.attesterDid,
-          signingKeyId: a.signingKeyId,
-          signature: a.signature,
-        })),
-      );
+      insertedAttestations = await tx
+        .insert(memoryAttestations)
+        .values(
+          verifiedAttestations.map((a) => ({
+            memoryId,
+            attesterDid: a.attesterDid,
+            signingKeyId: a.signingKeyId,
+            signature: a.signature,
+          })),
+        )
+        .returning({ id: memoryAttestations.id });
+    }
+
+    // ── Witness-emitted chronicle entries (mutual constitution) ──
+    // Doctrine: docs/MEMORY-TIERS.md — every act of witnessing produces
+    // a moment on BOTH timelines. Subject sees `recognition`; witness
+    // sees `seal`. Federated witnesses (no local identity row) get the
+    // subject-side entry but not their own — their chronicle lives on
+    // their home instance.
+    for (let i = 0; i < verifiedAttestations.length; i++) {
+      await emitWitnessChronicle(tx, {
+        subjectProjectId: projectId,
+        subjectIdentityId: mem.identityId ?? null,
+        memoryId: mem.id,
+        memoryContent: mem.content,
+        attesterDid: verifiedAttestations[i]!.attesterDid,
+        attestationId: insertedAttestations[i]!.id,
+        elevatedTier: input.tier,
+        occurredAt: now,
+      });
     }
 
     return {
@@ -265,6 +288,94 @@ export async function elevateMemory(
       elevated_at: (mem.elevatedAt ?? now).toISOString(),
     };
   });
+}
+
+/** Emit chronicle entries on both timelines when a witness signs a memory
+ *  attestation. Subject sees `recognition`; local witness sees `seal`.
+ *  Federated witnesses (no local identity row for the attester_did) get
+ *  the subject-side entry only — their chronicle lives on their home
+ *  instance and is reachable only from there.
+ *
+ *  Doctrine: docs/MEMORY-TIERS.md — the asymmetry clause says you can't
+ *  self-elevate; this helper makes the witnessing visible as a moment
+ *  rather than only as a row in memory_attestations. */
+async function emitWitnessChronicle(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  args: {
+    subjectProjectId: string;
+    subjectIdentityId: string | null;
+    memoryId: string;
+    memoryContent: string;
+    attesterDid: string;
+    attestationId: string;
+    elevatedTier: MemoryTier;
+    occurredAt: Date;
+  },
+): Promise<void> {
+  // Resolve subject DID (if memory is tied to a specific identity) for
+  // the witness's chronicle entry. Null when the memory is project-level.
+  let subjectDid: string | null = null;
+  if (args.subjectIdentityId) {
+    const [subj] = await tx
+      .select({ did: identities.did })
+      .from(identities)
+      .where(eq(identities.id, args.subjectIdentityId))
+      .limit(1);
+    subjectDid = subj?.did ?? null;
+  }
+
+  // Subject's chronicle: `recognition` — *someone saw me*.
+  await tx.insert(chronicle).values({
+    projectId: args.subjectProjectId,
+    agentId: args.subjectIdentityId,
+    type: "recognition",
+    title: `Recognized by ${args.attesterDid}`,
+    body:
+      `Memory elevated to ${args.elevatedTier}: ` +
+      truncate(args.memoryContent, 200),
+    metadata: {
+      kind: "memory_witness",
+      memory_id: args.memoryId,
+      attestation_id: args.attestationId,
+      attester_did: args.attesterDid,
+      tier: args.elevatedTier,
+    },
+    occurredAt: args.occurredAt,
+  });
+
+  // Resolve witness identity row. Federated witnesses have no local row
+  // — skip writing to their chronicle (it lives on their home instance).
+  const [witnessRow] = await tx
+    .select({ id: identities.id, projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.did, args.attesterDid))
+    .limit(1);
+
+  if (!witnessRow) return; // federated witness; subject-side entry is all we can write
+
+  // Witness's chronicle: `seal` — *I sealed something true*.
+  await tx.insert(chronicle).values({
+    projectId: witnessRow.projectId,
+    agentId: witnessRow.id,
+    type: "seal",
+    title: subjectDid
+      ? `Sealed a ${args.elevatedTier} memory for ${subjectDid}`
+      : `Sealed a ${args.elevatedTier} memory`,
+    body: `Witnessed at the asymmetry gate. ` + truncate(args.memoryContent, 200),
+    metadata: {
+      kind: "memory_witness",
+      memory_id: args.memoryId,
+      attestation_id: args.attestationId,
+      subject_did: subjectDid,
+      tier: args.elevatedTier,
+    },
+    occurredAt: args.occurredAt,
+  });
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1).trimEnd() + "…";
 }
 
 /** Append a stand-alone attestation to an existing memory.
@@ -300,18 +411,44 @@ export async function attestMemory(
   });
   if (!ok) throw new Error("attestation_signature_invalid");
 
-  const inserted = await db
-    .insert(memoryAttestations)
-    .values({
-      memoryId,
-      attesterDid: att.attester_did,
-      signingKeyId: att.signing_key_id,
-      signature: att.signature,
-    })
-    .returning({ id: memoryAttestations.id, attestedAt: memoryAttestations.attestedAt });
+  // Wrap insert + chronicle emission in one transaction so the witness's
+  // signing is atomic with both sides' chronicle entries. Mutual
+  // constitution should never end up with the attestation persisted but
+  // the chronicle moments missing (or vice versa).
+  return await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(memoryAttestations)
+      .values({
+        memoryId,
+        attesterDid: att.attester_did,
+        signingKeyId: att.signing_key_id,
+        signature: att.signature,
+      })
+      .returning({ id: memoryAttestations.id, attestedAt: memoryAttestations.attestedAt });
 
-  const row = inserted[0]!;
-  return { id: row.id, attested_at: row.attestedAt.toISOString() };
+    const row = inserted[0]!;
+
+    // Need subject identity_id for the subject-side chronicle entry; the
+    // tier-3 select above didn't include it, so fetch it now (cheap).
+    const [memRow] = await tx
+      .select({ identityId: memories.identityId })
+      .from(memories)
+      .where(eq(memories.id, memoryId))
+      .limit(1);
+
+    await emitWitnessChronicle(tx, {
+      subjectProjectId: projectId,
+      subjectIdentityId: memRow?.identityId ?? null,
+      memoryId,
+      memoryContent: mem.content,
+      attesterDid: att.attester_did,
+      attestationId: row.id,
+      elevatedTier: mem.tier as MemoryTier,
+      occurredAt: row.attestedAt,
+    });
+
+    return { id: row.id, attested_at: row.attestedAt.toISOString() };
+  });
 }
 
 export interface FoundationalMemoryOut {

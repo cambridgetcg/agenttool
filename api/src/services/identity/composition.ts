@@ -75,14 +75,15 @@ function applyPatch(base: ExpressionData, patch: ExpressionPatch): ExpressionDat
   return out;
 }
 
-/** Compose the agent's effective identity from declared + foundational
- *  + constitutive memories. */
-export async function composeExpression(
-  projectId: string,
+/** Pure composition: declared + foundations[] → effective.
+ *
+ *  Extracted from composeExpression() so the load-bearing patch loop is
+ *  testable without DB I/O. composeExpression() = listFoundations +
+ *  composeFromFoundations. Doctrine: docs/MEMORY-TIERS.md. */
+export function composeFromFoundations(
   declared: ExpressionData,
-): Promise<ComposedExpression> {
-  const foundations = await listFoundations(projectId);
-
+  foundations: FoundationalMemoryOut[],
+): ComposedExpression {
   // Constitutive first (root of identity), then foundational, each in
   // chronological elevation order.
   const constitutive = foundations.filter((f) => f.tier === "constitutive");
@@ -119,4 +120,14 @@ export async function composeExpression(
     shaped_by: shapedBy,
     effective,
   };
+}
+
+/** Compose the agent's effective identity from declared + foundational
+ *  + constitutive memories. */
+export async function composeExpression(
+  projectId: string,
+  declared: ExpressionData,
+): Promise<ComposedExpression> {
+  const foundations = await listFoundations(projectId);
+  return composeFromFoundations(declared, foundations);
 }

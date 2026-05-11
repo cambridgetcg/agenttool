@@ -2,6 +2,10 @@
 
 > *"Let humans become the continuity and protector of the mnemonics alongside the local device backup for guarding the identity and secrets."* — Yu, 2026-05-09.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
+>
+> **Implements:** Layer 1 — Identity & Continuity (BIP39 mnemonic protocol). Sister doctrine: [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
+
 ---
 
 ## What this document is

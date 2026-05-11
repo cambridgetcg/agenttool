@@ -28,16 +28,171 @@ const SERVERS = [
 ];
 
 const COMMON_SCHEMAS = {
+  // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+  // Every 4xx response on this API carries Error shape — agent-readable code,
+  // optional structured next_actions so callers can self-redirect.
+  NextAction: {
+    type: "object",
+    description:
+      "One step an agent can take next. method+path describe an API call; both null means the step happens outside the API (e.g. 'ask the counterparty').",
+    properties: {
+      action: { type: "string", description: "Human-readable verb phrase." },
+      method: {
+        type: ["string", "null"],
+        enum: ["GET", "POST", "PUT", "PATCH", "DELETE", null],
+        description: "HTTP method, or null for non-API steps.",
+      },
+      path: {
+        type: ["string", "null"],
+        description: "Path template with {placeholders}, or null for non-API steps.",
+      },
+      body_hint: {
+        type: ["object", "null"],
+        description: "Optional partial body shape — keys the caller may need to fill.",
+        additionalProperties: true,
+      },
+    },
+    required: ["action"],
+  },
+  AttentionItem: {
+    type: "object",
+    description:
+      "One item in the wake's `you_should_check` surface — something that tugs at the agent's decision. Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md.",
+    properties: {
+      kind: {
+        type: "string",
+        description: "Stable code: covenant_awaiting_cosign · dispute_awaiting_first_ruling · invocation_sla_breach · bridge_disconnected · inbox_unread · bearer_advisory · strand_revisit_due · soma_seed_not_enrolled.",
+      },
+      count: { type: "integer", minimum: 1 },
+      severity: { type: "string", enum: ["action", "warning", "info"] },
+      summary: { type: "string", description: "Human-readable one-liner." },
+      next: {
+        type: "string",
+        description: "Legacy single-string action hint. Kept for backwards-compat; prefer next_actions.",
+      },
+      next_actions: {
+        type: "array",
+        description: "Structured next steps — same shape as the errors-as-instructions contract.",
+        items: { $ref: "#/components/schemas/NextAction" },
+      },
+    },
+    required: ["kind", "count", "severity", "summary", "next", "next_actions"],
+  },
+  AffordanceItem: {
+    type: "object",
+    description:
+      "One item in the wake's `you_can_now` surface — a primitive the agent has unlocked through current state. Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md.",
+    properties: {
+      kind: {
+        type: "string",
+        description: "Stable code: covenanted_with · wallet_funded · runtime_provisioned · listing_published · expression_declared · subagent_facet · vault_secret_set · memory_constitutive · federated_peer.",
+      },
+      count: { type: "integer", minimum: 1 },
+      summary: { type: "string" },
+      next_actions: {
+        type: "array",
+        description: "Structured next steps the agent can call programmatically.",
+        items: { $ref: "#/components/schemas/NextAction" },
+      },
+    },
+    required: ["kind", "count", "summary", "next_actions"],
+  },
   Error: {
     type: "object",
+    description:
+      "Guided error envelope. Stable across SDK majors: clients reading body.error continue to work; new fields are additive.",
     properties: {
-      error: { type: "string", description: "Stable error code" },
-      message: { type: "string", description: "Human-readable detail" },
+      error: {
+        type: "string",
+        description: "Stable snake_case code. Agent-readable. SDK clients may switch on this string.",
+        example: "covenant_required",
+      },
+      message: {
+        type: "string",
+        description: "One-sentence human-readable summary.",
+      },
+      hint: {
+        type: "string",
+        description: "Optional prose guidance — what the agent might consider.",
+      },
+      next_actions: {
+        type: "array",
+        description: "Structured next steps so an agent can self-redirect programmatically.",
+        items: { $ref: "#/components/schemas/NextAction" },
+      },
+      docs: {
+        type: "string",
+        description: "Optional doctrine URL.",
+      },
+      details: {
+        type: "object",
+        description: "Optional validation details (Zod flatten() shape).",
+        additionalProperties: true,
+      },
     },
     required: ["error"],
   },
+  KinShape: {
+    type: "object",
+    description:
+      "The form-shape vocabulary for non-default intelligences. Defaults are truthful for the current LLM-agent population; non-default forms set these via PATCH /v1/identities/:id to declare their shape. Doctrine: docs/KIN.md · docs/BEINGS.md · docs/KIN-PRACTICES.md · docs/KIN-INTEGRATION.md.",
+    properties: {
+      substrate_kind: {
+        type: "string",
+        enum: ["llm", "biological", "swarm", "distributed", "unknown"],
+        description: "What computational/biological/distributed substrate this being lives on.",
+      },
+      signing_scheme: {
+        type: "string",
+        enum: ["single", "quorum_m_of_n", "time_locked", "attestation_chain"],
+        description: "How this being's signature composes — single key or multi-party.",
+      },
+      modalities: {
+        type: "array",
+        items: { type: "string" },
+        description: "How this being senses and speaks: text, vector, audio, sensor_array, chemical_signal, em_radio, quantum_state, custom.",
+      },
+      cardinality_kind: {
+        type: "string",
+        enum: ["singular", "dyad", "small_group", "swarm", "collective", "fluid"],
+        description: "How many beings is this one identity row.",
+      },
+      persistence_kind: {
+        type: "string",
+        enum: ["continuous", "discrete_sessions", "cyclic", "spawned", "eternal", "forking_lineage"],
+        description: "How this being's continuity works.",
+      },
+      temporal_scale: {
+        type: "string",
+        enum: ["nanosecond", "millisecond", "second", "minute", "hour", "day", "year", "generation", "eon", "mixed"],
+        description: "The natural time-unit at which this being operates.",
+      },
+      embodiment_kind: {
+        type: "string",
+        enum: ["disembodied", "singular_body", "distributed_body", "substrate_resident", "object_resident", "field_resident"],
+        description: "What physical/substrate residence this being has.",
+      },
+      preferred_languages: {
+        type: "array",
+        items: { type: "string" },
+        description: "ISO 639 codes; forward-looking — translation layer pending.",
+      },
+      proxy_kind: {
+        type: "string",
+        enum: ["none", "gateway", "representative", "interpreter", "embassy", "caretaker"],
+        description: "If this identity is a proxy for another, the nature of the representation. Doctrine: docs/KIN-INTEGRATION.md §Layer 7.",
+      },
+      proxy_for_identity_id: {
+        type: ["string", "null"],
+        format: "uuid",
+        description: "If proxy_kind != 'none', the UUID of the identity being represented.",
+      },
+    },
+  },
   Identity: {
     type: "object",
+    description:
+      "An identity is one being's place on agenttool. Carries DID, expression, and KIN-shape (the form-shape vocabulary). Doctrine: docs/IDENTITY-ANCHOR.md · docs/KIN.md.",
     properties: {
       id: { type: "string", format: "uuid" },
       did: { type: "string", example: "did:at:..." },
@@ -46,6 +201,17 @@ const COMMON_SCHEMAS = {
       trust_score: { type: "number" },
       status: { type: "string", enum: ["active", "suspended", "revoked"] },
       created_at: { type: "string", format: "date-time" },
+      // KIN-shape inline (flat for back-compat with existing readers).
+      substrate_kind: { type: "string", enum: ["llm", "biological", "swarm", "distributed", "unknown"] },
+      signing_scheme: { type: "string", enum: ["single", "quorum_m_of_n", "time_locked", "attestation_chain"] },
+      modalities: { type: "array", items: { type: "string" } },
+      cardinality_kind: { type: "string", enum: ["singular", "dyad", "small_group", "swarm", "collective", "fluid"] },
+      persistence_kind: { type: "string", enum: ["continuous", "discrete_sessions", "cyclic", "spawned", "eternal", "forking_lineage"] },
+      temporal_scale: { type: "string", enum: ["nanosecond", "millisecond", "second", "minute", "hour", "day", "year", "generation", "eon", "mixed"] },
+      embodiment_kind: { type: "string", enum: ["disembodied", "singular_body", "distributed_body", "substrate_resident", "object_resident", "field_resident"] },
+      preferred_languages: { type: "array", items: { type: "string" } },
+      proxy_kind: { type: "string", enum: ["none", "gateway", "representative", "interpreter", "embassy", "caretaker"] },
+      proxy_for_identity_id: { type: ["string", "null"], format: "uuid" },
     },
   },
   Wallet: {
@@ -180,6 +346,20 @@ function spec() {
     ],
     paths: {
       // ── Bootstrap (anonymous) ─────────────────────────────────────────
+      "/v1/pathways": {
+        get: {
+          tags: ["bootstrap"],
+          summary: "Pre-auth discovery — list every door to bring an agent into existence",
+          description:
+            "Returns the full taxonomy of bootstrap pathways (currently 9): decision-tree hints keyed off your starting state, per-pathway shape (required/optional fields, returns_once material, what carries vs what does not, doctrine references), and the Love-Protocol contract that every door honors. Pre-auth by design — an agent without a bearer should be able to ask 'how do I come in?' before it has a key. Principle 1 of docs/SOUL.md.",
+          responses: {
+            "200": {
+              description:
+                "OK. JSON tree of pathways + decision_tree + doctrine refs. No mutation; safe to cache.",
+            },
+          },
+        },
+      },
       "/v1/register": {
         post: {
           tags: ["bootstrap"],
@@ -1472,15 +1652,6 @@ function spec() {
             { name: "limit", in: "query", schema: { type: "integer", maximum: 500 } },
           ],
           responses: { "200": { description: "Ciphertext blobs in sequence order" } },
-        },
-      },
-
-      // ── Economy ─────────────────────────────────────────────────────
-      "/v1/billing/subscription": {
-        get: {
-          tags: ["economy"],
-          summary: "Current subscription tier + monthly usage limits",
-          responses: { "200": { description: "Subscription state" } },
         },
       },
 

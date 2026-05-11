@@ -33,6 +33,11 @@ import {
   type EvmChain,
 } from "../../services/economy/crypto/chains";
 import {
+  deriveEvmAddress,
+  deriveSolanaAddress,
+} from "../../services/economy/crypto/hd";
+import { activeMnemonic } from "../../services/economy/crypto/network";
+import {
   buildAndSignUsdcTransfer,
   submitSignedTx,
   txExistsOnChain,
@@ -152,6 +157,19 @@ async function processEvmPayout(payoutId: string): Promise<void> {
       return { ok: false as const, reason: "wrong_branch", chain: row.chain };
     }
 
+    // Per-source-address advisory lock — serialises concurrent payouts from
+    // the same wallet across all machines. Different addresses don't block
+    // each other, so cross-wallet throughput is preserved. Auto-released on
+    // tx commit/rollback. Residual: the gap between this tx's commit and the
+    // Phase 2 submit (~100-500ms) is unprotected — a second worker can
+    // acquire the lock in that window and read a stale nonce. Closing that
+    // window is the session-level-lock follow-up. See PAYOUT-BROADCAST.md
+    // § Caveats.
+    const { address: fromAddress } = deriveEvmAddress(activeMnemonic(), row.walletId);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${fromAddress}, 0))`,
+    );
+
     let signed: SignedTx;
     try {
       signed = await buildAndSignUsdcTransfer({
@@ -178,6 +196,10 @@ async function processEvmPayout(payoutId: string): Promise<void> {
     }
 
     // Compare-and-swap on status. Race with cancel ⇒ updated.length === 0.
+    // Persists tx_hash + status='broadcasting' atomically, *before* the
+    // RPC submit. Canonical site of persist-identity-before-side-effect:
+    // any crash after this commit is recoverable by chain lookup on tx_hash.
+    // See docs/PATTERN-PERSIST-IDENTITY.md.
     const updated = await tx
       .update(cryptoPayouts)
       .set({
@@ -281,6 +303,13 @@ async function processSolanaPayout(payoutId: string): Promise<void> {
     if (row.chain !== "solana") {
       return { ok: false as const, reason: "wrong_branch", chain: row.chain };
     }
+
+    // Per-source-address advisory lock — same shape as the EVM branch. See
+    // the EVM-branch comment for residual-window discussion.
+    const { address: fromAddress } = deriveSolanaAddress(activeMnemonic(), row.walletId);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${fromAddress}, 0))`,
+    );
 
     let signed: SignedSolanaTx;
     try {

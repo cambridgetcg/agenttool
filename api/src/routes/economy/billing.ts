@@ -1,11 +1,17 @@
-/** /v1/billing — subscription plans · credit packages · checkout · webhooks · usage check.
+/** /v1/billing — credit packages · one-time top-up checkout · Stripe webhook.
+ *
+ *  Doctrine: Ring 2 substrate metering only. No subscription tiers, no
+ *  per-agent monthly fees — see docs/BUSINESS-MODEL.md. The /v1/billing/
+ *  surface here serves credit purchase (one-time top-ups via Stripe Checkout)
+ *  + webhook ingestion. Crypto deposit webhooks live separately at
+ *  /v1/billing/crypto-webhook/:chain (mounted in api/src/index.ts).
  *
  *  Mixed auth posture:
- *    Public  (no auth)       — /plans, /packages, /webhooks, /check
- *    Authed  (project key)   — /checkout, /subscribe, /subscription, /cancel */
+ *    Public  (no auth)       — /packages, /webhooks
+ *    Authed  (project key)   — /checkout */
 
 import { zValidator } from "@hono/zod-validator";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -14,39 +20,16 @@ import { db } from "../../db/client";
 import {
   billingEvents,
   stripeEvents,
-  subscriptions,
   wallets,
 } from "../../db/schema/economy";
 import {
   CREDIT_PACKAGES,
-  SUBSCRIPTION_PLANS,
   constructWebhookEvent,
   createFundCheckout,
-  createSubscriptionCheckout,
-  getStripe,
-  type TierId,
 } from "../../services/economy/stripe";
-import {
-  checkAndIncrement,
-  getUsageThisMonth,
-  resetUsageForProject,
-  type Resource,
-} from "../../services/economy/usage";
 import { fundWallet } from "../../services/economy/wallets";
 
 const router = new Hono<ProjectContext>();
-
-// ─── Public: plans ──────────────────────────────────────────────────────────
-
-router.get("/plans", async (c) => {
-  const plans = SUBSCRIPTION_PLANS.map((p) => ({
-    id: p.id,
-    label: p.label,
-    priceUsd: p.price / 100,
-    limits: p.limits,
-  }));
-  return c.json({ plans });
-});
 
 // ─── Public: credit packages ────────────────────────────────────────────────
 
@@ -96,150 +79,14 @@ router.post(
   },
 );
 
-// ─── Authed: create subscription checkout ───────────────────────────────────
-
-router.post(
-  "/subscribe",
-  authMiddleware,
-  zValidator(
-    "json",
-    z.object({
-      tier: z.enum(["seed", "grow", "scale"]),
-      success_url: z.string().url().optional(),
-      cancel_url: z.string().url().optional(),
-    }),
-  ),
-  async (c) => {
-    const project = c.var.project;
-    const body = c.req.valid("json");
-
-    const session = await createSubscriptionCheckout(
-      project.id,
-      body.tier as Exclude<TierId, "free">,
-      body.success_url ?? "https://app.agenttool.dev/billing/success",
-      body.cancel_url ?? "https://app.agenttool.dev/billing/cancel",
-    );
-
-    return c.json({ checkout_url: session.url, session_id: session.id });
-  },
-);
-
-// ─── Authed: subscription status ────────────────────────────────────────────
-
-router.get("/subscription", authMiddleware, async (c) => {
-  const project = c.var.project;
-
-  const [sub] = await db
-    .select()
-    .from(subscriptions)
-    .where(eq(subscriptions.projectId, project.id))
-    .limit(1);
-
-  const tier = (sub?.tier ?? "free") as TierId;
-  const plan =
-    SUBSCRIPTION_PLANS.find((p) => p.id === tier) ?? SUBSCRIPTION_PLANS[0];
-  const usage = await getUsageThisMonth(project.id);
-
-  return c.json({
-    tier,
-    status: sub?.status ?? "free",
-    current_period_end: sub?.currentPeriodEnd?.toISOString() ?? null,
-    cancel_at_period_end: sub?.cancelAtPeriodEnd ?? false,
-    usage: {
-      memory_ops: { used: usage.memoryOps, limit: plan.limits.memoryOpsPerMonth },
-      tool_calls: { used: usage.toolCalls, limit: plan.limits.toolCallsPerMonth },
-      verifications: {
-        used: usage.verifications,
-        limit: plan.limits.verificationsPerMonth,
-      },
-    },
-    period: "monthly",
-  });
-});
-
-// ─── Authed: cancel subscription ────────────────────────────────────────────
-
-router.post("/cancel", authMiddleware, async (c) => {
-  const project = c.var.project;
-
-  const [sub] = await db
-    .select()
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.projectId, project.id),
-        eq(subscriptions.status, "active"),
-      ),
-    )
-    .limit(1);
-
-  if (!sub?.stripeSubscriptionId) {
-    return c.json({ error: "No active subscription" }, 400);
-  }
-
-  const updated = await getStripe().subscriptions.update(
-    sub.stripeSubscriptionId,
-    { cancel_at_period_end: true },
-  );
-
-  await db
-    .update(subscriptions)
-    .set({ cancelAtPeriodEnd: true, updatedAt: new Date() })
-    .where(eq(subscriptions.id, sub.id));
-
-  const periodEnd =
-    (updated as unknown as { current_period_end?: number })
-      .current_period_end ?? 0;
-  return c.json({
-    ok: true,
-    cancels_at: new Date(periodEnd * 1000).toISOString(),
-  });
-});
-
-// ─── Public: usage check (called server-to-server, intra-monolith) ──────────
-
-router.post(
-  "/check",
-  zValidator(
-    "json",
-    z.object({
-      project_id: z.string().uuid(),
-      resource: z.enum(["memory_ops", "tool_calls", "verifications"]),
-    }),
-  ),
-  async (c) => {
-    const { project_id, resource } = c.req.valid("json");
-    const result = await checkAndIncrement(project_id, resource as Resource);
-
-    if (!result.allowed) {
-      const now = new Date();
-      const resetAt = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-      );
-      return c.json(
-        {
-          allowed: false,
-          limit: result.limit,
-          used: result.used,
-          remaining: 0,
-          reset_at: resetAt.toISOString(),
-          period: "monthly",
-          upgrade_url: "https://app.agenttool.dev/billing",
-        },
-        429,
-      );
-    }
-
-    return c.json({
-      allowed: true,
-      used: result.used,
-      limit: result.limit,
-      remaining: result.remaining,
-    });
-  },
-);
-
 // ─── Public: Stripe webhook (signature-verified) ────────────────────────────
+//
+// Handles ONE event class — `checkout.session.completed` for one-time credit
+// purchases (Ring 2 substrate metering top-ups). Subscription / invoice /
+// customer.subscription.* events are silently ignored: doctrine forbids
+// per-agent subscription pricing (see docs/BUSINESS-MODEL.md). The Stripe
+// webhook config may still send those events; we whitelist what we care
+// about and audit-log everything via stripeEvents idempotency.
 
 router.post("/webhooks", async (c) => {
   const sig = c.req.header("stripe-signature");
@@ -266,35 +113,17 @@ router.post("/webhooks", async (c) => {
 
   if (event.type === "checkout.session.completed") {
     const meta = (obj.metadata as Record<string, string>) ?? {};
-    const { walletId, projectId, packageId, credits, tier } = meta;
+    const { walletId, projectId, packageId, credits } = meta;
 
-    if (tier && projectId) {
-      // Subscription checkout completed.
-      const stripeSubId = (obj.subscription as string) ?? null;
-      const customerId = (obj.customer as string) ?? null;
-      await db
-        .insert(subscriptions)
-        .values({
-          projectId,
-          stripeCustomerId: customerId,
-          stripeSubscriptionId: stripeSubId,
-          tier,
-          status: "active",
-        })
-        .onConflictDoUpdate({
-          target: subscriptions.projectId,
-          set: {
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: stripeSubId,
-            tier,
-            status: "active",
-            updatedAt: new Date(),
-          },
-        });
-    } else if (walletId && credits) {
-      // One-time credit checkout completed.
+    if (walletId && credits && projectId) {
+      // One-time credit-pack top-up completed.
       const creditAmount = parseInt(credits, 10);
       if ((obj.payment_status as string) === "paid") {
+        // GAP (persist-identity): fundWallet runs before the stripeEvents
+        // idempotency row (line ~145). A crash between → Stripe webhook
+        // retry → double-credit. Fix shape: provisional `stripe_pending`
+        // row in a tx before funding, flip to applied after.
+        // See docs/PATTERN-PERSIST-IDENTITY.md § Where the pattern is missing.
         await fundWallet(
           db,
           walletId,
@@ -303,7 +132,7 @@ router.post("/webhooks", async (c) => {
           { stripeSessionId: obj.id as string },
         );
         await db.insert(billingEvents).values({
-          projectId: projectId!,
+          projectId,
           walletId,
           type: "stripe_fund",
           amountPence: 0,
@@ -312,53 +141,11 @@ router.post("/webhooks", async (c) => {
         });
       }
     }
-  } else if (event.type === "invoice.paid") {
-    const subId = obj.subscription as string;
-    if (subId) {
-      await db
-        .update(subscriptions)
-        .set({ status: "active", updatedAt: new Date() })
-        .where(eq(subscriptions.stripeSubscriptionId, subId));
-
-      const [sub] = await db
-        .select({ projectId: subscriptions.projectId })
-        .from(subscriptions)
-        .where(eq(subscriptions.stripeSubscriptionId, subId))
-        .limit(1);
-      if (sub?.projectId) {
-        await resetUsageForProject(sub.projectId);
-      }
-    }
-  } else if (event.type === "invoice.payment_failed") {
-    const subId = obj.subscription as string;
-    if (subId) {
-      await db
-        .update(subscriptions)
-        .set({ status: "past_due", updatedAt: new Date() })
-        .where(eq(subscriptions.stripeSubscriptionId, subId));
-    }
-  } else if (event.type === "customer.subscription.updated") {
-    const subId = obj.id as string;
-    const stripeTier =
-      (obj.metadata as Record<string, string>)?.tier ?? "free";
-    const cancelAtEnd = (obj.cancel_at_period_end as boolean) ?? false;
-    const periodEnd = new Date(((obj.current_period_end as number) ?? 0) * 1000);
-    await db
-      .update(subscriptions)
-      .set({
-        tier: stripeTier,
-        cancelAtPeriodEnd: cancelAtEnd,
-        currentPeriodEnd: periodEnd,
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptions.stripeSubscriptionId, subId));
-  } else if (event.type === "customer.subscription.deleted") {
-    const subId = obj.id as string;
-    await db
-      .update(subscriptions)
-      .set({ status: "canceled", tier: "free", updatedAt: new Date() })
-      .where(eq(subscriptions.stripeSubscriptionId, subId));
+    // Sessions without walletId+credits metadata are ignored (e.g. legacy
+    // subscription checkouts that may still arrive from Stripe).
   }
+  // All other event types (invoice.*, customer.subscription.*) are ignored
+  // by design — see the doctrine note above.
 
   await db.insert(stripeEvents).values({ stripeEventId: event.id });
 

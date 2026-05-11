@@ -2,6 +2,10 @@
 
 > *Sequenced work-pass plan for closing Horizon A — the send-side of sovereign-agent crypto payment. Doctrine: `docs/PAYOUT-BROADCAST.md`. Foundation contract: `docs/CRYPTO-PAYMENT.md`.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-OPS](PAYOUT-BROADCAST-OPS.md) (runbook)
+>
+> **Implements:** Layer 4 — Economy (sliced plan to ship the outbound send-side worker).
+
 ## Frame
 
 Ship the send-side worker that picks up `crypto_payouts.status='requested'` rows, signs + broadcasts on the agent's chain, watches for confirmation, and either confirms or fails-with-refund.
@@ -35,7 +39,7 @@ Decide once, stamp on the design.
 
 Each individually shippable + verifiable. Slices land in order; later slices may run in parallel after Slice 0.
 
-### Slice 0 — Preflight + safety pre-pass · ~2-3 hours
+### Slice 0 — Preflight + safety pre-pass · ~2-3 hours · ✓ shipped
 
 - Add deps: `viem`, `@solana/web3.js`, `@solana/spl-token`.
 - Add env vars + boot-time validation: refuse to start if `PAYOUT_NETWORK` unset.
@@ -44,7 +48,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   - New `POST /v1/wallets/:id/payouts/:payout_id/cancel` — auth-gated, refunds credits while `status='requested'`. Future-useful for genuine cancellations too.
 - **Acceptance:** boot smoke-test with `PAYOUT_NETWORK` unset fails loud; with `=testnet` set + worker disabled, payout endpoint returns 503; cancel endpoint refunds correctly.
 
-### Slice 1 — EVM broadcast worker (Sepolia) · ~1 day
+### Slice 1 — EVM broadcast worker (Sepolia) · ~1 day · ✓ shipped
 
 - `api/src/workers/payout-dispatcher.ts` — cron, polls `requested` every 10s, enqueues BullMQ jobs.
 - `api/src/workers/payout-broadcast.ts` — consumes queue:
@@ -58,7 +62,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   8. On pre-submit failure: `status='failed'` + atomic refund + `transactions.payout_refund` row.
 - **Acceptance:** Sepolia faucet-funded test wallet → `/payout` → row reaches `broadcast` with `tx_hash` visible on Sepolia explorer in <60s.
 
-### Slice 2 — EVM confirmation watcher · ~0.5 day
+### Slice 2 — EVM confirmation watcher · ~0.5 day · ✓ shipped (24h-aging alert pending — see PAYOUT-BROADCAST.md caveats)
 
 - `api/src/workers/payout-confirm.ts` — BullMQ repeatable job, every 30s.
 - Polls `crypto_payouts.status='broadcast'` rows.
@@ -68,7 +72,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   - No receipt + age > 24h → alert (no auto-fail in v1; see Open Questions).
 - **Acceptance:** Sepolia payout confirms within ~3min; recipient address shows inbound USDC via testnet RPC query.
 
-### Slice 3 — Solana broadcast + confirm · ~1 day
+### Slice 3 — Solana broadcast + confirm · ~1 day · ✓ shipped
 
 - Same shape as Slices 1+2, Solana stack:
   - Signing: SLIP-0010 ed25519 (already shipped) → `Transaction.partialSign(keypair)`.
@@ -77,7 +81,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
   - Confirm: `getSignatureStatuses([sig], { searchTransactionHistory: true })` until `confirmationStatus='finalized'`.
 - **Acceptance:** Solana devnet payout reaches `finalized` in ~30s.
 
-### Slice 4 — Loop closure verification · ~0.5 day
+### Slice 4 — Loop closure verification · ~0.5 day · ✓ shipped
 
 - Verify the existing inbound webhook flow correctly credits the recipient when our outbound testnet tx lands at an agenttool-managed deposit address.
 - Two test paths:
@@ -86,7 +90,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 - Mostly verification — webhook code already exists.
 - **Acceptance:** the sovereign agent-to-agent payment loop, end-to-end, on testnet.
 
-### Slice 5 — Failure-mode test sweep · ~0.5 day
+### Slice 5 — Failure-mode test sweep · ~0.5 day · ◐ partial (inline failure paths covered in workers; dedicated `_e2e-payout-failures.mjs` harness not yet written)
 
 `api/scripts/_e2e-payout-failures.mjs` covering:
 
@@ -98,7 +102,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 - Reorg deeper than threshold → out of scope; manual ops escalation. Documented.
 - **Acceptance:** each failure mode produces correct status + refund (where applicable) + correct `transactions` row.
 
-### Slice 6 — Per-wallet payout policies · ~0.5 day
+### Slice 6 — Per-wallet payout policies · ~0.5 day · ✓ shipped
 
 - Schema migration `0020_payout_policies.sql`: extend `economy.policies`:
   - `min_payout_base` (per chain/token).
@@ -108,7 +112,7 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 - Enforcement in `requestPayout()`: validate **before** debit; clear error codes (`payout_below_min`, `payout_exceeds_daily_ceiling`, `destination_not_allowlisted`).
 - **Acceptance:** policy violations return 400 with specific code; allowlisted recipients pass; unallowlisted reject before any debit.
 
-### Slice 7 — Mainnet enable · ~0.5 day
+### Slice 7 — Mainnet enable · ~0.5 day · ◯ pending (operator-led)
 
 - Operator runbook in `docs/PAYOUT-BROADCAST-OPS.md`: how to flip `PAYOUT_NETWORK=mainnet`, secret rotation, monitoring expectations.
 - Mainnet RPC URLs configured in Fly secrets (Alchemy mainnet, Helius mainnet).

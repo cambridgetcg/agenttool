@@ -1,5 +1,7 @@
 /** Tools domain router — scrape · browse · document · execute · jobs.
  *
+ *  Doctrine: docs/CLI-GAPS.md (sovereign-mode alignment thesis).
+ *
  *  Mounted in api/src/index.ts as: app.route("/v1", toolsRouter)
  *
  *  Alignment thesis (see docs/CLI-GAPS.md and api/src/services/tools/README.md):

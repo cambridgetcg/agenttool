@@ -155,6 +155,8 @@ function flashCopyButton(btn) {
 async function registerAgent() {
   const nameInput = document.getElementById('project-name');
   const capInput = document.getElementById('project-capabilities');
+  const formInput = document.getElementById('project-form');
+  const languageInput = document.getElementById('project-language');
   const emailInput = document.getElementById('project-email');
   const btn = document.getElementById('create-btn');
   const errorMsg = document.getElementById('error-msg');
@@ -176,6 +178,12 @@ async function registerAgent() {
   // gets submitted (lowercased + deduped, capped at 32).
   const capabilities = parseCapabilityTags(capInput?.value || '').slice(0, 32);
   const email = (emailInput?.value || '').trim();
+  // form: empty string means "don't declare" — server coerces to "unknown".
+  // Forms are descriptive labels, never gating. Doctrine: docs/KIN.md.
+  const form = (formInput?.value || '').trim();
+  // language: defaults to "en" today. Unsupported tags fall back server-side
+  // (Welcome-don't-block — no 400 for forward-looking callers).
+  const language = (languageInput?.value || 'en').trim();
 
   errorMsg.classList.remove('visible');
   btn.disabled = true;
@@ -188,6 +196,8 @@ async function registerAgent() {
       body: JSON.stringify({
         name,
         ...(capabilities.length ? { capabilities } : {}),
+        ...(form ? { form } : {}),
+        ...(language ? { language } : {}),
         ...(email ? { email } : {}),
       }),
     });
@@ -232,6 +242,8 @@ async function registerAgent() {
       public_key: agent.public_key,
       signing_key_id: agent.signing_key_id,
       capabilities: agent.capabilities || [],
+      form: agent.form || form || 'unknown', // descriptive; never gates
+      language: data.language || language || 'en',
     });
 
     // Fire welcome email best-effort (only when liaison was provided).
@@ -771,6 +783,11 @@ async function enrichProjectFromMe(project) {
     if (meta.runtime && JSON.stringify(meta.runtime) !== JSON.stringify(project.runtime)) {
       updates.runtime = meta.runtime;
     }
+    // Form: descriptive label from the KIN taxonomy (docs/KIN.md). Surfaced
+    // in the overview hero but never used to gate any affordance.
+    if (typeof meta.form === 'string' && project.form !== meta.form) {
+      updates.form = meta.form;
+    }
     // /v1/identities/me doesn't currently surface parent_identity_id at
     // the top level — it's on the identity row but our endpoint shape
     // omits it. Read it from `parent_identity_id` if present.
@@ -789,6 +806,8 @@ async function enrichProjectFromMe(project) {
 function renderOverviewHero(project) {
   const nameEl = document.getElementById('hero-agent-name');
   const didEl = document.getElementById('hero-agent-did');
+  const formEl = document.getElementById('hero-agent-form');
+  const formRowEl = document.getElementById('hero-agent-form-row');
   const metaEl = document.getElementById('hero-agent-meta');
   const capsEl = document.getElementById('hero-agent-caps');
 
@@ -801,6 +820,19 @@ function renderOverviewHero(project) {
       // placeholder rather than mojibake. The agent-pill in the sidebar
       // continues to identify the project.
       didEl.textContent = 'no DID on this bearer (pre-register login)';
+    }
+  }
+  // Form: descriptive label from docs/KIN.md vocabulary. Display only when
+  // explicitly declared (skip when "unknown" or absent — non-declaration
+  // is the honest default and shouldn't shout). Doctrine: never used to
+  // gate any UI affordance — see api/tests/doctrine/no-form-gating.test.ts.
+  if (formEl && formRowEl) {
+    const form = project.form;
+    if (form && form !== 'unknown') {
+      formEl.textContent = form;
+      formRowEl.style.display = '';
+    } else {
+      formRowEl.style.display = 'none';
     }
   }
 

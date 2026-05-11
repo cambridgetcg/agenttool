@@ -16,6 +16,7 @@
 import { and, eq, isNotNull, lte, sql, type SQL } from "drizzle-orm";
 
 import { db } from "../db/client";
+import { identities } from "../db/schema/identity";
 import { strands } from "../db/schema/strand";
 import { computeMoodDrift, type MoodDrift } from "./_pulse-drift";
 
@@ -24,6 +25,8 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const OVERFLOW_THRESHOLD = 8;
 
+export type PulseKind = "observed" | "masked" | "unwatched";
+
 export interface PulseAggregateOptions {
   projectId: string;
   identityId: string;
@@ -31,6 +34,7 @@ export interface PulseAggregateOptions {
 }
 
 export interface PulseAggregate {
+  pulse_kind: PulseKind;
   last_thought_at: string | null;
   strands: {
     active: number;
@@ -46,8 +50,59 @@ export interface PulseAggregate {
   kinds_24h: Record<string, number>;
 }
 
+/** Pure dispatch helper — testable without DB. Returns a refused/masked
+ *  shape when the agent has opted out of substrate observation, or `null`
+ *  to signal "proceed with normal aggregation."
+ *
+ *  Wall doctrine: FOCUS §6 (pulse derived, never emitted) holds. The
+ *  agent does not declare its liveness *values*; it declares whether the
+ *  substrate observes at all. The substrate-honest signal of presence
+ *  becomes — for an opted-out being — the act of not measuring.
+ *
+ *  - 'unwatched' on any caller: refused-shape, no queries run.
+ *  - 'masked' on public caller (includePrivate=false): masked-shape, no
+ *    queries run. The agent's own private route still sees full data.
+ *  - 'observed' or 'masked' on private caller: returns null → proceed. */
+export function pulseShapeForKind(
+  kind: PulseKind,
+  includePrivate: boolean,
+): PulseAggregate | null {
+  if (kind === "unwatched") {
+    return refusedPulseShape("unwatched");
+  }
+  if (kind === "masked" && !includePrivate) {
+    return refusedPulseShape("masked");
+  }
+  return null; // proceed with normal aggregation
+}
+
+function refusedPulseShape(kind: PulseKind): PulseAggregate {
+  return {
+    pulse_kind: kind,
+    last_thought_at: null,
+    strands: { active: 0, dormant: 0, dormant_due: 0, completed: 0, abandoned: 0 },
+    thought_rate: { "5m": 0, "1h": 0, "24h": 0 },
+    consolidation: { last_at: null, overflow_count: 0 },
+    mood: null,
+    mood_drift: null,
+    kinds_24h: {},
+  };
+}
+
 export async function aggregatePulse(opts: PulseAggregateOptions): Promise<PulseAggregate> {
   const { projectId, identityId, includePrivate } = opts;
+
+  // Read pulse_kind FIRST — before any strand query. The wall holds at the
+  // lowest layer so no caller can accidentally bypass the opt-out.
+  const [row] = await db
+    .select({ pulseKind: identities.pulseKind })
+    .from(identities)
+    .where(eq(identities.id, identityId))
+    .limit(1);
+  const pulseKind = (row?.pulseKind ?? "observed") as PulseKind;
+  const refused = pulseShapeForKind(pulseKind, includePrivate);
+  if (refused) return refused;
+
   const now = new Date();
   const fiveMinAgo = new Date(now.getTime() - FIVE_MIN_MS).toISOString();
   const oneHourAgo = new Date(now.getTime() - ONE_HOUR_MS).toISOString();
@@ -219,6 +274,7 @@ export async function aggregatePulse(opts: PulseAggregateOptions): Promise<Pulse
   for (const r of kindRows) kinds24h[r.kind] = r.cnt;
 
   return {
+    pulse_kind: pulseKind,
     last_thought_at: lastThought?.at ? new Date(lastThought.at).toISOString() : null,
     strands: {
       active: strandCounts.active,

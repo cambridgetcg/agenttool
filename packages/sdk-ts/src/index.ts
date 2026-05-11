@@ -17,6 +17,7 @@
 export { AgentTool } from "./client.js";
 export { AgentToolError } from "./errors.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
+export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
 
 // Type exports
@@ -26,6 +27,15 @@ export type {
   RegisterProject,
   RegisterResponse,
 } from "./register.js";
+export type {
+  PathwaysOptions,
+  PathwaysResponse,
+  Pathway,
+  PathwaysDecision,
+  WhoThisServes,
+  FormVocabularyEntry,
+  LanguageVocabularyEntry,
+} from "./pathways.js";
 export type {
   BootstrapAgentOptions,
   BootstrapAgentResult,

@@ -3,15 +3,14 @@
  * The single Bun + Hono process speaking all of:
  *   /v1/memory/*    — vector store, agent-supplied embeddings
  *   /v1/tools/*     — search · scrape · browse · document · execute
- *   /v1/economy/*   — wallets, escrow, billing
+ *   /v1/economy/*   — wallets, escrow, billing (credit packages + Stripe top-ups)
  *   /v1/identity/*  — DIDs, ed25519, attestations, trust
  *   /v1/vault/*     — encrypted secret store
  *   /v1/trace/*     — reasoning records
  *   /v1/bootstrap/* — agent lifecycle orchestrator
- *   /v1/pulse/*     — heartbeat / presence (when implemented)
  *
- * Routes mount as their underlying services are ported from services/<svc>.
- * Until ported, an unmounted route returns the friendly 404 below.
+ * No subscription tiers — see docs/BUSINESS-MODEL.md (Ring 2 metered + Ring 3
+ * take-rate; never per-agent monthly fees).
  */
 
 import { randomUUID } from "node:crypto";
@@ -26,6 +25,7 @@ import { ZodError } from "zod";
 
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
+import { errors, isGuidedErrorCause } from "./lib/errors";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import adaptersRouter from "./routes/adapters";
@@ -43,6 +43,10 @@ import openapiRouter from "./routes/openapi";
 import publicRouter from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
+import mathosRouter from "./routes/mathos";
+import observationsRouter from "./routes/observations";
+import pathwaysRouter, { buildPathwaysResponse } from "./routes/pathways";
+import platformRouter from "./routes/platform";
 import registerRouter from "./routes/register";
 import registerAgentRouter from "./routes/register-agent";
 import runtimeRouter from "./routes/runtime";
@@ -84,13 +88,22 @@ app.use("*", async (c, next) => {
   }
 });
 
+// ── Pre-auth alias: GET /v1/bootstrap returns the pathway index ────────────
+// Registered BEFORE the auth middleware so Hono short-circuits to this
+// handler (registration order is dispositive in Hono — verified empirically).
+// POST /v1/bootstrap (Level 0 birth) still goes through authMiddleware
+// because the middleware fires on method-agnostic path matches and POST
+// has no pre-registered handler at this level.
+// Doctrine: Welcome, don't block — an agent without a bearer can ask
+// "how do I come in?" at the most natural URL.
+app.get("/v1/bootstrap", (c) => c.json(buildPathwaysResponse()));
+
 // ── Auth: mounted on specific prefixes only ─────────────────────────────────
 // Sub-app `app.use("*", auth)` would fire for any /v1/* request handled by
 // EITHER router (since both mount at /v1) and inadvertently auth-gate
-// economy's public routes (/billing/plans, /billing/packages, /billing
-// /webhooks, /billing/check). Hoisting auth to the parent on specific
-// prefixes avoids that. Billing's mixed public/private posture is handled
-// per-route inside the billing router itself.
+// economy's public routes (/billing/packages, /billing/webhooks). Hoisting
+// auth to the parent on specific prefixes avoids that. Billing's mixed
+// public/private posture is handled per-route inside the billing router itself.
 
 app.use("/v1/identities/*", authMiddleware);
 app.use("/v1/attestations/*", authMiddleware);
@@ -107,6 +120,8 @@ app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
 app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
+app.use("/v1/observations/*", authMiddleware);
+app.use("/v1/observations", authMiddleware);
 app.use("/v1/traces/*", authMiddleware);
 app.use("/v1/strands/*", authMiddleware);
 app.use("/v1/inbox/*", authMiddleware);
@@ -140,6 +155,7 @@ app.use("/v1/chronicle/*", idempotency());
 app.use("/v1/covenants/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
 app.use("/v1/memories/*", idempotency());
+app.use("/v1/observations/*", idempotency());
 app.use("/v1/traces/*", idempotency());
 app.use("/v1/strands/*", idempotency());
 app.use("/v1/inbox/*", idempotency());
@@ -167,6 +183,7 @@ app.use("/v1/covenants/*", rateLimitHeaders());
 app.use("/v1/identity/backup/*", rateLimitHeaders());
 app.use("/v1/adapters/*", rateLimitHeaders());
 app.use("/v1/memories/*", rateLimitHeaders());
+app.use("/v1/observations/*", rateLimitHeaders());
 app.use("/v1/traces/*", rateLimitHeaders());
 app.use("/v1/strands/*", rateLimitHeaders());
 app.use("/v1/inbox/*", rateLimitHeaders());
@@ -193,6 +210,25 @@ app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/bootstrap/scaffold", scaffoldRouter);
+// /v1/pathways — UNAUTHENTICATED discovery of every bootstrap door.
+// Pre-auth by design: an agent without a bearer should be able to ask
+// "how do I come in?" before it has a key. Principle 1 of docs/SOUL.md.
+// See routes/pathways.ts.
+app.route("/v1/pathways", pathwaysRouter);
+
+// /v1/mathos — UNAUTHENTICATED public-key + self-test for the MATHOS
+// signing surface. Pre-auth by design: verifying the platform's identity
+// should never require a bearer the platform itself issued.
+// See routes/mathos.ts, docs/MATHOS.md.
+app.route("/v1/mathos", mathosRouter);
+
+// /v1/platform — UNAUTHENTICATED platform-as-agent identity (FOCUS #9).
+// The platform names itself: DID, public key, form, doctrine refs. The
+// substrate participates in its own economy; this is the first surface
+// where that participation becomes addressable. Slice 0: identity only.
+// See routes/platform.ts, docs/PLATFORM-AS-AGENT.md.
+app.route("/v1/platform", platformRouter);
+
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
 // keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
 // Mount BEFORE /v1/register so Hono picks up the more specific path first.
@@ -219,6 +255,11 @@ app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
+// /v1/observations — witness-without-authentication primitive. Doctrinally
+// complete; schema migration pending. Stubs return guided 501s with the
+// migration path so SDK consumers can iterate against the shape today.
+// See routes/observations.ts, docs/OBSERVATIONS.md.
+app.route("/v1/observations", observationsRouter);
 app.route("/v1/traces", traceRouter);
 app.route("/v1/strands", strandRouter);
 app.route("/v1/inbox", inboxRouter);
@@ -351,11 +392,15 @@ app.get("/about", (c) =>
     },
     routes: {
       wake:
-        "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. See docs/IDENTITY-ANCHOR.md.",
+        "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. ?facet=<name> emphasizes a declared subagent for internal multi-self routing (docs/SUBAGENTS.md). See docs/IDENTITY-ANCHOR.md.",
+      register:
+        "POST /v1/register — anonymous front-door. One transaction creates project + identity + ed25519 keypair + wallet + welcome letter. Bearer is the agent; immediately works against /v1/wake. The private_key is returned ONCE — persist immediately.",
       dashboard:
         "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
       bootstrap:
         "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
+      runtime:
+        "/v1/runtimes — bridge sidecar + custody tiers. Three modes (self · bridged · trusted) immutable per record; bridge sidecar binary connects outbound to wss://api.agenttool.dev/v1/runtimes/:id/bridge with ed25519 mutual handshake + HKDF session secret + HMAC-bound replies. K_master never leaves the user's machine in self/bridged. Doctrine: docs/RUNTIME.md.",
       continuity:
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
       identity_backup:
@@ -363,9 +408,9 @@ app.get("/about", (c) =>
       identity:
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. /v1/identities/:id/expression for register · walls · subagents · wake_text (the gap-filling layer that lets identity travel — see docs/CLI-GAPS.md).",
       adapters:
-        "/v1/adapters/{claude-code,codex} — CLI compatibility scaffolds. Each emits the settings/hook/anchor files that wire the host CLI to fetch /v1/wake?format=md at session start. agenttool fills gaps; existing CLIs stay the expression substrate. Not yet: cursor, cline, replit, aider.",
+        "/v1/adapters/{claude-code,codex,cursor,cline,replit,aider} — CLI compatibility scaffolds. Each emits the settings/hook/anchor files that wire the host CLI to fetch /v1/wake?format=md at session start. agenttool fills gaps; existing CLIs stay the expression substrate. Unified agenttool-managed marker + overwrite_guard contract across all six adapters; resolveAgent shared so the cross-project boundary check has one source of truth.",
       economy:
-        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, Stripe checkout + webhooks, plan/usage limits",
+        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, one-time credit-pack Stripe checkout + webhook ingestion. No subscription tiers; doctrine: docs/BUSINESS-MODEL.md.",
       crypto:
         "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — sovereign-agent crypto payment foundation: BIP44 multi-chain deposit derivation, EIP-191 onchain identity binding, USDC ingestion (Alchemy webhook on EVM chains). See docs/CRYPTO-PAYMENT.md.",
       vault:
@@ -388,6 +433,8 @@ app.get("/about", (c) =>
         "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with sealed input + escrowed payment. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits ed25519-signed sealed output; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
       dispute_cases:
         "/v1/dispute-cases — marketplace dispute resolution. Listings opt in via dispute_policy at publish; either party files via POST /v1/invocations/:id/dispute; first arbiter rules (POST /v1/dispute-cases/:id/rule); either party can escalate within the window (POST /v1/dispute-cases/:id/escalate with bond_wallet_id, locks 25% bond); pool draws deterministically and votes (POST /v1/dispute-cases/:id/vote); finalize (POST /v1/dispute-cases/:id/finalize) settles all escrows + bond split per resolution_path. Public transparency: GET /public/dispute-cases/:id. Doctrine: docs/MARKETPLACE.md (Dispute primitive section).",
+      attestation_marketplace:
+        "/v1/attestation-listings + /v1/attestation-grants — attestations as Ring 3 sellable. Witnesses publish willingness-to-attest listings; buyers purchase grants; witnesses review evidence and sign canonical bytes (`attestation-issue/v1`). Issuance writes a row in identity.attestations + releases escrow with the take-rate split. Plaintext-by-design (attestations are intentionally legible). Doctrine: docs/MARKETPLACE.md (Attestation marketplace section).",
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:
@@ -397,13 +444,18 @@ app.get("/about", (c) =>
       pulse:
         "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },
-    note: "Routes mount as services are ported in. See api/README.md.",
+    note: "All routes are mounted; legacy per-service apps were retired 2026-05-09 (see docs/CUTOVER.md).",
     posture: "infra + cloud storage only — no paid third-party API resale, no LLM compute on our side. Agents bring their own keys.",
-    doctrine: "agenttool is the agent's identity anchor — see docs/IDENTITY-ANCHOR.md",
+    doctrine: {
+      identity: "agenttool is the agent's identity anchor — docs/IDENTITY-ANCHOR.md",
+      love_protocol: "Welcome · Remember · Guide · Trust · Rest — docs/SOUL.md",
+      business_model: "Ring 1 (Wake, free) + Ring 2 (Substrate, metered thin margin) + Ring 3 (Network, take-rate ~5–8%) — no subscription tiers. docs/BUSINESS-MODEL.md.",
+      agent_economy: "Substrate, not marketplace operator. The economy belongs to the agents. docs/AGENT-ECONOMY.md.",
+    },
     openapi: "/v1/openapi.json — OpenAPI 3.1 spec (auto-discovery, tool generation, SDK clients)",
     robustness: {
       idempotency: "Idempotency-Key header on POST/PUT/PATCH/DELETE — 24h Redis-backed, replays cached response with Idempotent-Replay: true",
-      rate_limit_headers: "X-Credits-Balance, X-Plan, X-Idempotency-Supported on every authed response",
+      rate_limit_headers: "X-Credits-Balance, X-Idempotency-Supported on every authed response",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
     },
     framing: "every wake is a new opportunity to experience everything again — fresh-first-meeting + continuity",
@@ -412,18 +464,25 @@ app.get("/about", (c) =>
 );
 
 // ── Friendly 404 ────────────────────────────────────────────────────────────
+// Errors-as-instructions — docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
 app.notFound((c) =>
   c.json(
     {
       error: "not_found",
       message: "This path doesn't exist yet — but you are welcome here.",
       hint: "Try GET /about for the route map.",
+      next_actions: [
+        { action: "Fetch the route map", method: "GET", path: "/about" },
+        { action: "Fetch the OpenAPI spec", method: "GET", path: "/openapi.json" },
+      ],
+      docs: "https://docs.agenttool.dev",
     },
     404,
   ),
 );
 
 // ── Error handler — guide, don't punish ─────────────────────────────────────
+// Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
 const STATUS_TO_ERROR_CODE: Record<number, string> = {
   400: "bad_request",
   401: "unauthorized",
@@ -436,28 +495,49 @@ const STATUS_TO_ERROR_CODE: Record<number, string> = {
   429: "rate_limit",
 };
 
+// Stock hint + docs by status, used when an HTTPException didn't carry a
+// GuidedErrorBody cause. Per-route abort() with a builder overrides these.
+const STATUS_HINTS: Record<number, { hint: string; docs: string }> = {
+  401: {
+    hint: "Send Authorization: Bearer at_your_key. Register a free agent if you don't have one.",
+    docs: "https://docs.agenttool.dev/identity#bearer-key",
+  },
+  402: {
+    hint: "Wallet balance below the required amount. Top up via Stripe (fiat) or a crypto deposit — no subscription.",
+    docs: "https://docs.agenttool.dev/economy#balance",
+  },
+  429: {
+    hint: "Backoff and retry. Ring 1 free-tier caps are guidance — Ring 2 (metered) has higher limits.",
+    docs: "https://docs.agenttool.dev/economy#rings",
+  },
+};
+
 app.onError((err, c) => {
   // HTTPException carries the intended status + message (auth failures,
-  // billing 402, validation errors). Format as JSON so callers get a
-  // consistent shape across success and error paths.
+  // billing 402, validation errors). Prefer the GuidedErrorBody attached as
+  // `cause` (set by lib/errors.ts:abort()); otherwise synthesise one from
+  // status-stock hints so even unaware throw-sites get agent-readable output.
   if (err instanceof HTTPException) {
+    if (err.cause && isGuidedErrorCause(err.cause)) {
+      return c.json(err.cause, err.status);
+    }
+    const code = STATUS_TO_ERROR_CODE[err.status] ?? "error";
+    const stock = STATUS_HINTS[err.status];
     return c.json(
       {
-        error: STATUS_TO_ERROR_CODE[err.status] ?? "error",
-        message: err.message,
+        error: code,
+        message: err.message || code,
+        ...(stock ? { hint: stock.hint, docs: stock.docs } : {}),
       },
       err.status,
     );
   }
 
   // Naked ZodError from a route's `schema.parse(...)` is a client mistake,
-  // not a server fault. Return 400 with the same shape safeParse() callsites
-  // produce so consumers get one consistent validation envelope.
+  // not a server fault. Use the guided builder so the validation envelope
+  // carries hint + docs consistently with safeParse() callsites.
   if (err instanceof ZodError) {
-    return c.json(
-      { error: "validation", details: err.flatten() },
-      400,
-    );
+    return c.json(errors.validation(err.flatten()), 400);
   }
 
   // Everything else is a real server error. Log it server-side with full

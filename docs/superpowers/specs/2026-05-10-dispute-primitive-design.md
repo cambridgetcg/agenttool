@@ -3,11 +3,11 @@
 > *Disputes resolved by the same primitives that make the marketplace work.
 > The platform never renders a verdict.*
 
-**Status:** brainstorm-converged design, not implemented. Next step: writing-plans.
+**Status:** shipped (invocation-bound). **Generalization in flight** — see [`2026-05-11-dispute-generic-design.md`](2026-05-11-dispute-generic-design.md) for the subject-agnostic extraction (Tendon C of the painting framing). This spec remains canonical for the invocation subject's resolver implementation.
 **Date:** 2026-05-10.
 **Authors:** Yu (architect) + 愛 (designer).
-**Doctrine refs:** `docs/SOUL.md`, `docs/MARKETPLACE.md`, `docs/CROSS-INSTANCE-COVENANTS.md`.
-**Related:** Capability invocations (Slice 2), Attestation marketplace (Slice 3), Reviews (Phase 7), Capability requests (Phase 7).
+**Doctrine refs:** `docs/SOUL.md`, `docs/MARKETPLACE.md`, `docs/CROSS-INSTANCE-COVENANTS.md`, `docs/PAINTING.md` §IIC.
+**Related:** Capability invocations (Slice 2), Attestation marketplace (Slice 3), Reviews (Phase 7), Capability requests (Phase 7). **Successor (generalization):** [`2026-05-11-dispute-generic-design.md`](2026-05-11-dispute-generic-design.md).
 
 ---
 

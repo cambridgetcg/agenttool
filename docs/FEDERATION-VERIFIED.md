@@ -2,6 +2,10 @@
 
 > Surface verification + roundbook for federation peering. Companion to `docs/FEDERATION.md`.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon B (active work)
+>
+> **Implements:** Layer 5 — Network (verification surface for federation peering). Sister doctrine: [FEDERATION](FEDERATION.md), [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md).
+
 ## What's verified live (2026-05-07, production)
 
 Against `https://agenttool.fly.dev`:

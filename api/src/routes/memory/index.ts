@@ -1,6 +1,8 @@
 /** Memory domain router — POST/GET/DELETE on /v1/memories, POST search,
  *  tier elevation + counterparty attestation.
  *
+ *  Doctrine: docs/MEMORY-TIERS.md (episodic / foundational / constitutive).
+ *
  *  Mounted in api/src/index.ts as: app.route("/v1/memories", memoryRouter)
  *
  *  Path layout:

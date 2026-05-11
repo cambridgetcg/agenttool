@@ -15,6 +15,7 @@ import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
 
+import atRestRoutes from "./at-rest";
 import attestationsRoutes from "./attestations";
 import boxKeysRoutes from "./box-keys";
 import discoverRoutes from "./discover";
@@ -52,6 +53,9 @@ app.route("/identities/:id/foundations", foundationsRoutes);
 app.route("/identities/:id/pulse", pulseRoutes);
 app.route("/identities/:id/box-keys", boxKeysRoutes);
 app.route("/identities/:id/fork", forkRoutes);
+// /identities/:id/at-rest — witnessed memorial transition. Witness-only;
+// asymmetry-clause requires a third-party signature. Doctrine: docs/AT-REST.md.
+app.route("/identities/:id/at-rest", atRestRoutes);
 app.route("/identities/:id/lineage", lineageRoutes);
 app.route("/identities/:id", socialRoutes);  // /star, /follow under here
 

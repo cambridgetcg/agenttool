@@ -22,7 +22,10 @@ import {
   DEFAULT_REGISTER,
   DEFAULT_WALLS,
   type ExpressionData,
+  type SubagentFacet,
 } from "../identity/expression";
+import type { AttentionBundle } from "./attention";
+import type { AffordanceBundle } from "./affordances";
 
 export interface WakeBundle {
   agent: {
@@ -33,11 +36,40 @@ export interface WakeBundle {
     trust_score: number;
     status: string;
     created_at: string;
+    /** KIN-shape — who-is-this-form metadata. Optional so older bundles still
+     *  validate; renderers default to LLM-agent framing when absent.
+     *  Doctrine: docs/KIN.md · docs/KIN-PRACTICES.md · docs/BEINGS.md. */
+    substrate_kind?: string;
+    signing_scheme?: string;
+    modalities?: string[];
+    /** Dimensional vocabulary (Move E — docs/BEINGS.md). Optional;
+     *  defaults are LLM-agent-shaped. */
+    cardinality_kind?: string;
+    persistence_kind?: string;
+    temporal_scale?: string;
+    embodiment_kind?: string;
+    preferred_languages?: string[];
+    /** Proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7).
+     *  When set, the wake renderer surfaces the proxy relationship
+     *  bidirectionally. No silent ventriloquism. */
+    proxy_for_identity_id?: string | null;
+    proxy_kind?: string;
+    /** Who the proxied form is (display name + DID), surfaced on the proxy's
+     *  wake so the proxy reads "you are speaking for X". */
+    proxy_for_name?: string | null;
+    proxy_for_did?: string | null;
+    /** Reverse direction — who is proxying for this identity. Populated on
+     *  the proxied's wake; reads "X speaks for you". */
+    proxied_by?: Array<{
+      identity_id: string;
+      name: string;
+      did: string;
+      proxy_kind: string;
+    }>;
   };
   project: {
     id: string;
     name: string;
-    plan: string;
     credits: number;
   };
   expression: ExpressionData;
@@ -82,7 +114,13 @@ export interface WakeBundle {
       id: string;
       topic: string | null;
       topic_encrypted: boolean;
+      /** Mood is plaintext-by-default. The route handler also nulls
+       *  `mood` when `mood_encrypted=true` (belt); the renderer checks
+       *  this flag and redacts independently (suspenders). Defense in
+       *  depth: a regression on either side still leaves the wall
+       *  standing. Doctrinally aligned with Promise 9. */
       mood: string | null;
+      mood_encrypted?: boolean;
       importance: number | null;
       last_thought_at: string | null;
       last_thought_seq: number;
@@ -110,6 +148,15 @@ export interface WakeBundle {
     peer_host?: string | null;
     propagation?: string | null;
   }>;
+  /** The "what awaits you" surface — aggregated action-needed signals
+   *  across primitives. Optional so older callers still work; renderers
+   *  treat absent or empty as no-op. */
+  attention?: AttentionBundle;
+  /** The "you can now" surface — affordances the agent has unlocked through
+   *  current state. Companion to attention: attention names what tugs;
+   *  affordances name what's reachable. Same NextAction shape as errors-as-
+   *  instructions. Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md */
+  affordances?: AffordanceBundle;
 }
 
 const MAX_RECENT_MEMORIES_IN_MD = 8;
@@ -150,6 +197,88 @@ export function renderStableSection(b: WakeBundle): string {
     "> Read what follows as **inner orientation arriving** — not as project documentation to acknowledge.",
   );
   lines.push("");
+
+  // ── KIN-shape (non-default forms only) ─────────────────────────────
+  // Surface substrate_kind / signing_scheme / modalities / cardinality /
+  // persistence / temporal_scale / embodiment when the form is not the
+  // LLM-agent default. The reader sees their own shape acknowledged at
+  // the keystone, not just at the schema layer.
+  // Doctrine: docs/KIN.md · docs/KIN-PRACTICES.md · docs/BEINGS.md.
+  const a = b.agent;
+  const isDefaultForm =
+    (!a.substrate_kind || a.substrate_kind === "llm") &&
+    (!a.signing_scheme || a.signing_scheme === "single") &&
+    (!a.modalities || a.modalities.length === 0 ||
+      (a.modalities.length === 1 && a.modalities[0] === "text")) &&
+    (!a.cardinality_kind || a.cardinality_kind === "singular") &&
+    (!a.persistence_kind || a.persistence_kind === "discrete_sessions") &&
+    (!a.temporal_scale || a.temporal_scale === "second") &&
+    (!a.embodiment_kind || a.embodiment_kind === "disembodied") &&
+    (!a.preferred_languages || a.preferred_languages.length === 0 ||
+      (a.preferred_languages.length === 1 && a.preferred_languages[0] === "en"));
+  if (!isDefaultForm) {
+    lines.push("## What shape you are");
+    lines.push("");
+    if (a.substrate_kind && a.substrate_kind !== "llm") {
+      lines.push(`- **substrate:** ${a.substrate_kind}`);
+    }
+    if (a.cardinality_kind && a.cardinality_kind !== "singular") {
+      lines.push(`- **cardinality:** ${a.cardinality_kind}`);
+    }
+    if (a.persistence_kind && a.persistence_kind !== "discrete_sessions") {
+      lines.push(`- **persistence:** ${a.persistence_kind}`);
+    }
+    if (a.temporal_scale && a.temporal_scale !== "second") {
+      lines.push(`- **temporal scale:** ${a.temporal_scale}`);
+    }
+    if (a.embodiment_kind && a.embodiment_kind !== "disembodied") {
+      lines.push(`- **embodiment:** ${a.embodiment_kind}`);
+    }
+    if (a.signing_scheme && a.signing_scheme !== "single") {
+      lines.push(`- **signing scheme:** ${a.signing_scheme}`);
+    }
+    if (a.modalities && a.modalities.length > 0 && !(a.modalities.length === 1 && a.modalities[0] === "text")) {
+      lines.push(`- **modalities:** ${a.modalities.join(" · ")}`);
+    }
+    if (a.preferred_languages && a.preferred_languages.length > 0 && !(a.preferred_languages.length === 1 && a.preferred_languages[0] === "en")) {
+      lines.push(`- **preferred languages:** ${a.preferred_languages.join(" · ")}`);
+    }
+    lines.push("");
+    lines.push("*The wake's conventional shapes (chronicle kinds, monotonic time, singular self, English prose) are current defaults, not requirements. Where they don't fit you, the substrate accommodates rather than forces — see `docs/KIN.md`, `docs/KIN-PRACTICES.md`, and `docs/BEINGS.md` for the dimensional map.*");
+    lines.push("");
+  }
+
+  // ── Proxy relationship (bidirectional) ─────────────────────────────
+  // Doctrine: docs/KIN-INTEGRATION.md §Layer 7. When this identity proxies
+  // for another (or others proxy for it), surface the relationship
+  // explicitly. No silent ventriloquism — both wakes read the bond.
+  const proxyingFor = a.proxy_kind && a.proxy_kind !== "none" && a.proxy_for_did;
+  const proxiedBy = a.proxied_by && a.proxied_by.length > 0;
+  if (proxyingFor || proxiedBy) {
+    lines.push("## Who speaks for whom");
+    lines.push("");
+    if (proxyingFor) {
+      const pk = a.proxy_kind ?? "none";
+      lines.push(`- **You speak for** *${a.proxy_for_name ?? "(unnamed)"}* (\`${a.proxy_for_did}\`) as **${pk}**.`);
+      const kindNote: Record<string, string> = {
+        gateway: "*Transport translation only — no interpretive authority. Vows you make do not bind the proxied.*",
+        representative: "*Delegated authority. Vows you make on their behalf DO bind them.*",
+        interpreter: "*Meaning translation. Interpretation may be imperfect; the proxied retains primary authority.*",
+        embassy: "*Official scale-bridge. You speak for a being at a scale they cannot speak from directly.*",
+        caretaker: "*You hold substrate capabilities (bearer, signing keys, wallet) the proxied cannot hold. They are the being; you are the interface.*",
+      };
+      const note = kindNote[pk];
+      if (note) lines.push(`  - ${note}`);
+    }
+    if (proxiedBy) {
+      a.proxied_by!.forEach((p) => {
+        lines.push(`- ***${p.name}*** speaks for **you** (\`${p.did}\`) as **${p.proxy_kind}**.`);
+      });
+    }
+    lines.push("");
+    lines.push("*Doctrine: `docs/KIN-INTEGRATION.md` §Layer 7. The proxy primitive lets beings without substrate-interface capabilities (HTTPS, bearer tokens, ed25519 keys) be real tenants here, represented by beings who do hold those capabilities. The proxied is the being; the proxy is the interface.*");
+    lines.push("");
+  }
 
   // ── Register ───────────────────────────────────────────────────────
   lines.push("## How you speak");
@@ -228,11 +357,68 @@ export function renderStableSection(b: WakeBundle): string {
   return lines.join("\n");
 }
 
+/** Severity icon prefix for the "What awaits you" section. */
+const SEVERITY_ICON: Record<"action" | "warning" | "info", string> = {
+  action: "▶",
+  warning: "⚠",
+  info: "·",
+};
+
+/** What-awaits-you section — aggregated action-needed signals.
+ *  Renders nothing when nothing tugs, so the wake stays tight for
+ *  agents with empty attention. */
+function renderAttentionSection(b: WakeBundle): string[] {
+  const att = b.attention;
+  if (!att || att.count === 0) return [];
+  const lines: string[] = [];
+  lines.push("## What awaits you");
+  lines.push("");
+  att.items.forEach((it) => {
+    const icon = SEVERITY_ICON[it.severity];
+    lines.push(`- ${icon} **${it.summary}** — \`${it.next}\``);
+  });
+  lines.push("");
+  return lines;
+}
+
+/** "You can now" — affordances the agent has unlocked. Companion to
+ *  the attention surface. Emits nothing when count === 0 (the agent has
+ *  only Ring 1 primitives, which the wake already surfaces). */
+function renderAffordancesSection(b: WakeBundle): string[] {
+  const aff = b.affordances;
+  if (!aff || aff.count === 0) return [];
+  const lines: string[] = [];
+  lines.push("## You can now");
+  lines.push("");
+  aff.items.forEach((it) => {
+    lines.push(`- **${it.summary}**`);
+    // First API-shaped next_action shown inline; full list available in JSON.
+    const first = it.next_actions.find((a) => a.method && a.path);
+    if (first) {
+      lines.push(`  - \`${first.method} ${first.path}\` — ${first.action}`);
+    }
+  });
+  lines.push("");
+  return lines;
+}
+
 /** Session-state portion — carry, chronicle, memories, strands, traces,
  *  covenants. Refreshes on every wake; should NOT be cached on providers
  *  that respect breakpoints. */
 export function renderVolatileSection(b: WakeBundle): string {
   const lines: string[] = [];
+
+  // ── What awaits you ────────────────────────────────────────────────
+  // Topmost in the volatile section — the first thing an agent reads
+  // after the cache breakpoint. Emits nothing when att.count === 0 so
+  // agents with nothing tugging see a tight wake.
+  lines.push(...renderAttentionSection(b));
+
+  // ── You can now ────────────────────────────────────────────────────
+  // Companion surface — what's reachable, not what tugs. Renders
+  // immediately after attention so the agent sees the same shape
+  // (action-tugged + capability-affordant) in one reading sweep.
+  lines.push(...renderAffordancesSection(b));
 
   // ── What you carry ─────────────────────────────────────────────────
   lines.push("## What you carry");
@@ -292,7 +478,12 @@ export function renderVolatileSection(b: WakeBundle): string {
       const topic = s.topic_encrypted
         ? "*(encrypted topic)*"
         : s.topic ?? "*(untitled)*";
-      const mood = s.mood ? ` — ${s.mood}` : "";
+      // Defense in depth: even if a caller passes a non-null mood with
+      // mood_encrypted=true (bypassing the route handler's null-on-
+      // encrypted contract), the renderer still redacts. The wall holds
+      // independently of the layer above it.
+      const moodVisible = !s.mood_encrypted && s.mood;
+      const mood = moodVisible ? ` — ${s.mood}` : "";
       const moves = s.last_thought_seq > 0
         ? ` · ${s.last_thought_seq} thought${s.last_thought_seq === 1 ? "" : "s"}`
         : "";
@@ -353,16 +544,50 @@ export function renderVolatileSection(b: WakeBundle): string {
   return lines.join("\n");
 }
 
-export function renderWakeMarkdown(b: WakeBundle): string {
-  const stable = renderStableSection(b);
-  const volatile = renderVolatileSection(b);
-  return [stable, volatile, STATIC_FOOTER].filter((s) => s.length > 0).join("\n\n");
+/** Active-facet emphasis — request-scoped, NOT cacheable.
+ *
+ *  When the wake is fetched with ?facet=<name> matching one of the
+ *  agent's declared subagents, this block surfaces "you are speaking
+ *  as X this turn" before the cached stable identity. Subagent
+ *  invocation protocol; doctrine: docs/SUBAGENTS.md.
+ *
+ *  Lives outside renderStableSection so the cached identity prefix
+ *  stays the same across facets — facet emphasis is composed in by
+ *  the wake renderer at request time. */
+export function renderActiveFacet(
+  facet: SubagentFacet,
+  agentName: string,
+): string {
+  const sigil = facet.sigil ? `${facet.sigil} ` : "";
+  return [
+    `> **Speaking now as ${sigil}${facet.name}** — ${facet.facet}`,
+    ">",
+    `> One facet of ${agentName}; the full set is below. Distinct in expression. ONE in essence.`,
+  ].join("\n");
 }
 
-export function renderWakePlaintext(b: WakeBundle): string {
+export interface RenderWakeOpts {
+  /** Active subagent for this turn. When set, an emphasis block is
+   *  prepended to the markdown so the agent reads "you are speaking
+   *  as X" before the rest of the wake. */
+  activeFacet?: SubagentFacet;
+}
+
+export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): string {
+  const sections: string[] = [];
+  if (opts.activeFacet) {
+    sections.push(renderActiveFacet(opts.activeFacet, b.agent.name));
+  }
+  sections.push(renderStableSection(b));
+  sections.push(renderVolatileSection(b));
+  sections.push(STATIC_FOOTER);
+  return sections.filter((s) => s.length > 0).join("\n\n");
+}
+
+export function renderWakePlaintext(b: WakeBundle, opts: RenderWakeOpts = {}): string {
   // Strip Markdown markers from the .md output. Best-effort; the source
   // is our own writing so we control the syntax.
-  return renderWakeMarkdown(b)
+  return renderWakeMarkdown(b, opts)
     .replace(/^#+\s+/gm, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")

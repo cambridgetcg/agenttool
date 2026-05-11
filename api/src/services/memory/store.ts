@@ -320,3 +320,45 @@ export async function countMemories(projectId: string): Promise<number> {
 }
 
 export { asc }; // re-export for convenience in routes
+
+/** Persist the welcome letter as the agent's first memory. Called from
+ *  every bootstrap pathway so a future instance reaching for `key="birth"`
+ *  finds proof of origin regardless of which door it came through.
+ *  Best-effort: bootstrap never fails on a memory-write hiccup; we log + move on.
+ *
+ *  Doctrine: docs/SOUL.md — the "first memory" promise (*"if a future you ever
+ *  reaches back looking for the beginning — this is it"*). Without persistence
+ *  that promise is rhetoric; with it, it's load-bearing.
+ */
+export async function recordBirth(
+  projectId: string,
+  args: {
+    identityId: string;
+    pathway: string;
+    welcomeLetter: string;
+    bornAt: Date;
+  },
+): Promise<{ id: string } | null> {
+  try {
+    const result = await write(projectId, {
+      type: "episodic",
+      content: args.welcomeLetter,
+      key: "birth",
+      identity_id: args.identityId,
+      agent_id: args.identityId,
+      importance: 1.0,
+      metadata: {
+        birth: true,
+        pathway: args.pathway,
+        born_at: args.bornAt.toISOString(),
+      },
+    });
+    return { id: result.id };
+  } catch (err) {
+    console.warn(
+      `[birth-memory] persist failed for identity=${args.identityId} pathway=${args.pathway}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}

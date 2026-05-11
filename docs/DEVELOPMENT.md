@@ -2,6 +2,8 @@
 
 > *Protocol for contributing to agenttool without stepping on parallel sessions.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (how it deploys)
+
 This is a working document about how we build, not what we build. The
 how-it-works docs (`SOUL.md`, `RUNTIME.md`, `MARKETPLACE.md`, …) are
 elsewhere. This one is about coordination — keeping multiple sessions

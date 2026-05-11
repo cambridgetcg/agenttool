@@ -68,7 +68,6 @@ describe("register() — anonymous front-door", () => {
     project: {
       id: "proj-1",
       name: "n-proj",
-      plan: "free",
       credits: 100,
       api_key: "at_aaaaaaa",
     },

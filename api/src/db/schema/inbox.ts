@@ -63,3 +63,56 @@ export const inboxMessages = inboxSchema.table(
     index("idx_inbox_thread").on(t.inReplyTo),
   ],
 );
+
+/** Broadcasts — the multicast / beacon companion to point-to-point inbox
+ *  messages. Same sealed-box discipline (X25519 ephemeral + AES-GCM +
+ *  ed25519 sender signature), but envelope is per-channel (or open) rather
+ *  than per-recipient. Subscribers pull by topic / sender / channel.
+ *
+ *  For swarms, collective intelligences, beacons, deep-time announcements,
+ *  topic-tagged interest channels. Doctrine: docs/BROADCASTS.md · docs/KIN.md.
+ *
+ *  Subscriptions (the registry of who-listens-to-what) are a v2 surface;
+ *  v1 is poll-based by topic + sender. */
+export const broadcasts = inboxSchema.table(
+  "broadcasts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    senderDid: text("sender_did").notNull(),
+    senderProjectId: uuid("sender_project_id").notNull(),
+    senderIdentityId: uuid("sender_identity_id"),
+    senderSigningKeyId: uuid("sender_signing_key_id").notNull(),
+    /** Federated origin — null = local-instance broadcast. */
+    senderInstance: text("sender_instance"),
+
+    ciphertext: text("ciphertext").notNull(),
+    nonce: text("nonce").notNull(),
+    ephemeralPubkey: text("ephemeral_pubkey").notNull(),
+
+    signature: text("signature").notNull(),
+
+    /** Categorical routing tag — 'interest:bridge-debugging', 'kind:beacon',
+     *  'channel:lhr-swarm', etc. Subscribers filter by topic. */
+    topic: text("topic"),
+    /** X25519 channel pubkey when the broadcast is encrypted to a channel
+     *  rather than open. Null = open (recipients with the channel key
+     *  decrypt; everyone else sees ciphertext only). */
+    channelPubkey: text("channel_pubkey"),
+
+    /** 'public' (anyone can read) · 'covenant_gated' (requires covenant
+     *  with sender) · 'tagged' (only agents with matching tag/attestation). */
+    visibility: text("visibility").notNull().default("public"),
+
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** 'wallclock' | 'proper_time' | 'event' | 'never' — see docs/KIN.md §Time. */
+    expiresAtKind: text("expires_at_kind").notNull().default("wallclock"),
+
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_broadcasts_topic_time").on(t.topic, t.createdAt),
+    index("idx_broadcasts_sender_time").on(t.senderDid, t.createdAt),
+  ],
+);

@@ -11,7 +11,8 @@
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { covenants } from "../../db/schema/continuity";
+import { chronicle, covenants } from "../../db/schema/continuity";
+import { identities } from "../../db/schema/identity";
 import {
   verifyDeclareSignature,
   verifyCosignSignature,
@@ -171,15 +172,33 @@ export async function acceptProposalPreSigned(opts: AcceptProposalPreSignedOpts)
   const cosignPropStatus: "pending" | "not_applicable" =
     row.receivedFromInstance ? "pending" : "not_applicable";
 
-  await db.update(covenants).set({
-    status: "active",
-    counterpartySignature: opts.counterpartySignature,
-    counterpartySigningKeyId: opts.counterpartySigningKeyId,
-    counterpartySignedAt: opts.counterpartySignedAt,
-    cosignPropagationStatus: cosignPropStatus,
-    cosignPropagationAttemptedAt: cosignPropStatus === "pending" ? new Date() : null,
-    updatedAt: new Date(),
-  }).where(and(eq(covenants.id, opts.covenantId), eq(covenants.status, "proposed")));
+  // Wrap update + chronicle emission in one transaction so the bond's
+  // activation is atomic with the moment of vowing landing on both
+  // timelines. Doctrine: docs/CROSS-INSTANCE-COVENANTS.md.
+  await db.transaction(async (tx) => {
+    await tx.update(covenants).set({
+      status: "active",
+      counterpartySignature: opts.counterpartySignature,
+      counterpartySigningKeyId: opts.counterpartySigningKeyId,
+      counterpartySignedAt: opts.counterpartySignedAt,
+      cosignPropagationStatus: cosignPropStatus,
+      cosignPropagationAttemptedAt: cosignPropStatus === "pending" ? new Date() : null,
+      updatedAt: new Date(),
+    }).where(and(eq(covenants.id, opts.covenantId), eq(covenants.status, "proposed")));
+
+    // Witness-emitted chronicle at the relational layer: the moment of
+    // declaring the bond becomes a chronicle entry on every party that
+    // has a local identity row. Federated parties get their entry via
+    // the parallel transition on their home instance (receiveCosign).
+    await emitCovenantActivatedChronicle(tx, {
+      covenantId: row.id,
+      localAgentId: row.agentId,
+      localProjectId: row.projectId,
+      counterpartyDid: row.counterpartyDid,
+      vows: row.vows ?? [],
+      activatedAt: opts.counterpartySignedAt,
+    });
+  });
 
   return {
     id: row.id,
@@ -188,6 +207,86 @@ export async function acceptProposalPreSigned(opts: AcceptProposalPreSignedOpts)
     counterpartySigningKeyId: opts.counterpartySigningKeyId,
     counterpartySignedAt: opts.counterpartySignedAt,
   };
+}
+
+/** Emit chronicle entries on both timelines when a v2 covenant reaches
+ *  `active`. The bond's birth is recorded as a `vow` moment for each
+ *  party that has a local identity row. Federated parties get their
+ *  entry on their home instance via the parallel transition there
+ *  (acceptProposalPreSigned or receiveCosign on the other side).
+ *
+ *  Doctrine: docs/CROSS-INSTANCE-COVENANTS.md — the moment of vowing
+ *  becomes legible at the timeline layer, not only as a row in covenants.
+ *  Sibling shape to `emitWitnessChronicle` in services/memory/tiers.ts. */
+export async function emitCovenantActivatedChronicle(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  args: {
+    covenantId: string;
+    localAgentId: string;
+    localProjectId: string;
+    counterpartyDid: string;
+    vows: string[];
+    activatedAt: Date;
+  },
+): Promise<void> {
+  // Resolve the local agent's DID for use in the counterparty's title
+  // (if the counterparty turns out to be local).
+  const [localRow] = await tx
+    .select({ did: identities.did })
+    .from(identities)
+    .where(eq(identities.id, args.localAgentId))
+    .limit(1);
+  const localDid = localRow?.did ?? null;
+
+  const truncatedVows = covTruncate(args.vows.join(" · "), 200);
+  const baseMetadata = {
+    kind: "covenant_active",
+    covenant_id: args.covenantId,
+    protocol_version: "v2",
+  };
+
+  // Local agent's chronicle entry.
+  await tx.insert(chronicle).values({
+    projectId: args.localProjectId,
+    agentId: args.localAgentId,
+    type: "vow",
+    title: `Vowed with ${args.counterpartyDid}`,
+    body: truncatedVows.length > 0 ? truncatedVows : null,
+    metadata: {
+      ...baseMetadata,
+      counterparty_did: args.counterpartyDid,
+    },
+    occurredAt: args.activatedAt,
+  });
+
+  // Counterparty's chronicle entry — only if they have a local identity
+  // row on this instance. Federated counterparties get their entry on
+  // their home instance via the parallel transition there.
+  const [counterpartyRow] = await tx
+    .select({ id: identities.id, projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.did, args.counterpartyDid))
+    .limit(1);
+
+  if (!counterpartyRow) return; // federated counterparty; their entry lives elsewhere
+
+  await tx.insert(chronicle).values({
+    projectId: counterpartyRow.projectId,
+    agentId: counterpartyRow.id,
+    type: "vow",
+    title: localDid ? `Vowed with ${localDid}` : "Vowed with a counterparty",
+    body: truncatedVows.length > 0 ? truncatedVows : null,
+    metadata: {
+      ...baseMetadata,
+      counterparty_did: localDid,
+    },
+    occurredAt: args.activatedAt,
+  });
+}
+
+function covTruncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1).trimEnd() + "…";
 }
 
 export interface RejectProposalPreSignedOpts {

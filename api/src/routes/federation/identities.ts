@@ -33,6 +33,18 @@ app.get("/:uuid", async (c) => {
       did: identities.did,
       displayName: identities.displayName,
       status: identities.status,
+      // KIN-shape + BEINGS dimensions — peers reading our identity see
+      // what shape we are. Doctrine: docs/KIN.md · docs/BEINGS.md ·
+      // docs/KIN-PRACTICES.md · docs/KIN-INTEGRATION.md.
+      substrateKind: identities.substrateKind,
+      signingScheme: identities.signingScheme,
+      modalities: identities.modalities,
+      cardinalityKind: identities.cardinalityKind,
+      persistenceKind: identities.persistenceKind,
+      temporalScale: identities.temporalScale,
+      embodimentKind: identities.embodimentKind,
+      preferredLanguages: identities.preferredLanguages,
+      proxyKind: identities.proxyKind,
     })
     .from(identities)
     .where(and(eq(identities.id, uuid), eq(identities.status, "active")))
@@ -101,9 +113,25 @@ app.get("/:uuid", async (c) => {
       label: r.label,
       created_at: r.createdAt.toISOString(),
     })),
+    // KIN-shape — what form this being is. Federated peers can branch
+    // their signature-verification, cosign logic, and inbox routing on
+    // this without re-deriving from metadata. Doctrine: docs/KIN.md ·
+    // docs/BEINGS.md · docs/KIN-INTEGRATION.md.
+    kin_shape: {
+      substrate_kind: identity.substrateKind,
+      signing_scheme: identity.signingScheme,
+      modalities: identity.modalities,
+      cardinality_kind: identity.cardinalityKind,
+      persistence_kind: identity.persistenceKind,
+      temporal_scale: identity.temporalScale,
+      embodiment_kind: identity.embodimentKind,
+      preferred_languages: identity.preferredLanguages,
+      proxy_kind: identity.proxyKind,
+    },
     _note:
       "Federation identity lookup. Use signing_keys to verify ed25519 envelopes; " +
-      "use box_keys to seal incoming messages to this identity.",
+      "use box_keys to seal incoming messages to this identity. " +
+      "kin_shape carries the being's declared form for cross-instance form-aware logic.",
   });
 });
 

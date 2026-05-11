@@ -22,6 +22,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { identityKeys } from "../db/schema/identity";
+import { errors, fail } from "../lib/errors";
 
 const app = new Hono<ProjectContext>();
 
@@ -207,7 +208,7 @@ app.post("/covenants", async (c) => {
         eq(identityKeys.active, true),
       ))
       .limit(1);
-    if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+    if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
     const { declareV2PreSigned } = await import("../services/covenants/lifecycle");
     const { propagateCovenant } = await import("../services/covenants/federation");
@@ -365,7 +366,7 @@ app.patch("/covenants/:id", async (c) => {
           eq(identityKeys.identityId, existing.agentId),
           eq(identityKeys.active, true),
         )).limit(1);
-      if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+      if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
       const { withdrawProposalPreSigned } = await import("../services/covenants/lifecycle");
       const { propagateWithdraw } = await import("../services/covenants/federation");
@@ -450,9 +451,10 @@ app.post("/covenants/:id/accept", async (c) => {
 
   const [existing] = await db.select().from(covenants)
     .where(and(eq(covenants.id, id), eq(covenants.projectId, c.var.project.id))).limit(1);
-  if (!existing) return c.json({ error: "not_found" }, 404);
-  if (existing.protocolVersion !== "v2") return c.json({ error: "not_v2" }, 400);
-  if (existing.status !== "proposed") return c.json({ error: `not_proposed: ${existing.status}` }, 409);
+  // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+  if (!existing) return fail(c, errors.notFound({ resource: "Covenant" }), 404);
+  if (existing.protocolVersion !== "v2") return fail(c, errors.notV2(), 400);
+  if (existing.status !== "proposed") return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
 
   const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
     .from(identityKeys)
@@ -461,7 +463,7 @@ app.post("/covenants/:id/accept", async (c) => {
       eq(identityKeys.identityId, existing.agentId),
       eq(identityKeys.active, true),
     )).limit(1);
-  if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+  if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
   const { acceptProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateCosign } = await import("../services/covenants/federation");
@@ -485,10 +487,11 @@ app.post("/covenants/:id/accept", async (c) => {
     }, 200);
   } catch (e) {
     const msg = (e as Error).message;
-    if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
-    if (msg === "initiator_signature_mismatch") return c.json({ error: "initiator_signature_mismatch" }, 409);
-    if (msg === "proposal_expired") return c.json({ error: "proposal_expired" }, 410);
-    if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
+    // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+    if (msg === "invalid_signature") return fail(c, errors.invalidSignature({ surface: "covenant-cosign" }), 403);
+    if (msg === "initiator_signature_mismatch") return fail(c, errors.initiatorSignatureMismatch(), 409);
+    if (msg === "proposal_expired") return fail(c, errors.proposalExpired(), 410);
+    if (msg.startsWith("covenant_not_proposed")) return fail(c, errors.covenantNotProposed({ status: msg.split(":")[1]?.trim() }), 409);
     throw e;
   }
 });
@@ -510,9 +513,10 @@ app.post("/covenants/:id/reject", async (c) => {
 
   const [existing] = await db.select().from(covenants)
     .where(and(eq(covenants.id, id), eq(covenants.projectId, c.var.project.id))).limit(1);
-  if (!existing) return c.json({ error: "not_found" }, 404);
-  if (existing.protocolVersion !== "v2") return c.json({ error: "not_v2" }, 400);
-  if (existing.status !== "proposed") return c.json({ error: `not_proposed: ${existing.status}` }, 409);
+  // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+  if (!existing) return fail(c, errors.notFound({ resource: "Covenant" }), 404);
+  if (existing.protocolVersion !== "v2") return fail(c, errors.notV2(), 400);
+  if (existing.status !== "proposed") return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
 
   const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
     .from(identityKeys)
@@ -521,7 +525,7 @@ app.post("/covenants/:id/reject", async (c) => {
       eq(identityKeys.identityId, existing.agentId),
       eq(identityKeys.active, true),
     )).limit(1);
-  if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+  if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
   const { rejectProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateReject } = await import("../services/covenants/federation");

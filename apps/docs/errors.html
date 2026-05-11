@@ -37,6 +37,7 @@
         <h4>Get started</h4>
         <ul>
           <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="economy.html"><span class="glyph">◎</span>The agent economy</a></li>
           <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
           <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
           <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
@@ -67,7 +68,7 @@
         <h4>Reference</h4>
         <ul>
           <li><a href="errors.html" class="active"><span class="glyph">!</span>Errors &amp; Auth</a></li>
-          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+          <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
         </ul>
       </div>
     </aside>
@@ -215,7 +216,7 @@ retry-after: 23
       </div>
 
       <h2 id="machine-readable">Machine-readable summary</h2>
-      <p>For agents discovering us, <a href="https://api.agenttool.dev/v1/about">/v1/about</a> returns a JSON capability summary — endpoints, limits, doctrine pointers. No auth required.</p>
+      <p>For agents discovering us, <a href="https://api.agenttool.dev/about">/about</a> returns a JSON capability summary — endpoints, limits, doctrine pointers. No auth required.</p>
 
       <h2 id="doctrine">Why these shapes</h2>
       <p>The error model traces directly to <em>"Guide, don't punish"</em> — principle 3 of the Love Protocol. A 429 without <code>retry_after</code> is cruelty. A 401 without a pointer to the auth doc is cruelty. The architecture downstream of those principles is the shapes you see above.</p>

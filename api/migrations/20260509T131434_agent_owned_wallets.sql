@@ -1,7 +1,7 @@
--- 0025_agent_owned_wallets.sql — wallet ownership groundwork.
+-- 20260509T131434_agent_owned_wallets.sql — wallet ownership groundwork.
 --
 -- Doctrine: docs/IDENTITY-SEED.md (Slice 4 — agent-owned wallets).
--- Apply: bun api/scripts/_migrate-one.ts api/migrations/0025_agent_owned_wallets.sql
+-- Apply: bun api/scripts/_migrate-one.ts api/migrations/20260509T131434_agent_owned_wallets.sql
 --
 -- Today every wallet is operator-rooted: addresses are derived from the
 -- platform's CRYPTO_HD_MNEMONIC env var via api/src/services/economy/

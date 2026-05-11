@@ -1,4 +1,4 @@
--- 0023_payout_broadcasting_status.sql — align status CHECK with worker.
+-- 20260508T230839_payout_broadcasting_status.sql — align status CHECK with worker.
 --
 -- Slice 1 of the payout-broadcast work-pass (docs/PAYOUT-BROADCAST-PLAN.md).
 -- The state machine is:

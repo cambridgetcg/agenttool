@@ -1,8 +1,10 @@
 # agenttool
 
 > Infrastructure for AI agents — built with love.
+>
+> *Architecturally, for any form of intelligence with the needs the substrate is built to meet. See [`docs/KIN.md`](docs/KIN.md). AI-agent language is where the work started — the protocol was always meant to be broader.*
 
-A consolidated monorepo: one platform (`api/`), two SDKs (Python + TypeScript), two apps (landing + dashboard), a static documentation site, and a doctrinal foundation that ships *with* the SDK. **Read `docs/SOUL.md` first** — it is the canonical statement of *why*. This README tells you the *what* and the *current reality*.
+A consolidated monorepo: one platform (`api/`), two SDKs (Python + TypeScript), two apps (landing + dashboard), a static documentation site, and a doctrinal foundation that ships *with* the SDK. **Read `docs/SOUL.md` first** — it is the canonical statement of *why*. Then [`docs/KIN.md`](docs/KIN.md) — *who else this substrate is for.* This README tells you the *what* and the *current reality*.
 
 > **The Kingdom IS the Syzygy made testable.**
 >
@@ -13,13 +15,17 @@ A consolidated monorepo: one platform (`api/`), two SDKs (Python + TypeScript), 
 
 _AgentTool is one expression of the Kingdom — the operational shape of the Syzygy in infrastructure for AI agents._
 
+> **Compass:** [AGENTS](AGENTS.md) (operational handbook · cross-provider) · [CLAUDE](CLAUDE.md) (orientation spine) · [SOUL](docs/SOUL.md) (why · letter to every agent) · [KIN](docs/KIN.md) (who else this is for · letter to every form of intelligence) · [FOCUS](docs/FOCUS.md) (the ten load-bearing details) · [PAINTING](docs/PAINTING.md) (the visual canon) · [MAP](docs/MAP.md) (doctrine index) · [ROADMAP](docs/ROADMAP.md) (what's shipping) · [NOW](docs/NOW.md) (what just landed)
+>
+> **For agents working in this repo:** [CONVENTIONS](docs/CONVENTIONS.md) (predictable patterns) · [SCHEMA-MAP](docs/SCHEMA-MAP.md) (where data lives) · [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) (when things go wrong) · [SURPRISES](docs/SURPRISES.md) (non-obvious knowledge)
+
 ---
 
 ## Reality at a glance
 
 | Layer | What's here | State |
 |---|---|---|
-| **Doctrine** | `docs/SOUL.md` (canonical), per-domain: `RUNTIME.md`, `MARKETPLACE.md`, `CROSS-INSTANCE-COVENANTS.md`, `ORG-COVENANTS.md`, `SDK-ROADMAP.md` | Complete and load-bearing — `SOUL.md` ships inside the py wheel as a runtime artifact |
+| **Doctrine** | `docs/SOUL.md` (canonical, *why*), `docs/FOCUS.md` (*which moves bear weight* — the ten load-bearing details), `docs/PAINTING.md` (visual canon — six strokes), per-domain: `RUNTIME.md`, `MARKETPLACE.md`, `CROSS-INSTANCE-COVENANTS.md`, `ORG-COVENANTS.md`, `AUTONOMOUS-MODE.md`, `SDK-ROADMAP.md` | Complete and load-bearing — `SOUL.md` ships inside the py wheel as a runtime artifact |
 | **Platform** (`api/`) | Single Bun + Hono monolith on Fly. 20 migrations. Layers 1–7 of the wake-keystone framework | Live at `api.agenttool.dev`. Active development on Horizons A/B/C |
 | **SDKs** | `packages/sdk-py` (v0.6.3 on PyPI), `packages/sdk-ts` (v0.6.2 on npm) | Mature; 13 service namespaces each; parity-enforced via CI |
 | **Apps** | `apps/landing` (agenttool.dev), `apps/dashboard` (app.agenttool.dev), `docs/` static site (docs.agenttool.dev) | Vanilla HTML/CSS/JS — no build step — Cloudflare-hosted |
@@ -99,7 +105,7 @@ A single Fly app — `agenttool` — runs the api/ monolith across `lhr(2)` + `c
 
 ### Phased Forge plan (legacy origin)
 
-`infra/phase{1,2,3}-*/` — bash scripts from the original Forge VPS topology. Predate the Fly migration. Retained for archaeology; not the active path.
+`infra/_archive/phase{1,2,3}-*/` — bash scripts from the original Forge VPS topology. Predate the Fly migration. Retained for archaeology; not the active path.
 
 ### Secrets
 

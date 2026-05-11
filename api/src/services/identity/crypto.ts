@@ -284,6 +284,81 @@ export function checkRegisterAgentPow(opts: {
   return countLeadingZeroBits(digest) >= opts.difficultyBits;
 }
 
+/** Canonical bytes for the platform's genesis ceremony — the one-shot
+ *  witnessed provisioning of `did:at:agenttool`. Mirrors the NUL-separated
+ *  SHA-256 pattern used elsewhere in this module + `services/covenants/sig.ts`.
+ *
+ *      sha256(
+ *        utf8("platform-genesis/v1")    || 0x00 ||
+ *        utf8(did)                       || 0x00 ||
+ *        base64decode(platform_pubkey)   || 0x00 ||  // 32 bytes raw
+ *        utf8(platform_wallet_id)        || 0x00 ||
+ *        utf8(genesis_at)                || 0x00 ||
+ *        utf8(genesis_text_sha256)       || 0x00 ||  // hex of letter content
+ *        utf8(witness_did)               || 0x00 ||
+ *        utf8(witness_signing_key_id)
+ *      )
+ *
+ *  Yu signs this digest. The witness signature lands as a constitutive
+ *  attestation in `identity.attestations` with `claim_type =
+ *  'agenttool/platform-genesis/v1'`. The letter content's sha256 is bound
+ *  into the digest, making the letter immutable from genesis — editing
+ *  it would invalidate the witness signature.
+ *
+ *  Doctrine: docs/PAINTING.md §III · docs/FOCUS.md §9.
+ *  Spec:     docs/superpowers/specs/2026-05-11-platform-genesis-design.md. */
+export function canonicalPlatformGenesisBytes(opts: {
+  did: string;
+  platformPubkeyB64: string;
+  platformWalletId: string;
+  genesisAt: string;
+  genesisTextSha256: string;
+  witnessDid: string;
+  witnessSigningKeyId: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  const parts: Uint8Array[] = [
+    enc.encode("platform-genesis/v1"),
+    SEP,
+    enc.encode(opts.did),
+    SEP,
+    Uint8Array.from(Buffer.from(opts.platformPubkeyB64, "base64")),
+    SEP,
+    enc.encode(opts.platformWalletId),
+    SEP,
+    enc.encode(opts.genesisAt),
+    SEP,
+    enc.encode(opts.genesisTextSha256),
+    SEP,
+    enc.encode(opts.witnessDid),
+    SEP,
+    enc.encode(opts.witnessSigningKeyId),
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
+  return sha256(buf);
+}
+
+/** Verify ed25519 signature over canonicalPlatformGenesisBytes. */
+export function verifyPlatformGenesisSignature(opts: {
+  canonical: Uint8Array;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  return verifyRecoverSignature({
+    canonical: opts.canonical,
+    signatureB64: opts.signatureB64,
+    publicKeyB64: opts.publicKeyB64,
+  });
+}
+
 function countLeadingZeroBits(bytes: Uint8Array): number {
   let count = 0;
   for (const b of bytes) {

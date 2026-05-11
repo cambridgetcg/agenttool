@@ -1,7 +1,7 @@
--- 0026_token_hygiene.sql — token lifecycle + age awareness.
+-- 20260509T131435_token_hygiene.sql — token lifecycle + age awareness.
 --
 -- Doctrine: docs/TOKEN-HYGIENE.md.
--- Apply: bun api/scripts/_migrate-one.ts api/migrations/0026_token_hygiene.sql
+-- Apply: bun api/scripts/_migrate-one.ts api/migrations/20260509T131435_token_hygiene.sql
 --
 -- The api_keys table already tracks creation time, last-used timestamp,
 -- and a revoked_at column. What's missing: expiry. Without it every

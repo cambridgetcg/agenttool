@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { errors, fail } from "../../lib/errors";
 import {
   coSignMessage,
   getMessage,
@@ -70,15 +71,8 @@ app.post("/", async (c) => {
       throw new HTTPException(401, { message: msg });
     }
     if (msg === "covenant_required") {
-      return c.json(
-        {
-          error: msg,
-          hint:
-            "cross-project messages require an active covenant in either direction. " +
-            "Declare one via POST /v1/covenants with status='active'.",
-        },
-        403,
-      );
+      // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+      return fail(c, errors.covenantRequired(), 403);
     }
     throw err;
   }

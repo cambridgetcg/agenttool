@@ -2,6 +2,10 @@
 
 **Slice 1 of org-level governance.** Org-wide covenants extend the trust ratchet from per-project to per-org without changing the cryptographic walls.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)
+>
+> **Implements:** Layer 5 — Network (org-scoped). Sister doctrine: [ORGS](ORGS.md), [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md).
+
 ## The principle
 
 A covenant is a declared, signed vow between two parties — the trust gate that allows messages to flow, identities to be co-witnessed, and constitutive memories to be elevated. Until 0014, every covenant was scoped to a single project: a covenant declared by project-A bound only project-A's outbound trust.

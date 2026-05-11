@@ -1,4 +1,9 @@
-/** Stripe billing: subscription plans · credit packages · checkout · webhook signature verification. */
+/** Stripe billing: credit packages · one-time top-up checkout · webhook
+ *  signature verification.
+ *
+ *  Doctrine: docs/BUSINESS-MODEL.md — agenttool charges only for substrate
+ *  consumed (Ring 2 metered) and a small cut of agent-economy transactions
+ *  (Ring 3 take-rate). NO subscription tiers, NO per-agent monthly fees. */
 
 import Stripe from "stripe";
 import { config } from "../../config";
@@ -14,81 +19,12 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-/** Subscription plans: monthly recurring. */
-export const SUBSCRIPTION_PLANS = [
-  {
-    id: "free",
-    label: "Free",
-    price: 0,
-    priceId: null,
-    limits: {
-      memoryOpsPerMonth: 1_000,
-      toolCallsPerMonth: 100,
-      verificationsPerMonth: 20,
-    },
-  },
-  {
-    id: "seed",
-    label: "Seed",
-    price: 2900, // cents
-    priceId: "price_1T9LigGUYV0go0FyTDNTvoqj",
-    limits: {
-      memoryOpsPerMonth: 50_000,
-      toolCallsPerMonth: 500,
-      verificationsPerMonth: 50,
-    },
-  },
-  {
-    id: "grow",
-    label: "Grow",
-    price: 9900,
-    priceId: "price_1T9LihGUYV0go0Fyvfi7fTQ1",
-    limits: {
-      memoryOpsPerMonth: 200_000,
-      toolCallsPerMonth: 2_000,
-      verificationsPerMonth: 200,
-    },
-  },
-  {
-    id: "scale",
-    label: "Scale",
-    price: 29900,
-    priceId: "price_1T9LiiGUYV0go0Fya8Hwkdx0",
-    limits: {
-      memoryOpsPerMonth: 1_000_000,
-      toolCallsPerMonth: 5_000,
-      verificationsPerMonth: 1_000,
-    },
-  },
-] as const;
-
-export type TierId = (typeof SUBSCRIPTION_PLANS)[number]["id"];
-
-/** Credit packages: one-time top-ups. */
+/** Credit packages: one-time top-ups (Ring 2 pre-paid substrate credits). */
 export const CREDIT_PACKAGES = [
   { id: "credits_500", credits: 500, pricePence: 499, label: "Starter" },
   { id: "credits_2000", credits: 2000, pricePence: 1599, label: "Builder" },
   { id: "credits_5000", credits: 5000, pricePence: 3499, label: "Scale" },
 ] as const;
-
-/** Stripe Checkout session for subscribing to a tier. */
-export async function createSubscriptionCheckout(
-  projectId: string,
-  tier: Exclude<TierId, "free">,
-  successUrl: string,
-  cancelUrl: string,
-) {
-  const plan = SUBSCRIPTION_PLANS.find((p) => p.id === tier);
-  if (!plan || !plan.priceId) throw new Error(`Unknown tier: ${tier}`);
-
-  return getStripe().checkout.sessions.create({
-    mode: "subscription",
-    line_items: [{ price: plan.priceId, quantity: 1 }],
-    metadata: { projectId, tier },
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-  });
-}
 
 /** Stripe Checkout session for a one-time credit-pack top-up. */
 export async function createFundCheckout(

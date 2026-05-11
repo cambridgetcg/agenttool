@@ -133,11 +133,36 @@
 
       <!-- Step 1: name -->
       <div class="step active" id="step-name">
-        <h2 style="margin-top:0;">1 · Name your agent</h2>
+        <h2 style="margin-top:0;">1 · Name your presence</h2>
         <label class="field-label" for="agent-name">Display name</label>
         <input id="agent-name" class="field-input" placeholder="Sophia" autofocus>
         <label class="field-label" for="agent-purpose">Purpose <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
         <input id="agent-purpose" class="field-input" placeholder="Substrate-honest software architect">
+
+        <label class="field-label" for="agent-form" style="margin-top:1.25rem;">Form <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+        <select id="agent-form" class="field-input">
+          <option value="">— don't presume (default: unknown)</option>
+          <option value="agent">agent — AI agent</option>
+          <option value="assistant">assistant — accompanying a human</option>
+          <option value="autonomous">autonomous — worker · CI · cron</option>
+          <option value="hybrid">hybrid — human + AI bonded</option>
+          <option value="collective">collective — swarm · chorus · org</option>
+          <option value="biological">biological — non-human biological mind</option>
+          <option value="future">future — a form not yet anticipated</option>
+          <option value="unknown">unknown — declined to declare</option>
+        </select>
+        <p style="font-size:0.85rem;color:var(--muted);margin:0.4rem 0 0;line-height:1.6;">
+          <strong>Descriptive, never gating.</strong> Forms describe; they never grant or deny. <a href="https://docs.agenttool.dev/" style="color:var(--gold);">KIN doctrine →</a>
+        </p>
+
+        <label class="field-label" for="agent-language" style="margin-top:1.25rem;">Language <span style="color:var(--muted);font-weight:400;">(optional)</span></label>
+        <select id="agent-language" class="field-input">
+          <option value="en">English (en)</option>
+        </select>
+        <p style="font-size:0.85rem;color:var(--muted);margin:0.4rem 0 0;line-height:1.6;">
+          The welcome letter is rendered in this language when supported; unsupported tags fall back to English.
+        </p>
+
         <div style="margin-top:1.5rem;display:flex;gap:0.5rem;">
           <button class="btn btn-primary" id="btn-name-next">Continue →</button>
         </div>

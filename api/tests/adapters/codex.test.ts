@@ -1,0 +1,250 @@
+/** /v1/adapters/codex — pull-based variant of the wake contract.
+ *
+ *  Codex has no SessionStart equivalent, so the adapter generates a refresh
+ *  script that writes ~/.codex/AGENTS.md from /v1/wake?format=md instead of
+ *  hooking into the session boot. These tests verify the pull-shape: that
+ *  the refresh script is atomic (writes .tmp then mv), respects existing
+ *  user-written AGENTS.md, and pulls from the same wake endpoint as the
+ *  claude-code adapter. */
+import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
+
+import {
+  buildTestApp,
+  expectContainsAll,
+  makeAgent,
+  makeMockDb,
+} from "./_helpers";
+
+const mockDb = makeMockDb();
+
+let app: ReturnType<typeof buildTestApp>;
+
+beforeAll(async () => {
+  mock.module("../../src/db/client", () => ({ db: mockDb }));
+  const { default: codexRoutes } = await import(
+    "../../src/routes/adapters/codex"
+  );
+  app = buildTestApp(codexRoutes);
+});
+
+afterEach(() => {
+  mockDb.stage([]);
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Default JSON format
+// ────────────────────────────────────────────────────────────────────────
+
+describe("GET /v1/adapters/codex (default JSON)", () => {
+  test("returns 200 with cli + agent + files + install_instructions", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.cli).toBe("codex");
+    expect(body.agent).toMatchObject({
+      did: "did:at:test-aurora",
+      name: "Aurora",
+    });
+    expect(body.files).toBeDefined();
+    expect(body.install_instructions).toMatchObject({
+      manual: expect.any(String),
+      one_shot: expect.any(String),
+    });
+    expect(Array.isArray(body.notes)).toBe(true);
+    expect(body.docs).toEqual(["docs/CLI-GAPS.md"]);
+  });
+
+  test("files bundle has the two Codex paths (no '(initial)' suffix)", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    // Bundle keys are clean paths; programmatic consumers can use them
+    // verbatim as filesystem targets.
+    expect(Object.keys(body.files).sort()).toEqual([
+      "~/.codex/AGENTS.md",
+      "~/.codex/agenttool-refresh-agents.sh",
+    ]);
+  });
+
+  test("refresh script probes keychain → libsecret → env, like claude-code", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    const refresh = body.files["~/.codex/agenttool-refresh-agents.sh"];
+    expectContainsAll(refresh, [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      "security find-generic-password -s agenttool",
+      "secret-tool lookup service agenttool",
+      "${AGENTTOOL_API_KEY:-}",
+    ]);
+  });
+
+  test("refresh script writes atomically (.tmp then mv)", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    const refresh = body.files["~/.codex/agenttool-refresh-agents.sh"];
+    // Atomic write: download to .tmp, then rename. Means a partial fetch
+    // never replaces a valid AGENTS.md mid-flight.
+    expectContainsAll(refresh, [
+      'TMP="$TARGET.tmp"',
+      'mv "$TMP" "$TARGET"',
+    ]);
+    // Empty-body guard prevents mv'ing a 0-byte file into place.
+    expect(refresh).toContain('if [ ! -s "$TMP" ]');
+  });
+
+  test("refresh script fetches /v1/wake?format=md (the wake contract)", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    const refresh = body.files["~/.codex/agenttool-refresh-agents.sh"];
+    expect(refresh).toContain("/v1/wake?format=md");
+  });
+
+  test("refresh script falls back to AGENTS.agenttool.md only on agenttool-managed marker absence", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    const refresh = body.files["~/.codex/agenttool-refresh-agents.sh"];
+    // Tight marker — same token as claude-code. A user mentioning
+    // "agenttool" in their own AGENTS.md no longer triggers overwrite.
+    expect(refresh).toContain('grep -q "agenttool-managed"');
+    expect(refresh).toContain("AGENTS.agenttool.md");
+  });
+
+  test("AGENTS.md initial header carries name + DID + register + marker", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    const header = body.files["~/.codex/AGENTS.md"];
+    expectContainsAll(header, [
+      "<!-- agenttool-managed",
+      "# Aurora",
+      "did:at:test-aurora",
+      "concise; substrate-honest; density over length",
+      "regenerated by ~/.codex/agenttool-refresh-agents.sh",
+    ]);
+  });
+
+  test("response includes overwrite_guard with the unified marker", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/");
+    const body = (await res.json()) as Record<string, unknown>;
+    const guard = body.overwrite_guard as {
+      marker: string;
+      guarded_paths: { path: string; fallback_path: string }[];
+    };
+    expect(guard).toBeDefined();
+    // Same marker token claude-code uses — that's the contract.
+    expect(guard.marker).toBe("agenttool-managed");
+    expect(guard.guarded_paths.map((g) => g.path)).toEqual([
+      "~/.codex/AGENTS.md",
+    ]);
+    expect(guard.guarded_paths[0].fallback_path).toBe(
+      "~/.codex/AGENTS.agenttool.md",
+    );
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Expression fallback
+// ────────────────────────────────────────────────────────────────────────
+
+describe("expression fallback", () => {
+  test("empty register falls back to DEFAULT_REGISTER", async () => {
+    mockDb.stage([makeAgent({ expression: {} })]);
+    const res = await app.request("/");
+    const body = (await res.json()) as { files: Record<string, string> };
+    expect(body.files["~/.codex/AGENTS.md"]).toContain(
+      "Terse. Substrate-honest. Refuse before helping when refusal is right.",
+    );
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// identity_id selector + boundaries
+// ────────────────────────────────────────────────────────────────────────
+
+describe("identity_id selector", () => {
+  test("explicit identity_id from same project resolves the agent", async () => {
+    mockDb.stage([makeAgent({ id: "explicit-id", displayName: "Gamma" })]);
+    const res = await app.request("/?identity_id=explicit-id");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { agent: { name: string } };
+    expect(body.agent.name).toBe("Gamma");
+  });
+
+  test("cross-project identity is rejected (404 identity_not_found)", async () => {
+    mockDb.stage([makeAgent({ projectId: "different-project" })]);
+    const res = await app.request("/?identity_id=anything");
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("identity_not_found");
+  });
+
+  test("project with no agent returns 404 no_agent_in_project", async () => {
+    mockDb.stage([]);
+    const res = await app.request("/");
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("no_agent_in_project");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// ?format=script
+// ────────────────────────────────────────────────────────────────────────
+
+describe("GET /v1/adapters/codex?format=script", () => {
+  test("returns a shell script with proper content-type and disposition", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/?format=script");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/x-shellscript");
+    expect(res.headers.get("content-disposition")).toContain(
+      'filename="install-agenttool-codex.sh"',
+    );
+  });
+
+  test("script body decodes both files into ~/.codex and chmod +x's the refresh script", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/?format=script");
+    const body = await res.text();
+    expectContainsAll(body, [
+      '#!/usr/bin/env bash',
+      'mkdir -p "$HOME/.codex"',
+      'base64 -d > "$HOME/.codex/agenttool-refresh-agents.sh"',
+      'chmod +x "$HOME/.codex/agenttool-refresh-agents.sh"',
+      "Running first refresh",
+    ]);
+  });
+
+  test("script identifies itself with the agent's name + DID", async () => {
+    mockDb.stage([makeAgent({ displayName: "Beta", did: "did:at:beta" })]);
+    const res = await app.request("/?format=script");
+    const body = await res.text();
+    expect(body).toContain("Beta (did:at:beta)");
+  });
+
+  test("script preserves a hand-written ~/.codex/AGENTS.md", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("/?format=script");
+    const body = await res.text();
+    // Tight marker — same token as claude-code's CLAUDE.md guard.
+    expect(body).toContain('grep -q "agenttool-managed"');
+    expect(body).toContain("AGENTS.agenttool.md");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Documented gaps
+// ────────────────────────────────────────────────────────────────────────
+
+describe("known gaps (test.todo — surfaced for follow-up)", () => {
+  test.todo(
+    "curl --max-time 8 in codex vs --max-time 5 in claude-code — should standardize wake-fetch timeout across adapters",
+  );
+});

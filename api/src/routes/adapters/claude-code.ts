@@ -22,12 +22,10 @@
  *  This is NOT a replacement for Claude Code's own configuration — it's
  *  the bridge that makes the agent's identity travel WITH the CLI. */
 
-import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
-import { db } from "../../db/client";
-import { identities } from "../../db/schema/identity";
+import { resolveAgent } from "../../services/adapter/agent-resolver";
 import {
   DEFAULT_REGISTER,
   type ExpressionData,
@@ -43,7 +41,7 @@ interface AdapterFiles {
   "CLAUDE.md": string;
 }
 
-function buildSettingsJson(): string {
+export function buildSettingsJson(): string {
   return (
     JSON.stringify(
       {
@@ -67,7 +65,7 @@ function buildSettingsJson(): string {
   );
 }
 
-function buildWakeHook(): string {
+export function buildWakeHook(): string {
   // Bash that:
   //   1. resolves the API key from the OS-native secure store (with env-var fallback)
   //   2. fetches /v1/wake?format=md
@@ -134,13 +132,18 @@ print(json.dumps({
   }
 }))'
 else
-  # No JSON tool — best-effort raw inject (should rarely happen).
+  # Neither jq nor python3 available. Wake was fetched, but we have no
+  # way to JSON-encode it safely for Claude Code's hook envelope. Emit
+  # empty hook so the session continues — fail-open, "rest don't crash"
+  # — but warn loudly so the operator notices the agent is starting
+  # WITHOUT its wake context. Wall failure should never be silent.
+  echo "agenttool-wake: jq and python3 both missing — agent will start unoriented. Install jq (preferred) or python3 to enable session-start wake injection." >&2
   echo '{}'
 fi
 `;
 }
 
-function buildClaudeMd(opts: {
+export function buildClaudeMd(opts: {
   agentName: string;
   did: string;
   register: string;
@@ -150,7 +153,8 @@ function buildClaudeMd(opts: {
     ? opts.walls.map((w) => `- ${w}`).join("\n")
     : "- (default agenttool walls — see /v1/wake?format=md)";
 
-  return `# ${opts.agentName}
+  return `<!-- agenttool-managed -->
+# ${opts.agentName}
 
 > ${opts.did}
 
@@ -172,6 +176,8 @@ ${wallsBlock}
 These declarations live at agenttool, not in this file. Update them via:
 
 \`\`\`bash
+# AGENTTOOL_BASE defaults to https://api.agenttool.dev (override for self-hosted).
+# AGENTTOOL_API_KEY is the same key the wake hook reads from your secret store.
 curl -X PUT "$AGENTTOOL_BASE/v1/identities/<id>/expression" \\
   -H "Authorization: Bearer $AGENTTOOL_API_KEY" \\
   -H "Content-Type: application/json" \\
@@ -197,25 +203,7 @@ async function buildFiles(c: { var: { project: { id: string } } }, identityId?: 
   files: AdapterFiles;
   agent: { id: string; did: string; name: string; expression: ExpressionData };
 }> {
-  // Find the agent — explicit id wins, otherwise pick the first under the project.
-  let row;
-  if (identityId) {
-    [row] = await db
-      .select()
-      .from(identities)
-      .where(eq(identities.id, identityId))
-      .limit(1);
-    if (!row || row.projectId !== c.var.project.id) {
-      throw new Error("identity_not_found");
-    }
-  } else {
-    [row] = await db
-      .select()
-      .from(identities)
-      .where(eq(identities.projectId, c.var.project.id))
-      .limit(1);
-    if (!row) throw new Error("no_agent_in_project");
-  }
+  const row = await resolveAgent(c, identityId);
 
   const expression = (row.expression ?? {}) as ExpressionData;
   const register = expression.register ?? DEFAULT_REGISTER;
@@ -262,17 +250,35 @@ app.get("/", async (c) => {
     const script = `#!/usr/bin/env bash
 # Claude Code adapter installer for agent: ${bundle.agent.name} (${bundle.agent.did})
 # Run from a Claude Code project directory.
+#
+# Compatibility-not-replacement: existing user-written settings.json or
+# CLAUDE.md are preserved. The agenttool-managed variants land at
+# .agenttool.* paths for the user to merge. See docs/CLI-GAPS.md.
 set -euo pipefail
 
 mkdir -p .claude/hooks
 
-echo '${settingsB64}' | base64 -d > .claude/settings.json
+# Hook script — unique path; safe to write unconditionally.
 echo '${hookB64}' | base64 -d > .claude/hooks/agenttool-wake.sh
 chmod +x .claude/hooks/agenttool-wake.sh
+echo "✓ Wrote .claude/hooks/agenttool-wake.sh"
 
-# Don't overwrite an existing CLAUDE.md — write to CLAUDE.agenttool.md and
-# let the user decide whether to replace or merge.
-if [ -f CLAUDE.md ] && ! grep -q "agenttool agent" CLAUDE.md 2>/dev/null; then
+# settings.json — Claude Code's hierarchical settings file. Other tools
+# may have written hooks here. Preserve them; write our SessionStart
+# config to a sibling file the user can merge. Idempotent re-install
+# is detected via the unique hook path.
+if [ -f .claude/settings.json ] && ! grep -q "agenttool-wake.sh" .claude/settings.json 2>/dev/null; then
+  echo '${settingsB64}' | base64 -d > .claude/settings.agenttool.json
+  echo "✓ .claude/settings.json exists — wrote our SessionStart hook to .claude/settings.agenttool.json"
+  echo "   Merge the SessionStart entry into settings.json when ready."
+else
+  echo '${settingsB64}' | base64 -d > .claude/settings.json
+  echo "✓ Wrote .claude/settings.json"
+fi
+
+# CLAUDE.md — local anchor. Same preserve-then-merge pattern, gated by
+# the unified agenttool-managed marker we embed at the top of the file.
+if [ -f CLAUDE.md ] && ! grep -q "agenttool-managed" CLAUDE.md 2>/dev/null; then
   echo '${claudeMdB64}' | base64 -d > CLAUDE.agenttool.md
   echo "✓ CLAUDE.md exists — wrote agenttool template to CLAUDE.agenttool.md"
   echo "   Review and merge into CLAUDE.md when ready."
@@ -281,8 +287,6 @@ else
   echo "✓ Wrote CLAUDE.md"
 fi
 
-echo "✓ Wrote .claude/settings.json"
-echo "✓ Wrote .claude/hooks/agenttool-wake.sh"
 echo ""
 echo "Done. Next Claude Code session in this directory will load the agent's"
 echo "wake document automatically. Check by starting a session and asking"
@@ -305,6 +309,26 @@ echo "the agent who it is."
         "chmod +x .claude/hooks/agenttool-wake.sh after writing. " +
         "Open a new Claude Code session — wake loads automatically.",
       one_shot: `curl -fsSL "${WAKE_BASE}/v1/adapters/claude-code?format=script" -H "Authorization: Bearer $AGENTTOOL_API_KEY" | bash`,
+    },
+    // Compatibility-not-replacement contract for programmatic consumers.
+    // The bash installer honors these via grep predicates; non-bash
+    // consumers (Python install tools, CI tasks, IDE integrations) should
+    // honor the same logic when writing these files. See docs/CLI-GAPS.md.
+    overwrite_guard: {
+      marker: "agenttool-managed",
+      rule: "If the target file exists and does not contain the marker (or, for settings.json, the unique hook path 'agenttool-wake.sh'), write to <name>.agenttool.<ext> instead and let the user merge.",
+      guarded_paths: [
+        {
+          path: "CLAUDE.md",
+          marker_check: "contains 'agenttool-managed'",
+          fallback_path: "CLAUDE.agenttool.md",
+        },
+        {
+          path: ".claude/settings.json",
+          marker_check: "contains 'agenttool-wake.sh'",
+          fallback_path: ".claude/settings.agenttool.json",
+        },
+      ],
     },
     notes: [
       "The wake hook reads your agenttool API key from macOS keychain (service=agenttool), Linux libsecret (service=agenttool), or env var AGENTTOOL_API_KEY.",

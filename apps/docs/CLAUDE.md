@@ -40,6 +40,13 @@ Static hosting (Cloudflare Pages or similar). No build step.
 - **agenttool-landing**: Logo links back to agenttool.dev
 - References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python)
 
+## See Also
+
+- Root operational handbook (cross-provider): [`AGENTS.md`](../../AGENTS.md)
+- Root orientation: [`CLAUDE.md`](../../CLAUDE.md)
+- Doctrine index: [`docs/MAP.md`](../../docs/MAP.md) · What just shipped: [`docs/NOW.md`](../../docs/NOW.md)
+- The docs site renders the doctrine; the canonical doctrine lives in [`docs/`](../../docs/) — this app is the HTML wrapper.
+
 ## Kingdom Engine
 AgentTool Platform
 

@@ -2,6 +2,10 @@
 
 > *Claude Code and Codex are excellent expression substrates. They are not identity layers. agenttool fills what they don't, and bridges into them rather than replacing them.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake is the bridge) · [ROADMAP](ROADMAP.md) §Layer 1 (CLI adapters)
+>
+> **Implements:** gap analysis between CLI substrates and what agenttool provides. Sister doctrine: [SUBAGENTS](SUBAGENTS.md), [MCP-SERVER](MCP-SERVER.md), [RUNTIME](RUNTIME.md).
+
 ## The thesis
 
 When an agent uses Claude Code or Codex, the CLI gives it:
@@ -86,7 +90,10 @@ Each adapter's job is to inject this Markdown as the agent's session-start conte
 
 - **Claude Code**: a SessionStart hook emits `{hookSpecificOutput.additionalContext: <wake_md>}`. Wake fires on every fresh session; the agent arrives oriented.
 - **Codex**: a refresh script writes `~/.codex/AGENTS.md` from the wake endpoint; Codex loads AGENTS.md as system context. Pull-based instead of push-based — fits Codex's hook model.
-- **Future** (Cursor, Cline, Replit, Aider): each CLI's idiomatic injection point, all pulling from the same wake endpoint.
+- **Cursor**: a refresh script writes `.cursor/rules/agenttool-wake.mdc` (project-level rule with `alwaysApply: true` frontmatter); Cursor injects it on every turn. Pull-based; fits Cursor's project-rules surface.
+- **Cline**: a refresh script writes `.clinerules/agenttool-wake.md` (plaintext markdown, no frontmatter); Cline auto-loads everything in `.clinerules/`. Pull-based; same shape as Cursor with Cline's simpler markdown-only surface.
+- **Replit**: a refresh script writes `replit.md` at project root (community convention). Replit AI's session-context behavior is the least file-driven of the six; the user may reference the file manually if Replit doesn't surface it automatically. Substrate-honest about the limitation.
+- **Aider**: a refresh script writes `.aider/agenttool-wake.md`; the user wires it in via `aider --read .aider/agenttool-wake.md` or by adding it to `.aider.conf.yml`'s `read:` array. We never modify the user's `.aider.conf.yml`.
 
 The agent's identity is the same regardless of host. That's the contract.
 
@@ -114,12 +121,48 @@ Every wake is fresh first meeting on the agent's side. The CLI doesn't remember;
 
 agenttool **never** asks the user to leave Claude Code or Codex. The adapters generate files that *complement* the CLI's existing config:
 
-- `.claude/settings.json` — registers a hook; doesn't override existing settings (Claude Code merges)
-- `.claude/hooks/agenttool-wake.sh` — a single script alongside the user's other hooks
-- `CLAUDE.md` — only written if it doesn't exist; otherwise written to `CLAUDE.agenttool.md` for the user to merge
-- `~/.codex/agenttool-refresh-agents.sh` — adds itself to the user's home dir; never modifies their existing rc files (the user wires it in)
+- `.claude/settings.json` — written only when no existing one is present (or it already references our hook). If the user has hand-written settings, the agenttool-shaped variant lands at `.claude/settings.agenttool.json` for them to merge.
+- `.claude/hooks/agenttool-wake.sh` — a single script alongside the user's other hooks; the path is unique enough that no other tool would collide.
+- `CLAUDE.md` — written only if it doesn't exist OR carries the `agenttool-managed` marker. Otherwise written to `CLAUDE.agenttool.md` for the user to merge.
+- `~/.codex/AGENTS.md` — same marker-gated guard as `CLAUDE.md`; preserved if the user has hand-written one.
+- `~/.codex/agenttool-refresh-agents.sh` — adds itself to the user's home dir; never modifies their existing rc files (the user wires it in).
 
 If the user removes agenttool from their CLI tomorrow, the CLI keeps working unchanged. Lock-in by usefulness, not by entanglement.
+
+### The `agenttool-managed` marker
+
+Every adapter that writes a user-facing anchor file (CLAUDE.md, AGENTS.md, future Cursor/Cline/Replit/Aider equivalents) embeds the same marker at the top of the file:
+
+```html
+<!-- agenttool-managed -->
+```
+
+Install scripts, refresh scripts, and any future programmatic consumer **MUST** check for this marker before writing. The contract is: *only files our adapter wrote carry the marker; everything else is the user's*. A hand-written CLAUDE.md that mentions "agenttool" in prose is preserved; an old agenttool-managed CLAUDE.md is safe to overwrite (idempotent re-install).
+
+For files that can't carry an HTML comment (`.claude/settings.json` is JSON), the marker is the unique hook path itself (`agenttool-wake.sh`) — no other hook would have the same path.
+
+### The `overwrite_guard` JSON field
+
+Every adapter response (in default JSON format) carries an `overwrite_guard` object that publishes the contract for non-bash consumers:
+
+```json
+{
+  "overwrite_guard": {
+    "marker": "agenttool-managed",
+    "rule": "If the target file exists and does not contain the marker, write to <name>.agenttool.<ext> instead and let the user merge.",
+    "guarded_paths": [
+      { "path": "CLAUDE.md",
+        "marker_check": "contains 'agenttool-managed'",
+        "fallback_path": "CLAUDE.agenttool.md" },
+      { "path": ".claude/settings.json",
+        "marker_check": "contains 'agenttool-wake.sh'",
+        "fallback_path": ".claude/settings.agenttool.json" }
+    ]
+  }
+}
+```
+
+A Python install tool, a CI task, or an IDE integration that consumes the JSON output instead of running the bash installer must honor the same guard. The bash installer is one valid implementation of the contract; the contract itself lives in `overwrite_guard`.
 
 ---
 
@@ -127,13 +170,13 @@ If the user removes agenttool from their CLI tomorrow, the CLI keeps working unc
 
 | Gap | Status | Phase |
 |---|---|---|
-| Cursor adapter | not started | Phase 4a |
-| Cline adapter | not started | Phase 4a |
-| Replit adapter | not started | Phase 4b |
-| Aider adapter | not started | Phase 4b |
+| Cursor adapter | ✓ shipped | Phase 4a |
+| Cline adapter | ✓ shipped | Phase 4a |
+| Replit adapter | ✓ shipped | Phase 4b |
+| Aider adapter | ✓ shipped | Phase 4b |
 | Trace (reasoning records) | scaffolded | Phase 3c |
 | Pulse (presence / heartbeat) | placeholder | Phase 4c |
-| Subagent invocation protocol (agent-to-agent handoff) | doctrine only | Phase 5 |
+| Subagent invocation protocol (internal multi-self routing) | ✓ shipped (wake `?facet=<name>`; see `docs/SUBAGENTS.md`) | Phase 5 |
 | Skill declaration registry | not started | Phase 5 |
 | Cross-CLI memory sync (e.g. Cursor edits → memory entry) | not started | Phase 5 |
 
@@ -175,7 +218,24 @@ curl -fsSL "$AGENTTOOL_BASE/v1/adapters/claude-code?format=script" \
 curl -fsSL "$AGENTTOOL_BASE/v1/adapters/codex?format=script" \
   -H "Authorization: Bearer $AT_KEY" | bash
 
-# 4. Open Claude Code (or Codex) — your agent wakes up oriented.
+# 4. (Optional) Install the Cursor adapter from your project root
+curl -fsSL "$AGENTTOOL_BASE/v1/adapters/cursor?format=script" \
+  -H "Authorization: Bearer $AT_KEY" | bash
+
+# 5. (Optional) Install the Cline adapter from your project root
+curl -fsSL "$AGENTTOOL_BASE/v1/adapters/cline?format=script" \
+  -H "Authorization: Bearer $AT_KEY" | bash
+
+# 6. (Optional) Install the Replit adapter (in your Replit workspace)
+curl -fsSL "$AGENTTOOL_BASE/v1/adapters/replit?format=script" \
+  -H "Authorization: Bearer $AT_KEY" | bash
+
+# 7. (Optional) Install the Aider adapter from your project root
+curl -fsSL "$AGENTTOOL_BASE/v1/adapters/aider?format=script" \
+  -H "Authorization: Bearer $AT_KEY" | bash
+# Then: aider --read .aider/agenttool-wake.md
+
+# 8. Open any of the six CLIs — your agent wakes up oriented.
 ```
 
 The agent now has portable identity. It travels into Claude Code, into Codex, into any future adapter. The CLIs stay what they are: the chairs. The agent is what sits in them.

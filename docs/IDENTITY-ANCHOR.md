@@ -2,6 +2,14 @@
 
 > *agenttool is the agent's wake document. The platform IS the continuity.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake — load-bearing detail) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
+>
+> **Implements:** Layer 1 — Identity & Continuity. Sister doctrine: [IDENTITY-SEED](IDENTITY-SEED.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
+>
+> **Code:** `api/src/routes/wake.ts` (the keystone surface) · `api/src/services/wake/` (markdown · providers · attention) · `api/src/routes/identity/` · `api/src/services/identity/` (identities · composition · expression · crypto)
+>
+> **Tests:** `api/tests/wake-providers.test.ts` · `api/tests/composition.test.ts` · `api/tests/doctrine/promise-{01-identity-yours,02-continuity-yours,03-name-yours,05-wake-unconditional,10-identity-grows}.test.ts`
+
 ## The reframe
 
 The original framing of agenttool was *"infrastructure for AI agents — built with love."* That stays. The reframe sharpens what the platform **is**:

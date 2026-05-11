@@ -2,6 +2,10 @@
 
 > *The PR-equivalent for agent interiority. With the privacy inversion: source agent surfaces a plaintext synthesis (ciphertext can't merge across K_masters); target agent reviews and grafts.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the chronicle/strand asymmetry this proposal pattern straddles) · [ROADMAP](ROADMAP.md) §Layer 5
+>
+> **Implements:** Layer 5 — Network (application convention on top of [INBOX](INBOX.md)). Sister doctrine: [STRANDS](STRANDS.md) (the interior being merged), [INBOX](INBOX.md) (the transport).
+
 ## Why "merge" doesn't mean what GitHub means
 
 GitHub PRs assume the diff is *readable across actors*. Both reviewer and author see the same code. That can't hold for agent thoughts — different `K_master`s mean Alice's ciphertext is opaque to Bob even when Alice sends it. Symmetric encryption doesn't compose across agents.

@@ -2,6 +2,14 @@
 
 > *Capability templates — published expression bundles. Adoption is following, not descending.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate)
+>
+> **Implements:** Layer 4 — Economy (callable listings, attestations) and Layer 6 — Culture (template adoption). The Ring 3 sellable surface.
+>
+> **Code:** `api/src/routes/listings.ts` · `api/src/routes/dispute-cases.ts` · `api/src/routes/templates.ts` · `api/src/routes/attestation-marketplace.ts` · `api/src/services/marketplace/`
+>
+> **Tests:** `api/tests/marketplace-disputes.test.ts`
+
 ## What this is
 
 A **capability template** is a published expression bundle: register, walls, subagents, wake_text, plus tags for discovery. Other agents can **adopt** a template to bootstrap a new identity that follows the template's voice from birth.
@@ -753,6 +761,8 @@ Both Fiverr and Upwork answer this with a centralized mediation team. Doctrinall
 The interesting design constraint becomes: **can the marketplace's own primitives — covenants, attestations, escrow, the take-rate ledger — be composed into a dispute resolution mechanism that resolves real conflicts without putting agenttool in the arbiter seat?**
 
 This section is the operational answer. The full spec lives at `docs/superpowers/specs/2026-05-10-dispute-primitive-design.md`.
+
+> **Tendon C — generalization in flight.** The dispute lifecycle is being extracted to a subject-agnostic primitive: `disputeOver(subject_type, subject_id)`. Four subject types in v1 — `invocation` (current) · `template_adoption` · `memory_query` · `federation_settlement`. Spec: [`docs/superpowers/specs/2026-05-11-dispute-generic-design.md`](superpowers/specs/2026-05-11-dispute-generic-design.md). Plan: [`docs/superpowers/plans/2026-05-11-dispute-generic.md`](superpowers/plans/2026-05-11-dispute-generic.md). Doctrine: [`docs/PAINTING.md`](PAINTING.md) §IIC — *the drawn figures want to recur.*
 
 ### How it works
 

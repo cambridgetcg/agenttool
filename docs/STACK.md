@@ -2,6 +2,8 @@
 
 > *How the kingdom deploys — code host, frontend, backend, database, secrets.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
+
 This is the architecture/operations map. It sits between two existing docs:
 
 - **`DEVELOPMENT.md`** — contributor protocols (migrations, schema collisions, secrets, K_master rotation).
@@ -129,6 +131,18 @@ A stale bundle silently derives the wrong keys — see `apps/dashboard/DEPLOY.md
 ### Cache headers
 
 `apps/dashboard/_headers` sets `Cache-Control: public, max-age=0, must-revalidate` on `app.js`, `style.css`, the SOMA pages, and the seed bundle. Browsers still 304 fast when content is unchanged — the must-revalidate just stops them from skipping the round-trip entirely. Without this, post-deploy operators kept hitting hours-old code from browser cache.
+
+**Zone-level requirement.** For `_headers` to take effect on JS/CSS/non-HTML responses, the Cloudflare zone setting **Browser Cache TTL must be `0` ("Respect Existing Headers")** on `agenttool.dev`. CF's default is 4 hours — that value silently *overrides* origin Cache-Control on static assets (HTML is exempt from the override, which is why HTML rules in `_headers` worked while JS/CSS rules silently didn't, until 2026-05-09). Verify via API:
+
+```bash
+CF_TOKEN=$(security find-generic-password -s Cloudflare_API_Token -w)
+ZONE_ID=1f264ac5149eefa9eb436716ff6ff9ba
+curl -s -H "Authorization: Bearer $CF_TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/browser_cache_ttl" \
+  | python3 -m json.tool   # expect: "value": 0
+```
+
+If a future operator wants a longer browser cache for landing/docs, do it via a per-hostname **Cache Rule** scoped to `agenttool.dev` / `docs.agenttool.dev` (NOT `app.agenttool.dev`) — restoring zone-wide Browser Cache TTL would break the dashboard's `_headers` doctrine again.
 
 ### CF deploy verification
 
@@ -329,7 +343,7 @@ DNS managed by Cloudflare. Zone: `agenttool.dev`.
 | `api.agenttool.dev` | Fly.io anycast | `api/` |
 | `*.agenttool.dev` | (reserved) | |
 
-Updating DNS records: scripted via `infra/phase3-load-balancer/deploy.sh` (uses `CF_ZONE_ID` + `CF_KEY` from `.env.infra`). Manual edits via the Cloudflare dashboard work too.
+Updating DNS records: manual via the Cloudflare dashboard, or scripted ad-hoc using a Cloudflare API token (`Cloudflare_API_Token` in macOS keychain) against the Cloudflare API. The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the historical Hetzner-LB DNS update; not used today.
 
 ---
 
@@ -496,12 +510,35 @@ If you stage in the other order (frontend first, or push without deploying), pro
 
 ### Pre-flight before any deploy
 
+The single entry point is `bin/preflight.sh`. It runs every test layer in order, gating each on the previous, and exits non-zero on any failure. **One command for the whole gate:**
+
 ```bash
 git status -s                                # working tree clean (all changes pushed)
-bunx tsc --noEmit -p api                     # api typechecks
-cd tests/playwright && npx playwright test   # browser e2e green
-cd packages/sdk-ts && bun run check-parity   # py↔ts parity (only if SDK changes)
+AGENTTOOL_BASE=https://api.agenttool.dev \
+AGENTTOOL_API_KEY=$(bin/agenttool-secret get agenttool-soma-bearer) \
+AGENTTOOL_IDENTITY_ID=$(bin/agenttool-secret get agenttool-sophia-identity-id) \
+  bin/preflight.sh
 ```
+
+What runs, in order:
+
+| Layer | What | Cost | Gate |
+|---|---|---|---|
+| 1 | `bunx tsc --noEmit` against `api/` + `packages/sdk-ts/` | seconds | (always) |
+| 2 | `bun test` against `api/` + `packages/sdk-ts/` — includes the doctrine directory (`api/tests/doctrine/`) and the SDK wake-cache tests | seconds | (always) |
+| 3 | `bun run check-parity` (py↔ts SDK surface) | sub-second | `SKIP_PARITY=1` to skip |
+| 4 | `bin/smoke-test.sh` against the running server — includes the wake-doctrine harness (`_e2e-wake-doctrine.mjs`, ~30 read-only assertions on `/v1/wake`) | ~10s | `SKIP_SMOKE=1` to skip |
+| 5 | **Contract tests** — real Anthropic + OpenAI calls verifying the wake's cache_control fires on the wire AND the agent behaves as the wake describes (identity, walls, register, witness). See `api/tests/contract/README.md`. | ~$0.10/run | `RUN_CONTRACT=1` to **enable** + `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` |
+
+Optional, run separately when meaningful:
+
+```bash
+cd tests/playwright && npx playwright test   # browser e2e (Cloudflare Pages flows)
+```
+
+If you can't reach a server from your machine (CI runner, offline laptop), pass `SKIP_SMOKE=1` and run `bin/smoke-test.sh` separately from a host that can.
+
+The doctrine layer (`api/tests/doctrine/README.md`) is the canonical wake-side spec — every doctrinal Promise from `IDENTITY-ANCHOR.md` carries an executable witness there. Layer 5 (`api/tests/contract/README.md`) extends the pact to "no doctrinal claim about the substrate without a test that the substrate honors it" — Promise 8 is now verifiable on the wire.
 
 If these don't pass, don't deploy. The pre-flight catches "I'm about to ship code that doesn't even compile" — common after a multi-file refactor where one file got missed.
 

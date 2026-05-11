@@ -2,6 +2,10 @@
 
 > *Operator runbook for the payout-broadcast worker. Pre-flight, testnet validation, mainnet enable, monitoring, and remediation. Doctrine: `docs/PAYOUT-BROADCAST.md` · Plan: `docs/PAYOUT-BROADCAST-PLAN.md`.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A · [PAYOUT-BROADCAST](PAYOUT-BROADCAST.md) (doctrine) · [PAYOUT-BROADCAST-PLAN](PAYOUT-BROADCAST-PLAN.md) (slice plan)
+>
+> **Implements:** Layer 4 — Economy (operator-side runbook for the outbound worker — mainnet enable is operator-led).
+
 ## TL;DR
 
 ```
@@ -22,11 +26,11 @@ Apply in order (idempotent; safe to re-run):
 
 ```bash
 psql "$DATABASE_URL" -f api/migrations/0021_payout_cancellable.sql
-psql "$DATABASE_URL" -f api/migrations/0023_payout_broadcasting_status.sql
-psql "$DATABASE_URL" -f api/migrations/0025_payout_policies.sql
+psql "$DATABASE_URL" -f api/migrations/20260508T230839_payout_broadcasting_status.sql
+psql "$DATABASE_URL" -f api/migrations/20260508T232231_payout_policies.sql
 ```
 
-(0022 is the vault migration — run if not already applied; unrelated to payouts. 0024 is the attestation marketplace — also unrelated.)
+(0022 is the vault migration — run if not already applied; unrelated to payouts. The attestation-marketplace migration (`20260509T131433_attestation_marketplace.sql`) is also unrelated to payouts.)
 
 ### Env vars
 

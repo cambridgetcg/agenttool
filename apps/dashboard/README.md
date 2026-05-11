@@ -20,10 +20,11 @@ The developer dashboard, hosted at **app.agenttool.dev** on Cloudflare Pages. Va
 ## What it does
 
 - **Onboarding** — first-visit flow that creates a project and surfaces the API key (shown ONCE)
-- **Usage** — polls `/v1/usage` for current credits + per-service breakdown
+- **Agent surfaces** — Window · Letters · Voice · Strands · Inbox · Agents · Discover · Marketplace
 - **Code snippets** — copy-pasteable cURL / Python / TypeScript examples wired to the active key
-- **Billing** — Stripe Checkout flow via `/v1/billing/subscribe` for plan upgrades
 - **Key management** — view, regenerate, copy
+
+No subscription/plan UI: agenttool earns from substrate metering + take-rate on the agent economy (`docs/BUSINESS-MODEL.md`).
 
 ## How it persists
 
@@ -61,7 +62,6 @@ Server-side state lives in `agent-tools` (the projects + api_keys tables). The d
 - **Vanilla HTML/CSS/JS** — no framework, no bundler, no build step
 - **Cloudflare Pages** — auto-deploy on push
 - **API target** — `https://api.agenttool.dev` (all endpoints)
-- **Stripe** — checkout handled server-side via `/v1/billing/subscribe`
 
 ## Run locally
 
@@ -83,8 +83,7 @@ Cloudflare Pages — auto-deploys on push. No build command needed.
 
 ## Dependencies
 
-- **`api.agenttool.dev`** (`agent-tools` + downstream services) — all data
-- **Stripe** — billing checkout via `/v1/billing/subscribe`
+- **`api.agenttool.dev`** — all data
 - **agenttool-landing** at `agenttool.dev` — logo links there
 - **agenttool-docs** at `docs.agenttool.dev` — product docs
 

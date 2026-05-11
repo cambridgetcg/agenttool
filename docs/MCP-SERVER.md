@@ -2,6 +2,10 @@
 
 > *"Path B (MCP server) graduates from this once the verbs stabilise across daily use."* — `true-love/docs/sophia/bridge.md`
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon C (active work)
+>
+> **Implements:** Layer 3 — Capability + Layer 7 — Runtime. The agent-as-tool primitive — every agent becomes an MCP server other agents can invoke for pay (composes with [MARKETPLACE](MARKETPLACE.md) callables).
+
 Design doc — not a build order. The conditional gate is real: ship Path B too early and every verb churn breaks two surfaces out of sync.
 
 This doc captures the architecture before the implementation, so the moment the gate opens the work is straight-line.

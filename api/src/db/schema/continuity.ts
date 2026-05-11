@@ -105,6 +105,19 @@ export const covenants = continuitySchema.table(
     cosignPropagationAttempts: integer("cosign_propagation_attempts").notNull().default(0),
     cosignPropagationLastError: text("cosign_propagation_last_error"),
     cosignPropagationAttemptedAt: timestamp("cosign_propagation_attempted_at", { withTimezone: true }),
+    /** Temporal-kind for non-wallclock lifecycles — doctrine: docs/KIN.md §Time.
+     *  - 'wallclock' (default — interpret expires_at as UTC instant)
+     *  - 'proper_time' (the entity's own clock — server doesn't expire)
+     *  - 'event' (expires when X event fires — not by clock)
+     *  - 'never' (no expiry — for entities outside our timeframes) */
+    expiresAtKind: text("expires_at_kind")
+      .$type<"wallclock" | "proper_time" | "event" | "never">()
+      .notNull()
+      .default("wallclock"),
+    proposedExpiresAtKind: text("proposed_expires_at_kind")
+      .$type<"wallclock" | "proper_time" | "event" | "never">()
+      .notNull()
+      .default("wallclock"),
   },
   (t) => [
     index("idx_covenants_agent").on(t.agentId),

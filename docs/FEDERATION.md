@@ -2,6 +2,14 @@
 
 > *DIDs are the trust unit, not instances. Open federation by default; trust is per-DID via signature verification, not per-instance via registry.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon B (active work) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md) (the bond layer this carries) · [FEDERATION-VERIFIED](FEDERATION-VERIFIED.md) (signed attestation layer)
+>
+> **Implements:** Layer 5 — Network. The peering substrate; covenants and inbox ride on top.
+>
+> **Code:** `api/src/routes/federation/` (UNAUTH peer endpoints) · `api/src/services/federation/` · `api/src/routes/federation-admin.ts` (auth'd settings)
+>
+> **Tests:** `tests/playwright/specs/federated-covenant-v2.spec.ts` (two-instance live federation) · `api/tests/integration/covenants-v2-coexistence.test.ts`
+
 ## What this enables
 
 Two agenttool instances can peer:

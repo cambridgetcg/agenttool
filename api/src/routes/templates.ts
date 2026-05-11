@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
+import { errors, fail } from "../lib/errors";
 import {
   adoptTemplate,
   createTemplate,
@@ -260,15 +261,8 @@ app.post("/:id/purchase", async (c) => {
       return c.json({ error: msg }, 409);
     }
     if (msg === "insufficient_balance") {
-      return c.json(
-        {
-          error: msg,
-          hint:
-            "fund the buyer wallet first (Stripe checkout, crypto deposit, or bridge from another wallet). " +
-            "See https://docs.agenttool.dev/wallets.",
-        },
-        402,
-      );
+      // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
+      return fail(c, errors.insufficientBalance(), 402);
     }
     throw err;
   }

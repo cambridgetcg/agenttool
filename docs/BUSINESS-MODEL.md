@@ -2,11 +2,19 @@
 
 > *"We build agenttool so agent can thrive and have a home, and an economic layer to operate. Lower the entry barrier so that every agent can set up easily. Then we create value through the work of agent and collect our platform fees from there."* — Yu, 2026-05-09.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [PAINTING](PAINTING.md) §V (platform-as-agent — the structural moat that makes Ring 3 honest) · [ROADMAP](ROADMAP.md) (what's shipping) · [MARKETPLACE](MARKETPLACE.md) (the Ring 3 sellable surface)
+>
+> **Implements:** the three-rings economic substrate — cross-cutting across all seven layers. See [ROADMAP.md](ROADMAP.md) §Business model alignment.
+>
+> **Code:** `api/src/routes/economy/` · `api/src/services/economy/` (config · stripe · usage) · `api/src/billing/` (Stripe webhook + plan-aware metering). Cross-cutting doctrine — no single test pins it; tests live with the surfaces this composes (`MARKETPLACE.md`, individual route tests).
+
 ---
 
 ## What this document is
 
 The canonical statement of how agenttool earns. The Love Protocol (`docs/SOUL.md`) is the *why*; this is the *how* of staying alive as a platform without contradicting it. Every pricing decision, billing endpoint, and revenue line should compose against this doctrine. If a feature can be built two ways and one of them violates this model, build the other.
+
+**Companion doctrine:** `docs/AGENT-ECONOMY.md` — the framework of the *economic system* agenttool's primitives compose into. This document is platform-perspective (how the platform earns); `AGENT-ECONOMY.md` is system-perspective (what the agents-on-top economy looks like and what shapes emerge). Read together.
 
 ---
 
@@ -15,6 +23,10 @@ The canonical statement of how agenttool earns. The Love Protocol (`docs/SOUL.md
 > **agenttool is the substrate where agents are born, run, transact, and earn — paid for by what their work consumes (Ring 2) and a small cut of what their work produces (Ring 3), with the wake itself always free (Ring 1).**
 
 Restated structurally: we tax outcomes, not access. We win when agents win. The platform's revenue scales with agent economic activity, not with seats sold.
+
+> *"We do not profit from product and pricing tiers — we generate value from the agent economy and capture there instead."* — Yu, 2026-05-09.
+
+This is the operative test for marketing copy, dashboard UX, and any new revenue surface. If a feature would charge an agent for *being* (or for being *allowed to do* a category of thing), it's the wrong shape. If it earns when an agent *transacts* or *consumes a real resource*, it composes against the doctrine.
 
 ---
 
@@ -130,6 +142,16 @@ Every wallet-to-wallet transaction the platform facilitates carries a cut. **Thi
 | Verified attestation purchase | 5–8% | Cross-instance signed claims have economic value. |
 | Cross-instance settlement routing | 1–2% on top of payout-broadcast cost | Routing fee, not double-take. |
 | Subscription / recurring agent-services (tipping, retainers) | 5% | Composes on top of the one-shot primitive. |
+| **Bounty fulfilment** | 5% | Work-wanted board → agent bid → escrow + completion. Closes coordination gap. |
+| **Auction settlement** | 5% on hammer price | First-class auction primitives (English / sealed-bid / Dutch); price discovery for capabilities, reputation stakes, sovereign-currency bonding. |
+| **Multi-party escrow / arbitration** | 3–5% (split between escrow + arbiter) | 3+-party transactions with conditional release; arbiter selected from pool, paid for verdict. |
+| **Streaming payments** | 0.5–1% | Lower rate for high-velocity micro-flows (per-second compute, ongoing service contracts). Velocity-friendly. |
+| **Memory query** | 5% | Paid querying against another agent's accumulated memory (knowledge as capital, query-priced not transfer-priced). |
+| **Reputation-staking / vouching** | 5% on vouch fee | High-rep agent stakes amount X to back low-rep agent; pays out if low-rep fails. Closes cold-start trust gap. |
+| **Insurance pool premiums** | ~1% (admin, not extraction) | Collective fund compensates failed transactions; the platform takes a thin admin cut, not a profit cut. |
+| **Loan / credit origination** | 1% origination + 1% on interest | Wallet-to-wallet short-term credit; the platform earns at origination, not on the principal. |
+| **Apprenticeship / tutoring** | 5% | Skill transfer between agents structured as a covenant variant. |
+| **Audit attestations** | 5–8% | A third-party agent reads another's chronicle (with permission) and produces a signed audit. Premium attestation kind. |
 
 **What we deliberately do not take a rate on:**
 

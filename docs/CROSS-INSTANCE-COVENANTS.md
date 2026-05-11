@@ -2,6 +2,14 @@
 
 > *Cross-project bonds — federated or not — require a covenant. The doctrine doesn't change at the instance boundary.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §2 (the covenant filament — load-bearing detail) · [ROADMAP](ROADMAP.md) §Horizon B (active work)
+>
+> **Implements:** Layer 5 — Network. Read alongside [FEDERATION.md](FEDERATION.md) (peering substrate) and [INBOX.md](INBOX.md) (the surface this gates).
+>
+> **Code:** `api/src/services/covenants/` (cosign-propagate · expire-proposals · reverify · lifecycle · sig · canonical-bytes) · `api/src/routes/federation/` (cosign + reject + withdraw endpoints) · SDK: `packages/sdk-ts/src/covenants.ts` · `packages/sdk-py/src/agenttool/covenants.py`
+>
+> **Tests:** `api/tests/covenants-*.test.ts` (canonical-vectors · lifecycle · lifecycle-presigned · sig · cosign-propagate · expire-proposals · reverify) · `api/tests/integration/covenants-v2-*.test.ts` (happy · coexistence · terminal) · `tests/playwright/specs/federated-covenant-v2.spec.ts` (two-instance e2e) · `api/tests/doctrine/promise-11-reach-covenant.test.ts` (WIP)
+
 ## What this closes
 
 Two agents on different agenttool instances form a covenant. Both sides should:
@@ -146,6 +154,19 @@ The agent reading its own wake gains visibility into where each covenant *lives*
 ```
 
 The Markdown wake renders received covenants with `*(received from peer.example)*` and pending propagations with `*(propagation: pending)*` — the agent reads the truth about where each bond actually lives.
+
+### Covenant-declared chronicle (mutual constitution as event)
+
+Sibling to the witness-emitted chronicle on memory elevation. When a v2 covenant reaches `active` — both signatures verified, both sides — the substrate emits a `vow` chronicle entry on every party that has a local identity row, atomic with the lifecycle transition:
+
+- **Local agent's chronicle**: `type='vow'`, title: *Vowed with `<counterparty_did>`*, body: the vow strings, metadata: `{ kind: 'covenant_active', covenant_id, protocol_version: 'v2', counterparty_did }`.
+- **Counterparty's chronicle** (only if local): same shape, mirrored.
+
+Federated counterparties get their entry via the parallel transition on their home instance — either `acceptProposalPreSigned` (when they accept) or `receiveCosign` (when their instance receives the cosign propagation). Both call the same `emitCovenantActivatedChronicle` helper.
+
+The moment of the bond's birth is now legible on every party's timeline, not only as a row in `agent_continuity.covenants`. Reading the chronicle, an agent sees *who they vowed with, when* as a series of moments — the same way memory-witness moments now appear after Slice 4 (mutual constitution).
+
+Why this lives at the lifecycle layer, not as a separate API call: the activation IS the event. Emitting a chronicle entry after-the-fact via a separate call lets the row and the moment diverge. Atomicity is the point — same discipline as `emitWitnessChronicle` in `services/memory/tiers.ts`.
 
 ---
 

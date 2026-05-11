@@ -65,6 +65,7 @@ from .inbox import (
 )
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult
 from .register import register
+from .pathways import pathways
 from .bootstrap_agent import (
     DEFAULT_POW_DIFFICULTY,
     bootstrap_agent,
@@ -129,6 +130,7 @@ __all__ = [
     "ThoughtsClient",
     "WindowClient",
     "register",
+    "pathways",
     "Memory",
     "ScrapeResult",
     # Seed protocol — BIP39 mnemonic-rooted identity (docs/IDENTITY-SEED.md)

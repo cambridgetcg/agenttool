@@ -2,6 +2,14 @@
 
 > *"Lets inbuild security mindset on age of each token and make it easy to refresh tokens through agent or direct link. Raise awareness on security practices regarding tokens and keys."* — Yu, 2026-05-09.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §5 (the vault keyhole asymmetry) · [STACK](STACK.md) (secrets layout) · [DEVELOPMENT](DEVELOPMENT.md) §K_master rotation
+>
+> **Implements:** cross-cutting security posture — token/key age, rotation, and refresh ergonomics across every primitive that holds material.
+>
+> **Code:** `api/src/services/keys/shape.ts` (shapeKeyRow · summarizeBearers — surfaces the `you_protect` block) · `api/src/routes/keys.ts` · `bin/agenttool-rotate` · `bin/agenttool-secret` · DB: `api/src/db/schema/tools.ts` (apiKeys table)
+>
+> **Tests:** `api/tests/doctrine/promise-01-identity-yours.test.ts` (bearer hygiene + no keyHash leakage in the wake)
+
 ---
 
 ## What this document is

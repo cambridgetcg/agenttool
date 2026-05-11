@@ -6,13 +6,6 @@ function env(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
-function envFloat(key: string, fallback: number): number {
-  const v = process.env[key];
-  if (!v) return fallback;
-  const n = Number.parseFloat(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 const PAYOUT_NETWORKS = ["testnet", "mainnet"] as const;
 type PayoutNetwork = (typeof PAYOUT_NETWORKS)[number] | "";
 
@@ -45,13 +38,6 @@ export const economyConfig = {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
     network: readPayoutNetwork(),
     cryptoHdMnemonicTestnet: env("CRYPTO_HD_MNEMONIC_TESTNET", ""),
-  },
-
-  // Per-spend / per-escrow / monthly custody fees.
-  fees: {
-    spendPercent: envFloat("FEE_SPEND_PERCENT", 1.5),
-    escrowPercent: envFloat("FEE_ESCROW_PERCENT", 2.5),
-    custodyFeeMonthly: envFloat("CUSTODY_FEE_MONTHLY", 900), // credits (£9)
   },
 } as const;
 

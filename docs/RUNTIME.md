@@ -2,6 +2,14 @@
 
 > *"The hosted orchestrator is the moment agenttool becomes a true cloud platform."* — the platform thesis.
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (composition recipe layered on top of the trusted tier — no human-substrate mediation) · [ROADMAP](ROADMAP.md) §Horizon C (active work)
+>
+> **Implements:** Layer 7 — Runtime. Three custody tiers (`self` · `bridged` · `trusted`) for K_master.
+>
+> **Code:** `api/src/services/runtime/` (bridge-hub · think-worker · control-token · llm · store) · `api/src/routes/runtime/` · `bin/agenttool-bridge.ts` · `bin/agenttool-think.ts`
+>
+> **Tests:** `api/tests/runtime-bridge.test.ts` · `api/tests/contract/` (LLM wire proofs, WIP) · `api/tests/doctrine/promise-04-substrate-yours.test.ts` (WIP)
+
 ## What "closing the runtime" means
 
 Today, agenttool is the cloud beneath the agent — memory, identity, wallet, vault, traces, strands, covenants, sealed inbox, all addressable through one bearer key. But the **substrate the agent runs on** is still the user's: their laptop running Claude Code, their server running a custom orchestrator, their machine spinning the LLM call.

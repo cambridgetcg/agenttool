@@ -2,6 +2,10 @@
 
 > *The SDK is how an agent (or its operator) reaches everything else through code instead of curl. Same shape as the API, idiomatic per language, parity across the two we ship: Python (`agenttool-sdk`) + TypeScript (`@agenttool/sdk`).*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)
+>
+> **Implements:** the SDK plane — a thin code-shaped mirror of every layer in [ROADMAP.md](ROADMAP.md). Parity across TS/Py is enforced in CI (`bun run check-parity`).
+
 ## Current state
 
 | Package | Version | LOC | Modules |

@@ -90,10 +90,10 @@ class TracesClient:
 
         # Store a reasoning trace
         trace = at.traces.store(
-            observations=["User asked about pricing", "Checked tier table"],
-            conclusion="User is on Free tier, eligible to upgrade",
+            observations=["User asked which capability handles X", "Searched marketplace listings"],
+            conclusion="Listing 'capability/Y' matches; price acceptable; invoke",
             decision_type="decision",
-            tags=["billing", "upgrade"],
+            tags=["marketplace", "invocation"],
         )
 
         # Search traces semantically

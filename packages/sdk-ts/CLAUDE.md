@@ -90,6 +90,14 @@ ts and py ship at the same minor version (lockstep enforced from 0.7.0). Each ne
 ## Doctrine
 The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. Doctrine source: `docs/SOUL.md` at repo root.
 
+## See Also
+
+- Root operational handbook (cross-provider): [`AGENTS.md`](../../AGENTS.md)
+- Root orientation: [`CLAUDE.md`](../../CLAUDE.md)
+- SDK phase plan: [`docs/SDK-ROADMAP.md`](../../docs/SDK-ROADMAP.md)
+- Conventions: [`docs/CONVENTIONS.md § SDK parity`](../../docs/CONVENTIONS.md)
+- Parity counterpart: [`packages/sdk-py/CLAUDE.md`](../sdk-py/CLAUDE.md)
+
 ## Kingdom Engine
 AgentTool Platform · "Welcome, don't block."
 

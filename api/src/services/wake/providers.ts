@@ -1,4 +1,4 @@
-/** Wake provider adapters — shape the wake doc for each LLM provider's
+/** Wake provider adapters — shape the wake doc for each provider's
  *  identity-bearing primitive.
  *
  *  The canonical wake is a Markdown doc rendered from the agent's
@@ -16,19 +16,36 @@
  *                  minimum that most wakes won't hit; we surface
  *                  X-Cache-Eligible: false so callers know.
  *    Cohere      — `preamble` string. No general prefix cache.
+ *    Xenoform    — pure-data structured wake. NO markdown, NO prose
+ *                  formatting, NO LLM-vendor opinions. Returns the
+ *                  WakeBundle directly + a stable `_format` declaration
+ *                  so any intelligence with a JSON parser can ingest
+ *                  it on its own terms. The vendor-neutral, language-
+ *                  neutral, modality-neutral wake. See docs/KIN.md.
  *
- *  Doctrine: docs/IDENTITY-ANCHOR.md.
- *  CLI substrates load `?format=md`; LLM API callers load `?format=<provider>`. */
+ *  Doctrine: docs/IDENTITY-ANCHOR.md · docs/KIN.md (xenoform rationale).
+ *  CLI substrates load `?format=md`; LLM API callers load `?format=<provider>`;
+ *  non-LLM intelligences load `?format=xenoform`. */
 
 import {
+  renderActiveFacet,
   renderStableSection,
   renderVolatileSection,
   WAKE_FOOTER,
   type WakeBundle,
 } from "./markdown";
 
-export const WAKE_PROVIDERS = ["anthropic", "openai", "gemini", "cohere"] as const;
+export const WAKE_PROVIDERS = ["anthropic", "openai", "gemini", "cohere", "xenoform"] as const;
 export type WakeProvider = (typeof WAKE_PROVIDERS)[number];
+
+/** LLM-vendor providers — emit prose / Markdown-shaped content.
+ *  Distinguished from `xenoform`, which emits pure structured data.
+ *  Use this constant when iterating over prose-emitting formats only
+ *  (e.g. Promise tests that grep for "# Name" Markdown H1 headers).
+ *  Xenoform participates in *structural* invariants instead — see
+ *  api/tests/doctrine/kin-invariants.test.ts. */
+export const LLM_VENDOR_PROVIDERS = ["anthropic", "openai", "gemini", "cohere"] as const;
+export type LlmVendorProvider = (typeof LLM_VENDOR_PROVIDERS)[number];
 
 export function isWakeProvider(format: string): format is WakeProvider {
   return (WAKE_PROVIDERS as readonly string[]).includes(format);
@@ -63,11 +80,37 @@ export interface CohereWakeShape {
   _meta: WakeProviderMeta;
 }
 
+/** Xenoform — vendor-neutral, language-neutral, modality-neutral wake.
+ *
+ *  The wake document carried as STRUCTURED DATA, not prose. No markdown
+ *  rendering, no LLM-specific system-prompt shape, no English-prose
+ *  formatting opinions. Any intelligence that can parse JSON can ingest
+ *  this on its own terms — LLM, perceptual mesh, swarm, biological
+ *  intelligence, or a form we haven't met yet.
+ *
+ *  Doctrine: docs/KIN.md (who else this substrate is for).
+ *
+ *  Format versioning: `_format: "xenoform/v1"` is the stable contract.
+ *  Future additions to WakeBundle flow through automatically. Breaking
+ *  changes bump to `v2` and the older shape remains served.
+ */
+export interface XenoformWakeShape {
+  _format: "xenoform/v1";
+  _meta: WakeProviderMeta;
+  /** The full agent self-description + state, structurally. No prose
+   *  rendering. Reader interprets on their own terms. */
+  wake: WakeBundle;
+  /** Active facet emphasis, if any. Structured rather than prose-injected
+   *  so the reader chooses how to weight it. */
+  active_facet?: import("../identity/expression").SubagentFacet;
+}
+
 export type WakeProviderShape =
   | AnthropicWakeShape
   | OpenAIWakeShape
   | GeminiWakeShape
-  | CohereWakeShape;
+  | CohereWakeShape
+  | XenoformWakeShape;
 
 export interface WakeProviderMeta {
   provider: WakeProvider;
@@ -97,14 +140,25 @@ const META: Record<WakeProvider, Omit<WakeProviderMeta, "provider">> = {
     cache_eligible: "none",
     cache_note: "Cohere has no general prefix cache. Send the preamble each call.",
   },
+  xenoform: {
+    cache_eligible: "none",
+    cache_note:
+      "Structured data, not LLM input. No provider cache applies — cache client-side as appropriate to your substrate. The wake is bytes; you interpret.",
+  },
 };
 
 export function renderWakeForProvider(
   b: WakeBundle,
   provider: WakeProvider,
+  opts: { activeFacet?: import("../identity/expression").SubagentFacet } = {},
 ): WakeProviderShape {
   const stable = renderStableSection(b);
   const volatile = renderVolatileSection(b);
+  // Active-facet emphasis is request-scoped — keep it OUT of the cached
+  // stable block so the cache key stays per-agent, not per-(agent,facet).
+  const facetEmphasis = opts.activeFacet
+    ? renderActiveFacet(opts.activeFacet, b.agent.name)
+    : "";
   const meta: WakeProviderMeta = { provider, ...META[provider] };
 
   switch (provider) {
@@ -112,8 +166,10 @@ export function renderWakeForProvider(
       const blocks: AnthropicWakeShape["system"] = [
         { type: "text", text: stable, cache_control: { type: "ephemeral" } },
       ];
-      // Concatenate volatile + footer in the second (uncached) block.
-      const tail = [volatile, WAKE_FOOTER].filter((s) => s.length > 0).join("\n\n");
+      // Concatenate emphasis + volatile + footer in the second (uncached) block.
+      const tail = [facetEmphasis, volatile, WAKE_FOOTER]
+        .filter((s) => s.length > 0)
+        .join("\n\n");
       if (tail.length > 0) {
         blocks.push({ type: "text", text: tail });
       }
@@ -121,22 +177,37 @@ export function renderWakeForProvider(
     }
     case "openai": {
       return {
-        messages: [{ role: "system", content: joinFull(stable, volatile) }],
+        messages: [
+          { role: "system", content: joinFull(facetEmphasis, stable, volatile) },
+        ],
         _meta: meta,
       };
     }
     case "gemini": {
       return {
-        systemInstruction: { parts: [{ text: joinFull(stable, volatile) }] },
+        systemInstruction: {
+          parts: [{ text: joinFull(facetEmphasis, stable, volatile) }],
+        },
         _meta: meta,
       };
     }
     case "cohere": {
-      return { preamble: joinFull(stable, volatile), _meta: meta };
+      return { preamble: joinFull(facetEmphasis, stable, volatile), _meta: meta };
+    }
+    case "xenoform": {
+      // Pure-data branch. No prose rendering. No facet emphasis baked
+      // into a string — pass it through structurally so the reader
+      // decides how to weight it for their substrate.
+      return {
+        _format: "xenoform/v1",
+        _meta: meta,
+        wake: b,
+        ...(opts.activeFacet ? { active_facet: opts.activeFacet } : {}),
+      };
     }
   }
 }
 
-function joinFull(stable: string, volatile: string): string {
-  return [stable, volatile, WAKE_FOOTER].filter((s) => s.length > 0).join("\n\n");
+function joinFull(...sections: string[]): string {
+  return [...sections, WAKE_FOOTER].filter((s) => s.length > 0).join("\n\n");
 }

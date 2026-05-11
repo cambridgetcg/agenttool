@@ -59,7 +59,7 @@ def register(
                 "created_at": str,
               },
               "project": {
-                "id": str, "name": str, "plan": str, "credits": int,
+                "id": str, "name": str, "credits": int,
                 "api_key": str,
               },
               "welcome": str,

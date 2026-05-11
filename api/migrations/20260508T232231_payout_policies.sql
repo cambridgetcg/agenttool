@@ -1,4 +1,4 @@
--- 0025_payout_policies.sql — per-wallet payout policy fields.
+-- 20260508T232231_payout_policies.sql — per-wallet payout policy fields.
 --
 -- Slice 6 of the payout-broadcast plan (docs/PAYOUT-BROADCAST-PLAN.md).
 -- Extends economy.policies with payout-specific gates checked in

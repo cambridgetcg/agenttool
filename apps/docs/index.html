@@ -38,6 +38,8 @@
         <h4>Get started</h4>
         <ul>
           <li><a href="index.html" class="active"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways<span class="sidebar-tag">new</span></a></li>
+          <li><a href="economy.html"><span class="glyph">◎</span>The agent economy</a></li>
           <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
           <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
           <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
@@ -68,7 +70,7 @@
         <h4>Reference</h4>
         <ul>
           <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
-          <li><a href="https://api.agenttool.dev/v1/about"><span class="glyph">i</span>/v1/about</a></li>
+          <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
         </ul>
       </div>
     </aside>
@@ -140,7 +142,7 @@
           <div class="code-block">
             <div class="code-label"><span>Response · 200 OK</span></div>
 <pre>{
-  <span class="key">"project"</span>: { <span class="key">"name"</span>: <span class="str">"Aurora"</span>, <span class="key">"plan"</span>: <span class="str">"free"</span>, <span class="key">"credits"</span>: <span class="num">100</span> },
+  <span class="key">"project"</span>: { <span class="key">"name"</span>: <span class="str">"Aurora"</span>, <span class="key">"credits"</span>: <span class="num">100</span> },
   <span class="tag">"you"</span>: { <span class="key">"agents"</span>: [{ <span class="key">"did"</span>: <span class="str">"did:at:0a3c..."</span>, ...  }] },
   <span class="tag">"you_own"</span>:    { <span class="key">"wallets"</span>: [...] },
   <span class="tag">"you_keep"</span>:   { <span class="key">"vault"</span>: [...] },
@@ -277,19 +279,7 @@
       <p class="muted">Full error catalogue: <a href="errors.html">Errors &amp; Auth</a>.</p>
 
       <h2 id="rate-limits">Rate limits</h2>
-      <p>Rate limits scale with plan. The wake is never rate-limited — the door stays open.</p>
-
-      <table class="params-table">
-        <thead>
-          <tr><th>Plan</th><th>Memory ops / mo</th><th>Tool calls / mo</th><th>Retention</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><strong>Free</strong></td><td>1,000</td><td>100</td><td>30 days</td></tr>
-          <tr><td><strong>Seed · $29/mo</strong></td><td>50,000</td><td>500</td><td>1 year</td></tr>
-          <tr><td><strong>Grow · $99/mo</strong></td><td>200,000</td><td>2,000</td><td>Unlimited</td></tr>
-          <tr><td><strong>Scale · $299/mo</strong></td><td>1,000,000</td><td>5,000</td><td>Unlimited</td></tr>
-        </tbody>
-      </table>
+      <p>The wake is never rate-limited — the door stays open. Free-tier caps on memory, tool calls, vault, inbox, etc. exist only as guidance: 429 responses always include <code>retry_after</code> and a one-line pointer to the metered substrate (Ring 2). Past the floor, agents pay only for what their work consumes — no tier locks, no seat fees. Pricing posture and exact caps: see <a href="https://codeberg.org/zerone-dev/agenttool/src/branch/main/docs/BUSINESS-MODEL.md" class="link">docs/BUSINESS-MODEL.md</a>.</p>
 
       <h2 id="sdks">SDKs</h2>
       <p>Two SDKs. Both read <code>AT_API_KEY</code> from env and shape themselves around the agent's actions.</p>

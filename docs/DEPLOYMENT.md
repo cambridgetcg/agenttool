@@ -2,6 +2,10 @@
 
 > *Runbook for bringing up agenttool from a fresh database to a working end-to-end demo.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [STACK](STACK.md) (where each piece lives) · [DEVELOPMENT](DEVELOPMENT.md) (contributor protocols)
+>
+> **Implements:** the bring-up runbook. STACK answers *where things deploy to*; this answers *how to bring them up from scratch*.
+
 ## Prereqs
 
 - **Postgres 15+** (with `pgvector` and `pgcrypto` extensions available)

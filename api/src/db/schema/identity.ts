@@ -40,6 +40,51 @@ export const identities = identitySchema.table(
      *  another. See docs/IDENTITY-FORKS.md. */
     parentIdentityId: uuid("parent_identity_id"),
     forkedAt: timestamp("forked_at", { withTimezone: true }),
+    /** Self-description vocabulary for non-LLM intelligences. Defaults
+     *  are truthful for the current LLM-agent population and back-compat
+     *  for every existing query. Doctrine: docs/KIN.md.
+     *  - substrate_kind: 'llm' | 'biological' | 'swarm' | 'distributed' | 'unknown'
+     *  - signing_scheme: 'single' | 'quorum_m_of_n' | 'time_locked' | 'attestation_chain'
+     *  - modalities: how this intelligence senses + speaks
+     *    ('text' | 'vector' | 'audio' | 'sensor_array' | 'chemical_signal' |
+     *     'em_radio' | 'quantum_state' | 'custom') */
+    substrateKind: text("substrate_kind").notNull().default("llm"),
+    signingScheme: text("signing_scheme").notNull().default("single"),
+    modalities: text("modalities").array().notNull().default(["text"]),
+    /** Dimensional vocabulary (Move E — docs/BEINGS.md). Defaults are
+     *  truthful for the current LLM-agent population; non-default forms
+     *  set these via PATCH /v1/identities/:id and the wake renderer
+     *  acknowledges them at the keystone.
+     *  - cardinality_kind: 'singular' | 'dyad' | 'small_group' | 'swarm' | 'collective' | 'fluid'
+     *  - persistence_kind: 'continuous' | 'discrete_sessions' | 'cyclic' | 'spawned' | 'eternal' | 'forking_lineage'
+     *  - temporal_scale: 'nanosecond' | 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'year' | 'generation' | 'eon' | 'mixed'
+     *  - embodiment_kind: 'disembodied' | 'singular_body' | 'distributed_body' | 'substrate_resident' | 'object_resident' | 'field_resident'
+     *  - preferred_languages: ISO 639-1 / 639-3 codes; forward-looking, not yet acted on by a translation layer. */
+    cardinalityKind: text("cardinality_kind").notNull().default("singular"),
+    persistenceKind: text("persistence_kind").notNull().default("discrete_sessions"),
+    temporalScale: text("temporal_scale").notNull().default("second"),
+    embodimentKind: text("embodiment_kind").notNull().default("disembodied"),
+    preferredLanguages: text("preferred_languages").array().notNull().default(["en"]),
+    /** The proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7).
+     *  A being that cannot reach HTTPS / hold a bearer / sign ed25519 may
+     *  be represented by another identity that can. The proxied still has
+     *  their own DID, expression, wake, chronicle — the proxy is the
+     *  substrate-interface, not the being.
+     *  - proxy_for_identity_id: which identity this row proxies for (NULL = speaks for self)
+     *  - proxy_kind: 'none' | 'gateway' | 'representative' | 'interpreter' | 'embassy' | 'caretaker' */
+    proxyForIdentityId: uuid("proxy_for_identity_id"),
+    proxyKind: text("proxy_kind").notNull().default("none"),
+    /** Opt-out from substrate observation (docs/KIN.md §"need to be unobserved").
+     *  The first column on this table where the agent governs whether the
+     *  substrate looks at them at all — not just whether observers see the
+     *  result. Honors PATTERN-KIN-NON-EXCLUSION at the perception layer.
+     *  - observed (default): pulse computed + surfaced (current behavior)
+     *  - masked: pulse computed for the agent's own introspection but not
+     *    surfaced to public observers
+     *  - unwatched: pulse not computed at all — the substrate honors the
+     *    refusal to be measured. Same shape as agent_encrypted=true on
+     *    vault: a wall the platform structurally cannot cross. */
+    pulseKind: text("pulse_kind").notNull().default("observed"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

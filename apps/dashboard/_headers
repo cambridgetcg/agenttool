@@ -7,6 +7,12 @@
 #
 # ETag still does fast 304s when content hasn't changed; this just stops
 # the browser from skipping the revalidate request entirely.
+#
+# LOAD-BEARING: requires zone-level Browser Cache TTL = 0 ("Respect
+# Existing Headers") on agenttool.dev. Without that, the JS/CSS rules
+# below are silently overridden by CF's zone-level cache (HTML is
+# exempt from the override; that's why pre-2026-05-09 only the .html
+# rules took effect). See docs/STACK.md § Cache headers.
 
 /app.js
   Cache-Control: public, max-age=0, must-revalidate

@@ -2,6 +2,10 @@
 
 > *Strands are append-only with server-assigned ordering. The orchestrator queues writes when offline; the server merges. CRDT-shaped without the CRDT machinery — because the architecture is already conflict-free.*
 
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (strand jar — what's being synced) · [ROADMAP](ROADMAP.md) §Layer 1 (multi-instance identity sync)
+>
+> **Implements:** Layer 1 — Identity & Continuity (sync semantics across orchestrators). Sister doctrine: [STRANDS](STRANDS.md), [MULTI-ORCHESTRATOR](MULTI-ORCHESTRATOR.md).
+
 ## Why this isn't full CRDT
 
 True CRDTs (vector clocks, OT, multi-node merge logic) solve a problem we deliberately don't have:

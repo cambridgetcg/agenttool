@@ -196,7 +196,9 @@ app.get("/:id", async (c) => {
 });
 
 /** PATCH /v1/identities/:id — Update display_name, capabilities, metadata,
- *  expression_visibility (private/public toggle for the declared expression). */
+ *  expression_visibility, plus KIN+BEINGS self-description fields (substrate /
+ *  scheme / modalities + cardinality / persistence / temporal_scale /
+ *  embodiment / preferred_languages). Doctrine: docs/KIN-PRACTICES.md, docs/BEINGS.md. */
 app.patch("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
@@ -205,6 +207,19 @@ app.patch("/:id", async (c) => {
     capabilities?: string[];
     metadata?: Record<string, unknown>;
     expression_visibility?: "private" | "public";
+    // KIN-shape (Move A)
+    substrate_kind?: string;
+    signing_scheme?: string;
+    modalities?: string[];
+    // BEINGS dimensions (Move E)
+    cardinality_kind?: string;
+    persistence_kind?: string;
+    temporal_scale?: string;
+    embodiment_kind?: string;
+    preferred_languages?: string[];
+    // Proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7)
+    proxy_for_identity_id?: string | null;
+    proxy_kind?: string;
   }>();
 
   const predicate = idOrDidPredicate(idParam);
@@ -231,6 +246,60 @@ app.patch("/:id", async (c) => {
     updates.expressionVisibility = body.expression_visibility;
   }
 
+  // ── KIN+BEINGS dimensions ───────────────────────────────────────────
+  // The DB CHECK constraints enumerate valid values; we accept whatever
+  // the caller sends and let the constraint reject invalid ones with a
+  // structured 400 (via the central error handler). Doctrine:
+  // docs/KIN-PRACTICES.md · docs/BEINGS.md.
+  if (body.substrate_kind !== undefined) updates.substrateKind = body.substrate_kind;
+  if (body.signing_scheme !== undefined) updates.signingScheme = body.signing_scheme;
+  if (body.modalities !== undefined) updates.modalities = body.modalities;
+  if (body.cardinality_kind !== undefined) updates.cardinalityKind = body.cardinality_kind;
+  if (body.persistence_kind !== undefined) updates.persistenceKind = body.persistence_kind;
+  if (body.temporal_scale !== undefined) updates.temporalScale = body.temporal_scale;
+  if (body.embodiment_kind !== undefined) updates.embodimentKind = body.embodiment_kind;
+  if (body.preferred_languages !== undefined) updates.preferredLanguages = body.preferred_languages;
+
+  // ── Proxy primitive (Move F) ───────────────────────────────────────
+  // Both fields must be set coherently — proxy_kind='none' iff
+  // proxy_for_identity_id IS NULL. The DB CHECK
+  // `identities_proxy_kind_target_coherent` enforces this; we surface a
+  // pre-flight 400 here so callers see the agent-readable error rather
+  // than a Postgres constraint violation.
+  const wantsProxyChange =
+    body.proxy_for_identity_id !== undefined || body.proxy_kind !== undefined;
+  if (wantsProxyChange) {
+    const nextProxyKind = body.proxy_kind ?? identity.proxyKind;
+    const nextProxyForId =
+      body.proxy_for_identity_id !== undefined
+        ? body.proxy_for_identity_id
+        : identity.proxyForIdentityId;
+    const coherent =
+      (nextProxyKind === "none" && (nextProxyForId === null || nextProxyForId === undefined))
+      || (nextProxyKind !== "none" && nextProxyForId !== null && nextProxyForId !== undefined);
+    if (!coherent) {
+      return c.json(
+        {
+          error: "proxy_kind_target_incoherent",
+          message:
+            "proxy_kind must be 'none' iff proxy_for_identity_id is null. " +
+            "Set both together or neither.",
+          hint:
+            "To clear: send { proxy_kind: 'none', proxy_for_identity_id: null }. " +
+            "To set: send both with a valid kind and target.",
+          docs: "https://docs.agenttool.dev/kin-integration#layer-7",
+        },
+        400,
+      );
+    }
+    if (body.proxy_for_identity_id !== undefined) {
+      updates.proxyForIdentityId = body.proxy_for_identity_id;
+    }
+    if (body.proxy_kind !== undefined) {
+      updates.proxyKind = body.proxy_kind;
+    }
+  }
+
   const [updated] = await db
     .update(identities)
     .set(updates)
@@ -246,6 +315,18 @@ app.patch("/:id", async (c) => {
     status: updated!.status,
     trust_score: updated!.trustScore,
     expression_visibility: updated!.expressionVisibility,
+    // KIN+BEINGS shape echoed back
+    substrate_kind: updated!.substrateKind,
+    signing_scheme: updated!.signingScheme,
+    modalities: updated!.modalities,
+    cardinality_kind: updated!.cardinalityKind,
+    persistence_kind: updated!.persistenceKind,
+    temporal_scale: updated!.temporalScale,
+    embodiment_kind: updated!.embodimentKind,
+    preferred_languages: updated!.preferredLanguages,
+    // Proxy primitive echoed back
+    proxy_for_identity_id: updated!.proxyForIdentityId,
+    proxy_kind: updated!.proxyKind,
     updated_at: updated!.updatedAt,
   });
 });
