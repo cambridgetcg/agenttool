@@ -19,6 +19,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import {
   acknowledgeInvocation,
+  buyerAcceptInvocation,
   cancelInvocation,
   completeInvocation,
   declineInvocation,
@@ -27,6 +28,7 @@ import {
   listInvocationsForListing,
   listInvocationsForProject,
 } from "../services/marketplace/invocations";
+import { fileDispute } from "../services/marketplace/disputes";
 import {
   createListing,
   getListing,
@@ -120,6 +122,9 @@ function mapServiceError(msg: string): { status: number; code: string; hint?: st
   }
 
   // 409
+  if (msg === "buyer_review_window_expired") return { status: 409, code: msg };
+  if (msg === "dispute_already_filed") return { status: 409, code: msg };
+  if (msg === "listing_not_disputable") return { status: 409, code: msg, hint: "This listing has no dispute_policy. /complete releases atomically; there's nothing to dispute." };
   if (msg === "self_invocation_not_allowed") return { status: 409, code: msg };
   if (msg === "buyer_wallet_not_active") return { status: 409, code: msg };
   if (msg === "seller_wallet_not_active") return { status: 409, code: msg };
@@ -362,6 +367,47 @@ invocationsRouter.post("/:id/cancel", async (c) => {
   try {
     const inv = await cancelInvocation(id, c.var.project.id);
     return c.json(inv);
+  } catch (err) {
+    return mapAndRespond(c, (err as Error).message);
+  }
+});
+
+invocationsRouter.post("/:id/accept", async (c) => {
+  const id = c.req.param("id");
+  await charge(c, 1, "invocation.buyer_accept");
+  try {
+    const inv = await buyerAcceptInvocation(id, c.var.project.id);
+    return c.json({ ...inv, accepted: true });
+  } catch (err) {
+    return mapAndRespond(c, (err as Error).message);
+  }
+});
+
+invocationsRouter.post("/:id/dispute", async (c) => {
+  const body = await c.req.json();
+  const parsed = z
+    .object({
+      filer_role: z.enum(["buyer", "seller"]),
+      filer_identity_id: z.string().uuid(),
+      reason: z.string().max(4000).nullish(),
+      evidence: z.record(z.unknown()).nullish(),
+    })
+    .strict()
+    .safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+  await charge(c, 3, "invocation.dispute");
+  try {
+    const caseRow = await fileDispute({
+      invocationId: c.req.param("id"),
+      filerProjectId: c.var.project.id,
+      filerRole: parsed.data.filer_role,
+      filerIdentityId: parsed.data.filer_identity_id,
+      reason: parsed.data.reason ?? null,
+      evidence: parsed.data.evidence ?? null,
+    });
+    return c.json({ dispute_case: caseRow, filed: true }, 201);
   } catch (err) {
     return mapAndRespond(c, (err as Error).message);
   }

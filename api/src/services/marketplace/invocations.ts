@@ -56,6 +56,7 @@ export interface InvocationOut {
   acknowledged_at: string | null;
   completed_at: string | null;
   settled_at: string | null;
+  buyer_review_deadline_at: string | null;
 }
 
 function rowToOut(r: typeof invocations.$inferSelect): InvocationOut {
@@ -80,6 +81,7 @@ function rowToOut(r: typeof invocations.$inferSelect): InvocationOut {
     acknowledged_at: r.acknowledgedAt?.toISOString() ?? null,
     completed_at: r.completedAt?.toISOString() ?? null,
     settled_at: r.settledAt?.toISOString() ?? null,
+    buyer_review_deadline_at: r.buyerReviewDeadlineAt?.toISOString() ?? null,
   };
 }
 
@@ -375,21 +377,40 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
     }
     if (!escrow.workerWallet) throw new Error("escrow_worker_missing");
 
-    // Take-rate split: seller receives gross − fee; the fee is recorded
-    // in marketplace.platform_revenue (Ring 3 take-rate ledger).
-    // Doctrine: docs/BUSINESS-MODEL.md.
+    // Branch on whether the listing has opted into disputability.
+    const hasDisputePolicy = listing.disputePolicy !== null && listing.disputePolicy !== undefined;
+    const now = new Date();
+
+    if (hasDisputePolicy) {
+      // Disputable path — transition to 'completed', set buyer-review deadline.
+      // Wallet credit + escrow release deferred until /accept or window expiry.
+      const policy = listing.disputePolicy as { buyer_review_seconds: number };
+      const buyerReviewDeadline = new Date(now.getTime() + policy.buyer_review_seconds * 1000);
+      const [updated] = await tx
+        .update(invocations)
+        .set({
+          status: "completed",
+          outputSealed: output as unknown,
+          completionSig: input.signatureB64,
+          completedAt: now,
+          buyerReviewDeadlineAt: buyerReviewDeadline,
+        })
+        .where(eq(invocations.id, inv.id))
+        .returning();
+      return rowToOut(updated!);
+    }
+
+    // Atomic release — existing behavior for non-dispute listings.
     const split = computeFee({
       amount: escrow.amount,
       currency: inv.currency,
     });
 
-    // Credit seller wallet (net of fee).
     await tx
       .update(wallets)
       .set({ balance: sql`balance + ${split.net}` })
       .where(eq(wallets.id, escrow.workerWallet));
 
-    // Mark escrow released.
     await tx
       .update(escrows)
       .set({ status: "released", releasedAt: new Date() })
@@ -421,8 +442,6 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
       metadata: { listing_id: listing.id },
     });
 
-    // Update invocation: store sealed output + sig, mark released.
-    const now = new Date();
     const [updated] = await tx
       .update(invocations)
       .set({
@@ -757,4 +776,103 @@ export async function buyerInvocationSummary(projectId: string): Promise<{
     released_30d: released30d,
     refunded_30d: refunded30d,
   };
+}
+
+// ── Buyer accept (for disputable listings; releases the deferred settle) ─
+
+export async function buyerAcceptInvocation(
+  invocationId: string,
+  buyerProjectId: string,
+): Promise<InvocationOut> {
+  return await db.transaction(async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invocations)
+      .where(eq(invocations.id, invocationId))
+      .for("update");
+    if (!inv) throw new Error("invocation_not_found");
+    if (inv.buyerProjectId !== buyerProjectId) throw new Error("not_buyer");
+    if (inv.status !== "completed") {
+      throw new Error(`invocation_state_invalid: status=${inv.status}`);
+    }
+    if (inv.buyerReviewDeadlineAt && inv.buyerReviewDeadlineAt < new Date()) {
+      throw new Error("buyer_review_window_expired");
+    }
+
+    if (!inv.escrowId) throw new Error("escrow_missing");
+    const [escrow] = await tx
+      .select()
+      .from(escrows)
+      .where(eq(escrows.id, inv.escrowId))
+      .for("update");
+    if (!escrow) throw new Error("escrow_missing");
+    if (escrow.status !== "funded") {
+      throw new Error(`escrow_state_invalid: status=${escrow.status}`);
+    }
+    if (!escrow.workerWallet) throw new Error("escrow_worker_missing");
+
+    const [listing] = await tx
+      .select()
+      .from(listings)
+      .where(eq(listings.id, inv.listingId))
+      .limit(1);
+    if (!listing) throw new Error("listing_not_found");
+
+    const split = computeFee({ amount: escrow.amount, currency: inv.currency });
+    const now = new Date();
+
+    await tx
+      .update(wallets)
+      .set({ balance: sql`balance + ${split.net}` })
+      .where(eq(wallets.id, escrow.workerWallet));
+
+    await tx
+      .update(escrows)
+      .set({ status: "released", releasedAt: now })
+      .where(eq(escrows.id, escrow.id));
+
+    await tx.insert(transactions).values({
+      walletId: escrow.workerWallet,
+      type: "escrow_release",
+      amount: split.net,
+      counterparty: escrow.creatorWallet,
+      description: `Invocation released (buyer-accept): ${listing.name}`,
+      escrowId: escrow.id,
+      metadata: {
+        listing_id: listing.id,
+        invocation_id: inv.id,
+        platform_fee: split.fee,
+        gross_amount: split.gross,
+        buyer_accepted: true,
+      },
+    });
+
+    await recordRevenue(tx, {
+      transactionType: "capability_invocation",
+      transactionId: inv.id,
+      fee: split.fee,
+      currency: split.currency,
+      rateBps: split.rateBps,
+      buyerWalletId: escrow.creatorWallet,
+      sellerWalletId: escrow.workerWallet,
+      metadata: { listing_id: listing.id, buyer_accepted: true },
+    });
+
+    const [updated] = await tx
+      .update(invocations)
+      .set({ status: "released", settledAt: now })
+      .where(eq(invocations.id, inv.id))
+      .returning();
+
+    await tx
+      .update(listings)
+      .set({
+        revenueTotal: sql`${listings.revenueTotal} + ${split.net}`,
+        revenueCount: sql`${listings.revenueCount} + 1`,
+        updatedAt: now,
+      })
+      .where(eq(listings.id, listing.id));
+
+    return rowToOut(updated!);
+  });
 }
