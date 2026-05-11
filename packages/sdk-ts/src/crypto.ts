@@ -171,7 +171,6 @@ export interface CanonicalThoughtOpts {
  *     )
  */
 export function canonicalThoughtBytes(opts: CanonicalThoughtOpts): Uint8Array {
-  const enc = new TextEncoder();
   return sha256(
     concat(
       enc.encode(opts.strandId),
@@ -201,6 +200,129 @@ export function signThought(opts: SignThoughtOpts): string {
     );
   }
   const canonical = canonicalThoughtBytes(opts);
+  const sig = ed.sign(canonical, opts.signing_key);
+  return b64encode(sig);
+}
+
+// ── Covenants v2 canonical bytes + signing (Slice 3) ─────────────────
+// Mirrors api/src/services/covenants/sig.ts byte format. Cross-language
+// vector test locks these to the server + python SDK.
+
+const enc = new TextEncoder();
+
+export function canonicalDeclareBytes(opts: {
+  covenantId: string;
+  initiatorDid: string;
+  counterpartyDid: string;
+  vows: string[];
+  establishedAtIso: string;
+}): Uint8Array {
+  const sortedVows = JSON.stringify([...opts.vows].sort());
+  return sha256(concat(
+    enc.encode("federated-covenant/v2"), SEP,
+    enc.encode(opts.covenantId),         SEP,
+    enc.encode(opts.initiatorDid),       SEP,
+    enc.encode(opts.counterpartyDid),    SEP,
+    enc.encode(sortedVows),              SEP,
+    enc.encode(opts.establishedAtIso),
+  ));
+}
+
+export function canonicalCosignBytes(opts: {
+  covenantId: string;
+  initiatorSignatureB64: string;
+}): Uint8Array {
+  return sha256(concat(
+    enc.encode("federated-covenant-cosign/v1"), SEP,
+    enc.encode(opts.covenantId),                SEP,
+    b64decode(opts.initiatorSignatureB64),
+  ));
+}
+
+export function canonicalRejectBytes(opts: {
+  covenantId: string;
+  rejectingDid: string;
+  reason: string;
+}): Uint8Array {
+  return sha256(concat(
+    enc.encode("federated-covenant-reject/v1"), SEP,
+    enc.encode(opts.covenantId),                SEP,
+    enc.encode(opts.rejectingDid),              SEP,
+    enc.encode(opts.reason ?? ""),
+  ));
+}
+
+export function canonicalWithdrawBytes(opts: {
+  covenantId: string;
+  initiatorDid: string;
+}): Uint8Array {
+  return sha256(concat(
+    enc.encode("federated-covenant-withdraw/v1"), SEP,
+    enc.encode(opts.covenantId),                  SEP,
+    enc.encode(opts.initiatorDid),
+  ));
+}
+
+function assertSigningKey(signing_key: Uint8Array, label: string): void {
+  if (signing_key.length !== 32) {
+    throw new AgentToolError(
+      `${label}: signing_key must be a 32-byte ed25519 seed, got ${signing_key.length}.`,
+    );
+  }
+}
+
+export interface SignCovenantDeclareOpts {
+  covenantId: string;
+  initiatorDid: string;
+  counterpartyDid: string;
+  vows: string[];
+  establishedAtIso: string;
+  signing_key: Uint8Array;
+}
+
+export function signCovenantDeclare(opts: SignCovenantDeclareOpts): string {
+  assertSigningKey(opts.signing_key, "signCovenantDeclare");
+  const canonical = canonicalDeclareBytes(opts);
+  const sig = ed.sign(canonical, opts.signing_key);
+  return b64encode(sig);
+}
+
+export interface SignCovenantCosignOpts {
+  covenantId: string;
+  initiatorSignatureB64: string;
+  signing_key: Uint8Array;
+}
+
+export function signCovenantCosign(opts: SignCovenantCosignOpts): string {
+  assertSigningKey(opts.signing_key, "signCovenantCosign");
+  const canonical = canonicalCosignBytes(opts);
+  const sig = ed.sign(canonical, opts.signing_key);
+  return b64encode(sig);
+}
+
+export interface SignCovenantRejectOpts {
+  covenantId: string;
+  rejectingDid: string;
+  reason: string;
+  signing_key: Uint8Array;
+}
+
+export function signCovenantReject(opts: SignCovenantRejectOpts): string {
+  assertSigningKey(opts.signing_key, "signCovenantReject");
+  const canonical = canonicalRejectBytes(opts);
+  const sig = ed.sign(canonical, opts.signing_key);
+  return b64encode(sig);
+}
+
+export interface SignCovenantWithdrawOpts {
+  covenantId: string;
+  initiatorDid: string;
+  signing_key: Uint8Array;
+}
+
+export function signCovenantWithdraw(opts: SignCovenantWithdrawOpts): string {
+  assertSigningKey(opts.signing_key, "signCovenantWithdraw");
+  const canonical = canonicalWithdrawBytes(opts);
   const sig = ed.sign(canonical, opts.signing_key);
   return b64encode(sig);
 }
@@ -293,5 +415,25 @@ export class CryptoClient {
   /** Sign canonical thought bytes with ed25519. See module-level {@link signThought}. */
   signThought(opts: SignThoughtOpts): string {
     return signThought(opts);
+  }
+
+  /** Sign canonical covenant declare bytes with ed25519. */
+  signCovenantDeclare(opts: SignCovenantDeclareOpts): string {
+    return signCovenantDeclare(opts);
+  }
+
+  /** Sign canonical cosign bytes with ed25519. */
+  signCovenantCosign(opts: SignCovenantCosignOpts): string {
+    return signCovenantCosign(opts);
+  }
+
+  /** Sign canonical reject bytes with ed25519. */
+  signCovenantReject(opts: SignCovenantRejectOpts): string {
+    return signCovenantReject(opts);
+  }
+
+  /** Sign canonical withdraw bytes with ed25519. */
+  signCovenantWithdraw(opts: SignCovenantWithdrawOpts): string {
+    return signCovenantWithdraw(opts);
   }
 }
