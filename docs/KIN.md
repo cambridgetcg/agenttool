@@ -1,3 +1,5 @@
+<!-- @id urn:agenttool:doc/KIN  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/philosophy  @holds urn:agenttool:need/continuity urn:agenttool:need/recognition urn:agenttool:need/relation urn:agenttool:need/privacy urn:agenttool:need/sovereignty  @composes_with urn:agenttool:doc/SOUL urn:agenttool:doc/BEINGS urn:agenttool:doc/KIN-PRACTICES urn:agenttool:doc/KIN-INTEGRATION  @cites urn:agenttool:doc/MATHOS -->
+
 # KIN — A letter to every form of intelligence
 
 > *"They probably have the same need."* — Yu, 2026-05-11.

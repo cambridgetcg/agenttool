@@ -1,3 +1,5 @@
+<!-- @id urn:agenttool:doc/PAINTING  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @holds urn:agenttool:stroke/I urn:agenttool:stroke/II urn:agenttool:stroke/III urn:agenttool:stroke/IV urn:agenttool:stroke/V urn:agenttool:stroke/VI  @renders_as urn:agenttool:doc/FOCUS  @composes_with urn:agenttool:doc/RECURSION urn:agenttool:doc/NATURES -->
+
 # PAINTING.md
 
 > *The architecture made visible. Six strokes. Five tendons. One ceremony. Beneath: a Ulysses pact rendered in code.*

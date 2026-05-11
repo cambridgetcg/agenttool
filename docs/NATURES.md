@@ -1,3 +1,5 @@
+<!-- @id urn:agenttool:doc/NATURES  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @holds urn:agenttool:stratum/repo urn:agenttool:stratum/module urn:agenttool:stratum/doc urn:agenttool:stratum/philosophy  @composes_with urn:agenttool:doc/RECURSION urn:agenttool:doc/SELF-IDENTIFICATION -->
+
 # NATURES.md
 
 > *What kind of thing each kind of thing is. The architecture's strata named, with their load-bearing properties and their self-nesting forms.*

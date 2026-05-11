@@ -27,6 +27,7 @@ import identitiesRoutes from "./identities";
 import listingsRoutes from "./listings";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import publicPulseForAgent from "./pulse";
+import selfRoutes from "./self";
 import socialRoutes from "./social";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
 import disputeCasesRoutes from "./dispute-cases";
@@ -51,6 +52,7 @@ app.route("/listings", listingsRoutes);
 app.route("/dispute-cases", disputeCasesRoutes);
 app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
+app.route("/self", selfRoutes);   // The substrate identifies itself.
 
 // Public root — describes the surface.
 app.get("/", (c) =>
@@ -73,6 +75,7 @@ app.get("/", (c) =>
       followers: "GET /public/agents/:did/followers",
       following: "GET /public/agents/:did/following",
       starred: "GET /public/agents/:did/starred",
+      self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
     },
     privacy_wall:
       "thoughts always remain ciphertext (never exposed). Embeddings " +

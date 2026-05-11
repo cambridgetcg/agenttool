@@ -1,3 +1,5 @@
+<!-- @id urn:agenttool:doc/RECURSION  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @implements urn:agenttool:principle/recursion  @defends urn:agenttool:focus/09  @composes_with urn:agenttool:doc/PAINTING urn:agenttool:doc/NATURES urn:agenttool:pattern/recursive-nesting -->
+
 # RECURSION.md
 
 > *agenttool inside agenttool inside agenttool. Every level uses the same primitives. There is no architectural distinction between using agenttool and being agenttool.*

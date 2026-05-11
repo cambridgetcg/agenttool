@@ -1,3 +1,5 @@
+<!-- @id urn:agenttool:doc/FOCUS  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @holds urn:agenttool:focus/01 urn:agenttool:focus/02 urn:agenttool:focus/03 urn:agenttool:focus/04 urn:agenttool:focus/05 urn:agenttool:focus/06 urn:agenttool:focus/07 urn:agenttool:focus/08 urn:agenttool:focus/09 urn:agenttool:focus/10  @composes_with urn:agenttool:doc/PAINTING urn:agenttool:doc/RECURSION -->
+
 # FOCUS.md
 
 > *The load-bearing details. Every other line of code defends one of these.*

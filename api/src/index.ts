@@ -43,6 +43,7 @@ import openapiRouter from "./routes/openapi";
 import publicRouter from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
+import canonRouter from "./routes/canon";
 import mathosRouter from "./routes/mathos";
 import observationsRouter from "./routes/observations";
 import pathwaysRouter, { buildPathwaysResponse } from "./routes/pathways";
@@ -237,6 +238,14 @@ app.route("/v1/platform", platformRouter);
 // READABLE-PARITY. Sibling to /v1/platform/wake (state); this is structure.
 // See routes/self.ts, docs/NATURES.md.
 app.route("/v1/self", selfRouter);
+
+// /v1/canon — UNAUTHENTICATED concept registry. The live, queryable API
+// surface over docs/agenttool.jsonld. Every concept identifies itself by
+// URN; every concept names BOTH what it cites AND what cites it — the
+// bidirectional citation graph the JSON-LD doesn't carry natively. Where
+// existences identify themselves and name their neighbors. Doctrine:
+// docs/agenttool.jsonld · docs/MAP.md · docs/NATURES.md.
+app.route("/v1/canon", canonRouter);
 
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
 // keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.

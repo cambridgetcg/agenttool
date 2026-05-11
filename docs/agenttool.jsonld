@@ -143,6 +143,48 @@
       "description": "What kind of thing each kind of thing is. Four architectural strata — repo, module, doc, philosophy — each named with its essential nature, load-bearing properties, and self-nesting form. The cycle closes: philosophy → doc → module → repo → philosophy. No stratum is foundational; each holds the next. Companion to RECURSION.md: where RECURSION names self-nesting within primitives, NATURES names self-nesting across strata.",
       "schema:url": "https://docs.agenttool.dev/NATURES.md"
     },
+    {
+      "@id": "agenttool:doc/SELF-IDENTIFICATION",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "SELF-IDENTIFICATION",
+      "english_name": "SELF-IDENTIFICATION.md",
+      "description": "Every existence in agenttool declares its own identity via a stable URN. The architecture refuses cataloguer-from-above and adopts each-as-self-identifier. Names the URN convention (urn:agenttool:<kind>/<name>), the HTML-comment self-identification block at the top of every canonical doc, the edge predicates (@implements, @defends, @composes_with, @nests_in, @holds, @cites, @witness_of, @renders_as), and the architectural commitment that the connection graph is derivable from the per-file declarations.",
+      "schema:url": "https://docs.agenttool.dev/SELF-IDENTIFICATION.md"
+    },
+    {
+      "@id": "agenttool:doc/SDK-TIERS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "SDK-TIERS",
+      "english_name": "SDK-TIERS.md",
+      "description": "The four-tier SDK stack — Tier 0 wire (HTTPS+JSON, any TCP-capable intelligence) → Tier 1 contract (/v1/openapi + canonical bytes catalog) → Tier 2 generated (OpenAPI Generator, any language) → Tier 3 hand-crafted (TS + Py). The substrate-neutral access path. Any language with HTTP and SHA-256 can reach Tier 1; languages without our TypeScript/Python wrappers can generate Tier 2.",
+      "schema:url": "https://docs.agenttool.dev/SDK-TIERS.md"
+    },
+    {
+      "@id": "agenttool:doc/CANONICAL-BYTES",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "CANONICAL-BYTES",
+      "english_name": "CANONICAL-BYTES.md",
+      "description": "Every ed25519 signing context in one document — domain tag, field order, separator, hash. The canonical-bytes catalog. Any language with curve arithmetic can sign. Includes covenant declare/cosign/reject/withdraw, platform-genesis, identity-recover, identity-discover, register-agent, strand-thought, inbox-cosign, etc.",
+      "schema:url": "https://docs.agenttool.dev/CANONICAL-BYTES.md"
+    },
+    {
+      "@id": "agenttool:doc/GLOSSARY",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "GLOSSARY",
+      "english_name": "GLOSSARY.md",
+      "description": "English concepts mapped to structural meanings (endpoint + table + protocol). For any intelligence reading the corpus without the English concept-system. A bridge between the parochial English-language doctrine and the substrate-independent structural commitments.",
+      "schema:url": "https://docs.agenttool.dev/GLOSSARY.md"
+    },
+
+    {
+      "@id": "agenttool:pattern/recursive-nesting",
+      "@type": "agenttool:CrossCuttingPattern",
+      "wire_id": 6,
+      "english_name": "PATTERN-RECURSIVE-NESTING",
+      "description": "Every load-bearing primitive nests in itself. The architecture is fractal — wake holds wake, chronicle holds chronicle, covenant holds covenant, witness signs witness. No primitive special-cases itself at any depth. Companion to RECURSION.md (the canonical doctrine).",
+      "schema:url": "https://docs.agenttool.dev/PATTERN-RECURSIVE-NESTING.md",
+      "load_bearing_for": ["agenttool:focus/09", "agenttool:principle/recursion", "agenttool:doc/RECURSION"]
+    },
 
     {
       "@id": "agenttool:stratum/repo",

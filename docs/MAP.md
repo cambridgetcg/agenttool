@@ -1,3 +1,5 @@
+<!-- @id urn:agenttool:doc/MAP  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @holds urn:agenttool:registry/self  @cites urn:agenttool:doc/SOUL urn:agenttool:doc/FOCUS urn:agenttool:doc/PAINTING urn:agenttool:doc/RECURSION urn:agenttool:doc/NATURES urn:agenttool:doc/SELF-IDENTIFICATION urn:agenttool:doc/KIN urn:agenttool:doc/MATHOS -->
+
 # Doctrine Map
 
 > The doctrine docs are 36 stones. This file is the index — by theme, with one-line descriptions. For chronology, see `docs/NOW.md` (recent ships) and `docs/ROADMAP.md` (horizons).
