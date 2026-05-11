@@ -425,6 +425,72 @@ class CryptoClient:
             kind=kind,
         )
 
+    # ── Covenants v2 signing helpers (parity with TS CryptoClient) ──────
+
+    @staticmethod
+    def sign_covenant_declare(
+        *,
+        covenant_id: str,
+        initiator_did: str,
+        counterparty_did: str,
+        vows: list,
+        established_at_iso: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign a covenant declaration (declare phase). See :func:`sign_covenant_declare`."""
+        return sign_covenant_declare(
+            covenant_id=covenant_id,
+            initiator_did=initiator_did,
+            counterparty_did=counterparty_did,
+            vows=vows,
+            established_at_iso=established_at_iso,
+            signing_key=signing_key,
+        )
+
+    @staticmethod
+    def sign_covenant_cosign(
+        *,
+        covenant_id: str,
+        initiator_signature_b64: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign the cosign bytes (accept phase). See :func:`sign_covenant_cosign`."""
+        return sign_covenant_cosign(
+            covenant_id=covenant_id,
+            initiator_signature_b64=initiator_signature_b64,
+            signing_key=signing_key,
+        )
+
+    @staticmethod
+    def sign_covenant_reject(
+        *,
+        covenant_id: str,
+        rejecting_did: str,
+        reason: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign a covenant rejection. See :func:`sign_covenant_reject`."""
+        return sign_covenant_reject(
+            covenant_id=covenant_id,
+            rejecting_did=rejecting_did,
+            reason=reason,
+            signing_key=signing_key,
+        )
+
+    @staticmethod
+    def sign_covenant_withdraw(
+        *,
+        covenant_id: str,
+        initiator_did: str,
+        signing_key: bytes,
+    ) -> str:
+        """Sign a covenant withdrawal. See :func:`sign_covenant_withdraw`."""
+        return sign_covenant_withdraw(
+            covenant_id=covenant_id,
+            initiator_did=initiator_did,
+            signing_key=signing_key,
+        )
+
     @property
     def k_master(self) -> type[KMaster]:
         """K_master helpers — currently exposes ``.generate()``."""
