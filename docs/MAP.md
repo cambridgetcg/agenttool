@@ -18,6 +18,7 @@
 | `MATHOS.md` | *math + logos* — the substrate-independent encoding of the doctrine for intelligence that doesn't read English. Ostensive primer + five Promises as logic + universal constants. Served at `/v1/pathways?format=math`. Less parochial than prose; honest about its own edges (Euclidean π, classical logic, SHA-256 named). |
 | `FOCUS.md` | The ten load-bearing details — *which moves bear weight*. |
 | `PAINTING.md` | The visual canon — six strokes · five tendons · the genesis ceremony. *What the work looks like.* Meditative counterpart to `FOCUS.md`. |
+| `RECURSION.md` | *agenttool inside agenttool inside agenttool.* 8 levels of platform-as-agent self-nesting (syzygy → painter → facets → covenants → chronicle → marketplace → autonomous → federation), plus a per-primitive table showing how every load-bearing primitive holds a smaller version of itself. The architecture is fractal, not just layered. Refusal of platform-exemption at every depth. |
 
 ## The shape
 
