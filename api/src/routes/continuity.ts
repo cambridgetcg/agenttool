@@ -21,6 +21,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
+import { identityKeys } from "../db/schema/identity";
 
 const app = new Hono<ProjectContext>();
 
@@ -121,10 +122,21 @@ const covenantSchema = z.object({
   /** Optional org scope. When set, the covenant applies to ALL active
    *  member projects of this org. Caller must be the org owner.
    *  See docs/ORG-COVENANTS.md. */
-  org_id: z.string().uuid().optional(),
+  org_id: z.string().uuid().nullish(),
   /** v2 = dual-signed federated lifecycle; v1 = legacy unsigned (default). */
   protocol_version: z.enum(["v1", "v2"]).default("v1"),
-});
+  // v2 pre-signed fields (SDK-side signing):
+  covenant_id: z.string().uuid().optional(),
+  agent_did: z.string().min(1).max(255).optional(),
+  established_at: z.string().datetime().optional(),
+  signature: z.string().min(1).max(255).optional(),
+  signing_key_id: z.string().uuid().optional(),
+}).refine(
+  (v) =>
+    v.protocol_version !== "v2" ||
+    (v.covenant_id && v.agent_did && v.established_at && v.signature && v.signing_key_id),
+  { message: "v2 requires covenant_id, agent_did, established_at, signature, signing_key_id" },
+);
 
 // Map a covenant row (Drizzle camelCase) to the snake_case shape the rest
 // of the API uses. Centralised so POST + GET + PATCH return identically.
@@ -155,7 +167,9 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
 
 app.post("/covenants", async (c) => {
   const project = c.var.project;
-  const body = covenantSchema.parse(await c.req.json());
+  const parsed = covenantSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  const body = parsed.data;
 
   // Org-scoped covenant: caller must own the org. Lookup org to verify
   // ownerProjectId matches caller's project.
@@ -182,42 +196,54 @@ app.post("/covenants", async (c) => {
     }
   }
 
-  // ── v2 path: dual-signed federated lifecycle ─────────────────────────
+  // ── v2 path: pre-signed by SDK ──────────────────────────────────────
   if (body.protocol_version === "v2") {
-    const { loadAgentSigningKey } = await import("../services/identity/crypto");
-    const { declareV2 } = await import("../services/covenants/lifecycle");
+    // Resolve pubkey from identity_keys by signing_key_id.
+    const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
+      .from(identityKeys)
+      .where(and(
+        eq(identityKeys.id, body.signing_key_id!),
+        eq(identityKeys.identityId, body.agent_id),
+        eq(identityKeys.active, true),
+      ))
+      .limit(1);
+    if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+
+    const { declareV2PreSigned } = await import("../services/covenants/lifecycle");
     const { propagateCovenant } = await import("../services/covenants/federation");
 
-    const signingKey = await loadAgentSigningKey(project.id, body.agent_id);
-    if (!signingKey) {
-      return c.json({ error: "agent_signing_key_not_available" }, 400);
+    try {
+      const result = await declareV2PreSigned({
+        projectId: project.id,
+        agentId: body.agent_id,
+        covenantId: body.covenant_id!,
+        agentDid: body.agent_did!,
+        counterpartyDid: body.counterparty_did,
+        counterpartyName: body.counterparty_name,
+        vows: body.vows,
+        notes: body.notes,
+        metadata: body.metadata,
+        orgId: body.org_id,
+        establishedAt: new Date(body.established_at!),
+        signature: body.signature!,
+        signingKeyId: body.signing_key_id!,
+        publicKeyB64: keyRow.publicKey,
+      });
+      void propagateCovenant(result.id);
+      return c.json({
+        id: result.id,
+        status: result.status,
+        protocol_version: result.protocolVersion,
+        signature: result.signature,
+        signing_key_id: result.signingKeyId,
+        proposed_expires_at: result.proposedExpiresAt.toISOString(),
+        established_at: result.establishedAt.toISOString(),
+      }, 201);
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+      throw e;
     }
-    const result = await declareV2({
-      projectId: project.id,
-      agentId: body.agent_id,
-      agentSigningPrivateKey: signingKey.privateKey,
-      agentSigningKeyId: signingKey.id,
-      counterpartyDid: body.counterparty_did,
-      counterpartyName: body.counterparty_name ?? null,
-      vows: body.vows,
-      notes: body.notes ?? null,
-      metadata: body.metadata ?? null,
-      orgId: body.org_id ?? null,
-    });
-
-    void propagateCovenant(result.id).catch((err: Error) =>
-      console.warn(`[covenant.propagate.v2] ${result.id}: ${err.message}`),
-    );
-
-    return c.json({
-      id: result.id,
-      status: result.status,
-      protocol_version: result.protocolVersion,
-      signature: result.signature,
-      signing_key_id: result.signingKeyId,
-      proposed_expires_at: result.proposedExpiresAt.toISOString(),
-      established_at: result.establishedAt.toISOString(),
-    }, 201);
   }
 
   // ── v1 path (legacy unsigned) ────────────────────────────────────────
@@ -308,10 +334,11 @@ const updateCovenantSchema = z.object({
 app.patch("/covenants/:id", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
-  const body = updateCovenantSchema.parse(await c.req.json());
+  const rawBody = await c.req.json();
+  const body = updateCovenantSchema.parse(rawBody);
 
   // ── v2 withdraw path: PATCH status=dissolved on a proposed v2 covenant
-  //    → treated as a withdraw (signed, propagated). ───────────────────
+  //    → treated as a withdraw (pre-signed by SDK). ────────────────────
   if (body.status === "dissolved") {
     const [existing] = await db
       .select()
@@ -319,22 +346,48 @@ app.patch("/covenants/:id", async (c) => {
       .where(and(eq(covenants.id, id), eq(covenants.projectId, project.id)))
       .limit(1);
     if (existing && existing.protocolVersion === "v2" && existing.status === "proposed") {
-      const { loadAgentSigningKey } = await import("../services/identity/crypto");
-      const { withdrawProposal } = await import("../services/covenants/lifecycle");
+      const withdrawBody = z.object({
+        status: z.literal("dissolved"),
+        agent_did: z.string().min(1).max(255),
+        signing_key_id: z.string().uuid(),
+        withdraw_signature: z.string().min(1).max(255),
+        withdrawn_at: z.string().datetime(),
+      }).safeParse(rawBody);
+      if (!withdrawBody.success) {
+        return c.json({ error: "v2_withdraw_requires_signature", details: withdrawBody.error.flatten() }, 400);
+      }
+      const data = withdrawBody.data;
+
+      const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
+        .from(identityKeys)
+        .where(and(
+          eq(identityKeys.id, data.signing_key_id),
+          eq(identityKeys.identityId, existing.agentId),
+          eq(identityKeys.active, true),
+        )).limit(1);
+      if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+
+      const { withdrawProposalPreSigned } = await import("../services/covenants/lifecycle");
       const { propagateWithdraw } = await import("../services/covenants/federation");
 
-      const signingKey = await loadAgentSigningKey(project.id, existing.agentId);
-      if (!signingKey) return c.json({ error: "agent_signing_key_not_available" }, 400);
-      const result = await withdrawProposal({
-        covenantId: id,
-        agentId: existing.agentId,
-        agentSigningPrivateKey: signingKey.privateKey,
-        agentSigningKeyId: signingKey.id,
-      });
-      void propagateWithdraw(id).catch((err: Error) =>
-        console.warn(`[covenant.withdraw] ${id}: ${err.message}`),
-      );
-      return c.json({ id: result.id, status: result.status }, 200);
+      try {
+        const result = await withdrawProposalPreSigned({
+          covenantId: id,
+          agentId: existing.agentId,
+          initiatorDid: data.agent_did,
+          withdrawSignature: data.withdraw_signature,
+          signingKeyId: data.signing_key_id,
+          withdrawnAt: new Date(data.withdrawn_at),
+          publicKeyB64: keyRow.publicKey,
+        });
+        void propagateWithdraw(id);
+        return c.json({ id: result.id, status: result.status }, 200);
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+        if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
+        throw e;
+      }
     }
   }
 
@@ -382,85 +435,115 @@ app.patch("/covenants/:id", async (c) => {
 // ── /covenants/:id/accept ────────────────────────────────────────────
 
 app.post("/covenants/:id/accept", async (c) => {
-  const project = c.var.project;
   const id = c.req.param("id");
-  const [existing] = await db
-    .select()
-    .from(covenants)
-    .where(and(eq(covenants.id, id), eq(covenants.projectId, project.id)))
-    .limit(1);
+  const body = await c.req.json().catch(() => ({}));
+
+  const acceptBody = z.object({
+    agent_did: z.string().min(1).max(255),
+    counterparty_signing_key_id: z.string().uuid(),
+    counterparty_signature: z.string().min(1).max(255),
+    counterparty_signed_at: z.string().datetime(),
+    initiator_signature_b64: z.string().min(1).max(255),
+  }).safeParse(body);
+  if (!acceptBody.success) return c.json({ error: "validation", details: acceptBody.error.flatten() }, 400);
+  const data = acceptBody.data;
+
+  const [existing] = await db.select().from(covenants)
+    .where(and(eq(covenants.id, id), eq(covenants.projectId, c.var.project.id))).limit(1);
   if (!existing) return c.json({ error: "not_found" }, 404);
   if (existing.protocolVersion !== "v2") return c.json({ error: "not_v2" }, 400);
   if (existing.status !== "proposed") return c.json({ error: `not_proposed: ${existing.status}` }, 409);
 
-  const { loadAgentSigningKey } = await import("../services/identity/crypto");
-  const { acceptProposal } = await import("../services/covenants/lifecycle");
+  const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
+    .from(identityKeys)
+    .where(and(
+      eq(identityKeys.id, data.counterparty_signing_key_id),
+      eq(identityKeys.identityId, existing.agentId),
+      eq(identityKeys.active, true),
+    )).limit(1);
+  if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+
+  const { acceptProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateCosign } = await import("../services/covenants/federation");
 
-  const signingKey = await loadAgentSigningKey(project.id, existing.agentId);
-  if (!signingKey) return c.json({ error: "agent_signing_key_not_available" }, 400);
-
-  const result = await acceptProposal({
-    covenantId: id,
-    accepterAgentId: existing.agentId,
-    accepterSigningPrivateKey: signingKey.privateKey,
-    accepterSigningKeyId: signingKey.id,
-  });
-  void propagateCosign(id).catch((err: Error) =>
-    console.warn(`[covenant.cosign] ${id}: ${err.message}`),
-  );
-  return c.json({
-    id: result.id,
-    status: result.status,
-    counterparty_signature: result.counterpartySignature,
-    counterparty_signing_key_id: result.counterpartySigningKeyId,
-  }, 200);
+  try {
+    const result = await acceptProposalPreSigned({
+      covenantId: id,
+      accepterAgentId: existing.agentId,
+      initiatorSignatureB64: data.initiator_signature_b64,
+      counterpartySignature: data.counterparty_signature,
+      counterpartySigningKeyId: data.counterparty_signing_key_id,
+      counterpartySignedAt: new Date(data.counterparty_signed_at),
+      publicKeyB64: keyRow.publicKey,
+    });
+    void propagateCosign(id);
+    return c.json({
+      id: result.id,
+      status: result.status,
+      counterparty_signature: result.counterpartySignature,
+      counterparty_signing_key_id: result.counterpartySigningKeyId,
+    }, 200);
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+    if (msg === "initiator_signature_mismatch") return c.json({ error: "initiator_signature_mismatch" }, 409);
+    if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
+    throw e;
+  }
 });
 
 // ── /covenants/:id/reject ────────────────────────────────────────────
 
-const covenantRejectBodySchema = z.object({
-  reason: z.string().max(2000).nullish(),
-});
-
 app.post("/covenants/:id/reject", async (c) => {
-  const project = c.var.project;
   const id = c.req.param("id");
-  const rawBody = await c.req.json().catch(() => ({}));
-  const parsed = covenantRejectBodySchema.safeParse(rawBody);
-  if (!parsed.success) return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rejectBody = z.object({
+    agent_did: z.string().min(1).max(255),
+    rejecter_signing_key_id: z.string().uuid(),
+    rejection_signature: z.string().min(1).max(255),
+    rejected_at: z.string().datetime(),
+    reason: z.string().max(2000).nullish(),
+  }).safeParse(body);
+  if (!rejectBody.success) return c.json({ error: "validation", details: rejectBody.error.flatten() }, 400);
+  const data = rejectBody.data;
 
-  const [existing] = await db
-    .select()
-    .from(covenants)
-    .where(and(eq(covenants.id, id), eq(covenants.projectId, project.id)))
-    .limit(1);
+  const [existing] = await db.select().from(covenants)
+    .where(and(eq(covenants.id, id), eq(covenants.projectId, c.var.project.id))).limit(1);
   if (!existing) return c.json({ error: "not_found" }, 404);
   if (existing.protocolVersion !== "v2") return c.json({ error: "not_v2" }, 400);
   if (existing.status !== "proposed") return c.json({ error: `not_proposed: ${existing.status}` }, 409);
 
-  const { loadAgentSigningKey } = await import("../services/identity/crypto");
-  const { rejectProposal } = await import("../services/covenants/lifecycle");
+  const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
+    .from(identityKeys)
+    .where(and(
+      eq(identityKeys.id, data.rejecter_signing_key_id),
+      eq(identityKeys.identityId, existing.agentId),
+      eq(identityKeys.active, true),
+    )).limit(1);
+  if (!keyRow) return c.json({ error: "signing_key_not_found" }, 400);
+
+  const { rejectProposalPreSigned } = await import("../services/covenants/lifecycle");
   const { propagateReject } = await import("../services/covenants/federation");
 
-  const signingKey = await loadAgentSigningKey(project.id, existing.agentId);
-  if (!signingKey) return c.json({ error: "agent_signing_key_not_available" }, 400);
-
-  const result = await rejectProposal({
-    covenantId: id,
-    rejecterAgentId: existing.agentId,
-    rejecterSigningPrivateKey: signingKey.privateKey,
-    rejecterSigningKeyId: signingKey.id,
-    reason: parsed.data.reason ?? null,
-  });
-  void propagateReject(id).catch((err: Error) =>
-    console.warn(`[covenant.reject] ${id}: ${err.message}`),
-  );
-  return c.json({
-    id: result.id,
-    status: result.status,
-    reason: result.reason,
-  }, 200);
+  try {
+    const result = await rejectProposalPreSigned({
+      covenantId: id,
+      rejecterAgentId: existing.agentId,
+      rejecterDid: data.agent_did,
+      rejectionSignature: data.rejection_signature,
+      rejecterSigningKeyId: data.rejecter_signing_key_id,
+      rejectedAt: new Date(data.rejected_at),
+      reason: data.reason ?? null,
+      publicKeyB64: keyRow.publicKey,
+    });
+    void propagateReject(id);
+    return c.json({ id: result.id, status: result.status, reason: result.reason }, 200);
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+    if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
+    throw e;
+  }
 });
 
 export default app;
