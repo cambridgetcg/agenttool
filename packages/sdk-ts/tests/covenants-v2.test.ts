@@ -6,7 +6,11 @@
  */
 
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import * as ed from "@noble/ed25519";
 import { AgentTool, CovenantsClient } from "../src/index.js";
+
+const dummyKey = ed.utils.randomPrivateKey();
+const dummyInitSig = Buffer.from(new Uint8Array(64)).toString("base64");
 
 const originalFetch = globalThis.fetch;
 let mockFetch: ReturnType<typeof mock>;
@@ -57,6 +61,9 @@ describe("covenants v2 — SDK surface", () => {
       vows: ["v"],
       protocol_version: "v2",
       agent_id: "agent-1",
+      agent_did: "did:at:test/agent",
+      signing_key: dummyKey,
+      signing_key_id: "00000000-0000-0000-0000-000000000099",
     });
     const { url, init } = getLastCall();
     expect(url).toContain("/v1/covenants");
@@ -73,7 +80,12 @@ describe("covenants v2 — SDK surface", () => {
   test("accept POSTs to /accept", async () => {
     setupMock(200, { id: "cov-1", status: "active", counterparty_signature: "x" });
     const at = makeClient();
-    const r = await at.covenants.accept("cov-1");
+    const r = await at.covenants.accept("cov-1", {
+      agent_did: "did:at:test/agent",
+      signing_key: dummyKey,
+      signing_key_id: "00000000-0000-0000-0000-000000000099",
+      initiator_signature_b64: dummyInitSig,
+    });
     const { url, init } = getLastCall();
     expect(url).toContain("/v1/covenants/cov-1/accept");
     expect(init.method).toBe("POST");
@@ -83,7 +95,12 @@ describe("covenants v2 — SDK surface", () => {
   test("reject POSTs to /reject with reason", async () => {
     setupMock(200, { id: "cov-1", status: "rejected", reason: "scope mismatch" });
     const at = makeClient();
-    const r = await at.covenants.reject("cov-1", { reason: "scope mismatch" });
+    const r = await at.covenants.reject("cov-1", {
+      agent_did: "did:at:test/agent",
+      signing_key: dummyKey,
+      signing_key_id: "00000000-0000-0000-0000-000000000099",
+      reason: "scope mismatch",
+    });
     const { url, init } = getLastCall();
     expect(url).toContain("/v1/covenants/cov-1/reject");
     expect(init.method).toBe("POST");
@@ -94,7 +111,11 @@ describe("covenants v2 — SDK surface", () => {
   test("withdraw PATCHes /v1/covenants/:id with dissolved status", async () => {
     setupMock(200, { id: "cov-1", status: "withdrawn" });
     const at = makeClient();
-    const r = await at.covenants.withdraw("cov-1");
+    const r = await at.covenants.withdraw("cov-1", {
+      agent_did: "did:at:test/agent",
+      signing_key: dummyKey,
+      signing_key_id: "00000000-0000-0000-0000-000000000099",
+    });
     const { url, init } = getLastCall();
     expect(url).toContain("/v1/covenants/cov-1");
     expect(init.method).toBe("PATCH");

@@ -105,8 +105,12 @@ export type {
   CovenantStatus,
   Covenant,
   CovenantsCreateOpts,
+  CovenantsCreateV2Opts,
   CovenantsListOpts,
   CovenantsPatchOpts,
+  CovenantsAcceptOpts,
+  CovenantsRejectOpts,
+  CovenantsWithdrawOpts,
 } from "./covenants.js";
 export { WindowClient } from "./window.js";
 export type {
