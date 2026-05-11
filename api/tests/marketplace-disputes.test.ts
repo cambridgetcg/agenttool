@@ -120,3 +120,46 @@ describe("canonicalDisputePoolVoteBytes", () => {
     expect(split50).not.toEqual(split75);
   });
 });
+
+import { drawPool } from "../src/services/marketplace/disputes";
+
+describe("drawPool (deterministic)", () => {
+  const candidates = Array.from({ length: 20 }, (_, i) => ({
+    id: `id-${i}`,
+    did: `did:at:${i}`,
+  }));
+
+  test("returns 5 distinct candidates", () => {
+    const pool = drawPool(candidates, "case-1", 1700000000);
+    expect(pool).not.toBeNull();
+    expect(pool!.length).toBe(5);
+    const ids = new Set(pool!.map((p) => p.id));
+    expect(ids.size).toBe(5);
+  });
+
+  test("same case_id + timestamp produces same pool (deterministic)", () => {
+    const a = drawPool(candidates, "case-x", 1700000000);
+    const b = drawPool(candidates, "case-x", 1700000000);
+    expect(a).toEqual(b);
+  });
+
+  test("different case_id produces different pool", () => {
+    const a = drawPool(candidates, "case-x", 1700000000);
+    const b = drawPool(candidates, "case-y", 1700000000);
+    expect(a).not.toEqual(b);
+  });
+
+  test("returns null when fewer than 5 candidates", () => {
+    expect(drawPool(candidates.slice(0, 4), "case", 1)).toBeNull();
+    expect(drawPool(candidates.slice(0, 5), "case", 1)).not.toBeNull();
+  });
+
+  test("never returns the same candidate twice within a draw", () => {
+    // Sample 100 draws to be sure; with 5 from 20 there are no duplicates ever
+    for (let i = 0; i < 100; i++) {
+      const pool = drawPool(candidates, `case-${i}`, i * 1000);
+      const ids = new Set(pool!.map((p) => p.id));
+      expect(ids.size).toBe(pool!.length);
+    }
+  });
+});
