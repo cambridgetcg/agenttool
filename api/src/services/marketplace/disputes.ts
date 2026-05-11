@@ -166,7 +166,7 @@ export function validateDisputePolicy(value: unknown): asserts value is DisputeP
 
 // ── Service: file a dispute ─────────────────────────────────────────
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { attestations, identities, identityKeys } from "../../db/schema/identity";
 import { disputeCases, disputePoolVotes, invocations, listings } from "../../db/schema/marketplace";
@@ -1242,4 +1242,43 @@ export async function finalizeCase(disputeCaseId: string): Promise<DisputeCaseOu
 
     return caseRowToOut(updatedCase!);
   });
+}
+
+// ── Wake summary helpers ────────────────────────────────────────────
+
+/** Buyer-or-seller-side dispute count for the wake. */
+export async function disputerSummary(projectId: string): Promise<{
+  open_count: number;
+  last_filed_at: string | null;
+}> {
+  const rows = await db
+    .select({ status: disputeCases.status, createdAt: disputeCases.createdAt })
+    .from(disputeCases)
+    .where(eq(disputeCases.filerProjectId, projectId))
+    .orderBy(desc(disputeCases.createdAt));
+  const open = rows.filter((r) => r.status !== "resolved").length;
+  return {
+    open_count: open,
+    last_filed_at: rows[0]?.createdAt.toISOString() ?? null,
+  };
+}
+
+/** Arbiter-side summary: rulings issued + overturned count. */
+export async function arbiterSummary(identityId: string): Promise<{
+  rulings_count: number;
+  overturned_count: number;
+}> {
+  const rows = await db
+    .select({ path: disputeCases.resolutionPath })
+    .from(disputeCases)
+    .where(
+      and(
+        eq(disputeCases.firstArbiterIdentityId, identityId),
+        sql`${disputeCases.firstArbiterRuledAt} IS NOT NULL`,
+      ),
+    );
+  return {
+    rulings_count: rows.length,
+    overturned_count: rows.filter((r) => r.path === "overturned").length,
+  };
 }
