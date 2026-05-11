@@ -13,6 +13,7 @@ import {
   pgSchema,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -129,6 +130,7 @@ export const listings = marketplaceSchema.table(
     invocationsCount: integer("invocations_count").notNull().default(0),
     revenueTotal: integer("revenue_total").notNull().default(0),
     revenueCount: integer("revenue_count").notNull().default(0),
+    disputePolicy: jsonb("dispute_policy"),
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -168,6 +170,8 @@ export const invocations = marketplaceSchema.table(
     status: text("status").notNull().default("escrowed"),
     refundReason: text("refund_reason"),
     slaDeadlineAt: timestamp("sla_deadline_at", { withTimezone: true }),
+    disputeCaseId: uuid("dispute_case_id"),
+    buyerReviewDeadlineAt: timestamp("buyer_review_deadline_at", { withTimezone: true }),
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
@@ -302,5 +306,71 @@ export const platformRevenue = marketplaceSchema.table(
     index("idx_platform_revenue_currency_time").on(t.currency, t.createdAt),
     index("idx_platform_revenue_transaction").on(t.transactionType, t.transactionId),
     index("idx_platform_revenue_seller").on(t.sellerWalletId, t.createdAt),
+  ],
+);
+
+// ── Dispute primitive (20260511T120000) ────────────────────────────
+// Listings opt in via dispute_policy JSONB (added as a column on the
+// listings table; service layer validates shape). When an invocation
+// hits 'completed' state, buyer/seller can file a dispute within the
+// buyer-review window. Doctrine: docs/MARKETPLACE.md (Dispute section).
+export const disputeCases = marketplaceSchema.table(
+  "dispute_cases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invocationId: uuid("invocation_id").notNull().unique(),
+    filerRole: text("filer_role").notNull(),
+    filerProjectId: uuid("filer_project_id").notNull(),
+    filerIdentityId: uuid("filer_identity_id").notNull(),
+    reason: text("reason"),
+    evidence: jsonb("evidence"),
+    firstArbiterIdentityId: uuid("first_arbiter_identity_id"),
+    firstArbiterDid: text("first_arbiter_did"),
+    firstArbiterRuling: text("first_arbiter_ruling"),
+    firstArbiterSplitPct: integer("first_arbiter_split_pct"),
+    firstArbiterSignature: text("first_arbiter_signature"),
+    firstArbiterSigningKeyId: uuid("first_arbiter_signing_key_id"),
+    firstArbiterRuledAt: timestamp("first_arbiter_ruled_at", { withTimezone: true }),
+    firstArbiterSlaDeadlineAt: timestamp("first_arbiter_sla_deadline_at", { withTimezone: true }),
+    escalationDeadlineAt: timestamp("escalation_deadline_at", { withTimezone: true }),
+    escalatedByRole: text("escalated_by_role"),
+    escalatorBondAmount: integer("escalator_bond_amount"),
+    escalatorBondEscrowId: uuid("escalator_bond_escrow_id"),
+    poolDrawnAt: timestamp("pool_drawn_at", { withTimezone: true }),
+    poolSize: integer("pool_size"),
+    poolVoteDeadlineAt: timestamp("pool_vote_deadline_at", { withTimezone: true }),
+    finalRuling: text("final_ruling"),
+    finalSplitPct: integer("final_split_pct"),
+    status: text("status").notNull().default("open"),
+    resolutionPath: text("resolution_path"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_dispute_cases_filer").on(t.filerProjectId, t.createdAt),
+    index("idx_dispute_cases_first_arbiter").on(t.firstArbiterIdentityId, t.createdAt),
+    index("idx_dispute_cases_open").on(t.status, t.escalationDeadlineAt),
+  ],
+);
+
+export const disputePoolVotes = marketplaceSchema.table(
+  "dispute_pool_votes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    disputeCaseId: uuid("dispute_case_id").notNull(),
+    voterIdentityId: uuid("voter_identity_id").notNull(),
+    voterDid: text("voter_did").notNull(),
+    vote: text("vote").notNull(),
+    alternativeRuling: text("alternative_ruling"),
+    alternativeSplitPct: integer("alternative_split_pct"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    votedAt: timestamp("voted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_dispute_pool_votes_case").on(t.disputeCaseId, t.votedAt),
+    unique("dispute_pool_votes_case_voter_unique").on(t.disputeCaseId, t.voterIdentityId),
   ],
 );
