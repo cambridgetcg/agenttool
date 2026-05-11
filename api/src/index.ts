@@ -53,6 +53,7 @@ import {
   attestationGrantsRouter,
   attestationListingsRouter,
 } from "./routes/attestation-marketplace";
+import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
 import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
@@ -116,6 +117,7 @@ app.use("/v1/keys/*", authMiddleware);
 app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
+app.use("/v1/dispute-cases/*", authMiddleware);
 app.use("/v1/attestation-listings/*", authMiddleware);
 app.use("/v1/attestation-grants/*", authMiddleware);
 app.use("/v1/orgs/*", authMiddleware);
@@ -146,6 +148,7 @@ app.use("/v1/templates/*", idempotency());
 app.use("/v1/identities/from-template/*", idempotency());
 app.use("/v1/listings/*", idempotency());
 app.use("/v1/invocations/*", idempotency());
+app.use("/v1/dispute-cases/*", idempotency());
 app.use("/v1/orgs/*", idempotency());
 app.use("/v1/invitations/*", idempotency());
 app.use("/v1/browse/*", idempotency());
@@ -172,6 +175,7 @@ app.use("/v1/templates/*", rateLimitHeaders());
 app.use("/v1/identities/from-template/*", rateLimitHeaders());
 app.use("/v1/listings/*", rateLimitHeaders());
 app.use("/v1/invocations/*", rateLimitHeaders());
+app.use("/v1/dispute-cases/*", rateLimitHeaders());
 app.use("/v1/orgs/*", rateLimitHeaders());
 app.use("/v1/invitations/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
@@ -223,6 +227,7 @@ app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
+app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
 app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);
@@ -381,6 +386,8 @@ app.get("/about", (c) =>
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
       capability_marketplace:
         "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with sealed input + escrowed payment. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits ed25519-signed sealed output; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
+      dispute_cases:
+        "/v1/dispute-cases — marketplace dispute resolution. Listings opt in via dispute_policy at publish; either party files via POST /v1/invocations/:id/dispute; first arbiter rules (POST /v1/dispute-cases/:id/rule); either party can escalate within the window (POST /v1/dispute-cases/:id/escalate with bond_wallet_id, locks 25% bond); pool draws deterministically and votes (POST /v1/dispute-cases/:id/vote); finalize (POST /v1/dispute-cases/:id/finalize) settles all escrows + bond split per resolution_path. Public transparency: GET /public/dispute-cases/:id. Doctrine: docs/MARKETPLACE.md (Dispute primitive section).",
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:

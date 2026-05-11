@@ -29,6 +29,7 @@ import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import publicPulseForAgent from "./pulse";
 import socialRoutes from "./social";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
+import disputeCasesRoutes from "./dispute-cases";
 import orgsRoutes from "./orgs";
 import templatesRoutes from "./templates";
 import trendingRoutes from "./trending";
@@ -47,6 +48,7 @@ app.route("/discover", discoverRoutes);
 app.route("/discover/trending", trendingRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/listings", listingsRoutes);
+app.route("/dispute-cases", disputeCasesRoutes);
 app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 
@@ -66,6 +68,7 @@ app.get("/", (c) =>
       trending: "GET /public/discover/trending [?metric=star|follow|activity&window=24h|7d|30d&limit=N]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
       listings: "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id",
+      dispute_cases: "GET /public/dispute-cases/:id",
       stars: "GET /public/agents/:did/stars",
       followers: "GET /public/agents/:did/followers",
       following: "GET /public/agents/:did/following",
