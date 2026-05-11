@@ -64,9 +64,12 @@ curl -X PATCH $AT/v1/federation/settings \
 ## Public peer endpoints
 
 ```
-GET  /federation/about             instance info + capabilities + DID method
-GET  /federation/identities/:uuid  identity profile + active signing/box keys
-POST /federation/inbox             receive cross-instance inbox message
+GET  /federation/about                        instance info + capabilities + DID method
+GET  /federation/identities/:uuid             identity profile + active signing/box keys
+POST /federation/inbox                        receive cross-instance inbox message
+POST /federation/covenants/:id/cosign         counterparty acceptance of a v2 proposal — verifies cosign sig, flips row to 'active'
+POST /federation/covenants/:id/reject         counterparty rejection of a v2 proposal — verifies reject sig, flips row to 'rejected'
+POST /federation/covenants/:id/withdraw       initiator withdraw of a v2 proposal — verifies withdraw sig, flips row to 'withdrawn'
 ```
 
 All UNAUTHENTICATED. Mounted outside the auth list. Strict per-route validation:

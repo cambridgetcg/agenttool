@@ -298,3 +298,20 @@ function countLeadingZeroBits(bytes: Uint8Array): number {
   }
   return count;
 }
+
+/** Load an agent's active server-rooted signing key. Returns null if the
+ *  identity is SOMA-rooted (private key never reaches the server) — in
+ *  that case the SDK signs client-side and POSTs the signature directly
+ *  via a separate code path (extend declareV2 to accept a pre-signed sig
+ *  in a follow-up; v1 of this plan supports server-rooted only).
+ *
+ *  NOTE: identity_keys has no server-side private key column — all
+ *  identities are SOMA-rooted. v2 declaration requires SDK-side signing,
+ *  which is tracked as a follow-up to this plan. This stub always returns
+ *  null so routes return 400 agent_signing_key_not_available. */
+export async function loadAgentSigningKey(
+  _projectId: string,
+  _identityId: string,
+): Promise<{ id: string; privateKey: Uint8Array } | null> {
+  return null;
+}

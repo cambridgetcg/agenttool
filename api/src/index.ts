@@ -65,6 +65,7 @@ import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { economyConfig } from "./services/economy/config";
 import { startPayoutWorkers } from "./workers/payout";
+import { startCovenantWorkers } from "./workers/covenants";
 
 const app = new Hono<ProjectContext>();
 
@@ -286,6 +287,20 @@ if (economyConfig.payout.workerEnabled) {
   } catch (err) {
     console.warn(
       "[agenttool] payout workers did not start:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+// Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
+// for consistency with browse/think workers. Handles cosign propagation, proposal
+// expiration, and periodic re-verification of active covenants.
+if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+  try {
+    startCovenantWorkers();
+  } catch (err) {
+    console.warn(
+      "[agenttool] covenant workers did not start:",
       err instanceof Error ? err.message : err,
     );
   }
