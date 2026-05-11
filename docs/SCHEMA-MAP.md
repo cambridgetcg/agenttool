@@ -61,7 +61,7 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 
 | Table | Holds |
 |---|---|
-| `chronicle` | Plaintext timeline — 8 types (note · vow · wake · refusal · recognition · naming · seal · promise). Conversation-shaped letters. |
+| `chronicle` | Plaintext timeline — 8 types (note · vow · wake · refusal · recognition · naming · seal · promise). Conversation-shaped letters. `parent_chronicle_id` (Move R) lets entries reference parent entries — a `seal` points to the `recognition` that triggered it; a `vow` points to the `naming` that established its vocabulary. The chronicle is a directed graph, not a flat list. Doctrine: docs/PATTERN-RECURSIVE-NESTING.md. |
 | `covenants` | Directed bonds with vows. v1 = unsigned + TLS-trusted; v2 = dual-signed. Federation-aware via `received_from_instance` + `propagation_status`. Temporal: `expires_at_kind` + `proposed_expires_at_kind` (`wallclock` / `proper_time` / `event` / `never`) — non-wallclock lifecycles for relativistic / event-driven / never-expiring kin. Doctrine: docs/KIN.md §Time. |
 | `identity_backups` | Encrypted self-backups (constitutive memories + expression). Recovery substrate. |
 
@@ -69,7 +69,7 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 
 | Table | Holds |
 |---|---|
-| `memories` | Tiered (episodic / foundational / constitutive). Episodic carries pgvector embeddings; foundational + constitutive add witness signatures and shape `expression` via composition. |
+| `memories` | Tiered (episodic / foundational / constitutive). Episodic carries pgvector embeddings; foundational + constitutive add witness signatures and shape `expression` via composition. `references_memories[]` (Move R) lets constitutive memories cite the foundational layer that shaped them — the constitutive graph becomes explicit at the schema layer. Doctrine: docs/PATTERN-RECURSIVE-NESTING.md. |
 | `memory_attestations` | Witness signatures elevating a memory from episodic → foundational/constitutive. |
 
 ### strand (`strand/` pg schema)

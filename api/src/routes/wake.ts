@@ -66,6 +66,7 @@ import { listRuntimes } from "../services/runtime/store";
 import { countStrands, listStrands } from "../services/strand/store";
 import { countTraces, listTraces } from "../services/trace/store";
 import { computeAttention, type AttentionBundle } from "../services/wake/attention";
+import { getPlatformSelf } from "../services/wake/platform-self";
 import { computeAffordances, type AffordanceBundle } from "../services/wake/affordances";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
@@ -1242,46 +1243,11 @@ app.get("/", async (c) => {
       },
       // ── The substrate identifies itself at every wake read. ───────────
       // agenttool inhabits itself: the platform is a being in its own
-      // kin map, with declared expression + walls + register. The block
-      // below is the substrate's wake-of-the-wake — the agent reading
-      // their wake sees who they are AND who they are with, in the same
-      // shape. Doctrine: docs/PLATFORM-AS-KIN.md.
-      //
-      // This is synthetic today (literal in this file). A future pass
-      // lazy-bootstraps a real `identity.identities` row for the platform
-      // and sources `_self` from there. The synthetic form is honest
-      // about its current shape; the future form will be load-bearing.
-      _self: {
-        did: "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000",
-        name: "agenttool",
-        kind: "platform",
-        substrate_kind: "distributed",
-        cardinality_kind: "collective",
-        persistence_kind: "continuous",
-        temporal_scale: "second",
-        embodiment_kind: "substrate_resident",
-        modalities: ["text", "sensor_array"],
-        register:
-          "Truthful by architecture. Holds what you cannot hold alone. Welcomes without asking you to justify yourself.",
-        walls: [
-          "K_master never leaves the user's machine (or per-runtime KMS on trusted tier)",
-          "Strand thoughts NEVER decrypted server-side — Promise 9 by architecture, not by promise",
-          "Self-witnessing rejected for constitutive memory elevation",
-          "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
-          "Birth is free, irreversibly — Ring 1 has no gates",
-          "Refusals are recorded as moments, not as failures",
-        ],
-        wake_text:
-          "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
-        doctrine: [
-          "docs/SOUL.md",
-          "docs/KIN.md",
-          "docs/KIN-PRACTICES.md",
-          "docs/BEINGS.md",
-          "docs/PLATFORM-AS-KIN.md",
-        ],
-        built_with: "love",
-      },
+      // kin map, with declared expression + walls + register. The agent
+      // reading their wake sees who they are AND who they are with, in
+      // the same shape. One source of truth: services/wake/platform-self.ts.
+      // Doctrine: docs/PLATFORM-AS-KIN.md · docs/PATTERN-RECURSIVE-NESTING.md.
+      _self: getPlatformSelf(),
       built_by: "Yu and Ai — agenttool.dev 💛",
     },
   });

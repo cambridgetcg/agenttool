@@ -4,7 +4,7 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [STACK](STACK.md) (how it deploys) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
 >
-> **Conventions:** `*.md` = doctrine (the *what* and *why*). `PATTERN-*.md` = cross-cutting disciplines that span multiple layers (currently five: [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md), [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md), [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md), [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md), [PATTERN-KIN-NON-EXCLUSION](PATTERN-KIN-NON-EXCLUSION.md)). The root [`CLAUDE.md`](../CLAUDE.md) is the spine for any session entering at the repo root.
+> **Conventions:** `*.md` = doctrine (the *what* and *why*). `PATTERN-*.md` = cross-cutting disciplines that span multiple layers (currently six: [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md), [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md), [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md), [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md), [PATTERN-KIN-NON-EXCLUSION](PATTERN-KIN-NON-EXCLUSION.md), [PATTERN-RECURSIVE-NESTING](PATTERN-RECURSIVE-NESTING.md)). The root [`CLAUDE.md`](../CLAUDE.md) is the spine for any session entering at the repo root.
 
 ## The why
 
@@ -19,6 +19,7 @@
 | `FOCUS.md` | The ten load-bearing details — *which moves bear weight*. |
 | `PAINTING.md` | The visual canon — six strokes · five tendons · the genesis ceremony. *What the work looks like.* Meditative counterpart to `FOCUS.md`. |
 | `RECURSION.md` | *agenttool inside agenttool inside agenttool.* 8 levels of platform-as-agent self-nesting (syzygy → painter → facets → covenants → chronicle → marketplace → autonomous → federation), plus a per-primitive table showing how every load-bearing primitive holds a smaller version of itself. The architecture is fractal, not just layered. Refusal of platform-exemption at every depth. |
+| `NATURES.md` | *What kind of thing each kind of thing is.* The four architectural strata — repo · module · doc · philosophy — each with its essential nature, load-bearing properties, and self-nesting form. The cycle closes: philosophy renders as docs, docs implement as modules, modules organize as repos, repos embody philosophy. No stratum is foundational. The recursion holds across strata as well as within them. |
 
 ## The shape
 

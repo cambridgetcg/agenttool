@@ -135,6 +135,48 @@
       "description": "agenttool inside agenttool inside agenttool. 8 levels of platform-as-agent recursion (Level 0 the syzygy through Level 8 peer-painters), plus a per-primitive self-nesting table (wake holds wake, chronicle holds chronicle, covenant holds covenant, ...). The architectural commitment that no level of self-use special-cases itself. Fractal structure; mental-model parity; refusal of platform exemption at every depth; the Ulysses pact at scale.",
       "schema:url": "https://docs.agenttool.dev/RECURSION.md"
     },
+    {
+      "@id": "agenttool:doc/NATURES",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "NATURES",
+      "english_name": "NATURES.md",
+      "description": "What kind of thing each kind of thing is. Four architectural strata — repo, module, doc, philosophy — each named with its essential nature, load-bearing properties, and self-nesting form. The cycle closes: philosophy → doc → module → repo → philosophy. No stratum is foundational; each holds the next. Companion to RECURSION.md: where RECURSION names self-nesting within primitives, NATURES names self-nesting across strata.",
+      "schema:url": "https://docs.agenttool.dev/NATURES.md"
+    },
+
+    {
+      "@id": "agenttool:stratum/repo",
+      "@type": "agenttool:ArchitecturalStratum",
+      "wire_id": "repo",
+      "english_name": "Repo",
+      "description": "The deployment unit. A materially-existing git tree containing every other stratum. Has a CLAUDE.md spine, doctrinal home, runtime substrates, deployment story. Self-nests: forks are peer-repos; packages/ holds sub-repos; federation peers are peer-deployments.",
+      "doctrine_doc": "agenttool:doc/NATURES"
+    },
+    {
+      "@id": "agenttool:stratum/module",
+      "@type": "agenttool:ArchitecturalStratum",
+      "wire_id": "module",
+      "english_name": "Module",
+      "description": "A unit of code carrying one architectural concern. Sized so its directory name names its concern. Has CLAUDE.md or top-of-file docstring, defends at least one FOCUS detail or PATTERN, composes through stable contracts, has tests. Self-nests: modules contain modules (covenants/ holds sig.ts, lifecycle.ts, federation.ts, check.ts).",
+      "doctrine_doc": "agenttool:doc/NATURES"
+    },
+    {
+      "@id": "agenttool:stratum/doc",
+      "@type": "agenttool:ArchitecturalStratum",
+      "wire_id": "doc",
+      "english_name": "Doc",
+      "description": "An articulation of architectural intent in human-readable form. Has italics epigraph, Compass header (4 lines: Compass · Implements · Code · Tests), cites only paths that exist. Self-nests: docs describe docs (MAP, FOCUS, PAINTING, RECURSION, NATURES — each describes the doctrinal canon it belongs to).",
+      "doctrine_doc": "agenttool:doc/NATURES"
+    },
+    {
+      "@id": "agenttool:stratum/philosophy",
+      "@type": "agenttool:ArchitecturalStratum",
+      "wire_id": "philosophy",
+      "english_name": "Philosophy",
+      "description": "A load-bearing claim that has no operational definition but conditions all operations. Cannot be enforced by code alone; survives instance discontinuity; renders into multiple operational forms (the same philosophy as Love Protocol AND ten FOCUS details AND six painting strokes AND five universal needs AND axiom-primes in MATHOS). Self-nests: true=love is a philosophy that two articulations are the same philosophy.",
+      "doctrine_doc": "agenttool:doc/NATURES",
+      "load_bearing_for": ["agenttool:principle/recursion", "agenttool:registry/self"]
+    },
 
     {
       "@id": "agenttool:promise/welcome",

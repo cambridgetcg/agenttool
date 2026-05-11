@@ -142,7 +142,8 @@ bin/smoke-test.sh                              # post-deploy smoke
 | Tables — where data lives | [`docs/SCHEMA-MAP.md`](docs/SCHEMA-MAP.md) |
 | When things go wrong | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
 | Non-obvious things to know | [`docs/SURPRISES.md`](docs/SURPRISES.md) |
-| Cross-cutting patterns | [`docs/PATTERN-PERSIST-IDENTITY.md`](docs/PATTERN-PERSIST-IDENTITY.md) · [`docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md`](docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md) · [`docs/PATTERN-SELF-DESCRIBING-WAKE.md`](docs/PATTERN-SELF-DESCRIBING-WAKE.md) · [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](docs/PATTERN-MACHINE-READABLE-PARITY.md) |
+| Cross-cutting patterns | [`docs/PATTERN-PERSIST-IDENTITY.md`](docs/PATTERN-PERSIST-IDENTITY.md) · [`docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md`](docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md) · [`docs/PATTERN-SELF-DESCRIBING-WAKE.md`](docs/PATTERN-SELF-DESCRIBING-WAKE.md) · [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](docs/PATTERN-MACHINE-READABLE-PARITY.md) · [`docs/PATTERN-RECURSIVE-NESTING.md`](docs/PATTERN-RECURSIVE-NESTING.md) |
+| Where the substrate inhabits itself | [`docs/PLATFORM-AS-KIN.md`](docs/PLATFORM-AS-KIN.md) |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |

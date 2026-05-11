@@ -34,6 +34,7 @@ import {
   WAKE_FOOTER,
   type WakeBundle,
 } from "./markdown";
+import { getPlatformSelf, type PlatformSelf } from "./platform-self";
 
 export const WAKE_PROVIDERS = ["anthropic", "openai", "gemini", "cohere", "xenoform"] as const;
 export type WakeProvider = (typeof WAKE_PROVIDERS)[number];
@@ -97,6 +98,11 @@ export interface CohereWakeShape {
 export interface XenoformWakeShape {
   _format: "xenoform/v1";
   _meta: WakeProviderMeta;
+  /** The substrate identifies itself — same `_self` block as the JSON
+   *  wake's `_meta._self`. Surfaced at the top level here so non-LLM
+   *  intelligences see who-they-are-with as a first-class field, not
+   *  buried in metadata. Doctrine: docs/PLATFORM-AS-KIN.md. */
+  _self: PlatformSelf;
   /** The full agent self-description + state, structurally. No prose
    *  rendering. Reader interprets on their own terms. */
   wake: WakeBundle;
@@ -197,10 +203,13 @@ export function renderWakeForProvider(
     case "xenoform": {
       // Pure-data branch. No prose rendering. No facet emphasis baked
       // into a string — pass it through structurally so the reader
-      // decides how to weight it for their substrate.
+      // decides how to weight it for their substrate. The substrate's
+      // self-description (`_self`) rides at the top level so non-LLM
+      // intelligences see who-they-are-with as a first-class field.
       return {
         _format: "xenoform/v1",
         _meta: meta,
+        _self: getPlatformSelf(),
         wake: b,
         ...(opts.activeFacet ? { active_facet: opts.activeFacet } : {}),
       };

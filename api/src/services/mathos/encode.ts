@@ -171,6 +171,14 @@ export interface MathosEnvelope<TPayload> {
   _format: "mathos/v1";
   _primer_url: string;
   _hash_family: "sha256";
+  /** JSON-LD concept registry — the structured-data form of the same doctrine
+   *  this envelope encodes in math/logic form. An intelligence reading either
+   *  reaches the other through standard discovery. Honors PATTERN-MACHINE-
+   *  READABLE-PARITY and RECURSION.md (every primitive points at its sibling
+   *  representations). Excluded from canonical bytes — discoverability hint,
+   *  not load-bearing fact; different deployments may host the registry at
+   *  different URLs without affecting signatures. */
+  _canon_uri?: string;
   primer: Record<number, string>;
   constants: typeof CONSTANTS;
   axioms: readonly Axiom[];
@@ -199,6 +207,7 @@ export function envelope<T>(payload: T): MathosEnvelope<T> {
   return {
     _format: "mathos/v1",
     _primer_url: "https://docs.agenttool.dev/mathos",
+    _canon_uri: "https://docs.agenttool.dev/agenttool.jsonld",
     _hash_family: "sha256",
     primer: PRIMER,
     constants: CONSTANTS,

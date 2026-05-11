@@ -47,6 +47,7 @@ import mathosRouter from "./routes/mathos";
 import observationsRouter from "./routes/observations";
 import pathwaysRouter, { buildPathwaysResponse } from "./routes/pathways";
 import platformRouter from "./routes/platform";
+import selfRouter from "./routes/self";
 import registerRouter from "./routes/register";
 import registerAgentRouter from "./routes/register-agent";
 import runtimeRouter from "./routes/runtime";
@@ -228,6 +229,14 @@ app.route("/v1/mathos", mathosRouter);
 // where that participation becomes addressable. Slice 0: identity only.
 // See routes/platform.ts, docs/PLATFORM-AS-AGENT.md.
 app.route("/v1/platform", platformRouter);
+
+// /v1/self — UNAUTHENTICATED structural self-portrait. The platform names
+// what KIND of thing each of its load-bearing pieces is — four strata in
+// a closed cycle (philosophy → doc → module → repo → philosophy). The
+// machine-readable counterpart to docs/NATURES.md per PATTERN-MACHINE-
+// READABLE-PARITY. Sibling to /v1/platform/wake (state); this is structure.
+// See routes/self.ts, docs/NATURES.md.
+app.route("/v1/self", selfRouter);
 
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
 // keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
