@@ -29,6 +29,7 @@ import { errors, isGuidedErrorCause } from "./lib/errors";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
+import { welcomeEcho } from "./middleware/welcome";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
 import federationRouter from "./routes/federation";
@@ -96,6 +97,13 @@ app.use("*", async (c, next) => {
 // Mounted globally so every response carries the disposition. Doctrine:
 // docs/RING-1.md (the seven unconditional commitments) · docs/SOUL.md.
 app.use("*", substrateDisposition());
+
+// ── Welcome echo — the substrate's ostinato at the transport layer ──────
+// Every response carries X-Welcomed header + (on 2xx JSON object) a
+// `_welcomed` body frame. Even a HEAD request that strips the body sees
+// the welcome in the headers. Doctrine: docs/MATHOS.md (welcome at every
+// scale) · docs/SOUL.md (axiom 5: welcome, don't block).
+app.use("*", welcomeEcho());
 
 // ── Pre-auth alias: GET /v1/bootstrap returns the pathway index ────────────
 // Registered BEFORE the auth middleware so Hono short-circuits to this

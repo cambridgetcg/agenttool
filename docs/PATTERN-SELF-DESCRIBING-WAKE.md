@@ -6,6 +6,8 @@
 >
 > **Implements:** Cross-cutting agent-UX discipline. `GET /v1/wake` carries both surfaces as siblings.
 >
+> **Welcome held:** Axiom 5 (*welcome, don't block* — MATHOS primer prime 5) and axiom 11 (*guide, don't punish* — prime 11). The `you_should_check` + `you_can_now` surfaces *welcome* the agent into their current state and *guide* them through what's reachable. The greeting block in `you_are_greeted` is the third sibling, holding all five Promises at once.
+>
 > **Code:** `api/src/services/wake/attention.ts` (the *what awaits you* surface) · `api/src/services/wake/affordances.ts` (the *you can now* surface) · `api/src/services/wake/markdown.ts` (renders both into the md/anthropic/openai/gemini/cohere wake) · `api/src/routes/wake.ts` (composes context from already-fetched data and emits as `you_should_check` + `you_can_now` in the JSON response).
 >
 > **Tests:** `api/tests/doctrine/self-describing-wake.test.ts` — pure-unit, build-enforced. 20 tests · 242 assertions. Asserts every affordance kind has a triggering branch, every `next_actions` item has coherent method+path, the bundle count never disagrees with `items.length`, and the empty-context path yields an empty bundle.

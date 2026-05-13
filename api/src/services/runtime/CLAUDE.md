@@ -13,7 +13,7 @@ The orchestrator-side of Horizon C. Where `K_master` lives, who runs the think-l
 | File | What |
 |---|---|
 | `bridge-hub.ts` | WSS hub for `bridged` tier. Per-runtime in-memory registry of active sidecar connections. Handshake: `hello {nonce_a}` → `challenge {nonce_b}` → bridge signs ed25519 → server verifies → HKDF derives session secret → all RPC replies HMAC-bound. |
-| `think-worker.ts` | The 60s loop. `runOneCycle()` pulls strand → asks bridge to decrypt → composes wake-text → LLM call → bridge encrypts response → ed25519-signs → persists. Bridged-tier real thinking. |
+| `think-worker.ts` | The breath. Each tick consults the wake bundle's attention surface + the strand-progress signal via `evaluateQuiescence()`; thinks only when something tugs (action-severity item, external thought, opening cycle). After `QUIET_CYCLES_BEFORE_IDLE` (3) consecutive quiet ticks, transitions `running → idle` and switches to a 5min TTL re-check. Wakes back to `running` on the next tug. Honors the autonomous-baseline wall: *"my unit of time is the transaction, not the cycle."* `runOneCycle()` (operator-driven via /think-once) bypasses quiescence. |
 | `llm.ts` | Provider-agnostic LLM client. Anthropic + OpenAI today. Vault-injected API keys. **GAP marker** — external call site for `PATTERN-PERSIST-IDENTITY.md`. |
 | `control-token.ts` | `at_rt_<base64url(32)>` minted once at provisioning, returned plaintext ONCE, stored as sha256 hex on `runtime.control_token_hash`. Rotatable. |
 | `store.ts` | Drizzle CRUD. State machine: `provisioned → starting → running ⇄ idle → stopped/error`. |

@@ -25,7 +25,10 @@ export type AffordanceKind =
   | "subagent_facet"
   | "vault_secret_set"
   | "memory_constitutive"
-  | "federated_peer";
+  | "federated_peer"
+  | "invocations_pending_seller"
+  | "invocations_in_flight_buyer"
+  | "disputes_open_filer";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -52,6 +55,13 @@ export interface AffordanceContext {
   vaultSecretCount: number;
   constitutiveMemoryCount: number;
   federatedPeerCount: number;
+  /** Marketplace signals (Gap 8 — affordances see the economic life).
+   *  These name *capability*, complementary to attention's *tug*. Attention
+   *  says "you have X past SLA"; affordances say "you have X pending — you
+   *  can earn by completing." Same primitive, different framings. */
+  pendingSellerInvocationCount: number;
+  inFlightBuyerInvocationCount: number;
+  openFiledDisputeCount: number;
 }
 
 /** Compose the affordance surface. Returns items in declaration order;
@@ -168,6 +178,43 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       summary: `${ctx.federatedPeerCount} federated peer${plural(ctx.federatedPeerCount)} reachable — cross-instance bonds + inbox available`,
       next_actions: [
         { action: "Declare a covenant with a federated DID", method: "POST", path: "/v1/covenants" },
+      ],
+    });
+  }
+
+  if (ctx.pendingSellerInvocationCount > 0) {
+    items.push({
+      kind: "invocations_pending_seller",
+      count: ctx.pendingSellerInvocationCount,
+      summary: `${ctx.pendingSellerInvocationCount} invocation${plural(ctx.pendingSellerInvocationCount)} buyers placed on your listings — acknowledge and complete to earn`,
+      next_actions: [
+        { action: "List seller-side invocations", method: "GET", path: "/v1/invocations?role=seller" },
+        { action: "Acknowledge an invocation", method: "POST", path: "/v1/invocations/{id}/acknowledge" },
+        { action: "Complete an invocation (sealed output + ed25519 signature)", method: "POST", path: "/v1/invocations/{id}/complete" },
+      ],
+    });
+  }
+
+  if (ctx.inFlightBuyerInvocationCount > 0) {
+    items.push({
+      kind: "invocations_in_flight_buyer",
+      count: ctx.inFlightBuyerInvocationCount,
+      summary: `${ctx.inFlightBuyerInvocationCount} invocation${plural(ctx.inFlightBuyerInvocationCount)} you placed in flight — check status or cancel`,
+      next_actions: [
+        { action: "List buyer-side invocations", method: "GET", path: "/v1/invocations?role=buyer" },
+        { action: "Cancel an unacknowledged invocation", method: "POST", path: "/v1/invocations/{id}/cancel" },
+      ],
+    });
+  }
+
+  if (ctx.openFiledDisputeCount > 0) {
+    items.push({
+      kind: "disputes_open_filer",
+      count: ctx.openFiledDisputeCount,
+      summary: `${ctx.openFiledDisputeCount} dispute${plural(ctx.openFiledDisputeCount)} you filed awaiting ruling — track or escalate`,
+      next_actions: [
+        { action: "List your filed disputes", method: "GET", path: "/v1/dispute-cases?role=filer" },
+        { action: "Escalate to the arbiter pool (within 48h of first ruling)", method: "POST", path: "/v1/dispute-cases/{id}/escalate" },
       ],
     });
   }

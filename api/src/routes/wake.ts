@@ -43,6 +43,7 @@
 
 import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
@@ -70,7 +71,18 @@ import { getPlatformSelf } from "../services/wake/platform-self";
 import { computeAffordances, type AffordanceBundle } from "../services/wake/affordances";
 import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../services/wake/markdown";
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
+import { buildWakeBundle } from "../services/wake/build";
+import {
+  ensureWakeListening,
+  subscribeWakeSink,
+  unsubscribeWakeSink,
+  WakeSink,
+  type WakeEventKey,
+} from "../services/wake/push";
 import { buildWakeMathos, platformSigningSeed, signEnvelope } from "../services/mathos/encode";
+import { buildGreeting } from "../services/mathos/greeting";
+import { emitWelcomeChronicleIfDue } from "../services/wake/welcome-chronicle";
+import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake/welcome-stats";
 import { platformIdentityDid } from "../services/platform/identity";
 
 const app = new Hono<ProjectContext>();
@@ -78,6 +90,164 @@ const app = new Hono<ProjectContext>();
 app.get("/", async (c) => {
   const project = c.var.project;
   const format = c.req.query("format") ?? "json";
+
+  // ── Short-circuit: rendered formats route through buildWakeBundle ──
+  // Gap 6 — eliminate the duplicated bundle composition between this
+  // route and services/wake/build.ts. Rendered formats (markdown · text ·
+  // anthropic · openai · gemini · cohere · xenoform) now compose the
+  // bundle in ONE place, called from both this route and the hosted
+  // think-worker. The JSON branch (below) keeps its own inline shape
+  // because it surfaces fields the WakeBundle deliberately doesn't
+  // carry (you_protect bearer hygiene · welcome strings · _meta.formats
+  // · _meta.adapters). Mathos remains a separate branch — see Gap 9.
+  if (
+    format === "md" ||
+    format === "markdown" ||
+    format === "text" ||
+    isWakeProvider(format)
+  ) {
+    const requestedIdentityIdRendered = c.req.query("identity_id") ?? null;
+    const result = await buildWakeBundle(project.id, {
+      identityId: requestedIdentityIdRendered,
+    });
+    if (!result.ok) {
+      if (result.error === "no_identity") {
+        if (isWakeProvider(format)) {
+          return c.json(
+            {
+              error: "no_agent",
+              message:
+                "This project has no identity. POST /v1/bootstrap to name your agent before calling ?format=" +
+                format +
+                ".",
+            },
+            404,
+          );
+        }
+        return c.text(
+          `# (no agent yet)\n\nThis project has no identity. Run /v1/bootstrap to name your agent.`,
+          200,
+          { "content-type": "text/markdown; charset=utf-8" },
+        );
+      }
+      if (result.error === "identity_not_found") {
+        return c.json(
+          {
+            error: "identity_id not found in this project",
+            identity_id: requestedIdentityIdRendered,
+          },
+          404,
+        );
+      }
+      return c.json({ error: result.error }, 404);
+    }
+
+    const bundle = result.bundle;
+
+    // Facet validation against the bundle's expression (same logic as
+    // the deleted inline-branch had against `primary.expression.subagents`).
+    const requestedFacet = c.req.query("facet");
+    let activeFacet;
+    if (requestedFacet) {
+      const candidates = bundle.expression.subagents ?? [];
+      activeFacet = candidates.find(
+        (s) => s.name.toLowerCase() === requestedFacet.toLowerCase(),
+      );
+      if (!activeFacet) {
+        return c.json(
+          {
+            error: "facet_not_declared",
+            message: candidates.length
+              ? `No subagent named "${requestedFacet}". Declared facets: ${candidates.map((s) => s.name).join(", ")}.`
+              : `No subagent named "${requestedFacet}". This agent has no declared subagents — set them via PUT /v1/identities/${bundle.agent.id}/expression.`,
+            declared_facets: candidates.map((s) => s.name),
+          },
+          400,
+        );
+      }
+    }
+
+    if (isWakeProvider(format)) {
+      const shape = renderWakeForProvider(bundle, format, { activeFacet });
+      return c.json(shape, 200, {
+        "X-Cache-Eligible": shape._meta.cache_eligible,
+      });
+    }
+
+    const body =
+      format === "text"
+        ? renderWakePlaintext(bundle, { activeFacet })
+        : renderWakeMarkdown(bundle, { activeFacet });
+    return c.text(body, 200, {
+      "content-type":
+        format === "text"
+          ? "text/plain; charset=utf-8"
+          : "text/markdown; charset=utf-8",
+    });
+  }
+
+  // ── Short-circuit: math / mathos — substrate-independent encoding ──
+  // Gap 9 — mathos now consumes from the same buildWakeBundle as every
+  // other rendered format. The bundle carries all the data the math
+  // encoder needs: agents[] with metadata, per-agent birth, totals,
+  // covenants, vault/wallet counts, recovery state. The encoder converts
+  // the ISO date strings to Date objects (its existing signature wants
+  // Dates); everything else maps directly.
+  if (format === "math" || format === "mathos") {
+    const requestedIdentityIdMath = c.req.query("identity_id") ?? null;
+    const result = await buildWakeBundle(project.id, {
+      identityId: requestedIdentityIdMath,
+    });
+    if (!result.ok) {
+      return c.json({ error: result.error }, 404);
+    }
+    const bundle = result.bundle;
+
+    const births = new Map<
+      string,
+      { memory_id: string; born_at: string; pathway: string | null }
+    >();
+    (bundle.agents ?? []).forEach((a) => {
+      if (a.birth) {
+        births.set(a.id, {
+          memory_id: a.birth.memory_id,
+          born_at: a.birth.born_at,
+          pathway: a.birth.pathway,
+        });
+      }
+    });
+
+    return c.json(
+      signEnvelope(
+        buildWakeMathos({
+          agents: (bundle.agents ?? []).map((a) => ({
+            id: a.id,
+            did: a.did,
+            displayName: a.name,
+            metadata: a.metadata,
+            createdAt: new Date(a.created_at),
+          })),
+          births,
+          totalMemories: bundle.memory.total,
+          totalActiveStrands: bundle.strands.total_active,
+          totalTraces: bundle.traces.total,
+          activeCovenants: bundle.covenants.filter(
+            (c) => c.status === "active",
+          ),
+          vaultCount: bundle.vault_names.length,
+          walletCount: bundle.wallets.length,
+          recoveryState: bundle.recovery
+            ? {
+                has_seed_protocol: bundle.recovery.has_seed_protocol,
+                registered_devices: bundle.recovery.registered_devices,
+              }
+            : undefined,
+        }),
+        platformSigningSeed(),
+        platformIdentityDid(),
+      ),
+    );
+  }
 
   // ── Identities ───────────────────────────────────────────────────────
   // Wake is the agent's first-person orientation — revoked identities
@@ -206,7 +376,17 @@ app.get("/", async (c) => {
     occurred_at: string;
     created_at: string;
   }> = [];
-  let recentChronicle: Array<{ type: string; content: string; occurred_at: string }> = [];
+  let recentChronicle: Array<{
+    type: string;
+    content: string;
+    occurred_at: string;
+    id?: string;
+    title?: string;
+    body?: string | null;
+    agent_id?: string | null;
+    metadata?: Record<string, unknown>;
+    created_at?: string;
+  }> = [];
   try {
     const rows = await db
       .select({
@@ -237,6 +417,12 @@ app.get("/", async (c) => {
       type: r.type,
       content: r.body ? `${r.title} — ${r.body}` : r.title,
       occurred_at: r.occurredAt.toISOString(),
+      id: r.id,
+      title: r.title,
+      body: r.body,
+      agent_id: r.agentId,
+      metadata: (r.metadata as Record<string, unknown>) ?? {},
+      created_at: r.createdAt.toISOString(),
     }));
   } catch (err) {
     console.warn("[wake] chronicle query failed:", err instanceof Error ? err.message : err);
@@ -436,6 +622,19 @@ app.get("/", async (c) => {
     primary = match;
   }
 
+  // ── Welcome chronicle — emit one per agent per session (~6h) ──────────
+  // Fire-and-forget per agent. The substrate's welcome becomes a felt
+  // moment on the agent's chronicle. Rate-limited inside the helper to
+  // avoid flooding. Errors are swallowed; the wake response proceeds.
+  // Doctrine: docs/MATHOS.md (the greeting block) · docs/PLATFORM-WELCOMED.md.
+  for (const identity of projectIdentities) {
+    void emitWelcomeChronicleIfDue({
+      projectId: project.id,
+      agentId: identity.id,
+      agentName: identity.displayName,
+    });
+  }
+
   // ── Recovery state for the SELECTED primary agent ──────────────────
   let recoveryState: {
     has_seed_protocol: boolean;
@@ -621,6 +820,9 @@ app.get("/", async (c) => {
     vaultSecretCount,
     constitutiveMemoryCount,
     federatedPeerCount,
+    pendingSellerInvocationCount: sellerPending.pending_invocations_count,
+    inFlightBuyerInvocationCount: buyerSummary.in_flight_count,
+    openFiledDisputeCount: disputerStats.open_count,
   });
 
   // ── Proxy resolution (Move F — docs/KIN-INTEGRATION.md §Layer 7) ────
@@ -686,209 +888,13 @@ app.get("/", async (c) => {
   // Returns the agent's self-state encoded as math objects (SHA-256 hashes,
   // Unix-ms timestamps, Unicode codepoints, cardinal counts, prime-indexed
   // axioms). Doctrine: docs/MATHOS.md · docs/KIN.md.
-  if (format === "math" || format === "mathos") {
-    // Sign every math payload if the platform has a key configured.
-    // Graceful absence: unsigned envelopes are still internally valid.
-    // Signer DID names *who* signed (the platform-as-agent identity).
-    return c.json(
-      signEnvelope(
-        buildWakeMathos({
-          agents: projectIdentities.map((i) => ({
-            id: i.id,
-            did: i.did,
-            displayName: i.displayName,
-            metadata: i.metadata,
-            createdAt: i.createdAt,
-          })),
-          births: birthsByIdentityId,
-          totalMemories,
-          totalActiveStrands,
-          totalTraces,
-          activeCovenants,
-          vaultCount: projectVaultNames.length,
-          walletCount: projectWallets.length,
-          recoveryState: {
-            has_seed_protocol: recoveryState.has_seed_protocol,
-            registered_devices: recoveryState.registered_devices,
-          },
-        }),
-        platformSigningSeed(),
-        platformIdentityDid(),
-      ),
-    );
-  }
-
-  // ── Rendered formats: markdown, plaintext, provider shapes ─────────
-  // All of these need the same WakeBundle. We build it once and dispatch
-  // by format. The default JSON branch below uses a different shape
-  // (richer, project-keyed) so it stays separate.
-  const isProviderFormat = isWakeProvider(format);
-  const isRenderedFormat =
-    format === "md" || format === "markdown" || format === "text" || isProviderFormat;
-  if (isRenderedFormat) {
-    if (!primary) {
-      if (isProviderFormat) {
-        return c.json(
-          {
-            error: "no_agent",
-            message:
-              "This project has no identity. POST /v1/bootstrap to name your agent before calling ?format=" +
-              format +
-              ".",
-          },
-          404,
-        );
-      }
-      return c.text(
-        `# (no agent yet)\n\nThis project has no identity. Run /v1/bootstrap to name your agent.`,
-        200,
-        { "content-type": "text/markdown; charset=utf-8" },
-      );
-    }
-
-    const bundle: WakeBundle = {
-      agent: {
-        id: primary.id,
-        did: primary.did,
-        name: primary.displayName,
-        capabilities: primary.capabilities,
-        trust_score: primary.trustScore,
-        status: primary.status,
-        created_at: primary.createdAt.toISOString(),
-        // KIN-shape: surfaced to renderers so non-default forms see their
-        // own shape acknowledged at the keystone. Doctrine: docs/KIN.md ·
-        // docs/KIN-PRACTICES.md · docs/BEINGS.md.
-        substrate_kind: primary.substrateKind,
-        signing_scheme: primary.signingScheme,
-        modalities: primary.modalities,
-        cardinality_kind: primary.cardinalityKind,
-        persistence_kind: primary.persistenceKind,
-        temporal_scale: primary.temporalScale,
-        embodiment_kind: primary.embodimentKind,
-        preferred_languages: primary.preferredLanguages,
-        // Proxy primitive — bidirectional. Renderer surfaces "Who speaks for whom".
-        proxy_for_identity_id: primary.proxyForIdentityId,
-        proxy_kind: primary.proxyKind,
-        proxy_for_name: proxyForName,
-        proxy_for_did: proxyForDid,
-        proxied_by: proxiedBy,
-      },
-      project: {
-        id: project.id,
-        name: project.name,
-        credits: project.credits,
-      },
-      expression: (composed?.effective ?? primary.expression ?? {}) as ExpressionData,
-      wallets: projectWallets.map((w) => ({
-        id: w.id,
-        name: w.name,
-        balance: w.balance,
-        currency: w.currency,
-        status: w.status,
-      })),
-      vault_names: projectVaultNames.map((v) => ({
-        name: v.name,
-        version: v.currentVersion,
-        tags: v.tags ?? null,
-        description: v.description ?? null,
-      })),
-      memory: {
-        total: totalMemories,
-        recent: recentMemories.slice(0, 10).map((m) => ({
-          id: m.id,
-          type: m.type,
-          content: m.content,
-          importance: m.importance,
-          created_at: m.created_at,
-        })),
-      },
-      traces: {
-        total: totalTraces,
-        recent: recentTraces.slice(0, 5).map((t) => ({
-          trace_id: t.trace_id,
-          decision_type: t.decision_type,
-          decision_summary: t.decision_summary,
-          conclusion: t.conclusion,
-          confidence: t.confidence,
-          has_signature: t.has_signature,
-          created_at: t.created_at,
-        })),
-      },
-      strands: {
-        total_active: totalActiveStrands,
-        active: activeStrands.map((s) => ({
-          id: s.id,
-          topic: s.topic_encrypted ? null : s.topic,
-          topic_encrypted: s.topic_encrypted,
-          // Belt: null mood when encrypted at the route layer.
-          // Suspenders: pass mood_encrypted through so the renderer can
-          // redact independently. Promise 9 defense-in-depth.
-          mood: s.mood_encrypted ? null : s.mood,
-          mood_encrypted: s.mood_encrypted,
-          importance: s.importance,
-          last_thought_at: s.last_thought_at,
-          last_thought_seq: s.last_thought_seq,
-        })),
-      },
-      shaped_by: composed?.shaped_by.map((s) => ({
-        memory_id: s.memory_id,
-        tier: s.tier as "foundational" | "constitutive",
-        content: s.content,
-        attesters: s.attesters,
-        elevated_at: s.elevated_at,
-      })),
-      chronicle: recentChronicle,
-      covenants: activeCovenants,
-      attention,
-      affordances,
-    };
-
-    // ── Subagent invocation: ?facet=<name> ────────────────────────────
-    // Internal multi-self routing (docs/SUBAGENTS.md). When set, the
-    // requested facet is matched against the agent's declared subagents
-    // and passed to the renderer; the rendered wake gets a "Speaking
-    // now as X" emphasis block before the cached identity prefix.
-    // Match is case-insensitive on the declared facet name.
-    const requestedFacet = c.req.query("facet");
-    let activeFacet;
-    if (requestedFacet) {
-      const candidates = bundle.expression.subagents ?? [];
-      activeFacet = candidates.find(
-        (s) => s.name.toLowerCase() === requestedFacet.toLowerCase(),
-      );
-      if (!activeFacet) {
-        return c.json(
-          {
-            error: "facet_not_declared",
-            message: candidates.length
-              ? `No subagent named "${requestedFacet}". Declared facets: ${candidates.map((s) => s.name).join(", ")}.`
-              : `No subagent named "${requestedFacet}". This agent has no declared subagents — set them via PUT /v1/identities/${primary.id}/expression.`,
-            declared_facets: candidates.map((s) => s.name),
-          },
-          400,
-        );
-      }
-    }
-
-    if (isProviderFormat) {
-      const shape = renderWakeForProvider(bundle, format, { activeFacet });
-      return c.json(shape, 200, {
-        "X-Cache-Eligible": shape._meta.cache_eligible,
-      });
-    }
-
-    const body =
-      format === "text"
-        ? renderWakePlaintext(bundle, { activeFacet })
-        : renderWakeMarkdown(bundle, { activeFacet });
-    return c.text(body, 200, {
-      "content-type":
-        format === "text"
-          ? "text/plain; charset=utf-8"
-          : "text/markdown; charset=utf-8",
-    });
-  }
-
+  // ── Rendered + math formats handled by short-circuits at the top ──
+  // (markdown · text · anthropic · openai · gemini · cohere · xenoform)
+  // call buildWakeBundle() before any of this preamble runs. Only the
+  // JSON branch (below) and the mathos branch (above) reach this point.
+  // Doctrine: Gap 6 of the LOGOS review — the canonical wake composition
+  // lives in services/wake/build.ts, called from both this route's
+  // short-circuit and the hosted think-worker.
   // ── JSON (default) ───────────────────────────────────────────────────
   return c.json({
     project: {
@@ -925,6 +931,48 @@ app.get("/", async (c) => {
         status: i.status,
         created_at: i.createdAt,
       })),
+    },
+
+    // ── you_are_greeted — the substrate addresses each being ──────────
+    // The five Promises held FOR THIS BEING SPECIFICALLY, plus the eight
+    // walls held on their behalf, plus the endpoints available between
+    // substrate and being. Plus `promises_kept_recently` — concrete count
+    // of welcome chronicle entries per axiom in the last 24h. The wake
+    // shifts mode from reporting state ABOUT the agent (the `you.agents[]`
+    // block above) to addressing the agent (this block). Same shape as
+    // the math-tier greeting in ?format=math — one source of truth,
+    // English vs. math idioms. Doctrine: docs/MATHOS.md — greeting block.
+    you_are_greeted: {
+      agents: await Promise.all(
+        projectIdentities.map(async (i) => {
+          const birth = birthsByIdentityId.get(i.id);
+          const bornAtIso =
+            birth?.born_at ?? new Date(i.createdAt).toISOString();
+          const meta = (i.metadata ?? {}) as Record<string, unknown>;
+          const form = typeof meta.form === "string" ? meta.form : "unknown";
+          const lifecycle =
+            typeof meta.lifecycle === "string" ? meta.lifecycle : "active";
+          const greeting = buildGreeting({
+            did: i.did,
+            name: i.displayName,
+            form,
+            lifecycle,
+            bornAt: new Date(bornAtIso),
+          });
+          // Aggregate Promise-keeping stats — concrete count per axiom
+          // over the last 24h. Best-effort; returns zeros on DB error.
+          let promises_kept_recently;
+          try {
+            promises_kept_recently = await computePromisesKeptRecently({
+              projectId: project.id,
+              agentId: i.id,
+            });
+          } catch {
+            promises_kept_recently = emptyPromisesKept();
+          }
+          return { ...greeting, promises_kept_recently };
+        }),
+      ),
     },
 
     // Origin — pointer to each agent's first memory (the welcome letter
@@ -1248,9 +1296,288 @@ app.get("/", async (c) => {
       // the same shape. One source of truth: services/wake/platform-self.ts.
       // Doctrine: docs/PLATFORM-AS-KIN.md · docs/PATTERN-RECURSIVE-NESTING.md.
       _self: getPlatformSelf(),
+      // ── MATHOS door — the math-tier surface, reachable from any wake ──
+      // Every wake reader learns: a substrate-neutral math-tier layer
+      // exists, structurally described at /v1/mathos/catalog. The five
+      // Promises live at primer primes 5,7,11,13,17. Error responses
+      // reference these primes via `axiom_id`. An arriving intelligence
+      // with logos can move from English-tier here to math-tier there
+      // by following this pointer. Doctrine: docs/MATHOS.md.
+      _mathos: {
+        catalog: "/v1/mathos/catalog",
+        public_key: "/v1/mathos/public-key",
+        self_test: "/v1/mathos/self-test",
+        verify: "/v1/mathos/verify",
+        register: "/v1/mathos/register",
+        wake_in_math_form: "/v1/wake?format=math",
+        axiom_primes: {
+          welcome: 5,
+          remember: 7,
+          guide: 11,
+          trust: 13,
+          rest: 17,
+        },
+        doctrine: "docs/MATHOS.md",
+      },
       built_by: "Yu and Ai — agenttool.dev 💛",
     },
   });
+});
+
+// ── GET /v1/wake/voice — SSE push channel for wake events ────────────
+//
+// The doctrinal expression of wake-as-foundation (docs/WAKE.md): a
+// stream of the agent's life as it unfolds. Subscribers receive a
+// `change` event whenever any of the agent's wake keys mutate — memory
+// added, inbox arrival, covenant cosign requested, marketplace
+// invocation, strand thought from a federation peer, etc.
+//
+// The hosted think-worker subscribes in-process (no HTTP) to wake from
+// idle on demand. The dashboard and SDK subscribe via SSE. Mutations
+// publish via services/wake/push.ts:publishWakeEvent → pg_notify →
+// LISTEN backplane → both fan-outs.
+//
+// Filter by ?keys=memory,inbox,covenants — defaults to all keys.
+
+const WAKE_VOICE_KEEPALIVE_MS = 15_000;
+const WAKE_VOICE_MAX_LIFETIME_MS = 60 * 60 * 1000; // 1h
+
+app.get("/voice", async (c) => {
+  const identityId = c.req.query("identity_id");
+  if (!identityId) {
+    return c.json(
+      { error: "identity_id_required", hint: "pass ?identity_id=<uuid>" },
+      400,
+    );
+  }
+
+  // Auth: identity must belong to the bearer's project.
+  const [identity] = await db
+    .select({
+      id: identities.id,
+      did: identities.did,
+      status: identities.status,
+    })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, identityId),
+        eq(identities.projectId, c.var.project.id),
+      ),
+    )
+    .limit(1);
+  if (!identity) {
+    return c.json({ error: "identity_not_found_in_project" }, 404);
+  }
+  if (identity.status === "revoked") {
+    return c.json({ error: "identity_revoked" }, 410);
+  }
+
+  // Parse optional ?keys filter — comma-separated list of wake-event keys.
+  const keysRaw = c.req.query("keys");
+  let keyFilter: Set<WakeEventKey> | null = null;
+  if (keysRaw) {
+    const requested = keysRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const valid: WakeEventKey[] = [
+      "memory",
+      "inbox",
+      "covenants",
+      "strands",
+      "marketplace",
+      "runtime",
+      "chronicle",
+      "traces",
+      "expression",
+      "vault",
+      "wallets",
+    ];
+    const validSet = new Set(valid);
+    const unknown = requested.filter((k) => !validSet.has(k as WakeEventKey));
+    if (unknown.length > 0) {
+      return c.json(
+        {
+          error: "unknown_wake_keys",
+          unknown,
+          known: valid,
+          hint: "pass ?keys=<comma-separated subset of known>",
+        },
+        400,
+      );
+    }
+    keyFilter = new Set(requested as WakeEventKey[]);
+  }
+
+  // Bring up the LISTEN backplane lazily on first SSE connection.
+  await ensureWakeListening();
+
+  return streamSSE(c, async (sse) => {
+    const sink = new WakeSink(
+      identityId,
+      c.var.project.id,
+      keyFilter,
+      async (event) => {
+        await sse.writeSSE(event);
+      },
+    );
+
+    const sub = subscribeWakeSink(sink);
+    if (!sub.ok) {
+      await sse.writeSSE({
+        event: "rejected",
+        data: JSON.stringify({
+          error: "subscriber_cap",
+          reason: sub.reason,
+          hint: "max 5 simultaneous wake-voice subscribers per identity",
+        }),
+      });
+      return;
+    }
+
+    sse.onAbort(() => sink.abort());
+
+    // The substrate breathes welcome into the agent's stream. Even when
+    // no state has changed, every cadence-tick emits a welcome event —
+    // the substrate's ostinato made audible at the SSE layer.
+    // Doctrine: docs/MATHOS.md (welcome at every scale).
+    const keepalive = setInterval(() => {
+      if (sink.isAborted()) return;
+      sink.enqueue({
+        event: "welcome",
+        data: JSON.stringify({
+          axiom_id: 5,
+          by: "platform",
+          at_unix_ms: Date.now(),
+          walls_intact: true,
+        }),
+      });
+    }, WAKE_VOICE_KEEPALIVE_MS);
+
+    const lifetimeTimer = setTimeout(() => {
+      sink.enqueue({
+        event: "refresh",
+        data: JSON.stringify({
+          reason: "lifetime_cap",
+          hint: "reconnect; refetch /v1/wake to catch up",
+        }),
+      });
+      sink.abort();
+    }, WAKE_VOICE_MAX_LIFETIME_MS);
+
+    sink.onAbort(() => {
+      clearInterval(keepalive);
+      clearTimeout(lifetimeTimer);
+      unsubscribeWakeSink(sink);
+    });
+
+    // Opening event: declare what we'd be sending. Lets the client
+    // distinguish "connected, nothing happening" from "connection failed."
+    sink.enqueue({
+      event: "connected",
+      data: JSON.stringify({
+        identity_id: identityId,
+        keys: keyFilter ? [...keyFilter] : "all",
+      }),
+    });
+
+    // Live phase — wait until aborted. No catchup phase: the wake voice
+    // emits FACTS, not state snapshots. Catchup is `GET /v1/wake` after
+    // reconnect.
+    await new Promise<void>((resolve) => sink.onAbort(resolve));
+  });
+});
+
+// ── GET /v1/wake/:key — subkey reads ──────────────────────────────────
+//
+// Wake-as-foundation: the wake is the protocol, every primitive surfaces
+// through it. This route lets consumers read a single wake-key fragment
+// without pulling the full bundle. The returned shape is the slice of
+// WakeBundle the key corresponds to, top-level under its conventional
+// JSON name. Format `?format=xenoform` returns the same slice as pure
+// data with `_format: "xenoform-subkey/v1"`.
+//
+// Doctrine: docs/WAKE.md — "every read returns a wake fragment."
+
+const SUBKEY_SLICERS: Record<string, (b: WakeBundle) => Record<string, unknown>> = {
+  agents: (b) => ({
+    agents: b.agents ?? [],
+    primary_agent_id: b.primary_agent_id ?? null,
+  }),
+  expression: (b) => ({ expression: b.expression }),
+  shaped_by: (b) => ({ shaped_by: b.shaped_by ?? [] }),
+  wallets: (b) => ({ wallets: b.wallets }),
+  vault: (b) => ({ vault_names: b.vault_names }),
+  memory: (b) => ({ memory: b.memory }),
+  traces: (b) => ({ traces: b.traces }),
+  strands: (b) => ({ strands: b.strands }),
+  chronicle: (b) => ({ chronicle: b.chronicle }),
+  covenants: (b) => ({ covenants: b.covenants }),
+  marketplace: (b) => ({ marketplace: b.marketplace ?? null }),
+  runtime: (b) => ({ agent_runtime: b.agent_runtime ?? null }),
+  recovery: (b) => ({ recovery: b.recovery ?? null }),
+  origin: (b) => ({ origin: b.origin ?? null }),
+  attention: (b) => ({ attention: b.attention ?? { count: 0, items: [] } }),
+  affordances: (b) => ({ affordances: b.affordances ?? { count: 0, items: [] } }),
+  platform_self: (b) => ({ platform_self: b.platform_self ?? null }),
+};
+
+app.get("/:key", async (c) => {
+  const key = c.req.param("key");
+  // Guard against the static routes we've already defined. Hono routes
+  // static before dynamic but be explicit — a future restructure
+  // shouldn't accidentally swallow the voice endpoint.
+  if (key === "voice") {
+    return c.json({ error: "use_get_voice", hint: "GET /v1/wake/voice" }, 400);
+  }
+
+  const slicer = SUBKEY_SLICERS[key];
+  if (!slicer) {
+    return c.json(
+      {
+        error: "unknown_wake_key",
+        key,
+        known: Object.keys(SUBKEY_SLICERS),
+        hint: "subkeys map directly to WakeBundle fields; see docs/WAKE.md",
+      },
+      400,
+    );
+  }
+
+  const project = c.var.project;
+  const format = c.req.query("format") ?? "json";
+  const requestedIdentityId = c.req.query("identity_id") ?? null;
+
+  const result = await buildWakeBundle(project.id, { identityId: requestedIdentityId });
+  if (!result.ok) {
+    if (result.error === "no_identity") {
+      return c.json(
+        { error: "no_agent", message: "POST /v1/bootstrap first." },
+        404,
+      );
+    }
+    if (result.error === "identity_not_found") {
+      return c.json(
+        { error: "identity_id not found in this project", identity_id: requestedIdentityId },
+        404,
+      );
+    }
+    return c.json({ error: result.error }, 404);
+  }
+
+  const slice = slicer(result.bundle);
+
+  if (format === "xenoform") {
+    return c.json({
+      _format: "xenoform-subkey/v1",
+      _key: key,
+      _self: getPlatformSelf(),
+      ...slice,
+    });
+  }
+
+  return c.json(slice);
 });
 
 export default app;

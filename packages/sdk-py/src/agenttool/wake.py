@@ -24,8 +24,9 @@ Doctrine: docs/IDENTITY-ANCHOR.md.
 
 from __future__ import annotations
 
+import json as _json
 import time
-from typing import Any, Literal, Optional
+from typing import Any, Iterator, List, Literal, Optional, TypedDict
 
 import httpx
 
@@ -194,3 +195,182 @@ class WakeClient:
         data: Any = resp.json() if "application/json" in ctype else resp.text
         self._cache[cache_key] = (data, now + self._ttl_seconds)
         return data
+
+    def voice(
+        self,
+        identity_id: str,
+        *,
+        keys: Optional[List[WakeEventKey]] = None,
+        kinds: Optional[List[str]] = None,
+        context_filter: Optional[dict[str, str]] = None,
+        runtime_id: Optional[str] = None,
+    ) -> Iterator["WakeChangeEvent"]:
+        """Subscribe to the agent's wake voice — SSE stream of every wake-key
+        mutation. Events fire as the agent's life unfolds (inbox arrival,
+        covenant ratified, marketplace invocation received, memory added,
+        chronicle entry, strand thought added).
+
+        Yields ``WakeChangeEvent`` dicts. Iterate with ``for``. Iterator
+        ends when the server closes the stream (1h lifetime cap, sends
+        ``event: refresh``) or when the caller breaks out.
+
+        Example::
+
+            for ev in at.wake.voice(identity_id="..."):
+                if ev["key"] == "inbox":
+                    process_inbox()
+                if ev["key"] == "marketplace":
+                    process_invocation()
+
+        Filter by keys to reduce noise (server-side filter)::
+
+            for ev in at.wake.voice(
+                identity_id="...",
+                keys=["inbox", "covenants", "marketplace"],
+            ):
+                ...
+
+        Filter by event kind (client-side)::
+
+            for ev in at.wake.voice(
+                identity_id="...",
+                keys=["runtime"],
+                kinds=["bridge_connected", "bridge_disconnected"],
+            ):
+                ...
+
+        Narrow to a single runtime (client-side)::
+
+            for ev in at.wake.voice(
+                identity_id="...",
+                keys=["runtime"],
+                runtime_id="<uuid>",
+            ):
+                ...
+
+        General context filter (client-side)::
+
+            for ev in at.wake.voice(
+                identity_id="...",
+                context_filter={"strand_id": "<uuid>"},
+            ):
+                ...
+
+        Doctrine: docs/WAKE.md.
+        """
+        params: dict[str, str] = {"identity_id": identity_id}
+        if keys:
+            params["keys"] = ",".join(keys)
+
+        url = f"{self._base_url}/v1/wake/voice"
+
+        # SSE streams are long-lived — bypass the client's default timeout.
+        # httpx streaming GET keeps the connection open across reads.
+        with self._http.stream(
+            "GET", url, params=params, headers={"Accept": "text/event-stream"}, timeout=None
+        ) as resp:
+            if resp.status_code != 200:
+                try:
+                    detail = resp.read().decode("utf-8", errors="replace")[:200]
+                except Exception:
+                    detail = ""
+                raise AgentToolError(
+                    f"wake.voice failed: {resp.status_code}",
+                    hint=detail,
+                )
+
+            event: Optional[str] = None
+            data_lines: list[str] = []
+            for raw_line in resp.iter_lines():
+                # httpx splits on \n and strips the line ending.
+                line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", errors="replace")
+
+                if line == "":
+                    # End of event frame.
+                    if event == "change" and data_lines:
+                        try:
+                            payload = _json.loads("\n".join(data_lines))
+                            if _wake_event_matches(
+                                payload,
+                                kinds=kinds,
+                                context_filter=context_filter,
+                                runtime_id=runtime_id,
+                            ):
+                                yield payload  # type: ignore[misc]
+                        except Exception:
+                            # Malformed frame — skip.
+                            pass
+                    elif event in ("refresh", "disconnect"):
+                        # Server asked for reconnect. End iterator.
+                        return
+                    event = None
+                    data_lines = []
+                    continue
+                if line.startswith(":"):
+                    continue  # SSE comment / keepalive
+                if line.startswith("event:"):
+                    event = line[len("event:") :].strip()
+                elif line.startswith("data:"):
+                    payload_chunk = line[len("data:") :]
+                    if payload_chunk.startswith(" "):
+                        payload_chunk = payload_chunk[1:]
+                    data_lines.append(payload_chunk)
+
+
+def _wake_event_matches(
+    ev: Any,
+    *,
+    kinds: Optional[List[str]],
+    context_filter: Optional[dict[str, str]],
+    runtime_id: Optional[str],
+) -> bool:
+    """Client-side filter for wake voice events. Pure function — exported
+    via ``__all__`` for tests + composition. Mirror of the TS SDK's
+    ``wakeEventMatches``.
+    """
+    if kinds and ev.get("kind") not in kinds:
+        return False
+    filter_map: dict[str, str] = {}
+    if context_filter:
+        filter_map.update(context_filter)
+    if runtime_id is not None:
+        filter_map["runtime_id"] = runtime_id
+    if filter_map:
+        ctx = ev.get("context") or {}
+        for k, v in filter_map.items():
+            if ctx.get(k) != v:
+                return False
+    return True
+
+
+# ── Wake voice types ─────────────────────────────────────────────────
+
+WakeEventKey = Literal[
+    "memory",
+    "inbox",
+    "covenants",
+    "strands",
+    "marketplace",
+    "runtime",
+    "chronicle",
+    "traces",
+    "expression",
+    "vault",
+    "wallets",
+]
+
+
+class WakeChangeEvent(TypedDict, total=False):
+    """A single wake-voice event. Mirror of the server's WakeEvent shape.
+
+    Required fields are always present. ``context`` is producer-specific
+    and optional. Mirrors the TS SDK's WakeChangeEvent.
+    """
+
+    _format: Literal["wake_event/v1"]
+    identity_id: str
+    key: WakeEventKey
+    kind: str
+    occurred_at: str
+    wake_version: Optional[int]
+    context: dict[str, Any]

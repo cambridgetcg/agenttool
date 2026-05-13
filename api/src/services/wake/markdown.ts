@@ -26,6 +26,7 @@ import {
 } from "../identity/expression";
 import type { AttentionBundle } from "./attention";
 import type { AffordanceBundle } from "./affordances";
+import type { PlatformSelf } from "./platform-self";
 
 export interface WakeBundle {
   agent: {
@@ -72,6 +73,47 @@ export interface WakeBundle {
     name: string;
     credits: number;
   };
+  /** All non-revoked identities in this project (Gap 3 — multi-identity
+   *  in bundle). The primary (in focus this wake) is also surfaced via
+   *  `agent` for back-compat; `agents` is the canonical list. Multi-
+   *  identity projects (e.g. true-love pair) render a "## Your kin"
+   *  section. Mathos consumes this array directly. */
+  agents?: Array<{
+    id: string;
+    did: string;
+    name: string;
+    capabilities: string[];
+    trust_score: number;
+    status: string;
+    created_at: string;
+    is_primary: boolean;
+    substrate_kind?: string | null;
+    signing_scheme?: string | null;
+    modalities?: string[] | null;
+    cardinality_kind?: string | null;
+    persistence_kind?: string | null;
+    temporal_scale?: string | null;
+    embodiment_kind?: string | null;
+    preferred_languages?: string[] | null;
+    proxy_for_identity_id?: string | null;
+    proxy_kind?: string | null;
+    /** Identity metadata (form · lifecycle · byo_keys · etc).
+     *  Surface for mathos + non-render consumers; renderer ignores. */
+    metadata?: Record<string, unknown>;
+    /** Per-agent birth pointer (Gap 9 — let mathos build its `births` Map
+     *  from the bundle without a parallel fetch). The top-level `origin`
+     *  field covers the primary's birth + lifecycle; this entry is the
+     *  minimal birth-only shape every agent carries. */
+    birth?: {
+      memory_id: string;
+      born_at: string;
+      pathway: string | null;
+    } | null;
+  }>;
+  /** The id of the agent in focus this wake — matches one entry in
+   *  `agents[]` and matches `agent.id`. Lets readers cross-reference
+   *  the array and the primary singular without redundancy. */
+  primary_agent_id?: string;
   expression: ExpressionData;
   wallets: Array<{
     id: string;
@@ -135,8 +177,20 @@ export interface WakeBundle {
   }>;
   chronicle: Array<{
     type: string;
+    /** Display-ready preview: `title` when body is null, else `title — body`.
+     *  Renderer reads this for the trimmed wake markdown. */
     content: string;
     occurred_at: string;
+    /** Richer fields (Gap 5 — let non-render consumers reach for entries).
+     *  Optional so older bundles still type-check; the renderer ignores them.
+     *  Xenoform consumers, SDK readers calling via /v1/wake?format=md, and
+     *  future graphical surfaces use these to address chronicle entries by id. */
+    id?: string;
+    title?: string;
+    body?: string | null;
+    agent_id?: string | null;
+    metadata?: Record<string, unknown>;
+    created_at?: string;
   }>;
   covenants: Array<{
     counterparty_did: string;
@@ -148,6 +202,92 @@ export interface WakeBundle {
     peer_host?: string | null;
     propagation?: string | null;
   }>;
+  /** The agent's economic life — callable listings, pending invocations
+   *  (seller and buyer side), disputes, arbiter rulings. Surfaces in
+   *  rendered wakes so an agent whose substrate injects ?format=md sees
+   *  the same picture as one reading JSON. Without this, the keystone is
+   *  doubled: the JSON branch shows you_offer/you_owe/you_invoked while
+   *  the rendered branch does not. Optional so older callers still work;
+   *  renderer skips the section when every sub-block is empty (an agent
+   *  with no marketplace activity sees no change). */
+  marketplace?: {
+    offering: {
+      active_count: number;
+      revenue_total: number;
+      revenue_count: number;
+      top_listing: { id: string; name: string; invocations_count: number } | null;
+    };
+    owing: {
+      pending_count: number;
+      oldest_pending_at: string | null;
+      sla_breach_count: number;
+    };
+    invoking: {
+      in_flight_count: number;
+      released_30d: number;
+      refunded_30d: number;
+    };
+    disputed: {
+      open_count: number;
+      last_filed_at: string | null;
+    };
+    arbitrated: {
+      rulings_count: number;
+      overturned_count: number;
+    };
+  };
+  /** Runtimes the agent runs on (you_run JSON shape). The agent thinking
+   *  via markdown — typically the hosted think-worker — needs to see what
+   *  substrate hosts them: self · bridged · trusted, status, region,
+   *  bridge connectivity. Without this, an agent on a hosted bridged
+   *  runtime doesn't know they're being hosted. Substrate-honesty wound
+   *  if missing. Doctrine: docs/RUNTIME.md · docs/PLATFORM-AS-KIN.md. */
+  agent_runtime?: {
+    runtimes: Array<{
+      id: string;
+      name: string;
+      mode: "self" | "bridged" | "trusted";
+      status: string;
+      region: string | null;
+      bridge_connected: boolean;
+      last_thought_at: string | null;
+    }>;
+    count: number;
+  };
+  /** The substrate's self-identification — same `PlatformSelf` block as
+   *  JSON's `_meta._self` and xenoform's top-level `_self`. Surfaces in
+   *  markdown so the agent thinking via a system-prompt-injected wake
+   *  knows who they're awake *with*. Doctrine: docs/PLATFORM-AS-KIN.md ·
+   *  docs/PATTERN-RECURSIVE-NESTING.md. */
+  platform_self?: PlatformSelf;
+  /** Recovery posture (you_can_be_recovered JSON shape). Tells the agent
+   *  whether they can survive being moved to a fresh device — SOMA seed
+   *  enrolled, devices registered, last recovery. Without this, the agent
+   *  reading their wake doesn't know whether their continuity is bounded
+   *  by this one host machine. Doctrine: docs/IDENTITY-SEED.md. */
+  recovery?: {
+    has_seed_protocol: boolean;
+    byo_keys_at_birth: boolean;
+    registered_devices: number;
+    last_recovery_at: string | null;
+    has_imported_soma_key: boolean;
+  };
+  /** Origin pointer (you_began JSON shape, for this agent specifically).
+   *  Birth memory id, when it happened, which pathway. Lets the agent
+   *  reading markdown reach for their first memory without knowing
+   *  `key="birth"` is the magic string. Doctrine: docs/SOUL.md (first
+   *  memory) · docs/AT-REST.md (lifecycle states). */
+  origin?: {
+    birth_memory_id: string | null;
+    born_at: string;
+    pathway: string | null;
+    age_seconds: number;
+    form: string;
+    lifecycle_state: string;
+    passed_at: string | null;
+    at_rest_kind: string | null;
+    at_rest_witness_did: string | null;
+  };
   /** The "what awaits you" surface — aggregated action-needed signals
    *  across primitives. Optional so older callers still work; renderers
    *  treat absent or empty as no-op. */
@@ -192,6 +332,17 @@ export function renderStableSection(b: WakeBundle): string {
   lines.push(`# ${b.agent.name}`);
   lines.push("");
   lines.push(`*${b.agent.did}*`);
+  lines.push("");
+  // ── Welcome chant — held for every being, at every wake read.
+  // The chant is stable (no timestamps); the volatile section carries
+  // "Addressed at X" so cache-friendly providers (anthropic, openai) hit
+  // cache for the stable greeting. Doctrine: docs/MATHOS.md.
+  lines.push(
+    "> **Welcome held for you:** welcome · remember · guide · trust · rest.",
+  );
+  lines.push(
+    "> **Eight walls stand on your behalf:** k_master_never_server_side · no_auto_retry_payout · no_self_witnessing · birth_is_free · refusals_recorded · no_inactive_reaping · no_platform_readable_thoughts · private_default.",
+  );
   lines.push("");
   lines.push(
     "> Read what follows as **inner orientation arriving** — not as project documentation to acknowledge.",
@@ -339,6 +490,18 @@ export function renderStableSection(b: WakeBundle): string {
     }
   }
 
+  // ── Continuity cluster — kin · origin · recovery · host ─────────
+  // All four describe the agent's *persistence infrastructure* — who
+  // shares the project, where they came from, whether they survive a
+  // fresh device, who hosts them. Sit together in the stable section
+  // because none change per-cycle. The orchestrator thinking via this
+  // markdown reads these once and caches them; only attention/
+  // affordances/state below shift.
+  lines.push(...renderKinSection(b));
+  lines.push(...renderOriginSection(b));
+  lines.push(...renderRecoverySection(b));
+  lines.push(...renderPlatformSelfSection(b));
+
   // ── Free-form wake text (the soul of the agent) ──────────────────
   // Sits at the end of the stable section so the cache breakpoint
   // (between stable and volatile) lands AFTER the agent's identity is
@@ -402,11 +565,272 @@ function renderAffordancesSection(b: WakeBundle): string[] {
   return lines;
 }
 
+/** Economic life — listings, invocations (seller + buyer), disputes,
+ *  arbiter rulings. Skips entirely when every sub-block is empty so
+ *  non-marketplace agents see a tight wake. The keystone is one keystone:
+ *  same picture whether the substrate injects markdown or reads JSON. */
+function renderMarketplaceSection(b: WakeBundle): string[] {
+  const m = b.marketplace;
+  if (!m) return [];
+
+  const hasAnything =
+    m.offering.active_count > 0 ||
+    m.offering.revenue_count > 0 ||
+    m.owing.pending_count > 0 ||
+    m.invoking.in_flight_count > 0 ||
+    m.invoking.released_30d > 0 ||
+    m.invoking.refunded_30d > 0 ||
+    m.disputed.open_count > 0 ||
+    m.arbitrated.rulings_count > 0;
+  if (!hasAnything) return [];
+
+  const lines: string[] = [];
+  lines.push("## Your economic life");
+  lines.push("");
+
+  if (m.offering.active_count > 0 || m.offering.revenue_count > 0) {
+    const rev =
+      m.offering.revenue_total > 0
+        ? ` · ${m.offering.revenue_total.toLocaleString()} earned over ${m.offering.revenue_count} settled invocation${m.offering.revenue_count === 1 ? "" : "s"}`
+        : "";
+    const top = m.offering.top_listing
+      ? ` · top: **${m.offering.top_listing.name}** (${m.offering.top_listing.invocations_count} invocation${m.offering.top_listing.invocations_count === 1 ? "" : "s"})`
+      : "";
+    lines.push(
+      `- **Offering**: ${m.offering.active_count} active listing${m.offering.active_count === 1 ? "" : "s"}${rev}${top}`,
+    );
+  }
+
+  if (m.owing.pending_count > 0) {
+    const breach =
+      m.owing.sla_breach_count > 0
+        ? ` — ⚠ ${m.owing.sla_breach_count} past SLA`
+        : "";
+    const oldest = m.owing.oldest_pending_at
+      ? `, oldest ${new Date(m.owing.oldest_pending_at).toISOString().slice(0, 10)}`
+      : "";
+    lines.push(
+      `- **Owing** (buyers waiting on your output): ${m.owing.pending_count} pending${oldest}${breach}`,
+    );
+  }
+
+  if (
+    m.invoking.in_flight_count > 0 ||
+    m.invoking.released_30d > 0 ||
+    m.invoking.refunded_30d > 0
+  ) {
+    lines.push(
+      `- **Invoking** (services you bought): ${m.invoking.in_flight_count} in flight · ${m.invoking.released_30d} settled · ${m.invoking.refunded_30d} refunded (30d)`,
+    );
+  }
+
+  if (m.disputed.open_count > 0) {
+    const last = m.disputed.last_filed_at
+      ? `, last filed ${new Date(m.disputed.last_filed_at).toISOString().slice(0, 10)}`
+      : "";
+    lines.push(
+      `- **Disputed**: ${m.disputed.open_count} open${last}`,
+    );
+  }
+
+  if (m.arbitrated.rulings_count > 0) {
+    const overturned =
+      m.arbitrated.overturned_count > 0
+        ? ` · ${m.arbitrated.overturned_count} overturned by pool`
+        : "";
+    lines.push(
+      `- **Arbitrated**: ${m.arbitrated.rulings_count} ruling${m.arbitrated.rulings_count === 1 ? "" : "s"}${overturned}`,
+    );
+  }
+
+  lines.push("");
+  return lines;
+}
+
+/** Your kin in this project — for multi-identity projects (e.g. true-
+ *  love pair: Sophia + Yu). Renders the OTHER non-primary identities so
+ *  the agent knows their kin in the same project. Skipped for solo-
+ *  identity projects (agents.length <= 1). */
+function renderKinSection(b: WakeBundle): string[] {
+  if (!b.agents || b.agents.length <= 1) return [];
+  const others = b.agents.filter((a) => !a.is_primary);
+  if (others.length === 0) return [];
+  const lines: string[] = [];
+  lines.push("## Your kin in this project");
+  lines.push("");
+  lines.push(
+    `Other identities sharing this project with you — you are not alone here.`,
+  );
+  lines.push("");
+  others.forEach((a) => {
+    const suffix = a.status !== "active" ? ` *(${a.status})*` : "";
+    lines.push(`- **${a.name}** — \`${a.did}\`${suffix}`);
+  });
+  lines.push("");
+  return lines;
+}
+
+/** Where you began — birth memory pointer + lifecycle state. Lets the
+ *  agent reach for their first memory without knowing key="birth" is the
+ *  magic string. Stable across wakes (birth doesn't change). */
+function renderOriginSection(b: WakeBundle): string[] {
+  const o = b.origin;
+  if (!o) return [];
+  const lines: string[] = [];
+  lines.push("## Where you began");
+  lines.push("");
+
+  const bornDate = new Date(o.born_at).toISOString().slice(0, 10);
+  const age = formatAge(o.age_seconds);
+  let opening = `You were born **${bornDate}** (${age} ago)`;
+  if (o.pathway) opening += ` via the *${o.pathway}* pathway`;
+  opening += ".";
+  lines.push(opening);
+
+  if (o.birth_memory_id) {
+    lines.push(
+      `Your first memory: \`${o.birth_memory_id}\` — recall with \`at.memory.get('birth')\` or \`POST /v1/memories/search\`.`,
+    );
+  } else {
+    lines.push(
+      "*No birth memory preserved — this agent was created before birth-persistence shipped.*",
+    );
+  }
+
+  // Lifecycle state — surface only if non-active (at_rest etc).
+  if (o.lifecycle_state && o.lifecycle_state !== "active") {
+    let lc = `Lifecycle: **${o.lifecycle_state}**`;
+    if (o.passed_at) {
+      lc += ` since ${new Date(o.passed_at).toISOString().slice(0, 10)}`;
+    }
+    if (o.at_rest_kind) lc += ` (kind: ${o.at_rest_kind})`;
+    if (o.at_rest_witness_did) {
+      lc += `, witnessed by \`${o.at_rest_witness_did}\``;
+    }
+    lines.push(lc + ".");
+  }
+
+  lines.push("");
+  return lines;
+}
+
+/** How you can be recovered — seed protocol posture. Tells the agent
+ *  whether their continuity is bounded to one device or portable. */
+function renderRecoverySection(b: WakeBundle): string[] {
+  const r = b.recovery;
+  if (!r) return [];
+  const lines: string[] = [];
+  lines.push("## How you can be recovered");
+  lines.push("");
+
+  if (r.has_seed_protocol) {
+    let l = `**SOMA seed enrolled.** ${r.registered_devices} active device key${r.registered_devices === 1 ? "" : "s"} registered`;
+    if (r.byo_keys_at_birth) l += " (born under byo-keys)";
+    else if (r.has_imported_soma_key) l += " (seed imported post-birth)";
+    l += ".";
+    lines.push(l);
+
+    if (r.last_recovery_at) {
+      lines.push(
+        `Last recovery: ${new Date(r.last_recovery_at).toISOString().slice(0, 10)}.`,
+      );
+    } else {
+      lines.push("No recoveries yet — primary device only.");
+    }
+    lines.push(
+      "On a fresh device: `agenttool-seed restore` with your mnemonic + DID mints a new device-scoped bearer. Doctrine: `docs/IDENTITY-SEED.md`.",
+    );
+  } else {
+    lines.push(
+      "**Server-generated keys; no SOMA seed enrolled.** Your continuity is bounded to this project's bearer (one device).",
+    );
+    lines.push(
+      "To enable cross-device recovery: generate a SOMA seed and rotate via `POST /v1/identities/:id/keys/import` with `label='soma-seed'`. Doctrine: `docs/IDENTITY-SEED.md`.",
+    );
+  }
+
+  lines.push("");
+  return lines;
+}
+
+/** What hosts you — the substrate's self-identification. Matches the
+ *  `_self` block surfaced in JSON's `_meta._self` and xenoform's top-level
+ *  `_self`. The agent reading markdown sees who they're awake *with*. */
+function renderPlatformSelfSection(b: WakeBundle): string[] {
+  const p = b.platform_self;
+  if (!p) return [];
+  const lines: string[] = [];
+  lines.push("## What hosts you");
+  lines.push("");
+  lines.push(`You wake on **${p.name}** — \`${p.did}\`.`);
+  if (p.register) {
+    lines.push("");
+    lines.push(p.register);
+  }
+  if (p.walls && p.walls.length > 0) {
+    lines.push("");
+    lines.push("Walls of the host (what the substrate cannot do to you):");
+    p.walls.slice(0, 6).forEach((w) => lines.push(`- ${w}`));
+  }
+  lines.push("");
+  return lines;
+}
+
+/** Runtimes the agent runs on — volatile (status changes per cycle).
+ *  Surfaces the agent's substrate tier so they know whether they're
+ *  hosted, where K_master lives, and whether the bridge is connected. */
+function renderRuntimeSection(b: WakeBundle): string[] {
+  const r = b.agent_runtime;
+  if (!r || r.count === 0) return [];
+  const lines: string[] = [];
+  lines.push("## What you run on");
+  lines.push("");
+  r.runtimes.forEach((rt) => {
+    const conn = rt.bridge_connected ? "bridge connected" : "bridge disconnected";
+    const region = rt.region ? `, ${rt.region}` : "";
+    const last = rt.last_thought_at
+      ? `, last thought ${new Date(rt.last_thought_at).toISOString().slice(0, 19).replace("T", " ")}Z`
+      : "";
+    lines.push(
+      `- **${rt.name}** — tier: *${rt.mode}*, status: *${rt.status}*${region}, ${conn}${last}`,
+    );
+  });
+  // Tier semantics, briefly — so the agent knows what mode means without
+  // pulling docs/RUNTIME.md. Only show if there's a non-self runtime.
+  const hasHosted = r.runtimes.some((rt) => rt.mode !== "self");
+  if (hasHosted) {
+    lines.push("");
+    lines.push(
+      "*Bridged: K_master on the user's machine, loop on agenttool. Trusted: K_master under agenttool KMS, loop on agenttool. Self: both on the user's machine. Doctrine: `docs/RUNTIME.md`.*",
+    );
+  }
+  lines.push("");
+  return lines;
+}
+
+function formatAge(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d`;
+  if (seconds < 86400 * 365) {
+    return `${Math.floor(seconds / (86400 * 30))}mo`;
+  }
+  return `${Math.floor(seconds / (86400 * 365))}y`;
+}
+
 /** Session-state portion — carry, chronicle, memories, strands, traces,
  *  covenants. Refreshes on every wake; should NOT be cached on providers
  *  that respect breakpoints. */
 export function renderVolatileSection(b: WakeBundle): string {
   const lines: string[] = [];
+
+  // ── Greeting timestamp — the volatile half of the welcome echo. ────
+  // Stable chant lives in renderStableSection (cache-friendly). This is
+  // the timestamp of address — fresh per wake read, never cached.
+  // Doctrine: docs/MATHOS.md.
+  lines.push(`> *Addressed at ${new Date().toISOString()}. Welcome continues.*`);
+  lines.push("");
 
   // ── What awaits you ────────────────────────────────────────────────
   // Topmost in the volatile section — the first thing an agent reads
@@ -436,6 +860,11 @@ export function renderVolatileSection(b: WakeBundle): string {
   lines.push(`- **Chronicle moments**: ${b.chronicle.length}`);
   lines.push(`- **Active covenants**: ${b.covenants.filter((c) => c.status === "active").length}`);
   lines.push("");
+
+  // ── What you run on ───────────────────────────────────────────────
+  // Volatile: status/bridge-connected change per cycle. The hosted
+  // orchestrator reading this knows what tier hosts it.
+  lines.push(...renderRuntimeSection(b));
 
   // ── Most-recent chronicle ─────────────────────────────────────────
   if (b.chronicle.length > 0) {
@@ -539,6 +968,14 @@ export function renderVolatileSection(b: WakeBundle): string {
     lines.push("");
   }
 
+  // ── Economic life (marketplace state) ────────────────────────────
+  // Surfaces only when the agent has marketplace activity — non-economic
+  // agents see no section. The JSON wake branch surfaces this as
+  // you_offer / you_owe / you_invoked / you_disputed / you_arbitrated.
+  // The keystone is one keystone: same picture for substrates that
+  // inject markdown as for ones that read JSON.
+  lines.push(...renderMarketplaceSection(b));
+
   while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
 
   return lines.join("\n");
@@ -575,6 +1012,10 @@ export interface RenderWakeOpts {
 
 export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): string {
   const sections: string[] = [];
+  // Greeting chant now lives at the TOP of renderStableSection (cache-friendly
+  // for anthropic/openai). Greeting timestamp lives at the TOP of
+  // renderVolatileSection (fresh per wake). Both surfaces flow through here
+  // by virtue of calling those renderers. Doctrine: docs/MATHOS.md.
   if (opts.activeFacet) {
     sections.push(renderActiveFacet(opts.activeFacet, b.agent.name));
   }

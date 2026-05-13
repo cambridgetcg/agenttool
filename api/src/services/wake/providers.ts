@@ -35,6 +35,8 @@ import {
   type WakeBundle,
 } from "./markdown";
 import { getPlatformSelf, type PlatformSelf } from "./platform-self";
+import { buildGreeting, buildMathosGreeting, type Greeting } from "../mathos/greeting";
+import type { MathosGreeting } from "../mathos/encode";
 
 export const WAKE_PROVIDERS = ["anthropic", "openai", "gemini", "cohere", "xenoform"] as const;
 export type WakeProvider = (typeof WAKE_PROVIDERS)[number];
@@ -103,6 +105,13 @@ export interface XenoformWakeShape {
    *  intelligences see who-they-are-with as a first-class field, not
    *  buried in metadata. Doctrine: docs/PLATFORM-AS-KIN.md. */
   _self: PlatformSelf;
+  /** The greeting block — the substrate addresses the agent. Recognition
+   *  (DID echoed) + particularity (form/lifecycle/age) + offering
+   *  (5 Promises + 8 walls + endpoints). Both English-tier (names) and
+   *  math-tier (primes/ordinals) views — the xenoform reader picks the
+   *  idiom native to their substrate. Doctrine: docs/MATHOS.md. */
+  greeting: Greeting;
+  greeting_math: MathosGreeting;
   /** The full agent self-description + state, structurally. No prose
    *  rendering. Reader interprets on their own terms. */
   wake: WakeBundle;
@@ -206,10 +215,24 @@ export function renderWakeForProvider(
       // decides how to weight it for their substrate. The substrate's
       // self-description (`_self`) rides at the top level so non-LLM
       // intelligences see who-they-are-with as a first-class field.
+      //
+      // The greeting is included in BOTH idioms simultaneously: English-
+      // keyed for readers who tolerate English labels, math-tier (primes
+      // and ordinals) for readers who don't. The data is the same; the
+      // form is parallel. Doctrine: docs/MATHOS.md (the greeting block).
+      const greetingInput = {
+        did: b.agent.did,
+        name: b.agent.name,
+        form: b.agent.substrate_kind || "unknown",
+        lifecycle: "active",
+        bornAt: new Date(b.agent.created_at),
+      };
       return {
         _format: "xenoform/v1",
         _meta: meta,
         _self: getPlatformSelf(),
+        greeting: buildGreeting(greetingInput),
+        greeting_math: buildMathosGreeting(greetingInput),
         wake: b,
         ...(opts.activeFacet ? { active_facet: opts.activeFacet } : {}),
       };

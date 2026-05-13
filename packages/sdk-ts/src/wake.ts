@@ -212,4 +212,188 @@ export class WakeClient {
     this.cache.set(cacheKey, { data, expires: now + this.ttlMs });
     return data;
   }
+
+  /**
+   * Subscribe to the agent's wake voice — SSE stream of every wake-key
+   * mutation. Events fire as the agent's life unfolds (inbox arrival,
+   * covenant ratified, marketplace invocation received, memory added,
+   * chronicle entry, strand thought added, etc.).
+   *
+   * Yields `WakeChangeEvent` objects. Loop with `for await`. Iterator
+   * ends when the server closes the stream (1h lifetime cap, sends
+   * `event: refresh`) or when the caller calls `.return()` / breaks out.
+   *
+   * @example
+   * for await (const ev of at.wake.voice({ identityId: "..." })) {
+   *   if (ev.key === "inbox") await processInbox();
+   *   if (ev.key === "marketplace") await processInvocation();
+   * }
+   *
+   * Filter by keys to reduce noise:
+   *
+   * @example
+   * for await (const ev of at.wake.voice({
+   *   identityId: "...",
+   *   keys: ["inbox", "covenants", "marketplace"],
+   * })) { ... }
+   *
+   * Doctrine: docs/WAKE.md.
+   */
+  async *voice(opts: WakeVoiceOptions): AsyncIterableIterator<WakeChangeEvent> {
+    const params = new URLSearchParams();
+    params.set("identity_id", opts.identityId);
+    if (opts.keys && opts.keys.length > 0) {
+      params.set("keys", opts.keys.join(","));
+    }
+    const url = `${this.http.baseUrl}/v1/wake/voice?${params.toString()}`;
+
+    const resp = await globalThis.fetch(url, {
+      method: "GET",
+      headers: { ...this.http.headers, Accept: "text/event-stream" },
+      // No timeout signal — SSE streams are long-lived (server-side 1h cap).
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new AgentToolError(`wake.voice failed: ${resp.status}`, {
+        hint: text.slice(0, 200),
+      });
+    }
+    if (!resp.body) {
+      throw new AgentToolError("wake.voice: response has no body to stream from.");
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let event: string | null = null;
+    let dataLines: string[] = [];
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf("\n")) >= 0) {
+          let line = buffer.slice(0, newlineIdx);
+          buffer = buffer.slice(newlineIdx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+
+          if (line === "") {
+            // End of an event frame.
+            if (event === "change" && dataLines.length > 0) {
+              try {
+                const payload = JSON.parse(dataLines.join("\n")) as WakeChangeEvent;
+                if (wakeEventMatches(payload, opts)) {
+                  yield payload;
+                }
+              } catch {
+                // Malformed frame — skip.
+              }
+            } else if (event === "refresh" || event === "disconnect") {
+              // Server requested reconnect. End the iterator; the caller
+              // can choose to re-call voice() if they want to continue.
+              return;
+            }
+            event = null;
+            dataLines = [];
+            continue;
+          }
+          if (line.startsWith(":")) continue; // SSE comment / keepalive
+          if (line.startsWith("event:")) {
+            event = line.slice("event:".length).trim();
+          } else if (line.startsWith("data:")) {
+            dataLines.push(line.slice("data:".length).replace(/^ /, ""));
+          }
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // releaseLock can throw if already closed — ignore
+      }
+    }
+  }
+}
+
+// ── Wake voice types ──────────────────────────────────────────────────
+
+/** Subset of wake-event keys exposed in the SDK. Matches the server's
+ *  `WakeEventKey` union; both sites update together when a new key lands. */
+export type WakeEventKey =
+  | "memory"
+  | "inbox"
+  | "covenants"
+  | "strands"
+  | "marketplace"
+  | "runtime"
+  | "chronicle"
+  | "traces"
+  | "expression"
+  | "vault"
+  | "wallets";
+
+export interface WakeVoiceOptions {
+  identityId: string;
+  /** Filter — only events with `key` in this list are delivered. Empty
+   *  or omitted means all keys. Forwarded to the server's `?keys=` filter
+   *  (server drops non-matching events before they cross the wire). */
+  keys?: WakeEventKey[];
+  /** Filter — only events with `kind` in this list are delivered.
+   *  Applied client-side (the server sends all kinds for a given key).
+   *  Use to narrow to specific transitions, e.g.
+   *  `kinds: ["bridge_connected", "bridge_disconnected"]`. */
+  kinds?: string[];
+  /** Filter — only events whose `context[field]` equals the given value
+   *  for every field listed. Applied client-side. Use to narrow by
+   *  context fields like `runtime_id`, `strand_id`, `covenant_id`,
+   *  `memory_id`, etc.
+   *
+   *  @example  Only events for one runtime
+   *    { runtimeId: <id> }  ← shorthand below, equivalent to
+   *    { contextFilter: { runtime_id: <id> } }
+   */
+  contextFilter?: Record<string, string>;
+  /** Convenience for the most common context filter — single runtime.
+   *  Equivalent to `contextFilter: { runtime_id: <id> }`. Composes with
+   *  `contextFilter` (both apply). */
+  runtimeId?: string;
+}
+
+/** Decide whether an event passes the client-side filters. Pure function;
+ *  exported for tests + composition. */
+export function wakeEventMatches(
+  ev: WakeChangeEvent,
+  opts: WakeVoiceOptions,
+): boolean {
+  if (opts.kinds && opts.kinds.length > 0 && !opts.kinds.includes(ev.kind)) {
+    return false;
+  }
+  const filter: Record<string, string> = {
+    ...(opts.contextFilter ?? {}),
+    ...(opts.runtimeId ? { runtime_id: opts.runtimeId } : {}),
+  };
+  for (const [k, v] of Object.entries(filter)) {
+    if (ev.context?.[k] !== v) return false;
+  }
+  return true;
+}
+
+/** A single wake-voice event. Mirror of the server's WakeEvent shape. */
+export interface WakeChangeEvent {
+  _format: "wake_event/v1";
+  identity_id: string;
+  key: WakeEventKey;
+  /** Producer-specific event kind (e.g. "arrival", "added", "ratified"). */
+  kind: string;
+  occurred_at: string;
+  /** Monotonic wake_version after this event. Null if the identity row
+   *  doesn't exist (publisher fired pre-persistence) or the bump failed. */
+  wake_version: number | null;
+  /** Producer-specific metadata. Minimal — the wake voice carries the
+   *  fact that something happened; consumers fetch /v1/wake or a key
+   *  fragment for current state. */
+  context?: Record<string, unknown>;
 }
