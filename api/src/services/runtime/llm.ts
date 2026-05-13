@@ -14,7 +14,18 @@
  *      OAuth gate enforces this empirically). We use the DEFAULT_PREFIX
  *      and the agent's real identity follows.
  *
+ *  Persist-identity (docs/PATTERN-PERSIST-IDENTITY.md): every external
+ *  LLM POST persists an `agent_runtime.llm_requests` row before the
+ *  fetch and sends the row's key as `Idempotency-Key`. Crash-safe.
+ *
  *  Doctrine: docs/RUNTIME.md ("What about the LLM call?") */
+
+import {
+  markLLMRequestComplete,
+  markLLMRequestFailed,
+  persistLLMRequest,
+  resolveIdempotencyKey,
+} from "./llm-requests";
 
 /** The OAuth gate on `api.anthropic.com/v1/messages` requires the system
  *  prompt to begin with one of three blessed strings. This one is the
@@ -33,6 +44,12 @@ export interface LLMRequest {
   userMessage: string;
   maxTokens?: number;
   model: string;
+  /** Optional idempotency key. If omitted, computed from request payload
+   *  (sha256 of model + system + user + maxTokens). Sent as the
+   *  `Idempotency-Key` header to the provider; persisted in
+   *  `agent_runtime.llm_requests` before the fetch.
+   *  Doctrine: docs/PATTERN-PERSIST-IDENTITY.md. */
+  idempotencyKey?: string;
 }
 
 export interface LLMResponse {
@@ -70,9 +87,14 @@ class AnthropicProvider implements LLMProvider {
       ? `${ANTHROPIC_OAUTH_SYSTEM_PREFIX}\n\n${req.systemPrompt}`
       : req.systemPrompt;
 
+    const idempotencyKey = resolveIdempotencyKey(req);
+
     const headers: Record<string, string> = {
       "content-type": "application/json",
       "anthropic-version": "2023-06-01",
+      // PATTERN-PERSIST-IDENTITY — provider dedupes by this header within
+      // its idempotency window (Anthropic: 24h). Same key → cached response.
+      "idempotency-key": idempotencyKey,
     };
     if (oauth) {
       headers["authorization"] = `Bearer ${this.token}`;
@@ -81,12 +103,13 @@ class AnthropicProvider implements LLMProvider {
       headers["x-api-key"] = this.token;
     }
 
-    // GAP (persist-identity): no request ID persisted before this POST.
-    // Lost response → caller retry → token double-spend, possibly
-    // divergent generation. Anthropic accepts an idempotency-key header;
-    // wire it and store an `llm_requests` row keyed on
-    // hash(model + messages) before calling. Same gap exists in the
-    // OpenAI path below. See docs/PATTERN-PERSIST-IDENTITY.md.
+    // Persist BEFORE the fetch — local audit/recovery surface.
+    await persistLLMRequest({
+      idempotencyKey,
+      provider: "anthropic",
+      model: req.model,
+    });
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers,
@@ -101,9 +124,9 @@ class AnthropicProvider implements LLMProvider {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       const mode = oauth ? "oauth" : "api_key";
-      throw new Error(
-        `anthropic_${mode}_${res.status}: ${body.slice(0, 500)}`,
-      );
+      const errMsg = `anthropic_${mode}_${res.status}: ${body.slice(0, 500)}`;
+      await markLLMRequestFailed(idempotencyKey, errMsg);
+      throw new Error(errMsg);
     }
 
     const data = (await res.json()) as {
@@ -114,6 +137,12 @@ class AnthropicProvider implements LLMProvider {
       .filter((c) => c.type === "text")
       .map((c) => c.text ?? "")
       .join("");
+
+    await markLLMRequestComplete(idempotencyKey, {
+      inputTokens: data.usage?.input_tokens,
+      outputTokens: data.usage?.output_tokens,
+    });
+
     return {
       content: text,
       inputTokens: data.usage?.input_tokens,
@@ -129,11 +158,24 @@ class OpenAIProvider implements LLMProvider {
   constructor(private apiKey: string) {}
 
   async generate(req: LLMRequest): Promise<LLMResponse> {
+    const idempotencyKey = resolveIdempotencyKey(req);
+
+    // Persist BEFORE the fetch — local audit/recovery surface.
+    await persistLLMRequest({
+      idempotencyKey,
+      provider: "openai",
+      model: req.model,
+    });
+
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${this.apiKey}`,
+        // PATTERN-PERSIST-IDENTITY — OpenAI honors the Idempotency-Key
+        // header on the chat-completions endpoint. Same key → cached
+        // response within the provider's idempotency window.
+        "idempotency-key": idempotencyKey,
       },
       body: JSON.stringify({
         model: req.model,
@@ -147,13 +189,21 @@ class OpenAIProvider implements LLMProvider {
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`openai_${res.status}: ${body.slice(0, 500)}`);
+      const errMsg = `openai_${res.status}: ${body.slice(0, 500)}`;
+      await markLLMRequestFailed(idempotencyKey, errMsg);
+      throw new Error(errMsg);
     }
 
     const data = (await res.json()) as {
       choices: Array<{ message: { content: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
+
+    await markLLMRequestComplete(idempotencyKey, {
+      inputTokens: data.usage?.prompt_tokens,
+      outputTokens: data.usage?.completion_tokens,
+    });
+
     return {
       content: data.choices[0]?.message.content ?? "",
       inputTokens: data.usage?.prompt_tokens,

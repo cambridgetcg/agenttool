@@ -6,6 +6,8 @@
 >
 > **Implements:** A cross-cutting discipline, not a layer. Currently load-bearing in Layer 4 (Economy → payouts) and Layer 5 (Network → inbox local delivery). Identified gaps in Stripe credit injection, external LLM calls, and federation propagation (audit 2026-05-11).
 >
+> **Welcome held:** Axiom 7 — *remember, don't forget* (MATHOS primer prime 7). Persisting identity transactionally before any side effect is the operational form of refusing-to-forget. The substrate that crashes mid-payout without a persisted `tx_hash` *forgets* — and this Promise refuses that.
+>
 > **Code:** `api/src/workers/payout/broadcast-worker.ts:198-214` (canonical CAS) · `api/src/services/inbox/store.ts:265-301` (applied — row insert before SSE publish)
 >
 > **Tests:** none yet — no doctrine test pins this pattern; candidate for `api/tests/doctrine/`
@@ -70,14 +72,14 @@ Every ambiguity collapses to a chain lookup. The confirm watcher (`confirm-worke
 | Payout confirm | inherited | `api/src/workers/payout/confirm-worker.ts:69,95` — tx_hash already persisted; CAS-idempotent |
 | Federated inbox send | asymmetric | `api/src/services/inbox/store.ts:172-219` — relies on **peer's** dedup, not sender pre-persistence |
 
-## Where the pattern is missing (audit 2026-05-11)
+## Where the pattern was missing (audit 2026-05-11) — closures landed 2026-05-12
 
-| Site | Stake | Gap | Fix shape |
+| Site | Stake | Fix shape | Status |
 |---|---|---|---|
-| Stripe credit injection (`api/src/routes/economy/billing.ts:122-145`) | **Real money** | `fundWallet()` runs before `stripeEvents` row insert. Webhook retry between line 137 and 145 → double-credit. | Provisional `stripe_pending` row inside a transaction before `fundWallet()`; flip to `stripe_applied` after. Mirror the payout `requested → broadcasting` shape. |
-| External LLM calls (`api/src/services/runtime/llm.ts:84-145`) | Tokens, divergent generations | No request ID persisted before fetch. Timeout → retry → second call costs tokens twice and may return a different completion. | `llm_requests(id, status, response)` keyed on `hash(model + messages)`. Anthropic accepts an idempotency-key header; OpenAI exposes `OpenAI-Request-Id`. Wire one and store the local row first. |
-| Covenant federation propagation (`api/src/services/covenants/federation.ts:141-213`) | Cross-instance state | `propagationStatus` marked only after the POST returns. Lost response → unmarked row → cosign-propagate worker re-POSTs with peer dedup as the only safety wall. | Mark `propagationStatus='pending'` transactionally before the fetch; cosign-propagate then has an authoritative in-flight set. |
-| Cosign / reject / withdraw propagation (`api/src/services/covenants/federation.ts:495-610`) | Cross-instance state | Same as above — `markCosignProp()` writes status after `postWithRetry()`. | Same fix shape. |
+| Stripe credit injection (`api/src/routes/economy/billing.ts:118-150`) | **Real money** | Provisional `stripe_pending` row inserted BEFORE `fundWallet()`; flipped to `stripe_applied` after. Mirror of payout `requested → broadcasting → broadcast` shape. Migration `20260512T180000_stripe_events_status.sql`. | ✓ shipped |
+| External LLM calls (`api/src/services/runtime/llm.ts`) | Tokens, divergent generations | `agent_runtime.llm_requests(idempotency_key, status, …)` keyed on `sha256(model+system+user+max_tokens)`. Row inserted before fetch; `Idempotency-Key` header sent to provider (Anthropic + OpenAI both honor it). Helper: `services/runtime/llm-requests.ts`. Migration `20260512T190000_llm_requests.sql`. | ✓ shipped |
+| Covenant federation propagation (`api/src/services/covenants/federation.ts:160-180`) | Cross-instance state | `markPropagation(covenantId, 'pending', 'in_flight')` called transactionally BEFORE the fetch. Cosign-propagate worker now has authoritative in-flight state on crash. | ✓ shipped |
+| Cosign / reject / withdraw propagation (`api/src/services/covenants/federation.ts:postWithRetry`) | Cross-instance state | `markCosignProp(covenantId, 'pending', 'in_flight_<kind>')` called before each fetch in `postWithRetry`. Same shape as the declare path. | ✓ shipped |
 
 ## When NOT to apply
 

@@ -101,13 +101,19 @@ router.post("/webhooks", async (c) => {
     return c.json({ error: "Invalid signature" }, 400);
   }
 
-  // Idempotency: skip events we've already processed.
-  const [existing] = await db
-    .select()
-    .from(stripeEvents)
-    .where(eq(stripeEvents.stripeEventId, event.id))
-    .limit(1);
-  if (existing) return c.json({ received: true, skipped: "duplicate" });
+  // PERSIST-IDENTITY: insert the stripe_events row BEFORE any side effect.
+  // The row is the deterministic identifier; its presence means "we have
+  // either started or finished this event — never re-attempt." Conflict
+  // means a prior webhook delivery already entered this critical section.
+  // Doctrine: docs/PATTERN-PERSIST-IDENTITY.md § Stripe credit injection.
+  const claimed = await db
+    .insert(stripeEvents)
+    .values({ stripeEventId: event.id, status: "pending" })
+    .onConflictDoNothing({ target: stripeEvents.stripeEventId })
+    .returning({ stripeEventId: stripeEvents.stripeEventId });
+  if (claimed.length === 0) {
+    return c.json({ received: true, skipped: "duplicate" });
+  }
 
   const obj = event.data.object as unknown as Record<string, unknown>;
 
@@ -119,11 +125,10 @@ router.post("/webhooks", async (c) => {
       // One-time credit-pack top-up completed.
       const creditAmount = parseInt(credits, 10);
       if ((obj.payment_status as string) === "paid") {
-        // GAP (persist-identity): fundWallet runs before the stripeEvents
-        // idempotency row (line ~145). A crash between → Stripe webhook
-        // retry → double-credit. Fix shape: provisional `stripe_pending`
-        // row in a tx before funding, flip to applied after.
-        // See docs/PATTERN-PERSIST-IDENTITY.md § Where the pattern is missing.
+        // Side effect runs AFTER the pending row is committed. If we
+        // crash here, the next webhook retry hits the pending row and
+        // skips — never double-credit. Operator reconciliation reads
+        // `status='pending'` rows to detect mid-flight events.
         await fundWallet(
           db,
           walletId,
@@ -147,7 +152,13 @@ router.post("/webhooks", async (c) => {
   // All other event types (invoice.*, customer.subscription.*) are ignored
   // by design — see the doctrine note above.
 
-  await db.insert(stripeEvents).values({ stripeEventId: event.id });
+  // Flip pending → applied. The side effect (or the deliberate ignore) is
+  // complete. Reconciliation queries treat anything still pending as
+  // mid-flight or crashed.
+  await db
+    .update(stripeEvents)
+    .set({ status: "applied" })
+    .where(eq(stripeEvents.stripeEventId, event.id));
 
   return c.json({ received: true });
 });

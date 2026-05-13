@@ -129,8 +129,12 @@ describe("state machine illegal transitions", () => {
       publicKeyB64: agent.pubB64,
     });
 
-    // Force-flip to 'active' to simulate illegal acceptance attempt
-    await db.update(covenants).set({ status: "active" }).where(eq(covenants.id, declared.id));
+    // Force-flip to a non-proposed terminal state to simulate illegal
+    // acceptance attempt. 'expired' avoids the covenants_v2_active_dual_signed
+    // CHECK (which requires counterparty_signature for v2 active rows); the
+    // test's intent is "acceptProposal rejects rows not in 'proposed' status,"
+    // and the specific terminal state is incidental.
+    await db.update(covenants).set({ status: "expired" }).where(eq(covenants.id, declared.id));
 
     const cosig = await ed.signAsync(
       canonicalCosignBytes({ covenantId: declared.id, initiatorSignatureB64: sigB64 }),

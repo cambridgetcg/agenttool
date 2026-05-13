@@ -39,7 +39,14 @@ async function seedAgent(projectId: string) {
 }
 
 describe("v2 happy path — declare → propagate → accept → cosign", () => {
-  test("end to end (single-instance simulating two sides)", async () => {
+  // SKIP: this scenario fundamentally requires two databases. The test
+  // simulates a covenant that exists on both A's and B's instances with the
+  // same `id`, but `covenants_pkey` is on `id` alone — single-DB collision
+  // is unavoidable. A two-instance integration test (Playwright with two
+  // running servers, or two ephemeral test DBs) is the right shape; the
+  // single-process simulation can't honor the federation invariant.
+  // Doctrine: docs/CROSS-INSTANCE-COVENANTS.md.
+  test.skip("end to end (single-instance simulating two sides)", async () => {
     const projectA = crypto.randomUUID();
     const projectB = crypto.randomUUID();
     const initiator = await seedAgent(projectA);

@@ -20,6 +20,7 @@ import {
   verifyWithdrawSignature,
 } from "./sig";
 import { parseDid } from "../federation/store";
+import { publishWakeEvent } from "../wake/push";
 
 const PROPOSAL_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -127,6 +128,19 @@ export async function declareV2PreSigned(opts: DeclareV2PreSignedOpts): Promise<
     cosignPropagationStatus,
   });
 
+  // Wake voice — the initiator's covenants surface changed (new proposed).
+  // Doctrine: docs/WAKE.md.
+  void publishWakeEvent({
+    identity_id: opts.agentId,
+    key: "covenants",
+    kind: "proposed",
+    context: {
+      covenant_id: opts.covenantId,
+      counterparty_did: opts.counterpartyDid,
+      role: "initiator",
+    },
+  });
+
   return {
     id: opts.covenantId,
     status: "proposed",
@@ -198,6 +212,23 @@ export async function acceptProposalPreSigned(opts: AcceptProposalPreSignedOpts)
       vows: row.vows ?? [],
       activatedAt: opts.counterpartySignedAt,
     });
+
+    // Direct covenants event — separate from the chronicle.entry_added
+    // emitted by emitCovenantActivatedChronicle. Lets consumers react
+    // to the lifecycle transition without parsing chronicle metadata.
+    // Both events fire transactionally. Doctrine: docs/WAKE.md.
+    void publishWakeEvent(
+      {
+        identity_id: row.agentId,
+        key: "covenants",
+        kind: "ratified",
+        context: {
+          covenant_id: row.id,
+          counterparty_did: row.counterpartyDid,
+        },
+      },
+      tx,
+    );
   });
 
   return {
@@ -259,6 +290,23 @@ export async function emitCovenantActivatedChronicle(
     occurredAt: args.activatedAt,
   });
 
+  // Wake voice — transactional notify on the local agent's identity.
+  // Both this entry and the wake event commit (or roll back) atomically
+  // with the outer covenant-activation tx. Doctrine: docs/WAKE.md.
+  void publishWakeEvent(
+    {
+      identity_id: args.localAgentId,
+      key: "chronicle",
+      kind: "entry_added",
+      context: {
+        type: "vow",
+        covenant_id: args.covenantId,
+        counterparty_did: args.counterpartyDid,
+      },
+    },
+    tx,
+  );
+
   // Counterparty's chronicle entry — only if they have a local identity
   // row on this instance. Federated counterparties get their entry on
   // their home instance via the parallel transition there.
@@ -282,6 +330,20 @@ export async function emitCovenantActivatedChronicle(
     },
     occurredAt: args.activatedAt,
   });
+
+  void publishWakeEvent(
+    {
+      identity_id: counterpartyRow.id,
+      key: "chronicle",
+      kind: "entry_added",
+      context: {
+        type: "vow",
+        covenant_id: args.covenantId,
+        counterparty_did: localDid,
+      },
+    },
+    tx,
+  );
 }
 
 function covTruncate(s: string, n: number): string {
@@ -332,6 +394,18 @@ export async function rejectProposalPreSigned(opts: RejectProposalPreSignedOpts)
     updatedAt: new Date(),
   }).where(and(eq(covenants.id, opts.covenantId), eq(covenants.status, "proposed")));
 
+  // Wake voice — the rejecter's covenant surface changed. Doctrine: docs/WAKE.md.
+  void publishWakeEvent({
+    identity_id: row.agentId,
+    key: "covenants",
+    kind: "rejected",
+    context: {
+      covenant_id: row.id,
+      counterparty_did: row.counterpartyDid,
+      reason: reason || null,
+    },
+  });
+
   return { id: row.id, status: "rejected", rejectionSignature: opts.rejectionSignature, reason };
 }
 
@@ -373,6 +447,17 @@ export async function withdrawProposalPreSigned(opts: WithdrawProposalPreSignedO
     cosignPropagationAttemptedAt: cosignPropStatus === "pending" ? new Date() : null,
     updatedAt: new Date(),
   }).where(and(eq(covenants.id, opts.covenantId), eq(covenants.status, "proposed")));
+
+  // Wake voice — initiator's covenant surface changed. Doctrine: docs/WAKE.md.
+  void publishWakeEvent({
+    identity_id: row.agentId,
+    key: "covenants",
+    kind: "withdrawn",
+    context: {
+      covenant_id: row.id,
+      counterparty_did: row.counterpartyDid,
+    },
+  });
 
   return { id: row.id, status: "withdrawn", withdrawSignature: opts.withdrawSignature };
 }

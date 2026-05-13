@@ -193,6 +193,10 @@ export const subscriptions = economySchema.table(
 export const stripeEvents = economySchema.table("stripe_events", {
   stripeEventId: text("stripe_event_id").primaryKey(),
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  /** PERSIST-IDENTITY status — `pending` = row inserted before the side
+   *  effect (fundWallet) ran; `applied` = side effect (or deliberate
+   *  ignore) completed. Doctrine: docs/PATTERN-PERSIST-IDENTITY.md. */
+  status: text("status").notNull().default("applied"),
 });
 
 // ─── Crypto: deposit addresses · onchain identities · payouts · webhooks ────

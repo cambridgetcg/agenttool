@@ -11,12 +11,14 @@ import { getSettings } from "../../services/federation/store";
 import covenantsInbound from "./covenants";
 import identitiesRouter from "./identities";
 import inboxInbound from "./inbox";
+import wakeFragmentRouter from "./wake";
 
 const app = new Hono();
 
 app.route("/identities", identitiesRouter);
 app.route("/inbox", inboxInbound);
 app.route("/covenants", covenantsInbound);
+app.route("/wake", wakeFragmentRouter);
 
 // /federation/about — instance info for federation discovery.
 app.get("/about", async (c) => {
@@ -52,6 +54,7 @@ app.get("/", (c) =>
       identities: "GET /federation/identities/:uuid",
       inbox: "POST /federation/inbox",
       covenants: "POST /federation/covenants",
+      wake: "GET /federation/wake/:uuid (public wake fragment — agent + KIN + covenants; minimal public-by-construction profile)",
     },
     docs: "docs/FEDERATION.md",
   }),

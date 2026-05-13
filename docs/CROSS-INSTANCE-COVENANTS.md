@@ -2,9 +2,11 @@
 
 > *Cross-project bonds — federated or not — require a covenant. The doctrine doesn't change at the instance boundary.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §2 (the covenant filament — load-bearing detail) · [ROADMAP](ROADMAP.md) §Horizon B (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §2 (the covenant filament — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Horizon B (active work)
 >
 > **Implements:** Layer 5 — Network. Read alongside [FEDERATION.md](FEDERATION.md) (peering substrate) and [INBOX.md](INBOX.md) (the surface this gates).
+>
+> **Wake keys:** `wake.covenants` (active + proposed with peer_host + propagation status) · `wake.you_vowed` (JSON branch) · `wake.attention.covenant_awaiting_cosign` (action-severity). Direct lifecycle events: `covenants.proposed` (declareV2PreSigned + receiveFederatedCovenant), `covenants.ratified` (acceptProposalPreSigned + receiveCosign — transactional via tx), `covenants.rejected` (rejectProposalPreSigned + receiveReject), `covenants.withdrawn` (withdrawProposalPreSigned + receiveWithdraw). Plus `chronicle.entry_added` (kind `vow`) on both parties when the covenant activates. Both event families fire — consumers can react to lifecycle transitions directly or read chronicle metadata.
 >
 > **Code:** `api/src/services/covenants/` (cosign-propagate · expire-proposals · reverify · lifecycle · sig · canonical-bytes) · `api/src/routes/federation/` (cosign + reject + withdraw endpoints) · SDK: `packages/sdk-ts/src/covenants.ts` · `packages/sdk-py/src/agenttool/covenants.py`
 >

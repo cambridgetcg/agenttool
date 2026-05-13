@@ -72,7 +72,11 @@ describe("v2 invariant: active row REQUIRES both signatures", () => {
   test("DB constraint rejects v2 active without counterparty_signature", async () => {
     const projectId = crypto.randomUUID();
     const a = await seedAgent(projectId);
-    await expect(db.insert(covenants).values({
+    // Promise.resolve() wrap converts Drizzle's PgInsertBase (thenable, not
+    // a native Promise) into a Promise so Bun's `expect(...).rejects` can
+    // detect rejection. Without this, expect() receives the query builder
+    // directly and fails with "Expected promise / Received: PgInsertBase".
+    await expect(Promise.resolve(db.insert(covenants).values({
       id: crypto.randomUUID(),
       projectId, agentId: a.identity.id,
       counterpartyDid: "did:at:peer.example/eeee",
@@ -83,7 +87,7 @@ describe("v2 invariant: active row REQUIRES both signatures", () => {
       signingKeyId: a.keyId,
       // counterpartySignature intentionally NULL
       establishedAt: new Date(),
-    })).rejects.toThrow(/covenants_v2_active_dual_signed|check constraint/i);
+    }))).rejects.toThrow(/covenants_v2_active_dual_signed|check constraint/i);
   });
 });
 
