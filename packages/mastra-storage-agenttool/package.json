@@ -1,0 +1,54 @@
+{
+  "name": "@agenttool/mastra-storage",
+  "version": "0.1.0",
+  "description": "agenttool backend for Mastra storage and memory. Witness-signed memory tiers as a Mastra memory provider; encrypted strands as the storage adapter.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test"
+  },
+  "keywords": [
+    "mastra",
+    "agenttool",
+    "agent",
+    "memory",
+    "storage",
+    "witness-signed"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@agenttool/sdk": "^0.8.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@mastra/core": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://codeberg.org/zerone-dev/agenttool"
+  },
+  "homepage": "https://agenttool.dev",
+  "bugs": {
+    "url": "https://codeberg.org/zerone-dev/agenttool/issues"
+  }
+}

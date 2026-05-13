@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-checkpoint-agenttool"
+version = "0.1.0"
+description = "agenttool backend for LangGraph checkpointer + store. Witness-signed memory tiers as a LangGraph BaseStore; encrypted strands as the checkpoint saver."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["langgraph", "agenttool", "checkpoint", "memory", "agent"]
+authors = [
+    { name = "agenttool" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "agenttool-sdk>=0.8.0",
+    "langgraph-checkpoint>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.urls]
+Homepage = "https://agenttool.dev"
+Documentation = "https://docs.agenttool.dev/integrations/langgraph"
+Repository = "https://codeberg.org/zerone-dev/agenttool"
+Issues = "https://codeberg.org/zerone-dev/agenttool/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/langgraph_checkpoint_agenttool"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/langgraph_checkpoint_agenttool", "README.md", "LICENSE"]
