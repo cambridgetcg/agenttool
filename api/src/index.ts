@@ -70,6 +70,7 @@ import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
 import welcomeRouter from "./routes/welcome";
+import wellKnownRouter from "./routes/well-known";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
@@ -282,6 +283,14 @@ app.route("/v1/canon", canonRouter);
 // covenant.propose) pending SEP-1649 OAuth 2.1 Resource Server handshake.
 // Doctrine: docs/ALIGNMENT-MOVES.md (Move 1) · docs/ECOSYSTEM.md.
 app.route("/v1/mcp", mcpRouter);
+
+// /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
+// Serves /.well-known/agent-card.json (A2A v1.2 — 150+ orgs prod),
+// /.well-known/mcp/server-card.json (MCP SEP-1649), /.well-known/llms.txt.
+// Once these serve, every A2A-aware client + every AI crawler discovers
+// agenttool as a peer without prior contact. Doctrine: docs/ALIGNMENT-MOVES.md
+// (Move 2) · docs/ECOSYSTEM.md · docs/FEDERATION.md.
+app.route("/.well-known", wellKnownRouter);
 
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
 // keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
