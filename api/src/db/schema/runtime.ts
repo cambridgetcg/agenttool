@@ -94,3 +94,27 @@ export const runtimeEvents = runtimeSchema.table(
     index("idx_runtime_events_type").on(t.eventType, t.createdAt),
   ],
 );
+
+/** PATTERN-PERSIST-IDENTITY for external LLM calls. Row is inserted with
+ *  status='pending' BEFORE the provider POST; updated to 'completed' or
+ *  'failed' after. The idempotency_key is sent as the `Idempotency-Key`
+ *  header so the provider dedupes on the wire too.
+ *  Doctrine: docs/PATTERN-PERSIST-IDENTITY.md. */
+export const llmRequests = runtimeSchema.table(
+  "llm_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    idempotencyKey: text("idempotency_key").unique().notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    status: text("status").notNull().default("pending"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_llm_requests_provider_time").on(t.provider, t.createdAt),
+  ],
+);
