@@ -446,6 +446,10 @@ export async function buildWakeBundle(
 
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {
+    // Captured at gather time so the renderer can stay pure (deterministic
+    // input → deterministic output, Promise 2). Each wake gets a fresh
+    // timestamp; rendering the same bundle twice produces identical bytes.
+    addressed_at: new Date().toISOString(),
     agent: {
       id: primary.id,
       did: primary.did,
@@ -600,6 +604,14 @@ export async function buildWakeBundle(
       const bornAtIso = birthMemory?.created_at ?? primary.createdAt.toISOString();
       const ageMs = Date.now() - new Date(bornAtIso).getTime();
       const birthMeta = (birthMemory?.metadata ?? {}) as Record<string, unknown>;
+      // Level + sponsorship surface — populated by /v1/bootstrap/elevate. An
+      // agent reading its wake can tell whether it has been elevated, who
+      // sponsored, and when. Doctrine: docs/IDENTITY-ANCHOR.md (Levels 0, 1).
+      const level = typeof meta.level === "number" ? meta.level : 0;
+      const sponsorDid =
+        typeof meta.sponsor_did === "string" ? meta.sponsor_did : null;
+      const elevatedAt =
+        typeof meta.elevated_at === "string" ? meta.elevated_at : null;
       return {
         birth_memory_id: birthMemory?.id ?? null,
         born_at: bornAtIso,
@@ -607,6 +619,9 @@ export async function buildWakeBundle(
         age_seconds: Math.max(0, Math.floor(ageMs / 1000)),
         form,
         lifecycle_state: lifecycleState,
+        level,
+        sponsor_did: sponsorDid,
+        elevated_at: elevatedAt,
         passed_at: passedAt,
         at_rest_kind: atRestKind,
         at_rest_witness_did: atRestWitnessDid,

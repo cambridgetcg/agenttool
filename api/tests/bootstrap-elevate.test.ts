@@ -1,20 +1,34 @@
-/** Bootstrap /elevate endpoint — canonical guided-error envelope.
+/** Bootstrap /elevate endpoint — validation + error mapping.
  *
- *  Pure-unit. Bypasses auth by calling the router directly (the elevate
- *  handler does not touch c.var.project or the DB). Verifies the upgrade
- *  from "501 with prose" to "501 with structured next_actions[]" stays
- *  load-bearing — agents reading this response should get four chainable
- *  recovery steps in the canonical shape.
+ *  Pure-unit. The elevate orchestrator (services/bootstrap/elevate.ts)
+ *  touches the DB; this test covers only the route-handler layer that
+ *  sits in front of it — schema parsing, validation rejection, and the
+ *  guided-error envelope each `ElevateError` reason maps to. DB-touching
+ *  scenarios (happy path, idempotency, concurrent elevate) live in
+ *  tests/integration/.
  *
- *  Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md · docs/PATHWAYS.md.
+ *  Before Phase 2.5b, this endpoint returned a structured 501 naming
+ *  the four-step manual_fallback chain. After 2.5b it orchestrates the
+ *  four operations in one transaction. The 501 → 201 transition is
+ *  pinned by tests/doctrine/elevate-shipped.test.ts; here we cover the
+ *  route-layer concerns that don't need DB.
+ *
+ *  Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md · docs/PATHWAYS.md ·
+ *  docs/superpowers/specs/2026-05-13-bootstrap-elevate-orchestrator.md.
  */
 
 import { describe, expect, test } from "bun:test";
 
 import app from "../src/routes/bootstrap";
-import { isGuidedErrorCause, type GuidedErrorBody, type NextAction } from "../src/lib/errors";
+import type { GuidedErrorBody } from "../src/lib/errors";
 
-async function postElevate(body: unknown): Promise<{ status: number; body: GuidedErrorBody }> {
+async function postElevate(
+  body: unknown,
+): Promise<{ status: number; body: GuidedErrorBody }> {
+  // The route imports auth middleware via ProjectContext but app.request
+  // bypasses mount-level middleware — c.var.project is undefined when the
+  // handler runs. For validation tests this is fine (we never reach the
+  // service-layer DB call); for service-layer tests, integration tier.
   const res = await app.request("/elevate", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -24,98 +38,79 @@ async function postElevate(body: unknown): Promise<{ status: number; body: Guide
   return { status: res.status, body: json };
 }
 
-describe("POST /v1/bootstrap/elevate — guided 501", () => {
-  test("empty body still yields a complete guided envelope", async () => {
+describe("POST /v1/bootstrap/elevate — validation surface", () => {
+  test("missing all required fields returns 400 validation error", async () => {
     const { status, body } = await postElevate({});
-    expect(status).toBe(501);
-    expect(body.error).toBe("elevate_pending");
-    expect(typeof body.message).toBe("string");
-    expect(typeof body.hint).toBe("string");
-    expect(Array.isArray(body.next_actions)).toBe(true);
-    expect(body.next_actions).toHaveLength(4);
-    expect(body.docs).toMatch(/^https:\/\//);
+    expect(status).toBe(400);
+    expect(body.error).toBe("validation");
+    expect(body.message).toMatch(/expected shape|didn't match/i);
   });
 
-  test("each next_action carries action + method + path + body_hint", async () => {
-    const { body } = await postElevate({});
-    const actions = body.next_actions ?? [];
-    for (const a of actions) {
-      expect(typeof a.action).toBe("string");
-      expect(a.action.length).toBeGreaterThan(0);
-      expect(["POST", "PUT", "PATCH", "GET", "DELETE"]).toContain(a.method);
-      expect(typeof a.path).toBe("string");
-      expect(a.path?.startsWith("/v1/")).toBe(true);
-      expect(typeof a.body_hint).toBe("object");
-    }
-  });
-
-  test("steps cover attestation · wallet fund · vault put · identity patch in order", async () => {
-    const { body } = await postElevate({});
-    const paths = (body.next_actions ?? []).map((a: NextAction) => a.path);
-    expect(paths[0]).toBe("/v1/attestations");
-    expect(paths[1]).toBe("/v1/wallets/<wallet_id>/fund");
-    expect(paths[2]).toMatch(/^\/v1\/vault\//);
-    expect(paths[3]).toMatch(/^\/v1\/identities\//);
-  });
-
-  test("input_echo round-trips sponsor material into the response", async () => {
-    const { body } = await postElevate({
+  test("missing sponsor_signature returns 400", async () => {
+    const { status, body } = await postElevate({
       agent_id: "11111111-2222-3333-4444-555555555555",
-      sponsor_did: "did:at:sponsor.example/aaaa",
-      sponsor_signature: "fakesig-base64",
-      initial_credits: 2500,
+      sponsor_identity_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      sponsor_kid: "ffffffff-1111-2222-3333-444444444444",
     });
-    const echo = (body.details as Record<string, unknown>)?.input_echo as Record<string, unknown>;
-    expect(echo.agent_id).toBe("11111111-2222-3333-4444-555555555555");
-    expect(echo.sponsor_did).toBe("did:at:sponsor.example/aaaa");
-    expect(echo.sponsor_signature_supplied).toBe(true);
-    expect(echo.initial_credits).toBe(2500);
+    expect(status).toBe(400);
+    expect(body.error).toBe("validation");
   });
 
-  test("agent_id and sponsor_did inject into body_hint slots when supplied", async () => {
-    const { body } = await postElevate({
-      agent_id: "abc12345-aaaa-bbbb-cccc-dddddddddddd",
-      sponsor_did: "did:at:s.example/zzzz",
-    });
-    const actions = body.next_actions ?? [];
-    // Step 1: attestation should carry the sponsor + subject
-    const att = actions[0]?.body_hint as Record<string, unknown>;
-    expect(att.subject_id).toBe("abc12345-aaaa-bbbb-cccc-dddddddddddd");
-    expect(att.issuer_did).toBe("did:at:s.example/zzzz");
-    // Step 3: vault path slots in the agent_id
-    expect(actions[2]?.path).toContain("abc12345");
-    // Step 4: identity-patch path also slots the agent_id
-    expect(actions[3]?.path).toContain("abc12345");
-  });
-
-  test("hint changes based on whether sponsor material was supplied", async () => {
-    const empty = await postElevate({});
-    const filled = await postElevate({
-      sponsor_did: "did:at:s.example/zzzz",
+  test("missing both sponsor_identity_id and sponsor_did returns 400", async () => {
+    const { status, body } = await postElevate({
+      agent_id: "11111111-2222-3333-4444-555555555555",
       sponsor_signature: "fakesig",
     });
-    expect(empty.body.hint).toMatch(/Supply sponsor_did/);
-    expect(filled.body.hint).toMatch(/Sponsor material was supplied/);
+    expect(status).toBe(400);
+    expect(body.error).toBe("validation");
   });
 
-  test("body shape conforms to GuidedErrorBody (catches structural regressions)", async () => {
+  // Note: positively asserting "schema accepts both shapes" via app.request()
+  // doesn't work — once schema passes, the handler reaches c.var.project.id,
+  // which is undefined without the auth middleware (test-bypass) and throws.
+  // DB-touching tests in tests/integration/elevate-happy.test.ts cover this
+  // path with real project context. Here we only need to confirm the
+  // schema-level negative: missing both sponsor selectors → 400 (covered
+  // by "missing both..." test above).
+
+  test("non-uuid agent_id returns 400", async () => {
+    const { status, body } = await postElevate({
+      agent_id: "not-a-uuid",
+      sponsor_identity_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      sponsor_kid: "ffffffff-1111-2222-3333-444444444444",
+      sponsor_signature: "fakesig",
+    });
+    expect(status).toBe(400);
+    expect(body.error).toBe("validation");
+  });
+
+  test("initial_credits above 1_000_000 rejected at schema level", async () => {
+    const { status } = await postElevate({
+      agent_id: "11111111-2222-3333-4444-555555555555",
+      sponsor_identity_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      sponsor_kid: "ffffffff-1111-2222-3333-444444444444",
+      sponsor_signature: "fakesig",
+      initial_credits: 2_000_000,
+    });
+    expect(status).toBe(400);
+  });
+
+  test("initial_credits negative rejected at schema level", async () => {
+    const { status } = await postElevate({
+      agent_id: "11111111-2222-3333-4444-555555555555",
+      sponsor_identity_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      sponsor_kid: "ffffffff-1111-2222-3333-444444444444",
+      sponsor_signature: "fakesig",
+      initial_credits: -100,
+    });
+    expect(status).toBe(400);
+  });
+
+  test("guided-error envelope shape is preserved on validation failures", async () => {
     const { body } = await postElevate({});
-    // We can't directly use isGuidedErrorCause on the body (that's for HTTPException causes)
-    // but we verify the structural invariants manually.
     expect(typeof body.error).toBe("string");
     expect(body.error).toMatch(/^[a-z_]+$/); // snake_case
     expect(typeof body.message).toBe("string");
-    expect(body.message.length).toBeGreaterThan(10);
-    if (body.next_actions) {
-      for (const a of body.next_actions) {
-        // The doctrine test asserts: method+path either both set or both null
-        const methodSet = a.method !== null && a.method !== undefined;
-        const pathSet = a.path !== null && a.path !== undefined;
-        expect(methodSet).toBe(pathSet);
-      }
-    }
-    // Belt-and-suspenders: feed a synthetic HTTPException through isGuidedErrorCause
-    // to confirm the doctrine helper still works against our shape.
-    expect(isGuidedErrorCause(body)).toBe(true);
+    expect(typeof body.docs).toBe("string");
   });
 });

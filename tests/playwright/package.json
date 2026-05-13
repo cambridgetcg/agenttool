@@ -8,6 +8,8 @@
     "test:ui": "playwright test --ui"
   },
   "devDependencies": {
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^2.0.1",
     "@playwright/test": "^1.48.0",
     "@types/node": "^22.0.0"
   }

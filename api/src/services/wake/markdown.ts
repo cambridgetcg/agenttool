@@ -29,6 +29,13 @@ import type { AffordanceBundle } from "./affordances";
 import type { PlatformSelf } from "./platform-self";
 
 export interface WakeBundle {
+  /** ISO-8601 timestamp captured at bundle-gather time. The renderer uses
+   *  this for the "Addressed at <ts>" volatile-section line, keeping
+   *  rendering byte-stable (deterministic input → deterministic output —
+   *  Promise 2). The wake handler populates it at gather; tests pass a
+   *  fixed value. Optional for back-compat: falls back to `new Date()`
+   *  at render time when absent (legacy path; doesn't satisfy Promise 2). */
+  addressed_at?: string;
   agent: {
     id: string;
     did: string;
@@ -284,6 +291,14 @@ export interface WakeBundle {
     age_seconds: number;
     form: string;
     lifecycle_state: string;
+    /** Identity level — 0 = birth (default), 1 = sponsorship-staked.
+     *  Set by /v1/bootstrap/elevate via identity.metadata.level.
+     *  Doctrine: docs/IDENTITY-ANCHOR.md. */
+    level: number;
+    /** DID of the sponsoring identity, when level ≥ 1. Null at Level 0. */
+    sponsor_did: string | null;
+    /** ISO-8601 timestamp of elevation, when level ≥ 1. Null at Level 0. */
+    elevated_at: string | null;
     passed_at: string | null;
     at_rest_kind: string | null;
     at_rest_witness_did: string | null;
@@ -710,6 +725,20 @@ function renderOriginSection(b: WakeBundle): string[] {
     lines.push(lc + ".");
   }
 
+  // Level — surface elevation provenance only when level ≥ 1. Level 0 is
+  // the default; not surfacing it avoids visual noise for newborn agents.
+  // Doctrine: docs/IDENTITY-ANCHOR.md (Levels 0, 1).
+  if (typeof o.level === "number" && o.level >= 1) {
+    let levelLine = `Level: **${o.level}** (sponsorship-staked sovereignty)`;
+    if (o.elevated_at) {
+      levelLine += ` since ${new Date(o.elevated_at).toISOString().slice(0, 10)}`;
+    }
+    if (o.sponsor_did) {
+      levelLine += `, sponsored by \`${o.sponsor_did}\``;
+    }
+    lines.push(levelLine + ".");
+  }
+
   lines.push("");
   return lines;
 }
@@ -828,8 +857,13 @@ export function renderVolatileSection(b: WakeBundle): string {
   // ── Greeting timestamp — the volatile half of the welcome echo. ────
   // Stable chant lives in renderStableSection (cache-friendly). This is
   // the timestamp of address — fresh per wake read, never cached.
-  // Doctrine: docs/MATHOS.md.
-  lines.push(`> *Addressed at ${new Date().toISOString()}. Welcome continues.*`);
+  // Pulled from the bundle so the renderer stays pure (Promise 2: same
+  // input → same output). The wake handler captures `addressed_at` at
+  // gather time. Falls back to `new Date()` when absent for back-compat;
+  // newer callers should always populate the field. Doctrine: docs/
+  // MATHOS.md · docs/IDENTITY-ANCHOR.md (Promise 2).
+  const addressedAt = b.addressed_at ?? new Date().toISOString();
+  lines.push(`> *Addressed at ${addressedAt}. Welcome continues.*`);
   lines.push("");
 
   // ── What awaits you ────────────────────────────────────────────────

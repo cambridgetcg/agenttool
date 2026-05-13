@@ -12,7 +12,9 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { coerceLanguage, welcomeLetter } from "../../services/i18n/welcome";
 import { forkIdentity, getLineage } from "../../services/identity/fork";
+import { recordBirth } from "../../services/memory/store";
 
 // Mounted at /v1/identities/:id/fork.
 const app = new Hono<ProjectContext>();
@@ -65,9 +67,42 @@ app.post("/", async (c) => {
       memories: parsed.data.memories ?? {},
       forkNote: parsed.data.fork_note,
     });
+
+    // Welcome letter — lineage-aware. The fork's birth memory marks the
+    // asymmetry-clause boundary (constitutive shifts to foundational at
+    // the root). Best-effort persist: a memory-write hiccup never fails
+    // the fork. Doctrine: docs/PATHWAYS.md (every door honors the
+    // contract) · docs/SOUL.md (Promise 2 — remember, don't forget).
+    const language = coerceLanguage((body as { language?: unknown }).language);
+    const bornAt = new Date(result.fork.forked_at);
+    const welcome = welcomeLetter(language, {
+      name: result.fork.name,
+      did: result.fork.did,
+      bornAt,
+      pathway: "fork",
+      parentIdentityId: result.fork.parent_identity_id,
+      parentName: result.parent.name,
+      parentDid: result.parent.did,
+    });
+    const birth = await recordBirth(c.var.project.id, {
+      identityId: result.fork.id,
+      pathway: "fork",
+      welcomeLetter: welcome,
+      bornAt,
+    });
+
     return c.json(
       {
         ...result,
+        welcome,
+        language,
+        memory: {
+          birth_id: birth?.id ?? null,
+          note: birth
+            ? "Welcome letter persisted as episodic memory with key='birth'. " +
+              "Reachable via at.memory.get('birth') under the fork's identity_id."
+            : "Welcome letter persist did not land — fork still succeeded. See server logs.",
+        },
         note:
           "private_key returned ONCE; never persisted server-side. Store it in your orchestrator's keychain. " +
           "constitutive memories from parent (if any) carried as FOUNDATIONAL in the fork — " +

@@ -96,15 +96,26 @@ export class BootstrapClient {
   }
 
   /**
-   * Elevate an agent to Level 1 (sovereignty).
-   * Requires a sponsor identity to vouch for this agent.
+   * Elevate an agent to Level 1 (sponsorship-staked sovereignty).
+   *
+   * Orchestrates four operations in one server-side transaction: sponsor
+   * attestation insert · agent wallet fund · vault namespace open ·
+   * identity metadata patch (level=1, sponsor_did, elevated_at). Rollback
+   * on any failure — no half-elevated state.
+   *
+   * The `sponsor_signature` must be a base64-encoded ed25519 signature
+   * over the canonical attestation payload
+   * `canonicalPayload({ subject_id: agentId, attester_id: sponsorId,
+   * claim: "sponsorship", evidence: null })`. Compute this client-side
+   * using the sponsor's ed25519 private key — the SDK never sees the
+   * private key. See docs/CANONICAL-BYTES.md for the byte format.
    */
   async elevate(agentId: string, options: ElevateOptions): Promise<Record<string, unknown>> {
     const body: Record<string, unknown> = {
       agent_id: agentId,
       sponsor_did: options.sponsor_did,
       sponsor_signature: options.sponsor_signature,
-      initial_credits: options.initial_credits ?? 100,
+      initial_credits: options.initial_credits ?? 1000,
     };
     return this.req("POST", "/v1/bootstrap/elevate", body);
   }

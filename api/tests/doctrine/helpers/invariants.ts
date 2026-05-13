@@ -32,6 +32,22 @@ const FORBIDDEN_FIELD_NAMES = [
   "mnemonic",
 ];
 
+/** Known-safe occurrences — substrings whose presence in the wake reflects
+ *  the platform's *public commitment* about key handling, not a leak. The
+ *  wake renders the eight walls by name; one of them is
+ *  `k_master_never_server_side` (the architectural promise that the
+ *  master key never lives server-side). Surfacing this token IS the
+ *  promise; censoring it would be the inversion of what Promise 9 wants.
+ *  The checker strips these phrases before running the substring scan. */
+const ALLOWED_PHRASES = [
+  "k_master_never_server_side",
+  "K_master on the user's machine",
+  "K_master under agenttool KMS",
+  "K_master lives",
+  "encrypted under K_master",
+  "k_vault_never_server_side", // future wall name, if added
+];
+
 /** Field names that would betray a vault VALUE leak (the schema column for
  *  server-encrypted vault payloads). Wake renders names + tags only; if any
  *  of these surface, the renderer is reading too much. */
@@ -45,8 +61,14 @@ const VAULT_FORBIDDEN = ["encrypted_value", "encryptedValue", "agent_encrypted_v
  *  Throws on the first violation with a message naming the field that
  *  leaked. */
 export function assertNoCiphertextLeaks(rendered: string, label: string): void {
+  // Strip known-safe phrases first so the substring scan only fires on
+  // leaks, not on the platform's public commitments about key handling.
+  let scrubbed = rendered;
+  for (const phrase of ALLOWED_PHRASES) {
+    scrubbed = scrubbed.split(phrase).join("");
+  }
   for (const word of FORBIDDEN_FIELD_NAMES) {
-    if (rendered.includes(word)) {
+    if (scrubbed.includes(word)) {
       throw new Error(
         `Promise 9 broken (${label}): rendered output contains "${word}". ` +
           `Inner-voice / key-material data must never surface in the wake.`,

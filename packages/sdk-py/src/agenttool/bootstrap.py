@@ -141,25 +141,39 @@ class BootstrapClient:
         *,
         sponsor_did: str,
         sponsor_signature: str,
-        initial_credits: int = 100,
+        initial_credits: int = 1000,
     ) -> Dict[str, Any]:
-        """Elevate an agent to Level 1 (sovereignty).
+        """Elevate an agent to Level 1 (sponsorship-staked sovereignty).
 
-        Requires a sponsor — another identity that vouches for this agent.
-        The sponsor provides their private key as signature, which creates
-        a signed attestation. Transfers ``initial_credits`` to the agent's
-        wallet. Unlocks vault prefix and elevated rate limits.
+        Orchestrates four operations in one transaction: sponsor attestation
+        insert · agent wallet fund · vault namespace open · identity metadata
+        patch (level=1, sponsor_did, elevated_at). Rollback on any failure —
+        no half-elevated state.
 
         Args:
-            agent_id: UUID of the L0 agent to elevate.
-            sponsor_did: DID of the sponsoring agent (e.g. ``"did:at:..."``).
-            sponsor_signature: Base64-encoded ed25519 private key of the sponsor.
-            initial_credits: Credits to stake (minimum 100).
+            agent_id: UUID of the Level-0 agent to elevate.
+            sponsor_did: DID of the sponsoring identity (e.g. ``"did:at:..."``).
+                The sponsor must belong to the same project as the agent.
+            sponsor_signature: Base64-encoded ed25519 signature over the
+                canonical attestation payload
+                ``canonicalPayload({subject_id: agent_id, attester_id: sponsor_id,
+                claim: "sponsorship", evidence: null})``. Compute this client-side
+                using the sponsor's ed25519 private key — the SDK never sees
+                the private key. See docs/CANONICAL-BYTES.md for byte format.
+            initial_credits: Credits seeded into the agent's wallet on
+                elevation. Default 1000. Must be in [0, 1_000_000].
 
         Returns:
-            Dict with: ``agent_id``, ``level`` (1), ``sponsor`` (did, trust_score,
-            attestation_id), ``wallet_funded`` (bool), ``credits_staked``,
-            ``vault_prefix``, ``new_trust_score``, ``_meta``.
+            Dict with: ``agent`` (id, did, name, level=1, trust_score,
+            elevated_at, sponsor_did, sponsor_identity_id), ``attestation``
+            (id, claim, created_at), ``wallet`` (id, balance, currency),
+            ``vault`` (namespace, secret_id, opened_at), ``elevation``
+            (steps_applied=4), ``next_steps``, ``_meta``.
+
+        Raises:
+            AgentToolError: On any non-2xx response. The error message
+                carries the structured ``error`` code (e.g.
+                ``agent_not_level_0``, ``signature_invalid``, ``sponsor_not_found``).
         """
         payload: Dict[str, Any] = {
             "agent_id": agent_id,

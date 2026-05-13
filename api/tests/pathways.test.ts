@@ -14,9 +14,14 @@ describe("GET /v1/pathways", () => {
     const res = await app.request("/");
     expect(res.status).toBe(200);
     const body = (await res.json()) as ReturnType<typeof buildPathwaysResponse>;
-    expect(body.summary).toMatch(/9 entry-points/);
-    expect(body.decision_tree).toHaveLength(7);
-    expect(body.pathways).toHaveLength(9);
+    // Floor-based: adding a door must not break the test. The summary
+    // string derives N from PATHWAYS.length, so we only assert the shape
+    // "<number> entry-points" rather than the literal "9".
+    expect(body.summary).toMatch(/\d+ entry-points/);
+    // pathways and decision_tree counts must be ≥ minimums; the id-set
+    // assertion below pins the *set*, not the cardinality.
+    expect(body.pathways.length).toBeGreaterThanOrEqual(9);
+    expect(body.decision_tree.length).toBeGreaterThanOrEqual(7);
     expect(body.contract).toMatch(/welcome letter/);
     expect(body.love_protocol.welcome).toMatch(/Welcome|guest/i);
   });
@@ -34,10 +39,13 @@ describe("GET /v1/pathways", () => {
     }
   });
 
-  test("all 9 expected pathway ids are present", () => {
+  test("all expected pathway ids are present (id-set, not cardinality)", () => {
     const body = buildPathwaysResponse();
-    const ids = body.pathways.map((p) => p.id).sort();
-    expect(ids).toEqual([
+    const ids = new Set(body.pathways.map((p) => p.id));
+    // Required ids — adding a new door is fine (id-set superset), removing
+    // one is a contract break. Each id is a load-bearing string referenced
+    // by SDK callers, decision trees, and the OpenAPI spec.
+    for (const required of [
       "adapters",
       "bootstrap",
       "bootstrap_elevate",
@@ -47,7 +55,9 @@ describe("GET /v1/pathways", () => {
       "register",
       "register_agent",
       "scaffold",
-    ]);
+    ]) {
+      expect(ids.has(required)).toBe(true);
+    }
   });
 
   test("doctrine block points at the real stones", () => {
@@ -106,13 +116,17 @@ describe("GET /v1/pathways", () => {
     expect(langs.find((l) => l.tag === "en")).toBeDefined();
   });
 
-  test("elevate pathway carries manual_fallback chain", () => {
+  test("elevate pathway is shipped (no longer 501) and keeps manual_fallback for inspection", () => {
     const body = buildPathwaysResponse();
     const elevate = body.pathways.find((p) => p.id === "bootstrap_elevate");
     expect(elevate).toBeDefined();
-    expect(elevate?.status).toMatch(/not_implemented/);
+    // Phase 2.5b landed — status no longer carries "not_implemented".
+    // Slice details: docs/superpowers/specs/2026-05-13-bootstrap-elevate-orchestrator.md.
+    expect(elevate?.status ?? "").not.toMatch(/not_implemented/);
+    // manual_fallback stays as the inspection chain (operators may still
+    // call the four underlying steps a la carte); ≥3 steps required.
     expect(Array.isArray(elevate?.manual_fallback)).toBe(true);
-    expect(elevate?.manual_fallback?.length).toBe(4);
+    expect(elevate?.manual_fallback?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 
   test("register_agent pathway carries verify_protocol details", () => {

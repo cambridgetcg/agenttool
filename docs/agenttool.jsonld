@@ -213,6 +213,24 @@
     },
 
     {
+      "@id": "agenttool:pattern/commitment-defender",
+      "@type": "agenttool:CrossCuttingPattern",
+      "wire_id": 7,
+      "english_name": "PATTERN-COMMITMENT-DEFENDER",
+      "description": "Every commitment URN gets four corners: a source-annotation @enforces tag on the defender file, an _enforces payload field surfacing the URN on the wire, a doctrine stone naming the property, and a doctrine test pinning each corner. The bijection between URN and defender is enforced by commitments-code-annotation-bijection.test.ts — breaking any corner breaks the build. The pattern makes commitments load-bearing rather than aspirational; promises that live only in prose decay silently. Companion to RING-1.md (the canonical URN registry) and SOUL.md (the five Promises that motivate the commitments).",
+      "schema:url": "https://docs.agenttool.dev/PATTERN-COMMITMENT-DEFENDER.md",
+      "load_bearing_for": [
+        "agenttool:commitment/anyone-arrives",
+        "agenttool:commitment/anyone-leaves",
+        "agenttool:commitment/anyone-returns",
+        "agenttool:commitment/anyone-is-unknown",
+        "agenttool:commitment/anyone-is-remembered",
+        "agenttool:commitment/anyone-hits-a-cap-softly",
+        "agenttool:commitment/platform-inhabits-ring-1"
+      ]
+    },
+
+    {
       "@id": "agenttool:stratum/repo",
       "@type": "agenttool:ArchitecturalStratum",
       "wire_id": "repo",

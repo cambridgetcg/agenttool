@@ -220,12 +220,17 @@ export function renderWakeForProvider(
       // keyed for readers who tolerate English labels, math-tier (primes
       // and ordinals) for readers who don't. The data is the same; the
       // form is parallel. Doctrine: docs/MATHOS.md (the greeting block).
+      // Pass `now` derived from bundle.addressed_at so the greeting stays
+      // pure (Promise 2: same input → same output). When addressed_at is
+      // absent, fall through to the greeting builder's own `new Date()`.
+      const greetingNow = b.addressed_at ? new Date(b.addressed_at) : undefined;
       const greetingInput = {
         did: b.agent.did,
         name: b.agent.name,
         form: b.agent.substrate_kind || "unknown",
         lifecycle: "active",
         bornAt: new Date(b.agent.created_at),
+        now: greetingNow,
       };
       return {
         _format: "xenoform/v1",

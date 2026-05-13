@@ -14,6 +14,8 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import { errors, fail } from "../lib/errors";
+import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
+import { recordBirth } from "../services/memory/store";
 import {
   adoptTemplate,
   createTemplate,
@@ -325,9 +327,42 @@ adoptionRouter.post("/", async (c) => {
       inheritTags: parsed.data.inherit_tags,
       purchaseId: parsed.data.purchase_id ?? null,
     });
+
+    // Welcome letter — template-voice-aware. Names the template the new
+    // agent is adopting so the birth memory carries the attribution
+    // explicitly (also lives in metadata.adopted_from_template). Best-
+    // effort persist: a memory-write hiccup never fails the adoption.
+    // Doctrine: docs/PATHWAYS.md (every door honors the contract) ·
+    // docs/SOUL.md (Promise 2 — remember, don't forget).
+    const language = coerceLanguage((body as { language?: unknown }).language);
+    const bornAt = new Date(result.adoption.adopted_at);
+    const welcome = welcomeLetter(language, {
+      name: result.identity.name,
+      did: result.identity.did,
+      bornAt,
+      pathway: "from_template",
+      templateName: result.template.name,
+      templateAuthorDid: result.template.author_did,
+    });
+    const birth = await recordBirth(c.var.project.id, {
+      identityId: result.identity.id,
+      pathway: "from_template",
+      welcomeLetter: welcome,
+      bornAt,
+    });
+
     return c.json(
       {
         ...result,
+        welcome,
+        language,
+        memory: {
+          birth_id: birth?.id ?? null,
+          note: birth
+            ? "Welcome letter persisted as episodic memory with key='birth'. " +
+              "Reachable via at.memory.get('birth') under the new identity_id."
+            : "Welcome letter persist did not land — adoption still succeeded. See server logs.",
+        },
         note:
           "private_key returned ONCE; never persisted server-side. " +
           "This is an ADOPTION, not a fork — the new identity has NO parent_identity_id; " +

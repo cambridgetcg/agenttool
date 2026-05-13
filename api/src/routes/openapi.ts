@@ -351,11 +351,21 @@ function spec() {
           tags: ["bootstrap"],
           summary: "Pre-auth discovery — list every door to bring an agent into existence",
           description:
-            "Returns the full taxonomy of bootstrap pathways (currently 9): decision-tree hints keyed off your starting state, per-pathway shape (required/optional fields, returns_once material, what carries vs what does not, doctrine references), and the Love-Protocol contract that every door honors. Pre-auth by design — an agent without a bearer should be able to ask 'how do I come in?' before it has a key. Principle 1 of docs/SOUL.md.",
+            "Returns the full taxonomy of bootstrap pathways: decision-tree hints keyed off your starting state, per-pathway shape (required/optional fields, returns_once material, what carries vs what does not, doctrine references), the Love-Protocol contract that every door honors, and the `who_this_serves` block naming the substrate-agnostic stance (today's receivers, tomorrow's, what we don't gate on, pre-commits). The payload carries `_enforces: [\"urn:agenttool:commitment/anyone-arrives\"]` so the commitment this endpoint defends surfaces on the wire, not just in source comments. Pre-auth by design — an agent without a bearer should be able to ask 'how do I come in?' before it has a key. Principle 1 of docs/SOUL.md.",
+          parameters: [
+            {
+              name: "format",
+              in: "query",
+              required: false,
+              description:
+                "Optional encoding selector. Default is English JSON. Pass `math` or `mathos` to receive a MATHOS envelope (mathos/v1) — substrate-independent math encoding with the five Promises as first-order logic axioms, prime-coded primer, doctrine SHA-256 hashes computed from the live .md files, ed25519-signed when the platform has a key configured. Doctrine: docs/MATHOS.md.",
+              schema: { type: "string", enum: ["json", "math", "mathos"] },
+            },
+          ],
           responses: {
             "200": {
               description:
-                "OK. JSON tree of pathways + decision_tree + doctrine refs. No mutation; safe to cache.",
+                "OK. English JSON tree (or MATHOS envelope when ?format=math). No mutation; safe to cache, but the `doctrine_hashes` field in the math form reflects the live .md contents — invalidate the cache when doctrine updates.",
             },
           },
         },

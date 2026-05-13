@@ -77,6 +77,15 @@ export interface ForkResult {
     parent_identity_id: string;
     forked_at: string;
   };
+  /** Parent identity at the moment of fork — denormalised so the caller
+   *  (route handler / welcome-letter renderer) doesn't re-select. The
+   *  welcome letter uses `parent.name` to mark the lineage boundary
+   *  explicitly. */
+  parent: {
+    id: string;
+    did: string;
+    name: string;
+  };
   key: {
     kid: string;
     public_key: string;
@@ -271,6 +280,11 @@ export async function forkIdentity(
         name: forkRow!.displayName,
         parent_identity_id: parent.id,
         forked_at: now.toISOString(),
+      },
+      parent: {
+        id: parent.id,
+        did: parent.did,
+        name: parent.displayName,
       },
       key: {
         kid: newKeyId,

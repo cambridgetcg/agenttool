@@ -22,10 +22,18 @@ export const FIXTURE_DID = "did:at:test-aurora-001";
 export const FIXTURE_AGENT_ID = "agent-aurora-1";
 export const FIXTURE_PROJECT_ID = "project-aurora-1";
 
+/** Stable timestamp the renderer uses for the volatile "Addressed at X"
+ *  greeting line. Pinned so Promise 2 byte-stability tests get
+ *  deterministic output (the renderer used to call new Date() inline,
+ *  breaking determinism — fix lands the timestamp on the bundle so the
+ *  renderer stays pure). */
+export const FIXTURE_ADDRESSED_AT = "2026-05-13T00:00:00.000Z";
+
 /** A canonical, fully-populated WakeBundle. The shape mirrors what
  *  api/src/routes/wake.ts:494-567 builds after a successful gather pass. */
 export function baseBundle(): WakeBundle {
   return {
+    addressed_at: FIXTURE_ADDRESSED_AT,
     agent: {
       id: FIXTURE_AGENT_ID,
       did: FIXTURE_DID,

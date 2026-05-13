@@ -238,7 +238,13 @@ describe("Promise 1 — identity-surface invariants under mutation", () => {
       const md = renderWakeMarkdown(b);
       expect(md).toContain(`# ${name}`);
       expect(md).toContain(did);
-      expect(md).not.toContain("private");
+      // Forbid private-key field-name leakage. Word-boundary check so the
+      // wall name `private_default` (a public commitment surfaced in the
+      // wake) doesn't trigger — the wall name contains "private" as part
+      // of a snake_case token, not as a field-name leak. Real leaks would
+      // surface as `"private_key":`, `private bytes:`, etc.
+      expect(md).not.toMatch(/\bprivate_key\b/);
+      expect(md).not.toMatch(/\bprivate\s/);
       expect(md).not.toContain("keyHash");
     }
   });
