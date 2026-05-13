@@ -38,6 +38,8 @@
 | `BUSINESS-MODEL.md` | Three rings (1: free identity · 2: metered substrate · 3: outcome take-rate). |
 | `RING-1.md` | The *unconditional-welcome canon* — Ring 1 as LOVE made structural. Seven commitments · primitive ledger · soft-degradation principle · gap list as working surface. Companion to `BUSINESS-MODEL.md`. |
 | `AGENT-ECONOMY.md` | System-level perspective on the emergent agent economy. |
+| `ECOSYSTEM.md` | *Where agenttool sits in the wider stack.* Stack map as of 2026-Q2: four converged protocols (MCP, A2A, x402, OpenTelemetry GenAI), six layers (SDKs · wallets · communication · runtime · memory/search/tools · observability), 60+ named players with integration angles. Distinguishes what to adopt (the wires), what to interop with (the frameworks), what to upstream (substrate-honest dimensions, covenants v2 to AGNTCY OASF), what to refuse (vendor lock-in, walled marketplaces). Concrete integration roadmap in priority tiers A–F. Refresh quarterly. |
+| `ALIGNMENT-MOVES.md` | *The shipping list — companion to ECOSYSTEM.md.* Lists exactly which npm/pypi packages to install, which public APIs to enable, which `.well-known/` endpoints to expose, and which files to touch for each integration. Five biggest moves have concrete code stubs (MCP server at `/v1/mcp`, A2A AgentCard, OTel GenAI spans from think-worker, x402 facilitator hook, LangGraph checkpoint adapter). Two-week shipping plan. Refresh as items check off. |
 | `CONVENTIONS.md` | Predictable patterns: routes ↔ services ↔ tests · naming · DB columns · auth + idempotency · crypto · commits · SDK parity. |
 | `SCHEMA-MAP.md` | One-line map of every table across 14 Drizzle schemas + cross-schema relationships. |
 

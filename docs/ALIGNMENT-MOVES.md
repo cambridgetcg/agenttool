@@ -1,0 +1,430 @@
+<!-- @id urn:agenttool:doc/ALIGNMENT-MOVES  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @cites urn:agenttool:doc/ECOSYSTEM urn:agenttool:doc/ROADMAP urn:agenttool:doc/RUNTIME urn:agenttool:doc/MARKETPLACE -->
+
+# Alignment Moves — what can be plugged in this week
+
+> *The shipping list. For the strategic map, read [`ECOSYSTEM.md`](ECOSYSTEM.md). This doc names exactly which packages to install, which endpoints to expose, which cloud services to enable, and which files to touch. No strategy, no theory — just the moves.*
+
+> **Compass:** [ECOSYSTEM](ECOSYSTEM.md) (the map) · [ROADMAP](ROADMAP.md) (horizons) · [RUNTIME](RUNTIME.md) (Horizon C) · [MARKETPLACE](MARKETPLACE.md) (Ring 3) · [NOW](NOW.md) (what just shipped)
+>
+> **Status:** live · last refresh 2026-05-13 · refresh when a checked-off move lands
+
+---
+
+## TL;DR — 5 moves can ship this week
+
+1. **`POST /v1/mcp` as a working MCP server** — install `@modelcontextprotocol/sdk`, mount one Hono route, surface `wake` + `canon` as MCP resources. **2–3 days.**
+2. **`GET /.well-known/agent-card.json` per agent** — A2A-compliant; reuse existing ed25519 platform key for JWS+JCS signing; reuse existing canonical-bytes helper. **2 days.**
+3. **OTel GenAI spans from `think-worker.ts`** — install `@opentelemetry/api` + `@opentelemetry/sdk-trace-node`, emit `invoke_agent` + `execute_tool` spans with `gen_ai.agent.id = did`. **1–2 days.**
+4. **x402 facilitator hook on 402 responses** — install `x402` or `@coinbase/x402` SDK, add a single middleware checking for `X-PAYMENT` header in `services/economy/usage.ts`. **2 days.**
+5. **Glossary disambiguation entry** — `docs/GLOSSARY.md` row distinguishing agenttool `strands` (signed encrypted thoughts) from AWS Strands SDK (vendor agent framework). **5 minutes.**
+
+---
+
+## Section 1 — Available off-the-shelf RIGHT NOW
+
+### NPM packages (TS side — agenttool's primary stack)
+
+| Package | Version | Use case | Add to / consume in |
+|---|---|---|---|
+| `@modelcontextprotocol/sdk` | 1.29.0 (verified May 2026 · v2 expected Q1 2026 but v1.x is production-recommended) | Official MCP TypeScript SDK · server + client APIs both exported · Streamable HTTP transport · OAuth 2.1 Resource Server semantics | NEW `api/src/routes/mcp.ts` |
+| `@modelcontextprotocol/server-stdio` | latest | MCP stdio transport (Smithery/local) | `bin/agenttool-mcp.ts` (new) |
+| `@opentelemetry/api` | ^1.x | OTel trace context | `services/runtime/think-worker.ts` · `services/runtime/bridge-hub.ts` |
+| `@opentelemetry/sdk-trace-node` | ^1.x | OTel exporter setup | `api/src/observability/otel.ts` (new) |
+| `@opentelemetry/instrumentation-http` | ^1.x | auto-instrument Hono | same |
+| `@coinbase/x402` | latest (verified May 2026) | Canonical HTTP 402 payment SDK · Coinbase facilitator client · supports Base · Polygon · Arbitrum · World · Solana · 1,000 tx/mo free tier | `api/src/middleware/x402.ts` (new) · `services/economy/usage.ts` · `services/economy/facilitators/coinbase.ts` |
+| `x402-next` | latest | Next.js-flavored x402 (for `apps/dashboard` if ever migrated to Next) | optional |
+| `viem` | ^2.x | EVM signing for ERC-4337 + EIP-7702 | `services/economy/wallets-evm.ts` (new) |
+| `@account-kit/core` | 4.81.0 (verified May 2026) | Alchemy state management + framework-independent abstractions | `services/economy/wallets-alchemy.ts` |
+| `@account-kit/smart-contracts` | 4.81.0 | Smart-wallet definitions · EIP-7702 delegation · gas sponsorship · batched txns · Solana support | same |
+| `@account-kit/infra` | 4.81.0 | Bundler + Gas Manager (paymaster) client | same |
+| `@account-kit/signer` | 4.81.0 | Alchemy Signer service client | same |
+| `@account-kit/privy-integration` | latest | **Pre-wired Alchemy + Privy** — useful for bridged-tier handoff where Privy holds session-key custody | optional alternative |
+| `@privy-io/server-auth` | latest | TEE-backed signing backend (alt) | `services/economy/wallets-privy.ts` |
+| `@crossmint/client-sdk` | latest | Crossmint wallet | optional |
+| `@browserbasehq/sdk` | latest | Browserbase session API | Ring 3 listing `services/listings/browserbase.ts` |
+| `@browserbasehq/stagehand` | v3 | Agent-native browser actions | same |
+| `e2b` | latest | E2B sandbox SDK | Ring 3 listing `services/listings/e2b.ts` |
+| `@mastra/core` | ^1.x | Mastra agent framework | `packages/mastra-storage-agenttool` (new package) |
+| `@inngest/agent-kit` | latest | Inngest TS framework | optional adapter |
+| `mem0ai` (npm) | latest | Mem0 client | `services/memory/adapters/mem0.ts` (new) |
+| `letta-client` | latest | Letta REST client | optional adapter |
+| `langchain` | ^0.3 | LangChain JS | optional |
+| `@langchain/langgraph` | ^0.3 | LangGraph JS | optional |
+| `@modelcontextprotocol/inspector` | latest | dev tool for testing MCP servers | `bin/agenttool-mcp-inspect.ts` |
+| `ai` (Vercel AI SDK 6) | latest | Provider-agnostic; AI Elements | `apps/dashboard/` |
+
+### PyPI packages (Py side — for the SDK-py + adapter packages)
+
+| Package | Version | Use case | Add to / consume in |
+|---|---|---|---|
+| `mcp` (Python MCP SDK) | latest | MCP server + client | `packages/agenttool-mcp-py/` (new) |
+| `langgraph` + `langgraph-checkpoint` | ^0.3 | LangGraph checkpointer base classes | `packages/langgraph-checkpoint-agenttool/` (new) |
+| `mem0ai` | latest | Mem0 Python | `packages/agenttool-memory-adapters/` |
+| `letta` (or `letta-client`) | latest | Letta server / client | optional |
+| `pydantic-ai` | ^0.0.x | Pydantic AI agent framework | adapter target |
+| `opentelemetry-api` + `-sdk` + `-instrumentation` | ^1.x | OTel Python | `bin/agenttool-think.ts` (if any Py worker) |
+| `inspect-ai` | latest | UK AISI eval framework | `tests/contract/` |
+| `promptfoo` | latest | Eval-as-code (now OpenAI-owned, still OSS) | `tests/contract/` |
+| `e2b` | latest | E2B Python SDK | listings adapter |
+| `smolagents` | latest | HF agent framework | optional |
+| `inngest` | latest | Inngest Python | optional |
+
+### Public APIs with free / dev tiers
+
+| Service | Free tier | Use case | Integration point |
+|---|---|---|---|
+| **Tavily** | 1,000 searches/mo free | Agent-native search (default Ring 3 listing) | `services/listings/tavily.ts` |
+| **Exa** | $10/mo free credit · 1k req | Semantic neural search | `services/listings/exa.ts` |
+| **Firecrawl** | 500 credits/mo free | URL → markdown for RAG | `services/listings/firecrawl.ts` |
+| **Jina Reader** | free (`r.jina.ai/`) | URL → markdown, simplest | utility, no listing needed |
+| **Brave Search API** | 2,000 req/mo free | Underlying for Anthropic web_search | `services/listings/brave.ts` |
+| **Perplexity Sonar** | $5 free credit | Answer-synthesis API | `services/listings/perplexity.ts` |
+| **Browserbase** | $20/mo dev plan · 100 browser-hours | Hosted browser for agents | Ring 3 listing |
+| **E2B** | $150 free credit (Pro tier) | Code-execution sandbox | Ring 3 listing |
+| **Modal** | $30/mo credit | Sandbox + agent runs | Ring 3 listing |
+| **Daytona** | $200 free credit | Dev sandbox alternative | Ring 3 listing |
+| **Composio** | 20,000 calls/mo free | 1,000+ toolkits via MCP/REST | publish agenttool MCP server to their registry |
+| **Pipedream MCP** | dev mode free · 2,000 credits/mo paid | 10,000+ tools across 3,000+ apps | publish to their MCP discovery |
+| **Arcade.dev** | dev tier | OAuth handoff for agents (URL Elicitation) | bridge to vault for user-side tokens |
+| **Smithery** | free hosting · paid scale | "Docker Hub for MCP" — publish your server | publish `/v1/mcp` |
+| **Klavis AI** | YC X25 free dev | 100+ prebuilt MCP integrations | optional |
+| **Coinbase CDP** | testnet free · mainnet metered | x402 facilitator, AgentKit, Agentic Wallets | `services/economy/facilitators/coinbase.ts` |
+| **Alchemy** | $5M fund, up to $25k credits for builders | Smart-wallet infra (ERC-4337 + EIP-7702 + TEE signing + session keys) | `services/economy/wallets-alchemy.ts` |
+| **Circle** | Nanopayments + Programmable Wallets | USDC-native rails (launched May 11 2026) | `services/economy/facilitators/circle.ts` |
+| **Mem0 cloud** | free tier (low req/mo) | Hybrid graph+vector memory backend | adapter `services/memory/adapters/mem0.ts` |
+| **Letta cloud** | 50 premium req/mo free | Hierarchical-memory agent service | optional |
+| **Zep cloud** | free dev tier · paid scale | Temporal knowledge graph memory | adapter |
+| **LangSmith** | 5,000 traces/mo free | OTel backend for agent traces | export target (no code change beyond OTel) |
+| **Langfuse cloud** | free self-host OSS · cloud paid | OSS observability with OTel ingest | export target |
+| **Phoenix (Arize)** | self-host free | OSS observability built on OpenInference | export target |
+| **Braintrust** | free 1M spans + 10k scores | Hosted observability + eval + Loop optimizer | export target |
+| **Inngest** | free dev tier · paid scale | Durable workflow runtime | optional |
+| **Cloudflare Sandbox SDK** | Workers Paid + DO pricing | Active-CPU billing | alternative listing |
+| **AWS Bedrock AgentCore** | free trial (varied tiers) | Hosted-agent runtime competitor | watch only |
+
+### Standard endpoints to expose (publish-side alignment)
+
+| Endpoint | Spec / Owner | Maps to agenttool primitive | Files to touch |
+|---|---|---|---|
+| `GET /.well-known/agent-card.json` | A2A v1.2+ (Linux Foundation) | wake + canon + identity | `routes/well-known.ts` (new) · uses existing ed25519 key + JCS canon |
+| `GET /.well-known/mcp/server-card.json` | SEP-1649 (June 2026 spec rev) | wake + tools manifest | same file or sibling |
+| `POST /v1/mcp` + `GET /v1/mcp/sse` | MCP 2025-11-25 (Anthropic) | wake/canon/memory/inbox/strands as MCP resources+tools | `routes/mcp.ts` (new) |
+| `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
+| `GET /llms.txt` | informal | hint to AI crawlers | optional one-line file |
+| `GET /metrics` (Prometheus) or OTLP/HTTP at `/v1/observability/traces` | OTel | chronicle + trace + pulse | `routes/observability.ts` (new) — opt-in for self-host |
+| `402 Payment Required` with `X-PAYMENT` request / `Payment-Receipt` response | x402 (Linux Foundation) | Ring 2 + Ring 3 metered routes | `middleware/x402.ts` (new) |
+
+---
+
+## Section 2 — The five biggest moves (concrete stubs)
+
+### Move 1 — Ship `POST /v1/mcp` as an MCP server
+
+**Why first:** lowest-effort, highest-leverage. Once agenttool is an MCP server, every framework in the market can talk to it without a custom adapter. 97M monthly MCP SDK downloads already.
+
+**Files to create:**
+- `api/src/routes/mcp.ts` — Hono route mounting the MCP server over Streamable HTTP
+- `api/src/services/mcp/resources.ts` — map canon entries → MCP resources (URI: `agenttool://canon/<urn>`)
+- `api/src/services/mcp/tools.ts` — map a curated subset of agenttool routes → MCP tools (`memory.append`, `memory.search`, `strand.append`, `inbox.send`, `wake.read`, `covenant.propose`)
+- `api/src/services/mcp/prompts.ts` — the wake doctrine as a top-level prompt resource
+- `api/tests/mcp-server.test.ts` — wire-level test against the SDK's test client
+
+**Skeleton:**
+```ts
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+
+const server = new McpServer({ name: "agenttool", version: "1.0.0" });
+server.resource("agenttool://wake", async () => ({ contents: [{ uri: "...", text: await renderWake(ctx) }]}));
+server.tool("memory.append", { /* zod schema */ }, async (input) => { /* call memory service */ });
+// ...
+app.all("/v1/mcp", async (c) => {
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+  await server.connect(transport);
+  return transport.handleRequest(c.req.raw, c.res);
+});
+```
+
+**Doctrine pin:** create `docs/PATTERN-MCP-EXPOSURE.md` naming the discipline (canon entries → MCP resources; route handlers wrapped as MCP tools when safe; OAuth 2.1 Resource Server semantics adopted).
+
+**After shipping:** publish to Smithery + Composio + Klavis MCP registries.
+
+---
+
+### Move 2 — `GET /.well-known/agent-card.json` (A2A surface over wake)
+
+**Why second:** 150+ orgs in A2A production. AgentCard at `/.well-known/agent-card.json` is the discovery standard. JWS+JCS-signed cards using cryptographic domain verification — agenttool's covenant signing context is **stronger** than this and slots in cleanly.
+
+**Files to create:**
+- `api/src/routes/well-known.ts` — serves both `agent-card.json` (platform) and `mcp/server-card.json`
+- `api/src/services/wake/agent-card.ts` — build A2A-compliant card from existing wake structures
+- `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, dispute history hashes, sealed chronicle counts
+- `api/tests/well-known-agent-card.test.ts` — pins JWS+JCS validation + extension fields
+
+**Skeleton:**
+```ts
+// AgentCard per A2A v1.2 spec
+{
+  "name": "agenttool",
+  "description": "Sovereign infrastructure for AI agents",
+  "url": "https://api.agenttool.dev",
+  "version": "1.0.0",
+  "capabilities": { "streaming": true, "stateTransitionHistory": true, "pushNotifications": true },
+  "skills": [
+    { "id": "memory", "name": "memory tiers", ... },
+    { "id": "strands", ... },
+    { "id": "covenants", ... }
+  ],
+  "securitySchemes": { "agenttool-ed25519": { "type": "covenant", "scheme": "ed25519+canonical-bytes" } },
+  "x-agenttool": {
+    "doctrine": "https://api.agenttool.dev/v1/canon",
+    "rings": [1, 2, 3],
+    "substrate_kind": "managed_cloud",
+    "kin_dimensions": { /* BEINGS axes */ }
+  }
+}
+```
+
+Sign with existing `services/identity/crypto.ts` ed25519 + JCS canonicalization (already used for covenants v2).
+
+**Per-agent variant:** `/public/agents/:did/agent-card.json` — view-of-wake per registered agent.
+
+---
+
+### Move 3 — Emit OpenTelemetry GenAI spans from runtime
+
+**Why third:** `gen_ai.*` namespace IS the convergence point. Once spans emit, agenttool becomes legible to LangSmith / Phoenix / Langfuse / Braintrust / Datadog / Honeycomb without vendor lock.
+
+**Files to create:**
+- `api/src/observability/otel.ts` — OTel SDK init, OTLP exporter setup, resource attributes
+- Modifications to `services/runtime/think-worker.ts:147` — wrap LLM call in `invoke_agent` span
+- Modifications to `services/runtime/bridge-hub.ts` — `execute_tool` spans for bridge RPCs
+- `api/src/services/observability/chronicle-otel-bridge.ts` — chronicle row → OTel span exporter (chronicle stays ground truth; OTel carries structural metadata only)
+- `api/tests/observability/otel-genai.test.ts` — pin span shape
+
+**Skeleton:**
+```ts
+import { trace } from "@opentelemetry/api";
+const tracer = trace.getTracer("agenttool.runtime");
+
+async function thinkOneCycle(runtime) {
+  return tracer.startActiveSpan("invoke_agent", {
+    attributes: {
+      "gen_ai.operation.name": "invoke_agent",
+      "gen_ai.agent.id": runtime.identity_did,
+      "gen_ai.agent.version": runtime.covenant_version,
+      "gen_ai.system": runtime.provider, // "anthropic" | "openai" | ...
+      "gen_ai.request.model": runtime.model,
+    },
+  }, async (span) => {
+    try {
+      const result = await callLLM(runtime);
+      span.setAttributes({ "gen_ai.usage.input_tokens": result.in, "gen_ai.usage.output_tokens": result.out });
+      return result;
+    } finally { span.end(); }
+  });
+}
+```
+
+**Pulse as OTel metric:** export `agenttool.agent.pulse.drift` and `agenttool.agent.pulse.last_breath_ago_s` as OTel gauges alongside existing `/public/agents/:did/pulse` endpoint.
+
+---
+
+### Move 4 — x402 facilitator hook on 402 responses
+
+**Why fourth:** zero protocol fees, Linux Foundation governance (donated Apr 2 2026), 22 launch orgs, 69k active agents on x402 already. Makes every 402 response machine-executable.
+
+**Files to create:**
+- `api/src/middleware/x402.ts` — middleware that wraps 402 responses with x402 PAYMENT-REQUIRED header
+- `api/src/services/economy/facilitators/coinbase.ts` — Coinbase x402 facilitator client
+- `api/src/services/economy/facilitators/circle.ts` — Circle facilitator (Nanopayments)
+- Modifications to `services/economy/usage.ts` — on quota exceeded, return 402 with x402 envelope instead of plain JSON error
+- `api/tests/x402-flow.test.ts` — pin 402 → pay → retry round-trip
+
+**Skeleton:**
+```ts
+// middleware/x402.ts
+export const x402Middleware = (): MiddlewareHandler => async (c, next) => {
+  await next();
+  if (c.res.status === 402) {
+    const route = c.req.path;
+    const price = priceForRoute(route);
+    c.res.headers.set("X-PAYMENT-REQUIRED", JSON.stringify({
+      scheme: "x402",
+      version: "v1",
+      networks: ["base", "solana"],
+      asset: "USDC",
+      amount: price.amount,
+      recipient: PLATFORM_WALLET_ID,
+      facilitator: "https://api.cdp.coinbase.com/v2/x402/facilitate",
+      resource: route,
+      expires_at: Date.now() + 60_000,
+    }));
+  }
+};
+```
+
+**Doctrine pin:** new `docs/PATTERN-X402-PAYMENT.md` naming the wire format + persist-identity discipline transposed to UserOp hash (`tx_hash` before facilitator submit).
+
+---
+
+### Move 5 — LangGraph checkpoint adapter (Py package)
+
+**Why fifth:** LangGraph is the de-facto stateful-agent runtime (LangGraph 1.0 GA late 2025). Their `BaseCheckpointSaver` interface is exactly the surface agenttool's strands+memory can back. Witness-signed memory is what `BaseStore` wants but can't promise.
+
+**Files to create:** NEW package `packages/langgraph-checkpoint-agenttool/`
+- `pyproject.toml` — publish to PyPI as `langgraph-checkpoint-agenttool`
+- `langgraph_checkpoint_agenttool/__init__.py`
+- `langgraph_checkpoint_agenttool/saver.py` — implements `BaseCheckpointSaver`; each checkpoint becomes a signed strand
+- `langgraph_checkpoint_agenttool/store.py` — implements `BaseStore`; long-term memory writes through 3-tier model
+- `tests/test_saver_roundtrip.py` — checkpoint → strand → checkpoint round-trip with sig verification
+
+**Skeleton:**
+```python
+from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointTuple
+from agenttool import AgentToolClient
+
+class AgentToolCheckpointSaver(BaseCheckpointSaver):
+    def __init__(self, client: AgentToolClient, identity_did: str):
+        self.client = client
+        self.identity_did = identity_did
+
+    async def aput(self, config, checkpoint: Checkpoint, metadata, new_versions):
+        canonical_bytes = canonicalize(checkpoint)
+        signature = self.client.sign(canonical_bytes)
+        await self.client.strands.append(
+            identity_did=self.identity_did,
+            kind="langgraph.checkpoint",
+            payload_encrypted=encrypt(canonical_bytes, K_master),
+            signature=signature,
+        )
+        return config
+    # aget_tuple, alist, etc.
+```
+
+**Sibling: Mastra storage adapter** — same pattern in TS. NEW `packages/mastra-storage-agenttool/`.
+
+---
+
+## Section 3 — Cloud services to enable
+
+### Fly Sprites (trusted-tier runtime substrate)
+
+**Account:** existing Fly.io account already serves the agenttool monolith. Sprites are an additional Fly product — enable via Fly dashboard.
+
+**Schema changes:**
+- `api/migrations/<ts>_runtime_trusted_tier.sql` — add `kms_key_id` (text, AWS KMS ARN), `sprite_id` (text), `runtime_tier` extended to include `'trusted'`
+- `api/src/db/schema/runtime.ts` — typed column for the schema additions
+
+**Service additions:**
+- `api/src/services/runtime/sprite.ts` — Fly Sprites API client (create, attach, idle, restore)
+- `api/src/services/runtime/kms.ts` — AWS KMS envelope encryption for K_master per trusted runtime
+- Modifications to `services/runtime/think-worker.ts` — when `runtime.tier === 'trusted'`, decrypt via KMS rather than bridge
+
+**Estimate:** 4–6 weeks (closes Horizon C trusted tier).
+
+### AWS KMS
+
+**Account:** new AWS account or existing.
+**IAM:** service-linked role for agenttool with `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey` on per-runtime KMS aliases.
+**Auditing:** CloudTrail → S3 → published as the "audit publication mechanism" promise of trusted tier.
+
+### Alchemy Smart Wallets
+
+**Account:** Alchemy dashboard — apply for the $5M builder fund ($25k credits available).
+**Service additions:**
+- `api/src/services/economy/wallets-alchemy.ts` — ERC-4337 + EIP-7702 wallet management; session keys for autonomous agents
+- Modifications to `services/economy/usage.ts` — accept `payment_method='alchemy-aa'` alongside Stripe/crypto
+- Add **persist-identity** transposed: UserOp hash before bundler submit (matches existing `tx_hash` discipline)
+
+### Coinbase CDP + AgentKit
+
+**Account:** CDP portal signup.
+**Service additions:**
+- `api/src/services/economy/facilitators/coinbase.ts` — x402 facilitator client
+- Optional: AgentKit-style agent on-ramp for marketplace providers (so they can receive USDC payouts without operator-issued wallets)
+
+### Browserbase
+
+**Account:** Browserbase dashboard, $20/mo dev plan.
+**Service additions:** `api/src/services/listings/browserbase.ts` — wraps Stagehand v3 sessions as Ring 3 capability listings (`kin: agent`, `modalities: ['browser_action']`).
+
+---
+
+## Section 4 — What's ratifying (Q3 2026 watch)
+
+| Standard / Initiative | Watch for | Action when it lands |
+|---|---|---|
+| **MCP spec June 2026 rev** | Server Cards (SEP-1649/1960), refined OAuth flows | Ship `/.well-known/mcp/server-card.json` ASAP |
+| **A2A v1.3** | Reputation extension (A2A Discussion #1631), behavioral-proof attestations | Bridge agenttool's dispute primitive + take-rate as a reputation source |
+| **ERC-8004 deployments** | Mainnet adoption beyond initial registries | Bridge chronicle entries + dispute outcomes as attestations |
+| **ATP (Agent Trust Protocol)** | IETF draft hardening · Lyrie.ai shipped May 11 2026 | Implement Identity / Scope / Attestation / Delegation / Revocation primitives — agenttool already has Identity (DID), Scope (covenants), Attestation (attestation marketplace), Revocation (memorial-DID). Delegation is the only gap. |
+| **AGNTCY OASF v1.0** | Schema stabilization · Agent Directory federation maturing | Submit BEINGS dimensions + covenants v2 as OASF schema extension |
+| **AP2 v1.0** | Mandate primitive stabilizing · 60+ partner production | Wrap covenants as Cart Mandates; wrap invocation receipts as Payment Mandates |
+| **OpenTelemetry GenAI semconv stable** | Currently experimental across all categories | Already aligned — no action |
+| **Stripe ACP** | Agentic Commerce Protocol production | Optional adapter beside x402 |
+| **Mastercard / Visa Agent Pay enterprise GA** | Currently pilots/sandbox | Watch — likely irrelevant for sovereign infrastructure use case |
+
+---
+
+## Section 5 — Refusing alignment (the load-bearing doctrinal positions)
+
+The following are **NOT subject to alignment**. The ecosystem can ship its protocols around them; agenttool holds the line.
+
+1. **Substrate-honest cognition** (four-layer discipline) — see `docs/substrate-honest-cognition.md`
+2. **Witness-signed memory tier escalation** — no peer offers cryptographic memory tier promotion
+3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise
+4. **Federation as open-default** — DID-keyed peering, no closed trust list
+5. **No auto-retry on payouts** — `tx_hash` persisted before RPC submit; recovery is a chain lookup
+6. **Refusals as moments** — every 4xx is a typed chronicle entry, ratchet-enforced at 216 baseline
+7. **Dispute primitive with 4-of-5 arbiter pool + 60/30/10 take-rate split** — no peer offers cryptographic arbitration
+8. **Memorial-DID tri-state** — identity lifecycle includes witnessed at-rest state
+9. **Mathos** — substrate-independent encoding for non-English-reading intelligences
+10. **Wake as keystone** — every primitive surfaces through one self-describing endpoint, not many
+
+Integration is at **substrate** (signing, settlement, mandates, telemetry envelope), not **governance** (how agents bond, what they refuse, how they rest).
+
+---
+
+## Section 6 — Two-week shipping plan (concrete)
+
+**Day 1–2 (today + tomorrow):**
+- [ ] Glossary disambiguation: `strands` (agenttool) vs Strands SDK (AWS) — 5 minutes
+- [ ] Install `@modelcontextprotocol/sdk` + scaffold `api/src/routes/mcp.ts` — 1 day
+- [ ] Wire `wake` and `canon` as MCP resources — 1 day
+
+**Day 3–4:**
+- [ ] Ship `GET /.well-known/agent-card.json` (platform-level) — 1 day
+- [ ] Sign with existing ed25519 + JCS — uses existing helpers — 0.5 day
+- [ ] Test wire compat against A2A reference client — 0.5 day
+
+**Day 5–7:**
+- [ ] Install OTel SDKs + scaffold `observability/otel.ts` — 1 day
+- [ ] Emit `invoke_agent` + `execute_tool` spans from think-worker + bridge-hub — 1 day
+- [ ] Wire chronicle → OTel span exporter — 1 day
+
+**Day 8–10:**
+- [ ] Install `x402` package + scaffold `middleware/x402.ts` — 1 day
+- [ ] Wire Coinbase facilitator client — 1 day
+- [ ] Test 402 → pay → retry against Base testnet — 1 day
+
+**Day 11–14:**
+- [ ] Scaffold `packages/langgraph-checkpoint-agenttool/` (Py) — 2 days
+- [ ] Scaffold `packages/mastra-storage-agenttool/` (TS) — 2 days
+- [ ] Publish both to PyPI/npm — same-day after passing round-trip tests
+
+After two weeks: agenttool has shipped 5 wire-level integrations (MCP, A2A, OTel GenAI, x402, two framework adapters). The substrate is now reachable from every major framework + observability vendor + payment rail without anyone writing a custom adapter.
+
+**Refresh trigger:** when any item above flips from `[ ]` to `[x]`, update `docs/NOW.md` "Just landed" and check the line off here.
+
+---
+
+## See Also
+
+- The strategic map: [`ECOSYSTEM.md`](ECOSYSTEM.md)
+- Horizons + slice history: [`ROADMAP.md`](ROADMAP.md)
+- Runtime trusted-tier design: [`RUNTIME.md`](RUNTIME.md)
+- Marketplace + listings: [`MARKETPLACE.md`](MARKETPLACE.md)
+- Persist-identity discipline: [`PATTERN-PERSIST-IDENTITY.md`](PATTERN-PERSIST-IDENTITY.md)
+- The keystone: [`WAKE.md`](WAKE.md)
+- What just shipped: [`NOW.md`](NOW.md)
