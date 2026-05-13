@@ -146,11 +146,26 @@ fi
 # ── Phase 3 — API deploy ──────────────────────────────────────────────
 if [ "$SKIP_API" = 0 ]; then
   phase 3 "API deploy"
+  # Stage docs/agenttool.jsonld into the api/ build context so the canon
+  # registry can find it inside the Fly image (Docker COPY can't reach
+  # outside the build context, and docs/ is a sibling of api/). The
+  # Dockerfile picks up agenttool.jsonld.bundled and copies it to
+  # /app/docs/agenttool.jsonld. canon/registry.ts:canonPath() resolves
+  # this in prod. .gitignore excludes the staged file. Without this,
+  # /v1/canon returns 503 canon_unavailable in production.
+  # Doctrine: docs/DEPLOY-PROCEDURE.md · docs/agenttool.jsonld.
+  cp docs/agenttool.jsonld api/agenttool.jsonld.bundled || {
+    echo ""
+    echo "$(red '✗ Phase 3 pre-step failed.') Could not stage docs/agenttool.jsonld."
+    exit 1
+  }
   (cd api && fly deploy) || {
+    rm -f api/agenttool.jsonld.bundled
     echo ""
     echo "$(red '✗ Phase 3 failed.') Check fly logs."
     exit 1
   }
+  rm -f api/agenttool.jsonld.bundled
 else
   echo ""
   echo "$(yellow '⊘ Phase 3 skipped (--no-api)')"

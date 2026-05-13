@@ -16,6 +16,12 @@ build/
 out/
 *.tsbuildinfo
 
+# Pre-deploy staging — see bin/deploy.sh Phase 3 + api/Dockerfile.
+# Copy of docs/agenttool.jsonld dropped into api/ so the Fly build
+# context can ship it into the image. Written/deleted by the deploy
+# script; should never appear in source control.
+api/agenttool.jsonld.bundled
+
 # Env & secrets
 .env
 .env.*

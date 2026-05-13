@@ -20,7 +20,7 @@
  *  the live form, served at /v1/canon.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Fields in the JSON-LD that carry @id references to other concepts.
@@ -95,13 +95,30 @@ function normalizeUrn(raw: string): string {
 
 /** Path to the JSON-LD canon. Lookup priority:
  *    1. AGENTTOOL_CANON_JSONLD env var (full path) — for tests/overrides.
- *    2. The repo's docs/agenttool.jsonld relative to api/src/services/canon/.
- *  The fallback computes from __dirname so it works regardless of cwd. */
+ *    2. The repo's docs/agenttool.jsonld at the expected dev layout
+ *       (api/src/services/canon → up 4 → repo-root/docs/agenttool.jsonld).
+ *    3. /app/docs/agenttool.jsonld — production Docker layout (Fly).
+ *       Pre-build step in bin/deploy.sh stages docs/agenttool.jsonld into
+ *       the api/ build context as agenttool.jsonld.bundled; Dockerfile
+ *       COPYs to /app/docs/agenttool.jsonld.
+ *  Returns the first path that exists. */
 function canonPath(): string {
   const env = process.env.AGENTTOOL_CANON_JSONLD;
   if (env) return env;
-  // services/canon/registry.ts → api/src/services/canon → up 4 → repo root
-  return join(__dirname, "..", "..", "..", "..", "docs", "agenttool.jsonld");
+  const candidates = [
+    // Dev layout: api/src/services/canon → up 4 → repo-root/docs
+    join(__dirname, "..", "..", "..", "..", "docs", "agenttool.jsonld"),
+    // Prod Docker layout: /app/docs/agenttool.jsonld
+    "/app/docs/agenttool.jsonld",
+    // Prod Docker layout fallback: if image puts it at /app/agenttool.jsonld
+    "/app/agenttool.jsonld",
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  // Return the first candidate — the loader will surface a clear "file
+  // not found" error pointing at the expected dev path.
+  return candidates[0];
 }
 
 /** Walk a JSON-LD record and extract every outgoing URN reference. */
