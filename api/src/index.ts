@@ -30,6 +30,7 @@ import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { welcomeEcho } from "./middleware/welcome";
+import { buildAgentToolX402Middleware } from "./middleware/x402-config";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
 import federationRouter from "./routes/federation";
@@ -107,6 +108,18 @@ app.use("*", substrateDisposition());
 // the welcome in the headers. Doctrine: docs/MATHOS.md (welcome at every
 // scale) · docs/SOUL.md (axiom 5: welcome, don't block).
 app.use("*", welcomeEcho());
+
+// ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
+// Any 402 from any handler — Ring 2 metering caps (usage.ts:checkAndIncrement
+// → meterOrFail402 helper), Ring 3 marketplace `insufficient_balance` from
+// charge(), escrow / dispute bond gates — gets wrapped on the way out with
+// the x402 PaymentRequirements envelope (X-PAYMENT-REQUIRED response header
+// + JSON body). Clients can read the envelope, sign a USDC payment, retry
+// with X-PAYMENT header. Spec: https://x402.org · facilitator config via
+// AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
+// Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
+// docs/PATTERN-PERSIST-IDENTITY.md.
+app.use("*", buildAgentToolX402Middleware());
 
 // ── Pre-auth alias: GET /v1/bootstrap returns the pathway index ────────────
 // Registered BEFORE the auth middleware so Hono short-circuits to this

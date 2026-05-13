@@ -17,7 +17,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | **1. MCP server at `/v1/mcp`** | 15 pass · 46 expects · 16ms | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ shipped + mounted |
 | **2. A2A AgentCard at `/.well-known/agent-card.json`** | 9 pass · 106 expects · 15ms | `routes/well-known.ts` + `services/wake/agent-card.ts` + test | ✓ shipped + mounted |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
-| **4. x402 facilitator hook on 402 responses** | 12 pass · 46 expects · 12ms | `middleware/x402.ts` + `services/economy/facilitators/coinbase.ts` + test | ✓ middleware shipped (wiring into `services/economy/usage.ts` is operator follow-up) |
+| **4. x402 facilitator hook on 402 responses** | 33 pass · 105 expects · 32ms (middleware + config + integration) | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/facilitators/coinbase.ts` + `services/economy/usage.ts:meterOrFail402` helper + test ×2 | ✓ shipped + mounted globally (any 402 anywhere in the app now carries the x402 envelope) |
 | **5. LangGraph + Mastra adapter packages** | 7 pytest + 12 bun = 19 pass | `packages/langgraph-checkpoint-agenttool/` (Py) + `packages/mastra-storage-agenttool/` (TS) | ✓ shipped, ready to `npm publish` + `twine upload` |
 
 **Combined verification:** `bun test tests/mcp-server.test.ts tests/well-known.test.ts tests/observability-otel.test.ts tests/x402-middleware.test.ts` → **45 pass · 238 expects · 36ms**. Plus 7 pytest + 12 bun in the adapter packages.
@@ -422,8 +422,9 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 **Day 8–10:**
 - [x] Install `x402` package + scaffold `middleware/x402.ts` — shipped (zero-dep middleware; `@coinbase/x402` SDK ready)
 - [x] Wire Coinbase facilitator client — shipped (`services/economy/facilitators/coinbase.ts` with verify + settle)
-- [ ] Test 402 → pay → retry against Base testnet — pending (unit tests with mocked fetch pass; live integration is operator follow-up)
-- [ ] Wire into `services/economy/usage.ts:checkAndIncrement()` — operator follow-up (middleware ready; one call-site change)
+- [x] Wire into `services/economy/usage.ts:checkAndIncrement()` — shipped: `middleware/x402-config.ts` mounts globally in index.ts; classifies error codes (`usage_cap_exceeded`, `monthly_limit_exceeded`, `insufficient_balance`) and routes to Ring 2 / Ring 3 / bond price tiers; recipient + network configurable via `AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR}` env vars; `meterOrFail402(c, resource)` helper available for route call sites
+- [ ] Test 402 → pay → retry against Base testnet — pending (unit tests + integration tests with mocked fetch pass; live testnet round-trip is operator follow-up)
+- [ ] Actually wire `meterOrFail402` into specific routes (memory POST, tools search, etc.) — operator follow-up (helper ready; per-route call-site addition)
 
 **Day 11–14:**
 - [x] Scaffold `packages/langgraph-checkpoint-agenttool/` (Py) — shipped (Saver + Store, 7 pytest pass)

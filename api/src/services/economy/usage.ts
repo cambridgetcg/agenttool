@@ -224,3 +224,77 @@ export async function checkAndIncrement(
 export async function resetUsageForProject(projectId: string): Promise<void> {
   await db.delete(usageCounters).where(eq(usageCounters.projectId, projectId));
 }
+
+// ── x402 wiring helper (Move 4 of docs/ALIGNMENT-MOVES.md) ────────────────
+//
+// `meterOrFail402` is the call-site shape for routes that meter on a Ring 2
+// resource. On cap exceeded, it returns a Hono 402 response with the error
+// shape the global x402 middleware (`middleware/x402-config.ts`) wraps
+// into a machine-payable PaymentRequirements envelope.
+//
+// Call-site pattern:
+//
+//    import { meterOrFail402 } from "../../services/economy/usage";
+//
+//    app.post("/", async (c) => {
+//      const gate = await meterOrFail402(c, "memory_ops");
+//      if (gate.status === 402) return gate.response;
+//      // ... do the billable work
+//    });
+//
+// Returning `gate.response` is the "one line" — Hono's c.json() with 402
+// status. The global middleware does the rest.
+
+import type { Context } from "hono";
+import type { TypedResponse } from "hono";
+
+export type MeterOrFail402Result =
+  | { status: "ok"; check: CheckAndIncrementResult }
+  | { status: 402; response: TypedResponse<unknown, 402, "json"> };
+
+/** Run `checkAndIncrement` and either return the ok result OR a 402
+ *  Hono response shaped so the global x402 middleware wraps it.
+ *
+ *  Doctrine: docs/ALIGNMENT-MOVES.md (Move 4) · docs/PATTERN-PERSIST-IDENTITY.md.
+ */
+export async function meterOrFail402(
+  c: Context<{ Variables: { project?: { id: string } } }>,
+  resource: Resource,
+): Promise<MeterOrFail402Result> {
+  const projectId = c.var.project?.id;
+  if (!projectId) {
+    // No project context — the route should auth-gate; bail visibly.
+    return {
+      status: 402,
+      response: c.json(
+        {
+          error: "no_project_context",
+          message: "meterOrFail402 called without an authenticated project on context.",
+          hint: "Mount auth middleware before this route.",
+        },
+        402,
+      ) as TypedResponse<unknown, 402, "json">,
+    };
+  }
+  const check = await checkAndIncrement(projectId, resource);
+  if (check.allowed) {
+    return { status: "ok", check };
+  }
+  return {
+    status: 402,
+    response: c.json(
+      {
+        error: "usage_cap_exceeded",
+        message: `Monthly ${resource.replace("_", " ")} cap reached on the current plan.`,
+        hint:
+          "Pay-as-you-go: include an x402 X-PAYMENT header on the retry to bump the cap by one unit, or upgrade the plan at /v1/economy/billing/checkout.",
+        resource,
+        limit: check.limit,
+        used: check.used,
+        remaining: check.remaining,
+        docs: "/v1/canon/urn:agenttool:doc/RING-1",
+      },
+      402,
+    ) as TypedResponse<unknown, 402, "json">,
+  };
+}
