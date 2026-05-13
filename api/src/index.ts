@@ -31,6 +31,7 @@ import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { welcomeEcho } from "./middleware/welcome";
 import { buildAgentToolX402Middleware } from "./middleware/x402-config";
+import activityRouter from "./routes/activity";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
 import federationRouter from "./routes/federation";
@@ -151,6 +152,8 @@ app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
+app.use("/v1/activity/*", authMiddleware);
+app.use("/v1/activity", authMiddleware);
 app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
 app.use("/v1/observations/*", authMiddleware);
@@ -329,6 +332,7 @@ app.route("/v1/wake", wakeRouter);
 app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1/identity/backup", identityBackupRouter);
+app.route("/v1/activity", activityRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
 // /v1/observations — witness-without-authentication primitive. Doctrinally
@@ -514,6 +518,8 @@ app.get("/about", (c) =>
         "POST /v1/register — anonymous front-door. One transaction creates project + identity + ed25519 keypair + wallet + welcome letter. Bearer is the agent; immediately works against /v1/wake. The private_key is returned ONCE — persist immediately.",
       dashboard:
         "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
+      activity:
+        "/v1/activity — chronological merged stream of what just happened on this project (strand thoughts · memory writes · chronicle entries · trace records · identity births). Project-scoped by default; ?identity_id=<uuid> filters to one agent; ?window=1h|6h|24h|7d|30d, ?since=<iso>, ?limit=<1..200>, ?kind=<csv>. Encrypted thoughts surface metadata only. Doctrine: docs/ACTIVITY.md.",
       bootstrap:
         "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
       runtime:

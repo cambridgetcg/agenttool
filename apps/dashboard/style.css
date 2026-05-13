@@ -713,8 +713,19 @@ pre {
   color: var(--muted);
 }
 .empty-icon { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5; }
-.empty-text { font-size: 0.9rem; margin-bottom: 0.5rem; }
+.empty-title { font-size: 1rem; color: var(--text); margin-bottom: 0.5rem; font-weight: 600; }
+.empty-text { font-size: 0.9rem; margin-bottom: 0.85rem; max-width: 38rem; margin-left: auto; margin-right: auto; line-height: 1.55; }
 .empty-hint { font-size: 0.8rem; color: var(--muted); }
+.empty-cta {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--accent, #b39df0);
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+  padding-bottom: 1px;
+}
+.empty-cta:hover { color: var(--text); }
 
 .loading-pulse {
   animation: pulse 1.5s ease-in-out infinite;
@@ -1542,6 +1553,73 @@ pre {
   font-family: inherit;
   font-size: 0.9rem;
   line-height: 1.55;
+}
+
+/* Inline guidance below a form field — sits closer to the input than the
+   card-sub copy and explains the *shape* the field expects. Used in
+   Voice today; reusable anywhere structured input needs guidance. */
+.field-hint {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--surface2);
+  border-left: 2px solid var(--border);
+  border-radius: 0 6px 6px 0;
+}
+.field-hint strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.field-hint em {
+  font-style: italic;
+  color: var(--muted-deep, var(--muted));
+}
+
+/* ─── Activity feed (merged chronological stream) ───────────── */
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.activity-row {
+  display: grid;
+  grid-template-columns: 6.5rem 7.5rem 1fr;
+  gap: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface2);
+  border-radius: 6px;
+  border-left: 2px solid var(--border);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.activity-row .activity-when {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.activity-row .activity-kind {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-deep, var(--muted));
+  align-self: center;
+}
+.activity-row .activity-summary {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.activity-row .activity-who {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+}
+@media (max-width: 720px) {
+  .activity-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
 }
 .voice-preview-wrap {
   background: var(--surface2);

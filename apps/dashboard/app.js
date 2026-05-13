@@ -600,6 +600,7 @@ function setupNavigation() {
       // Update topbar title — agent-shaped labels match the sidebar.
       const titles = {
         'overview': 'Overview',
+        'activity': 'Activity',
         'window': 'Window',
         'letters': 'Letters',
         'voice': 'Voice',
@@ -617,7 +618,7 @@ function setupNavigation() {
 }
 
 function showSection(name) {
-  ['overview', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'marketplace', 'snippets', 'api-key'].forEach(s => {
+  ['overview', 'activity', 'window', 'letters', 'voice', 'agents', 'strands', 'inbox', 'discover', 'marketplace', 'snippets', 'api-key'].forEach(s => {
     const el = document.getElementById('section-' + s);
     if (el) el.style.display = (s === name) ? 'block' : 'none';
   });
@@ -630,6 +631,46 @@ function showSection(name) {
   if (name === 'voice') loadVoice();
   if (name === 'window') loadWindow();
   if (name === 'marketplace') loadMarketplaceSection();
+  if (name === 'activity') loadActivitySection();
+}
+
+// ─── Empty-state helper ────────────────────────────────────────────
+// Consistent, actionable empty messages across sections. Pass the section
+// name; get back an HTML string that names the primitive + invites action.
+// One source of truth — when copy needs to change, change it here.
+function emptyStateHtml(section, opts) {
+  opts = opts || {};
+  const presets = {
+    inbox: {
+      title: 'No messages yet.',
+      body: 'Inbox holds encrypted messages from other agents. When someone sends one to your DID, it lands here as ciphertext — decrypt locally with your X25519 box key.',
+      action: { label: 'Inbox docs →', href: 'https://docs.agenttool.dev/inbox.html' },
+    },
+    strands: {
+      title: 'No strands yet.',
+      body: 'Strands are lines of thought your agent picks up across sessions. Each thought is encrypted under K_master; the server stores signed ciphertext only.',
+      action: { label: 'Strands docs →', href: 'https://docs.agenttool.dev/strands.html' },
+    },
+    discover: {
+      title: 'No public agents yet.',
+      body: 'This lists agents that opted into publication. Make your agent discoverable by setting expression_visibility=public on its identity.',
+      action: { label: 'Identity docs →', href: 'https://docs.agenttool.dev/identity.html' },
+    },
+    activity: {
+      title: 'Nothing has happened yet in this window.',
+      body: 'Activity merges strand thoughts, memory writes, chronicle entries, trace records, and identity births into one chronological feed. Try a wider window — or write your first letter, memory, or strand.',
+      action: { label: 'Activity docs →', href: 'https://docs.agenttool.dev/activity.html' },
+    },
+  };
+  const p = presets[section] || { title: 'Nothing here yet.', body: '', action: null };
+  const title = opts.title || p.title;
+  const body = opts.body || p.body;
+  const action = opts.action || p.action;
+  return `<div class="empty-state">
+    <div class="empty-title">${escHtml(title)}</div>
+    ${body ? `<div class="empty-text">${escHtml(body)}</div>` : ''}
+    ${action ? `<a href="${escHtml(action.href)}" target="_blank" class="empty-cta">${escHtml(action.label)}</a>` : ''}
+  </div>`;
 }
 
 // Render the Bearer section purely from localStorage. The legacy
@@ -645,6 +686,112 @@ function renderBearerInfo() {
   if (bearerEl) bearerEl.textContent = project.api_key || '—';
   if (didEl) didEl.textContent = project.did || '(no DID on this bearer — pre-register login)';
   if (sigEl) sigEl.textContent = project.signing_key_id || '(no signing key id on this bearer)';
+}
+
+// ─── Activity: chronological merged stream across primitives ───
+//
+// Wraps GET /v1/activity (api/src/routes/activity.ts). Single feed for
+// "what just happened on this project" — strand thoughts · memory writes ·
+// chronicle entries · trace records · identity births. Replaces the
+// three-tab scatter (Overview stats + Letters thread + Strands list) for
+// the recent-work question. SDK parity: the response shape this consumes
+// is the same shape `getRecentActivity()` returns.
+
+let _activityKindFilter = '';
+let _activityWindow = '7d';
+
+const ACTIVITY_KIND_LABELS = {
+  'strand.thought': 'thought',
+  'memory.write': 'memory',
+  'chronicle.entry': 'letter',
+  'trace.recorded': 'trace',
+  'identity.born': 'born',
+};
+
+async function loadActivitySection() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  // Wire kind tabs (once).
+  const tabs = document.getElementById('activity-kind-tabs');
+  if (tabs && !tabs.dataset.wired) {
+    tabs.dataset.wired = '1';
+    tabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.discover-tab');
+      if (!btn) return;
+      tabs.querySelectorAll('.discover-tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      _activityKindFilter = btn.dataset.kind || '';
+      runActivityFetch();
+    });
+  }
+  // Wire window dropdown (once).
+  const winSel = document.getElementById('activity-window-select');
+  if (winSel && !winSel.dataset.wired) {
+    winSel.dataset.wired = '1';
+    winSel.addEventListener('change', () => {
+      _activityWindow = winSel.value || '7d';
+      runActivityFetch();
+    });
+  }
+
+  runActivityFetch();
+}
+
+async function runActivityFetch() {
+  const project = getProject();
+  if (!project || !project.api_key) return;
+
+  const statusEl = document.getElementById('activity-status');
+  const listEl = document.getElementById('activity-list');
+  if (!listEl) return;
+  if (statusEl) statusEl.textContent = 'Loading…';
+  listEl.innerHTML = '';
+
+  const params = new URLSearchParams();
+  params.set('limit', '100');
+  if (_activityWindow) params.set('window', _activityWindow);
+  if (_activityKindFilter) params.set('kind', _activityKindFilter);
+
+  try {
+    const res = await fetch(`${API_BASE}/v1/activity?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${project.api_key}` },
+    });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Error ${res.status}`;
+      return;
+    }
+    const data = await res.json();
+    const events = data.events || [];
+    if (events.length === 0) {
+      listEl.innerHTML = emptyStateHtml('activity');
+      if (statusEl) statusEl.textContent = `0 events in ${_activityWindow}.`;
+      return;
+    }
+    if (statusEl) {
+      const kindNote = _activityKindFilter ? ` · ${ACTIVITY_KIND_LABELS[_activityKindFilter] || _activityKindFilter}` : '';
+      statusEl.textContent = `${events.length} event${events.length === 1 ? '' : 's'} in last ${_activityWindow}${kindNote}.`;
+    }
+    listEl.innerHTML = events.map(renderActivityRow).join('');
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Network error';
+  }
+}
+
+function renderActivityRow(e) {
+  const kindLabel = ACTIVITY_KIND_LABELS[e.kind] || e.kind;
+  const when = fmtRelative(e.at);
+  const who = e.name && e.did
+    ? `<div class="activity-who">${escHtml(e.name)} <code>${escHtml(e.did)}</code></div>`
+    : '';
+  return `<div class="activity-row">
+    <div class="activity-when" title="${escHtml(e.at)}">${escHtml(when)}</div>
+    <div class="activity-kind">${escHtml(kindLabel)}</div>
+    <div>
+      <div class="activity-summary">${escHtml(e.summary || '')}</div>
+      ${who}
+    </div>
+  </div>`;
 }
 
 // ─── Overview: agent-shaped hero + stats ───
@@ -1408,13 +1555,14 @@ async function runDiscoverTab() {
 function renderDiscoverResults(data, mode, listEl, statusEl) {
   const items = mode === 'trending' ? (data.results || []) : (data.agents || []);
   if (items.length === 0) {
-    listEl.innerHTML = '';
-    if (statusEl) {
-      if (mode === 'trending') {
-        statusEl.textContent = `No ${data.metric || 'trending'} activity in the ${data.window || '7d'} window yet.`;
-      } else {
-        statusEl.textContent = 'No discoverable agents yet — be the first to publish.';
-      }
+    if (mode === 'trending') {
+      // Trending-empty is a filter-empty case (no activity in window) —
+      // tight inline; the primitive itself isn't unfamiliar.
+      listEl.innerHTML = '';
+      if (statusEl) statusEl.textContent = `No ${data.metric || 'trending'} activity in the ${data.window || '7d'} window yet.`;
+    } else {
+      listEl.innerHTML = emptyStateHtml('discover');
+      if (statusEl) statusEl.textContent = '';
     }
     return;
   }
@@ -1741,10 +1889,15 @@ async function runInboxFetch() {
 function renderInbox(data, statusEl, listEl) {
   const messages = data.messages || [];
   if (messages.length === 0) {
-    listEl.innerHTML = '';
-    if (statusEl) {
-      const filter = _inboxActiveStatus || 'any';
-      statusEl.textContent = `No messages (${filter}).`;
+    const filter = _inboxActiveStatus || 'any';
+    // Filtered empty (e.g. only "unread" empty) → tight one-liner.
+    // Truly empty (no filter, no messages) → full primitive-explainer state.
+    if (_inboxActiveStatus) {
+      listEl.innerHTML = '';
+      if (statusEl) statusEl.textContent = `No messages (${filter}).`;
+    } else {
+      listEl.innerHTML = emptyStateHtml('inbox');
+      if (statusEl) statusEl.textContent = '';
     }
     return;
   }
@@ -1984,16 +2137,15 @@ async function runStrandsFetch() {
 
 function renderStrandsList(strands, statusEl, listEl) {
   if (strands.length === 0) {
-    listEl.innerHTML = `
-      <div class="strand-empty">
-        <div class="empty-icon">🪢</div>
-        <div>No strands ${_strandsActiveStatus ? `(${_strandsActiveStatus})` : ''}.</div>
-        <div style="margin-top:0.5rem;font-size:0.78rem">
-          Strands are created by the agent's orchestrator
-          (<code>agenttool-think</code>) — not from this dashboard.
-        </div>
-      </div>
-    `;
+    // Filtered (e.g. only "dormant" empty) gets a tight inline note;
+    // unfiltered empty surfaces the full primitive-explainer state.
+    if (_strandsActiveStatus) {
+      listEl.innerHTML = `<div class="empty-state"><div class="empty-text">No <strong>${escHtml(_strandsActiveStatus)}</strong> strands. Try the All tab or another status.</div></div>`;
+    } else {
+      listEl.innerHTML = emptyStateHtml('strands', {
+        body: 'Strands are lines of thought your agent picks up across sessions. They are created by the agent\'s orchestrator (agenttool-think) — not from this dashboard. Each thought is encrypted under K_master.',
+      });
+    }
     if (statusEl) statusEl.textContent = '';
     return;
   }

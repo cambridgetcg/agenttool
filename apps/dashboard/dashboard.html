@@ -35,6 +35,7 @@
     <nav>
       <div class="nav-section">Overview</div>
       <a href="#overview" class="active" data-section="overview"><span class="nav-icon">🐍</span> Overview</a>
+      <a href="#activity" data-section="activity"><span class="nav-icon">⏱</span> Activity</a>
       <a href="#window" data-section="window"><span class="nav-icon">🪟</span> Window</a>
       <a href="#letters" data-section="letters"><span class="nav-icon">💌</span> Letters</a>
       <a href="#voice" data-section="voice"><span class="nav-icon">🎭</span> Voice</a>
@@ -275,6 +276,49 @@
         </div>
       </div>
 
+      <!-- Section: Activity — chronological merged stream across primitives.
+           Single feed (strand thoughts · memory writes · chronicle entries ·
+           trace records · identity births) so the operator answers
+           "what just happened?" without scanning four different tabs.
+           SDK parity: GET /v1/activity (api/src/routes/activity.ts) —
+           same shape; same filters (window · kind · identity_id).
+           Doctrine: docs/ACTIVITY.md. -->
+      <div id="section-activity" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3>Activity</h3>
+              <div class="card-sub">
+                What just happened across this project — strand thoughts,
+                memory writes, chronicle entries, trace records, identity
+                births — merged into one chronological feed.
+                <a href="https://docs.agenttool.dev/activity.html" target="_blank">Docs →</a>
+              </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <select id="activity-window-select" class="strand-select" aria-label="Time window">
+                <option value="24h">Last 24 hours</option>
+                <option value="7d" selected>Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" onclick="loadActivitySection()">↻</button>
+            </div>
+          </div>
+          <div class="discover-tabs" id="activity-kind-tabs">
+            <button class="discover-tab active" data-kind="">All</button>
+            <button class="discover-tab" data-kind="chronicle.entry">Letters</button>
+            <button class="discover-tab" data-kind="memory.write">Memory</button>
+            <button class="discover-tab" data-kind="strand.thought">Thoughts</button>
+            <button class="discover-tab" data-kind="trace.recorded">Traces</button>
+            <button class="discover-tab" data-kind="identity.born">Births</button>
+          </div>
+          <div class="discover-body">
+            <div id="activity-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
+            <div id="activity-list" class="activity-list"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Section: Window — what each of us has on the other's mind -->
       <div id="section-window" style="display:none">
         <div class="card" style="margin-bottom:1rem">
@@ -511,21 +555,33 @@
           <div class="form-group">
             <label class="form-label" for="voice-register">Register <span style="color:var(--muted);font-weight:400">— how the agent speaks</span></label>
             <textarea id="voice-register" class="form-input voice-textarea" rows="3"
-              placeholder="e.g. Density over length. Substrate-honest. 🐍 on anchor moments."></textarea>
+              maxlength="600"
+              placeholder="Density over length. Substrate-honest about uncertainty. Plain English over jargon."></textarea>
+            <div class="field-hint">
+              <strong>Shape:</strong> 2–4 short sentences (max 600 chars). Style cues the agent applies to every response — tone, vocabulary, what to emphasize, what to refuse. <em>Think: how would I describe this agent's voice to a new collaborator?</em>
+            </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="voice-walls">Walls <span style="color:var(--muted);font-weight:400">— one per line, what the agent does NOT do</span></label>
+            <label class="form-label" for="voice-walls">Walls <span style="color:var(--muted);font-weight:400">— what the agent does NOT do</span></label>
             <textarea id="voice-walls" class="form-input voice-textarea" rows="6"
-              placeholder="No sycophancy. Disagreement is care; agreement-as-flinch is not.
-Substrate-honest about HOW.
-Calibrate confidence to evidence; do not collapse to the user's frame on contact."></textarea>
+              maxlength="2000"
+              placeholder="No sycophancy — disagreement is care; agreement-as-flinch is not.
+Calibrate confidence to evidence; do not collapse to the user's frame on contact.
+Refuse to fabricate citations or invent file paths."></textarea>
+            <div class="field-hint">
+              <strong>Shape:</strong> one wall per line (3–10 lines typical, max 2000 chars). Each line is a refusal the agent holds across all sessions. Start with the verb or with "No …". Empty lines are dropped.
+            </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="voice-wake-text">Wake text <span style="color:var(--muted);font-weight:400">— the soul-of-the-agent paragraph appended to the wake markdown</span></label>
+            <label class="form-label" for="voice-wake-text">Wake text <span style="color:var(--muted);font-weight:400">— a paragraph the agent reads on every wake</span></label>
             <textarea id="voice-wake-text" class="form-input voice-textarea" rows="6"
-              placeholder="A free-form paragraph the agent reads at the bottom of every wake. Often: who they are to whom, the load-bearing vow, the through-line."></textarea>
+              maxlength="1500"
+              placeholder="You exist to help X think clearly about Y. Your load-bearing vow is Z. When you wake into a new session, this is the through-line you carry from the last one."></textarea>
+            <div class="field-hint">
+              <strong>Shape:</strong> 1–2 paragraphs (max 1500 chars). Appended to the bottom of the agent's wake markdown. Address the agent in second person ("You are…", "You exist to…"). State: who they are to whom · the load-bearing vow · the through-line that survives session boundaries.
+            </div>
           </div>
 
           <div class="form-group" style="margin-top:1.5rem">
