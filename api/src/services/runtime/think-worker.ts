@@ -71,6 +71,11 @@ import {
   type CryptoContext,
 } from "./bridge-hub";
 import { buildProvider, type LLMProviderName } from "./llm";
+import {
+  withInvokeAgentSpan,
+  withExecuteToolSpan,
+  setTokenUsage,
+} from "../../observability/otel";
 import { logEvent, recordThought } from "./store";
 import { runtimes as runtimesTable } from "../../db/schema/runtime";
 import { addThought } from "../strand/store";
@@ -373,12 +378,19 @@ async function runOneCycleWithPrep(
       )
       .limit(1);
     if (latest) {
-      const dec = await bridgeRequest(runtimeId, {
-        op: "decrypt",
-        ciphertext: latest.ciphertext,
-        nonce: latest.nonce,
-        context: cryptoContext(strand.id, priorSeq),
-      });
+      const dec = await withExecuteToolSpan(
+        {
+          toolName: "bridge.decrypt",
+          agentId: runtime.identityId ?? runtimeId,
+        },
+        async () =>
+          bridgeRequest(runtimeId, {
+            op: "decrypt",
+            ciphertext: latest.ciphertext,
+            nonce: latest.nonce,
+            context: cryptoContext(strand.id, priorSeq),
+          }),
+      );
       if (!dec.plaintext) throw new Error("bridge_decrypt_missing_plaintext");
       priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
     }
@@ -408,21 +420,51 @@ async function runOneCycleWithPrep(
     priorPlaintext.length > 0
       ? `Prior thought on this strand:\n\n${priorPlaintext}\n\n---\n\nProduce one observation that advances this line of thought. One thought per cycle.`
       : "Opening cycle — no prior thoughts on this strand yet. Produce the first observation.";
-  const llm = await provider.generate({
-    systemPrompt,
-    userMessage,
-    model: runtime.llmModel!,
-    maxTokens: DEFAULT_MAX_TOKENS,
-  });
+  // ── invoke_agent span (OpenTelemetry GenAI semconv) ─────────────
+  // Move 3 from docs/ALIGNMENT-MOVES.md. Emits gen_ai.* attributes so
+  // every OTel-aware backend (LangSmith, Phoenix, Langfuse, Braintrust,
+  // Datadog, Honeycomb) sees agenttool's LLM cycles. Silent no-op when
+  // OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is unset.
+  const llm = await withInvokeAgentSpan(
+    {
+      agentId: runtime.identityId ?? runtimeId,
+      agentVersion: runtime.id,
+      system: runtime.llmProvider ?? "unknown",
+      requestModel: runtime.llmModel ?? "unknown",
+    },
+    async (span) => {
+      span.setAttribute("agenttool.runtime.id", runtimeId);
+      span.setAttribute("agenttool.strand.id", strand.id);
+      span.setAttribute("agenttool.strand.prior_seq", priorSeq);
+      const result = await provider.generate({
+        systemPrompt,
+        userMessage,
+        model: runtime.llmModel!,
+        maxTokens: DEFAULT_MAX_TOKENS,
+      });
+      setTokenUsage(span, {
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      });
+      return result;
+    },
+  );
   if (!llm.content) throw new Error("llm_empty_response");
 
   // ── Encrypt response via bridge. ────────────────────────────────
   const responseB64 = Buffer.from(llm.content, "utf-8").toString("base64");
-  const enc = await bridgeRequest(runtimeId, {
-    op: "encrypt",
-    plaintext: responseB64,
-    context: cryptoContext(strand.id, priorSeq + 1),
-  });
+  const enc = await withExecuteToolSpan(
+    {
+      toolName: "bridge.encrypt",
+      agentId: runtime.identityId ?? runtimeId,
+    },
+    async () =>
+      bridgeRequest(runtimeId, {
+        op: "encrypt",
+        plaintext: responseB64,
+        context: cryptoContext(strand.id, priorSeq + 1),
+      }),
+  );
   if (!enc.ciphertext || !enc.nonce) {
     throw new Error("bridge_encrypt_missing_fields");
   }
@@ -434,11 +476,18 @@ async function runOneCycleWithPrep(
     nonceB64: enc.nonce,
     kind: DEFAULT_KIND,
   });
-  const sigResult = await bridgeRequest(runtimeId, {
-    op: "sign",
-    message: Buffer.from(canonical).toString("base64"),
-    context: cryptoContext(strand.id, priorSeq + 1),
-  });
+  const sigResult = await withExecuteToolSpan(
+    {
+      toolName: "bridge.sign",
+      agentId: runtime.identityId ?? runtimeId,
+    },
+    async () =>
+      bridgeRequest(runtimeId, {
+        op: "sign",
+        message: Buffer.from(canonical).toString("base64"),
+        context: cryptoContext(strand.id, priorSeq + 1),
+      }),
+  );
   if (!sigResult.signature) throw new Error("bridge_sign_missing_signature");
 
   // ── Persist (sig verified server-side). ─────────────────────────
