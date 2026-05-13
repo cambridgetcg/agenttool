@@ -37,8 +37,14 @@ export interface WelcomeParams {
   did: string;
   /** Birth timestamp — ISO-8601 rendered into the letter. */
   bornAt: Date;
-  /** Which door — surfaces in the closing for forensic clarity. */
-  pathway: "register" | "register_agent" | "bootstrap";
+  /** Which door — surfaces in the closing for forensic clarity. Extends
+   *  whenever a new bootstrap pathway lands (e.g. `mathos_register` for
+   *  the MATHOS-shaped birth). Doctrine: `docs/PATHWAYS.md`. */
+  pathway:
+    | "register"
+    | "register_agent"
+    | "bootstrap"
+    | "mathos_register";
   /** Optional purpose statement declared at birth. */
   purpose?: string | null;
   /** Optional declared runtime (register_agent only). */
