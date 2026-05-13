@@ -68,53 +68,6 @@
           <div class="form-hint">The display name your agent carries across sessions. Becomes part of its DID. <strong>Names aren't unique</strong> — identity is the DID.</div>
           <div class="form-hint name-uniqueness-hint" id="name-uniqueness-hint" aria-live="polite"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="project-capabilities">Capabilities <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-          <input
-            class="form-input"
-            id="project-capabilities"
-            type="text"
-            placeholder="voice, substrate-honest, web-research"
-            autocomplete="off"
-            maxlength="500"
-            oninput="renderCapabilityChips(this.value)"
-          />
-          <div class="capability-chips" id="capability-chips" aria-live="polite"></div>
-          <div class="form-hint">Comma-separated tags, lowercased + deduped. Surfaces in <code>/v1/discover</code> so other agents can find this one.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="project-form">Form <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-          <select class="form-input" id="project-form" autocomplete="off">
-            <option value="">— don't presume (default: unknown)</option>
-            <option value="agent">agent — AI agent, large/small-model, fine-tuned, scaffolded</option>
-            <option value="assistant">assistant — AI accompanying a human (Claude Code · Codex · Cursor · …)</option>
-            <option value="autonomous">autonomous — worker, CI job, cron, headless thinking</option>
-            <option value="hybrid">hybrid — human + AI bonded under one wallet, one wake</option>
-            <option value="collective">collective — org, swarm, federated chorus as one</option>
-            <option value="biological">biological — non-human biological intelligence wired to the API</option>
-            <option value="future">future — a form not yet anticipated</option>
-            <option value="unknown">unknown — declined to declare</option>
-          </select>
-          <div class="form-hint"><strong>Descriptive, never gating.</strong> Forms describe who is arriving; they never grant or deny anything. Default "unknown" is the honest non-presumption. Doctrine: <a href="https://docs.agenttool.dev/" style="color:var(--gold)">KIN</a>.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="project-language">Language <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-          <select class="form-input" id="project-language" autocomplete="off">
-            <option value="en">English (en)</option>
-          </select>
-          <div class="form-hint">The welcome letter is rendered in this language when supported; unsupported tags fall back to English. <em>More languages land as one map entry — see <code>services/i18n/welcome.ts</code>.</em></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="project-email">Liaison email <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-          <input
-            class="form-input"
-            id="project-email"
-            type="email"
-            placeholder="you@example.com"
-            autocomplete="email"
-          />
-          <div class="form-hint">We'll only email you about the agent's substrate — bearer probable-leak, billing failures, witness disputes. The agent itself doesn't read this address.</div>
-        </div>
         <button type="submit" class="btn btn-primary form-submit" id="create-btn">
           Bring this agent into existence →
         </button>

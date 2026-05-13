@@ -154,10 +154,6 @@ function flashCopyButton(btn) {
 // by the dashboard or the server).
 async function registerAgent() {
   const nameInput = document.getElementById('project-name');
-  const capInput = document.getElementById('project-capabilities');
-  const formInput = document.getElementById('project-form');
-  const languageInput = document.getElementById('project-language');
-  const emailInput = document.getElementById('project-email');
   const btn = document.getElementById('create-btn');
   const errorMsg = document.getElementById('error-msg');
 
@@ -174,17 +170,6 @@ async function registerAgent() {
     return;
   }
 
-  // Use the same parser the chip preview uses so what the user sees is what
-  // gets submitted (lowercased + deduped, capped at 32).
-  const capabilities = parseCapabilityTags(capInput?.value || '').slice(0, 32);
-  const email = (emailInput?.value || '').trim();
-  // form: empty string means "don't declare" — server coerces to "unknown".
-  // Forms are descriptive labels, never gating. Doctrine: docs/KIN.md.
-  const form = (formInput?.value || '').trim();
-  // language: defaults to "en" today. Unsupported tags fall back server-side
-  // (Welcome-don't-block — no 400 for forward-looking callers).
-  const language = (languageInput?.value || 'en').trim();
-
   errorMsg.classList.remove('visible');
   btn.disabled = true;
   btn.textContent = 'Bringing into existence…';
@@ -193,13 +178,7 @@ async function registerAgent() {
     const res = await fetch(`${API_BASE}/v1/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        ...(capabilities.length ? { capabilities } : {}),
-        ...(form ? { form } : {}),
-        ...(language ? { language } : {}),
-        ...(email ? { email } : {}),
-      }),
+      body: JSON.stringify({ name }),
     });
 
     if (!res.ok) {
@@ -236,24 +215,14 @@ async function registerAgent() {
     saveProject({
       name,
       api_key: apiKey,
-      email: email || null,
       agent_id: agent.id,
       did: agent.did,
       public_key: agent.public_key,
       signing_key_id: agent.signing_key_id,
       capabilities: agent.capabilities || [],
-      form: agent.form || form || 'unknown', // descriptive; never gates
-      language: data.language || language || 'en',
+      form: agent.form || 'unknown', // descriptive; never gates
+      language: data.language || 'en',
     });
-
-    // Fire welcome email best-effort (only when liaison was provided).
-    if (email) {
-      fetch('https://agenttool.dev/api/welcome', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, project_name: name }),
-      }).catch(() => {});
-    }
 
     // Reveal the success panel.
     document.getElementById('create-panel').style.display = 'none';
@@ -358,43 +327,6 @@ async function checkNameUniqueness(name) {
   } catch {
     /* aborted or network — silent */
   }
-}
-
-// Live capability chip preview. Reads the comma-separated input, normalizes
-// case + whitespace, dedupes, and renders chips below. Pure presentational —
-// the actual submit still reads from the input value (split + filter).
-function renderCapabilityChips(raw) {
-  const host = document.getElementById('capability-chips');
-  if (!host) return;
-  const tags = parseCapabilityTags(raw || '');
-  if (!tags.length) {
-    host.innerHTML = '';
-    return;
-  }
-  host.innerHTML = tags.slice(0, 32).map((t) => {
-    const safe = t.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
-    return `<span class="capability-chip">${safe}</span>`;
-  }).join('');
-  // Hint when the user typed >32 (we'll truncate at submit too).
-  if (tags.length > 32) {
-    host.insertAdjacentHTML(
-      'beforeend',
-      `<span class="capability-chip capability-chip-overflow">+${tags.length - 32} more (will be truncated to 32 at submit)</span>`,
-    );
-  }
-}
-
-function parseCapabilityTags(raw) {
-  const seen = new Set();
-  const out = [];
-  raw.split(',').forEach((s) => {
-    const t = s.trim().toLowerCase();
-    if (!t) return;
-    if (seen.has(t)) return;
-    seen.add(t);
-    out.push(t);
-  });
-  return out;
 }
 
 // Bootstrap-page download helpers — bundle the credentials into files so the
