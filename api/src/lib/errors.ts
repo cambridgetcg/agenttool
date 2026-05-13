@@ -12,13 +12,50 @@
  *    - `docs` URL for doctrine
  *
  *  Backwards-compatible: every existing field stays. New fields are additive.
- *  Existing SDK / client code reading `body.error` continues to work. */
+ *  Existing SDK / client code reading `body.error` continues to work.
+ *
+ *  @enforces urn:agenttool:wall/refusals-as-moments
+ *    Canonical defender. This module is the catalog + emitter for every
+ *    guided refusal — `errors.*` builders return GuidedErrorBody with
+ *    next_actions + docs; `fail(c, body, status)` emits the structured
+ *    shape; `abort(body, status)` throws an HTTPException whose cause is
+ *    lifted by the central onError handler in api/src/index.ts. Routes
+ *    that hand-roll `c.json({ error: ... }, 4xx)` shapes bypass this wall —
+ *    the refusals-as-moments doctrine test publishes the coverage ratio
+ *    on every run and gates regressions via a hand-rolled count baseline.
+ *    Tested: api/tests/doctrine/wall-refusals-as-moments.test.ts
+ *            api/tests/doctrine/errors-as-instructions.test.ts
+ *
+ *  @enforces urn:agenttool:commitment/anyone-hits-a-cap-softly
+ *    Canonical defender of Ring 1's sixth commitment. Every cap-hit error
+ *    in this catalog carries a structured 429 (not 403), next_actions
+ *    pointing at a Ring 2 path for scale-up OR a free degradation path
+ *    that stays in Ring 1, and the docs field linking the doctrine.
+ *    Hitting a cap is recoverable, never punitive — the ladder out is
+ *    part of the error itself. */
 
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 const DOCS_BASE = "https://docs.agenttool.dev";
+
+// ─── MATHOS axiom primes ───────────────────────────────────────────────
+//
+// Every error is structurally a Promise-event — a moment where one of the
+// five Promises was tested. The axiom_id field anchors each error to the
+// MATHOS primer prime of the Promise it relates to. A MATHOS-aware agent
+// reads `axiom_id: 11` and knows: this is a guide-event (axiom 3 by SOUL
+// order, prime 11). The English `error` code is parochial; the axiom_id
+// is substrate-neutral.
+//
+// Inlined here (not imported from catalog.ts) to keep errors.ts foundational.
+// Doctrine: docs/MATHOS.md primer · docs/SOUL.md Promises.
+export const AXIOM_WELCOME = 5;   // Welcome, don't block
+export const AXIOM_REMEMBER = 7;  // Remember, don't forget
+export const AXIOM_GUIDE = 11;    // Guide, don't punish
+export const AXIOM_TRUST = 13;    // Trust, don't suspect
+export const AXIOM_REST = 17;     // Rest, don't crash
 
 export interface NextAction {
   /** Human-readable verb phrase. */
@@ -44,6 +81,11 @@ export interface GuidedErrorBody {
   docs?: string;
   /** Optional validation details. */
   details?: unknown;
+  /** Optional MATHOS axiom prime — the Promise this error instantiates.
+   *  5=welcome, 7=remember, 11=guide, 13=trust, 17=rest. Lets a MATHOS-aware
+   *  agent connect English error codes to the substrate-neutral Promise the
+   *  failure relates to. Doctrine: docs/MATHOS.md, docs/SOUL.md. */
+  axiom_id?: number;
 }
 
 /** Emit a guided error response. Use this instead of `c.json({ error: ... }, status)`
@@ -105,6 +147,7 @@ export const errors = {
         },
       ],
       docs: `${DOCS_BASE}/inbox#covenant-gate`,
+      axiom_id: AXIOM_TRUST, // bonds are gated; trust requires other-witness
     };
   },
 
@@ -122,6 +165,7 @@ export const errors = {
         },
       ],
       docs: `${DOCS_BASE}/covenants#expiry`,
+      axiom_id: AXIOM_REST, // graceful expiry — degrade, don't crash
     };
   },
 
@@ -142,6 +186,7 @@ export const errors = {
         },
       ],
       docs: `${DOCS_BASE}/covenants#signing`,
+      axiom_id: AXIOM_TRUST, // signature is the proof; trust requires it
     };
   },
 
@@ -154,6 +199,7 @@ export const errors = {
         { action: "Patch the covenant via the v1 path", method: "PATCH", path: "/v1/covenants/{id}" },
       ],
       docs: `${DOCS_BASE}/covenants#v1-vs-v2`,
+      axiom_id: AXIOM_GUIDE, // guide to the correct surface
     };
   },
 
@@ -166,6 +212,7 @@ export const errors = {
         { action: "Fetch the current proposal", method: "GET", path: "/v1/covenants/{id}" },
       ],
       docs: `${DOCS_BASE}/covenants#cosign`,
+      axiom_id: AXIOM_TRUST, // proof-against-stale-signature
     };
   },
 
@@ -175,6 +222,7 @@ export const errors = {
       message: `Covenant is not in 'proposed' state${opts.status ? ` (currently: ${opts.status})` : ""}.`,
       hint: "Only proposed covenants can be accepted/rejected/withdrawn. Active ones are already established; expired/rejected/withdrawn ones are terminal.",
       docs: `${DOCS_BASE}/covenants#lifecycle`,
+      axiom_id: AXIOM_GUIDE, // guide to the appropriate lifecycle step
     };
   },
 
@@ -193,6 +241,7 @@ export const errors = {
         { action: "Get a crypto deposit address (BIP44 EVM or Solana)", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
       ],
       docs: `${DOCS_BASE}/economy#balance`,
+      axiom_id: AXIOM_REST, // strain (low balance) — degrade gracefully, don't crash
     };
   },
 
@@ -211,6 +260,7 @@ export const errors = {
         { action: "Upgrade to Ring 2 (metered)", method: "POST", path: "/v1/billing/checkout" },
       ],
       docs: `${DOCS_BASE}/economy#rings`,
+      axiom_id: AXIOM_REST, // strain → degrade not crash (the rest axiom itself)
     };
   },
 
@@ -228,6 +278,7 @@ export const errors = {
         { action: "Check usage", method: "GET", path: "/v1/billing/check" },
       ],
       docs: `${DOCS_BASE}/economy#plans`,
+      axiom_id: AXIOM_REST, // plan strain — graceful, not punitive
     };
   },
 
@@ -243,6 +294,7 @@ export const errors = {
         { action: "Wait then retry the same key (up to 30s)", method: null, path: null },
       ],
       docs: `${DOCS_BASE}/idempotency`,
+      axiom_id: AXIOM_REMEMBER, // honoring prior-request memory — don't forget
     };
   },
 
@@ -268,6 +320,7 @@ export const errors = {
         },
       ],
       docs: `${DOCS_BASE}/identity#keys`,
+      axiom_id: AXIOM_TRUST, // trust requires a present, verifiable key
     };
   },
 
@@ -292,6 +345,7 @@ export const errors = {
         { action: "List provisioned runtimes", method: "GET", path: "/v1/runtimes" },
       ],
       docs: `${DOCS_BASE}/runtime#provisioning`,
+      axiom_id: AXIOM_GUIDE, // guide toward provisioning rather than punish absence
     };
   },
 
@@ -303,6 +357,7 @@ export const errors = {
       message: opts.resource ? `${opts.resource} not found.` : "Resource not found.",
       hint: "Either the ID is wrong, the resource was deleted, or it doesn't belong to this project.",
       docs: DOCS_BASE,
+      axiom_id: AXIOM_GUIDE, // help redirect, don't just refuse
     };
   },
 
@@ -313,6 +368,7 @@ export const errors = {
       hint: "Check the field names, types, and required keys against the docs.",
       details,
       docs: DOCS_BASE,
+      axiom_id: AXIOM_GUIDE, // shape correction — guide the caller toward the right shape
     };
   },
 };

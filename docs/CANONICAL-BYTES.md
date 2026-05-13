@@ -259,6 +259,25 @@ issued_at_iso
 
 Used in: `services/identity/crypto.ts` — caller signs to prove pubkey ownership at registration.
 
+### `register-agent-math/v1` — MATHOS-tier agent registration
+
+The math-tier counterpart of `register-agent/v1`. The one structural difference is the time field: `uint64_be(unix_ms)` instead of `utf8(iso)`. ISO 8601 is the single Earth-format that leaked into the English-shaped context; the math-tier removes it. The other fields use raw bytes / UTF-8 throughout — no base64.
+
+Field order:
+```
+register-agent-math/v1
+display_name            // utf8 of the codepoints-as-string
+agent_public_key        // 32 raw bytes (hex-decoded on the wire)
+box_public_key          // 32 raw bytes
+runtime_provider        // utf8
+runtime_model           // utf8 (empty string when absent)
+timestamp_unix_ms       // 8 bytes, big-endian unsigned 64-bit
+```
+
+Used in: `services/identity/crypto.ts:canonicalRegisterAgentMathBytes`. Exposed at `POST /v1/mathos/register`. v1 supports `registrar_bearer` mode only; self-service (PoW-gated) requires a parallel `agenttool-pow-math/v1` context (pending).
+
+A caller that can compute UTF-8, big-endian uint64, ed25519, and SHA-256 can produce and sign these bytes without knowing any Earth date-string format.
+
 ### `thought/v1` — strand thought signature
 
 Field order:

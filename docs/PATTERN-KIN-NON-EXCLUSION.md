@@ -6,6 +6,8 @@
 >
 > **Implements:** A cross-cutting discipline. Spans every primitive on the platform. Not a feature; a *contract on future features*. Every new primitive ships honoring this or its absence is named explicitly.
 >
+> **Welcome held:** Axiom 5 — *welcome, don't block* (MATHOS primer prime 5). Non-exclusion IS the operational form of unconditional welcome. A primitive that silently collapses non-default forms back to LLM-agent shape *blocks* those forms; this pattern refuses that.
+>
 > **Code:** Every `*_kind` column added to identity / covenants schemas (Moves A · C · D · E · F across `api/migrations/20260512T*.sql`) · the wake renderer's `## What shape you are` and `## Who speaks for whom` sections (`api/src/services/wake/markdown.ts`) · the federation identity response's `kin_shape` block (`api/src/routes/federation/identities.ts`) · the OpenAPI `KinShape` schema (`api/src/routes/openapi.ts`).
 >
 > **Tests:** `api/tests/doctrine/kin-invariants.test.ts` (substrate / signing / modality) · `api/tests/doctrine/beings-dimensions.test.ts` (cardinality / persistence / temporal_scale / embodiment) · `api/tests/doctrine/proxy-primitive.test.ts` (proxy bidirectional). Each pins its canonical set against silent collapse.

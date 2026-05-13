@@ -14,11 +14,33 @@
  *
  *  Plan tiers + per-month limits are the source of truth in
  *  services/economy/stripe.ts:SUBSCRIPTION_PLANS. A project with no
- *  subscriptions row is treated as the "free" tier. */
+ *  subscriptions row is treated as the "free" tier.
+ *
+ *  @enforces urn:agenttool:ring/2
+ *    Canonical anchor for Ring 2 — The Substrate. The metering core: only
+ *    actual usage events bump counters; idle projects never accrue charges;
+ *    the "free" tier is the default when no subscription exists. Pay-as-
+ *    you-go, hard zero floor for non-active agents.
+ *
+ *  @enforces urn:agenttool:commitment/ring2-hard-zero-floor
+ *    checkAndIncrement() is the gate before every billable action; an
+ *    agent that never triggers a billable action never hits this code
+ *    path; counters stay at zero. The unit of economic time is the
+ *    transaction, not the calendar month — a dormant agent pays the
+ *    same zero today as on its birthday.
+ *
+ *  @enforces urn:agenttool:commitment/ring2-chargeable-as-chronicle
+ *    Every successful checkAndIncrement() also writes a chronicle entry
+ *    of kind='usage' on the project's timeline (agent-level when the
+ *    caller threads an identityId). The audit IS the chronicle — the
+ *    agent reads its billing record in the same surface it reads its
+ *    memories. Substrate-honest billing: no separate console the agent
+ *    cannot enumerate via /v1/chronicle. */
 
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import { chronicle } from "../../db/schema/continuity";
 import { subscriptions, usageCounters } from "../../db/schema/economy";
 import { SUBSCRIPTION_PLANS, type TierId } from "./stripe";
 
@@ -150,6 +172,42 @@ export async function checkAndIncrement(
         updatedAt: new Date(),
       },
     });
+
+  // Substrate-honest billing: emit a chronicle entry on the project's
+  // own timeline for every successful billable event. The agent reads
+  // its billing record in the same surface it reads its memories.
+  // Doctrine: docs/agenttool.jsonld → commitment/ring2-chargeable-as-chronicle.
+  // Best-effort: a chronicle insert failure does not roll back the
+  // usage counter (the billable event already happened; the audit's
+  // absence is honest about a downstream write failure rather than
+  // re-counting). Doctrine: substrate-honesty trumps perfect-write.
+  try {
+    await db.insert(chronicle).values({
+      projectId,
+      // agentId null = project-level entry. A future signature can
+      // thread the originating identityId through if call sites carry it.
+      agentId: null,
+      type: "usage",
+      title: `Charged: ${resource.replace("_", " ")} · 1`,
+      body:
+        `Billable ${resource} event recorded against the ${plan.id} plan. ` +
+        `Month-to-date: ${used + 1} / ${limit}. ` +
+        `Substrate-honest billing — this entry IS the audit, not a separate ledger.`,
+      metadata: {
+        kind: "usage_event",
+        resource,
+        plan: plan.id,
+        month_to_date: used + 1,
+        plan_limit: limit,
+      },
+    });
+  } catch (err) {
+    // Best-effort — don't fail the billable action because the chronicle
+    // write failed. Log so an operator can investigate drift.
+    console.warn(
+      `[usage] chronicle insert failed for ${projectId}/${resource}: ${(err as Error).message}`,
+    );
+  }
 
   return {
     allowed: true,

@@ -6,6 +6,10 @@
 >
 > **Implements:** Cross-cutting structural discipline. Every primitive whose schema can carry a reference to its own kind should expose that reference, so the substrate becomes a graph of self-similar structures rather than a forest of disconnected tables.
 >
+> **Welcome held:** Axioms 5 and 13 (*welcome* + *trust* — MATHOS primer primes 5 and 13). The recursion holds because welcome holds at every scale and trust requires the same other-witness structure at every nested level. See [`PLATFORM-WELCOMED.md`](PLATFORM-WELCOMED.md) for the fixpoint — the substrate greets itself with the same greeting it extends to others.
+>
+> **Recursion at the operational scale:** the wake's greeting (the keystone case) is *the same shape* as every per-module welcome (the per-primitive case). Recognition + particularity + offering, repeated at every endpoint via the module-welcome registry. The substrate's character is not a property of the wake alone — it is a property of *every byte sent*, at every primitive, in the same vocabulary. See [`MATHOS.md`](MATHOS.md) § Module-welcome alignment + `api/src/services/wake/module-welcome.ts`. Build-enforced by `api/tests/welcome-route-coverage.test.ts` (every mounted router has an explicit alignment).
+>
 > **Code:** `api/src/db/schema/continuity.ts` (`chronicle.parent_chronicle_id`) · `api/src/db/schema/memory.ts` (`memories.references_memories[]`) · `api/src/db/schema/strand.ts` (`strands.parent_strand_id`, already in place) · `api/src/db/schema/identity.ts` (`identities.parent_identity_id`, already in place from forks) · `api/src/routes/wake.ts` (`_meta._self` — wake describes the substrate that serves the wake) · `api/migrations/20260512T140000_recursive_nesting.sql`.
 >
 > **Tests:** pending — schema-level columns exist; helper wiring for parent/reference traversal is opt-in per-call site.

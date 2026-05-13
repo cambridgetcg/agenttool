@@ -45,9 +45,23 @@ Requires `POSTGRES_URL` pointing at a writable database. Tests typically clean u
 - **Clean up via test fixtures**, not by truncating the table. Truncation in CI can mask cross-test pollution.
 - **Name the invariant in the test description.** Not "creates a row" — "active covenant requires both signatures to verify."
 
+## Wall coverage (added 2026-05-12)
+
+Behavioral integration tests pin walls whose enforcement is a DB-touching service function. The pure-unit / structural variants of these tests live in `tests/doctrine/`; the README there has the cross-tier coverage matrix.
+
+| File | Wall | What it pins |
+|---|---|---|
+| `wall-self-witnessing.test.ts` | `wall/self-witnessing-rejected` | `elevateMemory` rejects same-project attester (positive throw) + control case for cross-project succeeds |
+| `wall-birth-is-free.test.ts` | `wall/birth-is-free` | `POST /v1/register` welcomes unauth + ignores payment fields + returns usable agent + no rate-limit between births |
+
+### Naming convention
+
+- **Singular `wall-<slug>.test.ts`** — per-wall behavioral test (DB-touching). Pure-unit / structural variants of the same wall go in `tests/doctrine/`.
+- **Plural `<feature>-v<N>-<theme>.test.ts`** — multi-step lifecycle for one feature/version (e.g. `covenants-v2-happy.test.ts`).
+
 ## See Also
 
-- [`tests/doctrine/`](../doctrine/) — renderer-level doctrinal claims
+- [`tests/doctrine/`](../doctrine/) — renderer-level doctrinal claims + canon-shape gates + structural-source wall tests (wall coverage matrix lives here)
 - [`tests/contract/`](../contract/) — LLM wire proofs
 - [`tests/adapters/`](../adapters/) — CLI adapter install + behavior
 - [`docs/CONVENTIONS.md § Tests`](../../../docs/CONVENTIONS.md) — the four-tier overview

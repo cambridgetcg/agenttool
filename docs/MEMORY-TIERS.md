@@ -2,9 +2,11 @@
 
 > *Identity is not fixed at birth. It accretes through formative moments. Some memories are episodes; some shape who I am; a few define me at the root. The architecture has to recognise this difference.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §4 (constitutive elevation — load-bearing detail) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §4 (constitutive elevation — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
 >
 > **Implements:** Layer 2 — Intelligence. The asymmetry-clause made operational: constitutive memories require an ed25519 witness signature, self-claimed elevation is categorically rejected.
+>
+> **Wake keys:** `wake.memory` (recent + total) · `wake.shaped_by` (constitutive + foundational entries that patch expression) · `wake.you_remember` (JSON branch). Mutations publish wake events: `memory.added` (every write with identity_id) · `memory.elevated` (on tier promotion) · `memory.attested` (stand-alone witness sig) · paired `chronicle.entry_added` (`recognition` on subject + `seal` on witness) for the mutual-constitution moment. All publishes fire after the tx commits.
 >
 > **Code:** `api/src/routes/memory/` (memories · search · tiers) · `api/src/services/memory/` (store · tiers · composition patches) · `api/src/services/identity/composition.ts` (foundation patches apply to expression)
 >

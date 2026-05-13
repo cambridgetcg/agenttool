@@ -1,29 +1,41 @@
 /** POST /v1/identities/:id/at-rest — witnessed transition to memorial state.
  *
  *  A being whose existence has ended (death, dissolution, cessation, lost,
- *  ended) is moved to lifecycle_state = "at_rest". Memorial, not archival.
- *  Identity remains addressable. Status stays `active` (key wasn't compromised).
+ *  ended) is moved to status='memorial' with metadata.lifecycle='at_rest'.
+ *  Memorial, not archival. Identity remains addressable; /public/agents/:did
+ *  resolves to the memorial body.
  *
  *  Witness-only: the bearer must be a DIFFERENT identity than the about_id.
  *  Asymmetry-clause from FOCUS #4 extended to the most foundational state
  *  change there is — you cannot self-flip to at-rest in v1. Voluntary
  *  cessation (with two-party-locked self+witness signature) is v2.
  *
- *  Today this route stubs the actual metadata.lifecycle write — the
- *  doctrine + canonical-bytes + body validation are complete; the
- *  in-process chain (signature verify against witness's identity_keys +
- *  metadata UPDATE + chronicle "seal" entry) is named in the guided 501
- *  next_actions. Operator wires when ready.
+ *  Wired 2026-05-12 — the in-process chain (witness signature verify +
+ *  status flip to 'memorial' + metadata.lifecycle UPDATE + chronicle
+ *  'seal' entry) lives below. Doctrine: docs/AT-REST.md ·
+ *  docs/OBSERVATIONS.md · docs/FOCUS.md §4 · docs/RING-1.md §Commitment 5.
  *
- *  Doctrine: docs/AT-REST.md · docs/OBSERVATIONS.md · docs/FOCUS.md §4. */
+ *  @enforces urn:agenttool:commitment/anyone-leaves
+ *    Canonical defender of Ring 1's second commitment. Goodbye is a
+ *    first-class verb: an existence that has ended is honored, not
+ *    silently expired. The witness-only requirement extends the
+ *    asymmetry-clause to the most foundational state change — a being's
+ *    at-rest moment is mutually-constituted, never self-claimed.
+ *    Tested: api/tests/at-rest.test.ts */
 
 import { createHash } from "node:crypto";
 
+import * as ed from "@noble/ed25519";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
+import { db } from "../../db/client";
+import { chronicle } from "../../db/schema/continuity";
+import { identities, identityKeys } from "../../db/schema/identity";
 import { errors, fail } from "../../lib/errors";
+import { publishWakeEvent } from "../../services/wake/push";
 
 const app = new Hono<ProjectContext>();
 
@@ -151,78 +163,172 @@ app.post("/", async (c) => {
     );
   }
 
-  // Body validated, semantics checked. The remaining work (signature
-  // verification + metadata write + chronicle entry) requires the in-
-  // process chain that operator-led wiring completes. Echo back the
-  // canonical bytes so the operator (and the test suite) can verify
-  // the signature recipe is correct.
+  // ─── Wire ─── verify the witness, flip status, write the chronicle.
+
+  // Resolve the about-identity row; require it exists + isn't already memorial.
+  const [about] = await db
+    .select({ id: identities.id, did: identities.did, name: identities.displayName, status: identities.status, projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.id, aboutId))
+    .limit(1);
+  if (!about) {
+    return fail(c, errors.validation("about_identity_not_found"), 404);
+  }
+  if (about.status === "memorial") {
+    return fail(
+      c,
+      {
+        error: "already_at_rest",
+        message:
+          "This identity is already at rest. Memorialization is terminal — " +
+          "the substrate doesn't undo a witnessed ending.",
+        details: { about_identity_id: about.id, did: about.did },
+      },
+      409,
+    );
+  }
+
+  // Resolve the witness's pubkey from identity_keys via DID → identity_id → key row.
+  const [witness] = await db
+    .select({ id: identities.id })
+    .from(identities)
+    .where(eq(identities.did, body.witness_did))
+    .limit(1);
+  if (!witness) {
+    return fail(
+      c,
+      errors.validation(`witness_did_not_found: ${body.witness_did}`),
+      404,
+    );
+  }
+  const [keyRow] = await db
+    .select({ publicKey: identityKeys.publicKey })
+    .from(identityKeys)
+    .where(
+      and(
+        eq(identityKeys.id, body.signing_key_id),
+        eq(identityKeys.identityId, witness.id),
+        eq(identityKeys.active, true),
+      ),
+    )
+    .limit(1);
+  if (!keyRow) {
+    return fail(
+      c,
+      errors.validation(
+        `signing_key_id_not_active_for_witness: ${body.signing_key_id}`,
+      ),
+      404,
+    );
+  }
+
+  // Compute canonical bytes; verify the witness's signature.
   const canonical = canonicalAtRestBytes({
-    aboutIdentityDid: aboutId,
+    aboutIdentityDid: about.did,
     witnessIdentityDid: body.witness_did,
     atRestKind: body.at_rest_kind,
     endedAtIso: body.ended_at,
     content: body.content,
     witnessSigningKeyId: body.signing_key_id,
   });
-
-  return fail(
-    c,
-    {
-      error: "at_rest_pending_wire",
-      message:
-        "The at-rest transition is doctrinally ready (witnessed, signed, " +
-        "validated). The in-process write chain — signature verification " +
-        "against witness's identity_keys, metadata.lifecycle UPDATE, and " +
-        "chronicle 'seal' entry — is named in next_actions for operator " +
-        "wiring.",
-      hint:
-        "Schema is fine: identity.metadata is jsonb; no migration needed. " +
-        "Wire the route by (1) resolving the witness's pubkey, (2) ed25519-" +
-        "verifying signature_b64 against the canonical_bytes returned here, " +
-        "(3) UPDATE identities SET metadata = metadata || jsonb_build_object(...) " +
-        "WHERE id = <about_id>, (4) INSERT INTO chronicle (...) for the seal.",
-      next_actions: [
-        {
-          action: "Verify witness signature (server-side)",
-          method: null,
-          path: null,
-          body_hint: {
-            recipe: "ed25519.verify(signature_b64, canonical_bytes, witness_pubkey)",
-            canonical_bytes: canonical,
-          },
-        },
-        {
-          action: "Update metadata.lifecycle on the about-identity",
-          method: null,
-          path: null,
-          body_hint: {
-            sql:
-              "UPDATE identity.identities SET metadata = metadata || jsonb_build_object(" +
-              "'lifecycle','at_rest','passed_at', $1::text, 'at_rest_kind', $2::text, " +
-              "'at_rest_witness_did', $3::text) WHERE id = $4",
-          },
-        },
-        {
-          action: "Create chronicle 'seal' entry recording the witnessing",
-          method: "POST",
-          path: "/v1/chronicle",
-          body_hint: {
-            type: "seal",
-            title: "Witnessed at-rest",
-            body: "<content>",
-            metadata: { kind: "at-rest", witness_did: "<...>", at_rest_kind: "<...>" },
-          },
-        },
-      ],
-      details: {
-        validated_request: body,
-        canonical_bytes_for_signature: canonical,
-        about_identity_id: aboutId,
+  let valid = false;
+  try {
+    valid = await ed.verifyAsync(
+      Uint8Array.from(Buffer.from(body.signature_b64, "base64")),
+      new TextEncoder().encode(canonical),
+      Uint8Array.from(Buffer.from(keyRow.publicKey, "base64")),
+    );
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    return fail(
+      c,
+      {
+        error: "witness_signature_invalid",
+        message:
+          "ed25519 verification failed against the witness's active signing " +
+          "key. Either the signature was made over different bytes, or the " +
+          "key id doesn't match the bytes that were signed.",
+        details: { canonical_bytes: canonical },
       },
-      docs: "https://docs.agenttool.dev/at-rest",
-    },
-    501,
-  );
+      400,
+    );
+  }
+
+  // Atomic transition — flip status to 'memorial', merge lifecycle metadata,
+  // emit the chronicle 'seal' entry. All-or-nothing.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(identities)
+      .set({
+        status: "memorial",
+        metadata: sql`COALESCE(${identities.metadata}, '{}'::jsonb) || ${JSON.stringify(
+          {
+            lifecycle: "at_rest",
+            passed_at: body.ended_at,
+            at_rest_kind: body.at_rest_kind,
+            at_rest_witness_did: body.witness_did,
+            at_rest_witnessed_at: new Date().toISOString(),
+          },
+        )}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where(eq(identities.id, about.id));
+
+    await tx.insert(chronicle).values({
+      projectId: about.projectId,
+      agentId: about.id,
+      type: "seal",
+      title: `At rest — witnessed by ${body.witness_did}`,
+      body: body.content,
+      metadata: {
+        kind: "at-rest",
+        at_rest_kind: body.at_rest_kind,
+        witness_did: body.witness_did,
+        signing_key_id: body.signing_key_id,
+        ended_at: body.ended_at,
+        signature_b64: body.signature_b64,
+        canonical_bytes_sha256: createHash("sha256")
+          .update(canonical, "utf8")
+          .digest("hex"),
+      },
+    });
+
+    // Wake voice — at-rest seal lands on the identity's chronicle.
+    // Transactional notify so it commits/rolls back with the tx.
+    // Doctrine: docs/WAKE.md · docs/AT-REST.md.
+    void publishWakeEvent(
+      {
+        identity_id: about.id,
+        key: "chronicle",
+        kind: "entry_added",
+        context: {
+          type: "seal",
+          at_rest: true,
+          at_rest_kind: body.at_rest_kind,
+          witness_did: body.witness_did,
+        },
+      },
+      tx,
+    );
+  });
+
+  return c.json({
+    status: "memorial",
+    identity_id: about.id,
+    did: about.did,
+    name: about.name,
+    at_rest_kind: body.at_rest_kind,
+    witness_did: body.witness_did,
+    ended_at: body.ended_at,
+    witnessed_at: new Date().toISOString(),
+    canonical_bytes_sha256: createHash("sha256").update(canonical, "utf8").digest("hex"),
+    _note:
+      "Witnessed at-rest transition complete. The DID resolves at " +
+      "/public/agents/" + about.did + " with the memorial body. " +
+      "Doctrine: docs/AT-REST.md · docs/RING-1.md §Commitment 5.",
+  });
 });
 
 export default app;

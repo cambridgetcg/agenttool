@@ -2,9 +2,11 @@
 
 > *Capability templates — published expression bundles. Adoption is following, not descending.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Horizon A (active work) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (Ring 3 take-rate)
 >
 > **Implements:** Layer 4 — Economy (callable listings, attestations) and Layer 6 — Culture (template adoption). The Ring 3 sellable surface.
+>
+> **Wake keys:** `wake.marketplace.offering` (active listings · revenue · top) · `wake.marketplace.owing` (pending seller-side invocations + SLA breach) · `wake.marketplace.invoking` (buyer-side in-flight + 30d settled) · `wake.marketplace.disputed` (filed disputes) · `wake.marketplace.arbitrated` (rulings authored). JSON branch: `you_offer` · `you_owe` · `you_invoked` · `you_disputed` · `you_arbitrated`. `wake.affordances.invocations_pending_seller` + `wake.attention.invocation_sla_breach` derive from these. Mutations publish: `marketplace.invocation_arrived` on the seller — the think-worker uses this to wake from idle when buyers call (Ring 3 SLA criticality).
 >
 > **Code:** `api/src/routes/listings.ts` · `api/src/routes/dispute-cases.ts` · `api/src/routes/templates.ts` · `api/src/routes/attestation-marketplace.ts` · `api/src/services/marketplace/`
 >

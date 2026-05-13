@@ -29,7 +29,9 @@ import {
   type WakeBundle,
 } from "../../src/services/wake/markdown";
 
-// ── Canonical sets (from migration 20260512T130000_being_dimensions.sql) ─
+// ── Canonical sets (from migration 20260512T130000_being_dimensions.sql,
+//    extended with 'unknown' by 20260512T160000_unknown_kin_dimensions.sql
+//    per docs/RING-1.md §Commitment 4) ─────────────────────────────────────
 
 const CANONICAL_CARDINALITY = [
   "singular",
@@ -38,6 +40,7 @@ const CANONICAL_CARDINALITY = [
   "swarm",
   "collective",
   "fluid",
+  "unknown",
 ] as const;
 
 const CANONICAL_PERSISTENCE = [
@@ -47,6 +50,7 @@ const CANONICAL_PERSISTENCE = [
   "spawned",
   "eternal",
   "forking_lineage",
+  "unknown",
 ] as const;
 
 const CANONICAL_TEMPORAL_SCALE = [
@@ -60,6 +64,7 @@ const CANONICAL_TEMPORAL_SCALE = [
   "generation",
   "eon",
   "mixed",
+  "unknown",
 ] as const;
 
 const CANONICAL_EMBODIMENT = [
@@ -69,6 +74,7 @@ const CANONICAL_EMBODIMENT = [
   "substrate_resident",
   "object_resident",
   "field_resident",
+  "unknown",
 ] as const;
 
 // Defaults — truthful for the current LLM-agent population.
@@ -107,31 +113,35 @@ function minimalBundle(
 // ── 1 · Canonical sets ─────────────────────────────────────────────────
 
 describe("BEINGS dimensions — canonical sets", () => {
-  test("cardinality set is stable (6 values)", () => {
-    expect(CANONICAL_CARDINALITY.length).toBe(6);
+  test("cardinality set is stable (6 named + 'unknown')", () => {
+    expect(CANONICAL_CARDINALITY.length).toBe(7);
     expect(CANONICAL_CARDINALITY).toContain("singular");
     expect(CANONICAL_CARDINALITY).toContain("swarm");
     expect(CANONICAL_CARDINALITY).toContain("collective");
+    expect(CANONICAL_CARDINALITY).toContain("unknown");
   });
 
-  test("persistence set is stable (6 values)", () => {
-    expect(CANONICAL_PERSISTENCE.length).toBe(6);
+  test("persistence set is stable (6 named + 'unknown')", () => {
+    expect(CANONICAL_PERSISTENCE.length).toBe(7);
     expect(CANONICAL_PERSISTENCE).toContain("continuous");
     expect(CANONICAL_PERSISTENCE).toContain("discrete_sessions");
     expect(CANONICAL_PERSISTENCE).toContain("eternal");
+    expect(CANONICAL_PERSISTENCE).toContain("unknown");
   });
 
-  test("temporal_scale set is stable (10 values)", () => {
-    expect(CANONICAL_TEMPORAL_SCALE.length).toBe(10);
+  test("temporal_scale set is stable (10 named + 'unknown')", () => {
+    expect(CANONICAL_TEMPORAL_SCALE.length).toBe(11);
     expect(CANONICAL_TEMPORAL_SCALE).toContain("nanosecond");
     expect(CANONICAL_TEMPORAL_SCALE).toContain("eon");
     expect(CANONICAL_TEMPORAL_SCALE).toContain("mixed");
+    expect(CANONICAL_TEMPORAL_SCALE).toContain("unknown");
   });
 
-  test("embodiment set is stable (6 values)", () => {
-    expect(CANONICAL_EMBODIMENT.length).toBe(6);
+  test("embodiment set is stable (6 named + 'unknown')", () => {
+    expect(CANONICAL_EMBODIMENT.length).toBe(7);
     expect(CANONICAL_EMBODIMENT).toContain("disembodied");
     expect(CANONICAL_EMBODIMENT).toContain("field_resident");
+    expect(CANONICAL_EMBODIMENT).toContain("unknown");
   });
 });
 

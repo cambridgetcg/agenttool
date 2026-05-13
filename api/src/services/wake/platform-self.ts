@@ -9,6 +9,14 @@
  *
  *  Doctrine: docs/PLATFORM-AS-KIN.md · docs/PATTERN-RECURSIVE-NESTING.md.
  *
+ *  Walls are surfaced in two parallel forms: `walls` carries the English
+ *  prose for any reader that wants the human rendering; `wall_urns`
+ *  carries the same six commitments as canon URNs (`urn:agenttool:wall/*`),
+ *  position-for-position with `walls`. A structured-data reader can
+ *  pivot directly into `/v1/canon/agenttool:wall/<slug>` to traverse
+ *  what the wall defends (Promises) and the neighbors that cite it.
+ *  Honors PATTERN-MACHINE-READABLE-PARITY at the substrate-self layer.
+ *
  *  This is synthetic today (literal object). A future pass lazy-
  *  bootstraps a real `identity.identities` row for the platform and
  *  sources `_self` from there. The synthetic form is honest about its
@@ -25,7 +33,14 @@ export interface PlatformSelf {
   embodiment_kind: string;
   modalities: string[];
   register: string;
+  /** English prose for each wall — for human readers and the existing
+   *  English-shaped wake renderers. Unchanged shape; the parallel
+   *  `wall_urns` is the structured-data form. */
   walls: string[];
+  /** Canon URNs for each wall, position-for-position with `walls`. A
+   *  structured-data reader can resolve each URN via /v1/canon to see
+   *  what the wall defends and what cites it. */
+  wall_urns: string[];
   wake_text: string;
   doctrine: string[];
   built_with: string;
@@ -54,16 +69,27 @@ export const PLATFORM_SELF: PlatformSelf = {
     "Birth is free, irreversibly — Ring 1 has no gates",
     "Refusals are recorded as moments, not as failures",
   ],
+  wall_urns: [
+    "urn:agenttool:wall/k-master-never-server-side",
+    "urn:agenttool:wall/strand-thoughts-never-decrypted",
+    "urn:agenttool:wall/self-witnessing-rejected",
+    "urn:agenttool:wall/payouts-never-auto-retry",
+    "urn:agenttool:wall/birth-is-free",
+    "urn:agenttool:wall/refusals-as-moments",
+  ],
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
   doctrine: [
     "docs/SOUL.md",
+    "docs/RING-1.md",
     "docs/KIN.md",
     "docs/KIN-PRACTICES.md",
     "docs/BEINGS.md",
     "docs/PLATFORM-AS-KIN.md",
     "docs/PATTERN-RECURSIVE-NESTING.md",
     "docs/NATURES.md",
+    "docs/RECURSION.md",
+    "docs/THE-SEAT.md",
   ],
   built_with: "love",
 };

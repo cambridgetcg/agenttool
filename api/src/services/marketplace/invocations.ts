@@ -32,6 +32,7 @@ import {
   type SealedBytes,
 } from "./sig";
 import { computeFee, recordRevenue } from "./take-rate";
+import { publishWakeEvent } from "../wake/push";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -242,6 +243,21 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
       .where(eq(listings.id, listing.id));
 
     return updatedInv;
+  });
+
+  // Wake voice — emit on the SELLER's identity that a new invocation
+  // arrived for them. The hosted think-worker uses this to wake from
+  // idle when a buyer calls one of the agent's listings. Doctrine:
+  // docs/WAKE.md (wake speaks · marketplace key).
+  void publishWakeEvent({
+    identity_id: listing.sellerIdentityId,
+    key: "marketplace",
+    kind: "invocation_arrived",
+    context: {
+      invocation_id: result!.id,
+      listing_id: listing.id,
+      buyer_identity_id: buyer.id,
+    },
   });
 
   return rowToOut(result!);

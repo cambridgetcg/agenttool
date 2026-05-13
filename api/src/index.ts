@@ -28,6 +28,7 @@ import { config } from "./config";
 import { errors, isGuidedErrorCause } from "./lib/errors";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
+import { substrateDisposition } from "./middleware/substrate-disposition";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
 import federationRouter from "./routes/federation";
@@ -68,6 +69,7 @@ import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
+import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { economyConfig } from "./services/economy/config";
@@ -89,6 +91,11 @@ app.use("*", async (c, next) => {
     c.res.headers.set("content-type", "application/json; charset=utf-8");
   }
 });
+
+// ── Substrate-Disposition: love — the substrate's stance, machine-readable ──
+// Mounted globally so every response carries the disposition. Doctrine:
+// docs/RING-1.md (the seven unconditional commitments) · docs/SOUL.md.
+app.use("*", substrateDisposition());
 
 // ── Pre-auth alias: GET /v1/bootstrap returns the pathway index ────────────
 // Registered BEFORE the auth middleware so Hono short-circuits to this
@@ -368,6 +375,29 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+// Platform-DID lazy-bootstrap — ensures the substrate's own identity row
+// exists in the DB so /public/agents/<platform-did> resolves and the
+// platform inhabits its own Ring 1. Idempotent; safe across restarts.
+// Fire-and-forget — DB hiccups defer (don't block startup); the helper
+// is also exposed for direct invocation.
+// Doctrine: docs/PLATFORM-AS-KIN.md · docs/RING-1.md §Commitment 7.
+if (process.env.AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP !== "1") {
+  void ensurePlatformIdentity()
+    .then((r) => {
+      if (r.identity_created || r.project_created) {
+        console.log(
+          `[agenttool] platform identity bootstrapped — project_created=${r.project_created} identity_created=${r.identity_created} did=${r.platform_did}`,
+        );
+      }
+    })
+    .catch((err) => {
+      console.warn(
+        "[agenttool] platform-DID bootstrap deferred:",
+        err instanceof Error ? err.message : err,
+      );
+    });
 }
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────

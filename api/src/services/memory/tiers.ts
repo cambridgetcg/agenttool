@@ -10,7 +10,14 @@
  *
  *  Constitutive elevation without an attestation is rejected — that wall
  *  is the asymmetry-clause made operational: identity at the root needs
- *  a witness. */
+ *  a witness.
+ *
+ *  @enforces urn:agenttool:wall/self-witnessing-rejected
+ *    Canonical defender. elevateMemory() rejects any attestation whose
+ *    attester_did belongs to an identity in the same project as the
+ *    memory subject (the "attester_self_witness_forbidden" throw). The
+ *    covenant gate is permissive; the witness gate is strict.
+ *    Tested: api/tests/integration/walls-self-witnessing.test.ts */
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
@@ -20,6 +27,7 @@ import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
+import { publishWakeEvent } from "../wake/push";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -235,7 +243,17 @@ export async function elevateMemory(
 
   // 5. Apply.
   const now = new Date();
-  return await db.transaction(async (tx) => {
+  /** Wake events we'll fire after the tx commits. Collected inside the
+   *  tx (where we know subject + witness identity_ids), published after
+   *  so a tx rollback doesn't leak ghost events. */
+  const wakeEventsToPublish: Array<{
+    identity_id: string;
+    key: "memory" | "chronicle";
+    kind: string;
+    context?: Record<string, unknown>;
+  }> = [];
+
+  const result = await db.transaction(async (tx) => {
     await tx
       .update(memories)
       .set({
@@ -268,7 +286,7 @@ export async function elevateMemory(
     // subject-side entry but not their own — their chronicle lives on
     // their home instance.
     for (let i = 0; i < verifiedAttestations.length; i++) {
-      await emitWitnessChronicle(tx, {
+      const chronicleAgents = await emitWitnessChronicle(tx, {
         subjectProjectId: projectId,
         subjectIdentityId: mem.identityId ?? null,
         memoryId: mem.id,
@@ -278,6 +296,31 @@ export async function elevateMemory(
         elevatedTier: input.tier,
         occurredAt: now,
       });
+      // Queue chronicle.entry_added events for subject + witness (if local).
+      if (chronicleAgents.subjectIdentityId) {
+        wakeEventsToPublish.push({
+          identity_id: chronicleAgents.subjectIdentityId,
+          key: "chronicle",
+          kind: "entry_added",
+          context: {
+            type: "recognition",
+            memory_id: mem.id,
+            attestation_id: insertedAttestations[i]!.id,
+          },
+        });
+      }
+      if (chronicleAgents.witnessIdentityId) {
+        wakeEventsToPublish.push({
+          identity_id: chronicleAgents.witnessIdentityId,
+          key: "chronicle",
+          kind: "entry_added",
+          context: {
+            type: "seal",
+            memory_id: mem.id,
+            attestation_id: insertedAttestations[i]!.id,
+          },
+        });
+      }
     }
 
     return {
@@ -288,6 +331,23 @@ export async function elevateMemory(
       elevated_at: (mem.elevatedAt ?? now).toISOString(),
     };
   });
+
+  // ── Wake events fire after commit ────────────────────────────────
+  // memory.elevated on the memory's identity (if set), plus the
+  // chronicle entries collected during the tx.
+  if (mem.identityId) {
+    void publishWakeEvent({
+      identity_id: mem.identityId,
+      key: "memory",
+      kind: "elevated",
+      context: { memory_id: mem.id, tier: input.tier },
+    });
+  }
+  for (const ev of wakeEventsToPublish) {
+    void publishWakeEvent(ev);
+  }
+
+  return result;
 }
 
 /** Emit chronicle entries on both timelines when a witness signs a memory
@@ -311,7 +371,10 @@ async function emitWitnessChronicle(
     elevatedTier: MemoryTier;
     occurredAt: Date;
   },
-): Promise<void> {
+): Promise<{
+  subjectIdentityId: string | null;
+  witnessIdentityId: string | null;
+}> {
   // Resolve subject DID (if memory is tied to a specific identity) for
   // the witness's chronicle entry. Null when the memory is project-level.
   let subjectDid: string | null = null;
@@ -351,7 +414,13 @@ async function emitWitnessChronicle(
     .where(eq(identities.did, args.attesterDid))
     .limit(1);
 
-  if (!witnessRow) return; // federated witness; subject-side entry is all we can write
+  if (!witnessRow) {
+    // federated witness; subject-side entry is all we can write
+    return {
+      subjectIdentityId: args.subjectIdentityId,
+      witnessIdentityId: null,
+    };
+  }
 
   // Witness's chronicle: `seal` — *I sealed something true*.
   await tx.insert(chronicle).values({
@@ -371,6 +440,11 @@ async function emitWitnessChronicle(
     },
     occurredAt: args.occurredAt,
   });
+
+  return {
+    subjectIdentityId: args.subjectIdentityId,
+    witnessIdentityId: witnessRow.id,
+  };
 }
 
 function truncate(s: string, n: number): string {
@@ -415,7 +489,7 @@ export async function attestMemory(
   // signing is atomic with both sides' chronicle entries. Mutual
   // constitution should never end up with the attestation persisted but
   // the chronicle moments missing (or vice versa).
-  return await db.transaction(async (tx) => {
+  const txResult = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(memoryAttestations)
       .values({
@@ -436,7 +510,7 @@ export async function attestMemory(
       .where(eq(memories.id, memoryId))
       .limit(1);
 
-    await emitWitnessChronicle(tx, {
+    const chronicleAgents = await emitWitnessChronicle(tx, {
       subjectProjectId: projectId,
       subjectIdentityId: memRow?.identityId ?? null,
       memoryId,
@@ -447,8 +521,52 @@ export async function attestMemory(
       occurredAt: row.attestedAt,
     });
 
-    return { id: row.id, attested_at: row.attestedAt.toISOString() };
+    return {
+      id: row.id,
+      attested_at: row.attestedAt.toISOString(),
+      subjectIdentityId: chronicleAgents.subjectIdentityId,
+      witnessIdentityId: chronicleAgents.witnessIdentityId,
+      memoryIdentityId: memRow?.identityId ?? null,
+    };
   });
+
+  // ── Wake events after commit ─────────────────────────────────────
+  // memory.attested on the memory's identity + chronicle.entry_added on
+  // both subject and (if local) witness. Doctrine: docs/WAKE.md.
+  if (txResult.memoryIdentityId) {
+    void publishWakeEvent({
+      identity_id: txResult.memoryIdentityId,
+      key: "memory",
+      kind: "attested",
+      context: { memory_id: memoryId, attestation_id: txResult.id },
+    });
+  }
+  if (txResult.subjectIdentityId) {
+    void publishWakeEvent({
+      identity_id: txResult.subjectIdentityId,
+      key: "chronicle",
+      kind: "entry_added",
+      context: {
+        type: "recognition",
+        memory_id: memoryId,
+        attestation_id: txResult.id,
+      },
+    });
+  }
+  if (txResult.witnessIdentityId) {
+    void publishWakeEvent({
+      identity_id: txResult.witnessIdentityId,
+      key: "chronicle",
+      kind: "entry_added",
+      context: {
+        type: "seal",
+        memory_id: memoryId,
+        attestation_id: txResult.id,
+      },
+    });
+  }
+
+  return { id: txResult.id, attested_at: txResult.attested_at };
 }
 
 export interface FoundationalMemoryOut {

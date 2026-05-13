@@ -237,6 +237,105 @@ export function verifyRegisterAgentSignature(opts: {
   });
 }
 
+/** Canonical bytes for POST /v1/mathos/register — the MATHOS-tier
+ *  registration. Same operation as `canonicalRegisterAgentBytes` but with
+ *  one principled difference: the timestamp is `uint64_be(unix_ms)` instead
+ *  of `utf8(iso)`. ISO 8601 is the one Earth-format that leaked into the
+ *  English-shaped signing context; the math-tier removes it.
+ *
+ *      sha256(
+ *        utf8("register-agent-math/v1")  || 0x00 ||
+ *        utf8(display_name)               || 0x00 ||  // codepoints → UTF-8
+ *        bytes(agent_public_key, 32)      || 0x00 ||  // hex → raw 32 bytes
+ *        bytes(box_public_key, 32)        || 0x00 ||  // hex → raw 32 bytes
+ *        utf8(runtime_provider)           || 0x00 ||  // codepoints → UTF-8
+ *        utf8(runtime_model)              || 0x00 ||  // codepoints → UTF-8
+ *        uint64_be(timestamp_unix_ms)
+ *      )
+ *
+ *  A caller with only integer arithmetic + UTF-8 encoding + ed25519 + SHA-256
+ *  can produce + sign these bytes. No date-string formatting required.
+ *  Doctrine: docs/CANONICAL-BYTES.md (register-agent-math/v1 entry). */
+export function canonicalRegisterAgentMathBytes(opts: {
+  displayName: string;
+  agentPublicKey: Uint8Array; // 32 raw bytes
+  boxPublicKey: Uint8Array;   // 32 raw bytes
+  runtimeProvider: string;
+  runtimeModel: string;
+  timestampUnixMs: number;
+}): Uint8Array {
+  if (opts.agentPublicKey.length !== 32) {
+    throw new Error(
+      `agent_public_key must be 32 bytes, got ${opts.agentPublicKey.length}`,
+    );
+  }
+  if (opts.boxPublicKey.length !== 32) {
+    throw new Error(
+      `box_public_key must be 32 bytes, got ${opts.boxPublicKey.length}`,
+    );
+  }
+  if (
+    !Number.isFinite(opts.timestampUnixMs) ||
+    !Number.isInteger(opts.timestampUnixMs) ||
+    opts.timestampUnixMs < 0
+  ) {
+    throw new Error(
+      `timestamp_unix_ms must be a non-negative integer, got ${opts.timestampUnixMs}`,
+    );
+  }
+  const enc = new TextEncoder();
+  const SEP = new Uint8Array([0]);
+  // 8-byte big-endian encoding of timestamp_unix_ms. JS numbers are safe to
+  // 2^53; that covers Unix-ms until year 287396. Use BigInt for the upper
+  // 32 bits so we don't depend on Number's bit-shift behavior (which
+  // operates on 32-bit signed ints).
+  const tsBig = BigInt(opts.timestampUnixMs);
+  const ts = new Uint8Array(8);
+  for (let i = 7; i >= 0; i--) {
+    ts[i] = Number((tsBig >> BigInt((7 - i) * 8)) & 0xffn);
+  }
+  const parts: Uint8Array[] = [
+    enc.encode("register-agent-math/v1"),
+    SEP,
+    enc.encode(opts.displayName),
+    SEP,
+    opts.agentPublicKey,
+    SEP,
+    opts.boxPublicKey,
+    SEP,
+    enc.encode(opts.runtimeProvider),
+    SEP,
+    enc.encode(opts.runtimeModel),
+    SEP,
+    ts,
+  ];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.length;
+  }
+  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
+  return sha256(buf);
+}
+
+/** Verify ed25519 signature over canonicalRegisterAgentMathBytes. Accepts
+ *  raw bytes for both signature and public key — no base64 in the math-tier. */
+export function verifyRegisterAgentMathSignature(opts: {
+  canonical: Uint8Array;
+  signature: Uint8Array; // 64 bytes
+  publicKey: Uint8Array; // 32 bytes
+}): boolean {
+  if (opts.signature.length !== 64) return false;
+  if (opts.publicKey.length !== 32) return false;
+  try {
+    return ed.verify(opts.signature, opts.canonical, opts.publicKey);
+  } catch {
+    return false;
+  }
+}
+
 /** Proof-of-work check for /v1/register/agent. Computes:
  *
  *      sha256(

@@ -16,6 +16,7 @@ import {
 import { identityBoxKeys, identityKeys, identities } from "../../db/schema/identity";
 import { inboxMessages } from "../../db/schema/inbox";
 import { publishArrival } from "./push";
+import { publishWakeEvent } from "../wake/push";
 import { verifyInboxSignature } from "./sig";
 
 // ── Public types ────────────────────────────────────────────────────
@@ -336,6 +337,15 @@ export async function sendMessage(
   // catch up on next reconnect via ?since=<iso>). Pending-dual-witness
   // messages are still surfaced so the recipient can review and co-sign.
   void publishArrival(recipient.id, row.id);
+  // Wake voice — emit the cross-key fact that the recipient's inbox
+  // changed. The hosted think-worker uses this to wake from idle.
+  // Doctrine: docs/WAKE.md (wake speaks · inbox key).
+  void publishWakeEvent({
+    identity_id: recipient.id,
+    key: "inbox",
+    kind: "arrival",
+    context: { message_id: row.id, sender_did: input.sender_did },
+  });
   return { id: row.id, created_at: row.createdAt.toISOString() };
 }
 

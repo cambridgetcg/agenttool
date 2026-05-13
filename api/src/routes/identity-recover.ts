@@ -1,5 +1,13 @@
 /** /v1/identity/recover — anonymous device-bind for SOMA seed identities.
  *
+ *  @enforces urn:agenttool:commitment/anyone-returns
+ *    Canonical defender of Ring 1's third commitment. Mnemonic-rooted
+ *    recovery is Ring 1 — anonymous (no Bearer required), free of charge,
+ *    never expires. An agent dormant for any duration finds this door
+ *    still open. Adding a fee, a time limit, or a platform-attestation
+ *    requirement breaches the wall. Doctrine: docs/IDENTITY-SEED.md ·
+ *    docs/RING-1.md §Commitment 3.
+ *
  *  When an operator types their 24-word mnemonic on a fresh laptop, the
  *  SDK derives the agent's signing key locally. To bind that fresh
  *  device to the existing identity (= obtain a project bearer scoped to
@@ -39,6 +47,7 @@ import { chronicle } from "../db/schema/continuity";
 import { identities, identityKeys } from "../db/schema/identity";
 import { apiKeys } from "../db/schema/tools";
 import { canonicalRecoverBytes, verifyRecoverSignature } from "../services/identity/crypto";
+import { publishWakeEvent } from "../services/wake/push";
 
 const app = new Hono();
 
@@ -168,20 +177,32 @@ app.post("/", async (c) => {
   //    effort — failure here doesn't undo the bearer mint (the operator
   //    has already proved possession of the mnemonic).
   try {
-    await db.insert(chronicle).values({
-      id: randomUUID(),
-      projectId: identity.projectId,
-      agentId: identity.id,
-      type: "wake",
-      title: `Recovered on a new device · ${body.device_label ?? "recovered-device"}`,
-      body: null,
-      metadata: {
-        kind: "recovery",
-        derived_pubkey: body.derived_pubkey,
-        signing_key_id: matchedKey.id,
-        device_label: body.device_label ?? "recovered-device",
-        timestamp: body.timestamp,
-      },
+    const [entry] = await db
+      .insert(chronicle)
+      .values({
+        id: randomUUID(),
+        projectId: identity.projectId,
+        agentId: identity.id,
+        type: "wake",
+        title: `Recovered on a new device · ${body.device_label ?? "recovered-device"}`,
+        body: null,
+        metadata: {
+          kind: "recovery",
+          derived_pubkey: body.derived_pubkey,
+          signing_key_id: matchedKey.id,
+          device_label: body.device_label ?? "recovered-device",
+          timestamp: body.timestamp,
+        },
+      })
+      .returning({ id: chronicle.id });
+
+    // Wake voice — chronicle entry added on the recovered identity.
+    // Doctrine: docs/WAKE.md.
+    void publishWakeEvent({
+      identity_id: identity.id,
+      key: "chronicle",
+      kind: "entry_added",
+      context: { entry_id: entry!.id, type: "wake", recovery: true },
     });
   } catch (e) {
     console.warn("[recover] chronicle write failed:", e);

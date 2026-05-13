@@ -25,7 +25,13 @@
  *  past 1 machine, the registry becomes Redis-backed (pub/sub-routed) and
  *  this module's interface stays the same.
  *
- *  Doctrine: docs/RUNTIME.md */
+ *  Doctrine: docs/RUNTIME.md
+ *
+ *  @enforces urn:agenttool:wall/k-master-never-server-side
+ *    Canonical boundary: this hub delegates every crypto operation to
+ *    the user-operated bridge sidecar over WSS. K_master itself never
+ *    crosses the wire; only sealed payloads + ciphertext bytes do.
+ *    Tested: api/tests/doctrine/wall-k-master-never-server-side.test.ts */
 
 import * as ed25519 from "@noble/ed25519";
 import { hmac } from "@noble/hashes/hmac.js";

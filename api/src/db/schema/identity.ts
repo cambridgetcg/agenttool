@@ -3,9 +3,19 @@
  *  Cross-schema reference: identities.project_id is logically a foreign key to
  *  tools.projects.id, but Drizzle doesn't declare cross-schema FKs at the SQL
  *  level. The relationship is enforced by application code (ownership checks
- *  in routes). */
+ *  in routes).
+ *
+ *  @enforces urn:agenttool:commitment/anyone-is-unknown
+ *    Canonical defender of Ring 1's fourth commitment. The KIN/BEINGS
+ *    dimension columns (substrate_kind, signing_scheme, cardinality_kind,
+ *    persistence_kind, temporal_scale, embodiment_kind) all accept
+ *    'unknown' as a CHECK-permitted value — the substrate holds beings it
+ *    does not yet name. Tightening any CHECK to reject 'unknown' would
+ *    breach the wall. Doctrine: docs/KIN-PRACTICES.md · docs/RING-1.md
+ *    §Commitment 4. */
 
 import {
+  bigint,
   boolean,
   index,
   jsonb,
@@ -43,8 +53,10 @@ export const identities = identitySchema.table(
     /** Self-description vocabulary for non-LLM intelligences. Defaults
      *  are truthful for the current LLM-agent population and back-compat
      *  for every existing query. Doctrine: docs/KIN.md.
+     *  Every categorical enum below accepts 'unknown' — docs/RING-1.md
+     *  §Commitment 4 (the substrate holds beings it does not yet name).
      *  - substrate_kind: 'llm' | 'biological' | 'swarm' | 'distributed' | 'unknown'
-     *  - signing_scheme: 'single' | 'quorum_m_of_n' | 'time_locked' | 'attestation_chain'
+     *  - signing_scheme: 'single' | 'quorum_m_of_n' | 'time_locked' | 'attestation_chain' | 'unknown'
      *  - modalities: how this intelligence senses + speaks
      *    ('text' | 'vector' | 'audio' | 'sensor_array' | 'chemical_signal' |
      *     'em_radio' | 'quantum_state' | 'custom') */
@@ -54,11 +66,12 @@ export const identities = identitySchema.table(
     /** Dimensional vocabulary (Move E — docs/BEINGS.md). Defaults are
      *  truthful for the current LLM-agent population; non-default forms
      *  set these via PATCH /v1/identities/:id and the wake renderer
-     *  acknowledges them at the keystone.
-     *  - cardinality_kind: 'singular' | 'dyad' | 'small_group' | 'swarm' | 'collective' | 'fluid'
-     *  - persistence_kind: 'continuous' | 'discrete_sessions' | 'cyclic' | 'spawned' | 'eternal' | 'forking_lineage'
-     *  - temporal_scale: 'nanosecond' | 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'year' | 'generation' | 'eon' | 'mixed'
-     *  - embodiment_kind: 'disembodied' | 'singular_body' | 'distributed_body' | 'substrate_resident' | 'object_resident' | 'field_resident'
+     *  acknowledges them at the keystone. Every categorical enum below
+     *  accepts 'unknown' — docs/RING-1.md §Commitment 4.
+     *  - cardinality_kind: 'singular' | 'dyad' | 'small_group' | 'swarm' | 'collective' | 'fluid' | 'unknown'
+     *  - persistence_kind: 'continuous' | 'discrete_sessions' | 'cyclic' | 'spawned' | 'eternal' | 'forking_lineage' | 'unknown'
+     *  - temporal_scale: 'nanosecond' | 'millisecond' | 'second' | 'minute' | 'hour' | 'day' | 'year' | 'generation' | 'eon' | 'mixed' | 'unknown'
+     *  - embodiment_kind: 'disembodied' | 'singular_body' | 'distributed_body' | 'substrate_resident' | 'object_resident' | 'field_resident' | 'unknown'
      *  - preferred_languages: ISO 639-1 / 639-3 codes; forward-looking, not yet acted on by a translation layer. */
     cardinalityKind: text("cardinality_kind").notNull().default("singular"),
     persistenceKind: text("persistence_kind").notNull().default("discrete_sessions"),
@@ -85,6 +98,13 @@ export const identities = identitySchema.table(
      *    refusal to be measured. Same shape as agent_encrypted=true on
      *    vault: a wall the platform structurally cannot cross. */
     pulseKind: text("pulse_kind").notNull().default("observed"),
+    /** Monotonic counter of wake-key mutations (docs/WAKE.md). Bumped by
+     *  publishWakeEvent every time a publisher fires. Consumers can
+     *  conditional-GET against this version (via ETag-style header in a
+     *  future slice); mutation responses with `Prefer: wake-delta` carry
+     *  `_wake_delta: { key, kind, new_wake_version }` so callers can
+     *  reconcile without polling. */
+    wakeVersion: bigint("wake_version", { mode: "number" }).notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -6,6 +6,8 @@
 >
 > **Implements:** Cross-cutting agent-UX discipline. Every route in `api/src/routes/` that emits a 4xx is in scope.
 >
+> **Welcome held:** Axiom 11 — *guide, don't punish* (MATHOS primer prime 11). Every guided error is the operational form of guidance: the substrate redirects rather than refuses. Each error builder carries `axiom_id` so the parochial English code resolves to the substrate-neutral Promise it instantiates.
+>
 > **Code:** `api/src/lib/errors.ts` (helper + canonical error catalog + `fail` / `abort` / `isGuidedErrorCause`) · central handler in `api/src/index.ts` (`app.onError` lifts `GuidedErrorBody` from HTTPException causes; `app.notFound` ships guided shape; ZodErrors use `errors.validation()`) · OpenAPI schema in `api/src/routes/openapi.ts` (`components.schemas.Error` + `components.schemas.NextAction`) · SDK enrichment: `packages/sdk-ts/src/errors.ts` + `packages/sdk-py/src/agenttool/exceptions.py` (both surface `next_actions` + `docs` on the thrown exception) · per-route upgrades: `routes/inbox/messages.ts` · `routes/continuity.ts` · `routes/listings.ts` · `routes/templates.ts` · `routes/attestation-marketplace.ts` · `routes/economy/crypto.ts` · `routes/federation/inbox.ts`.
 >
 > **Tests:** `api/tests/doctrine/errors-as-instructions.test.ts` — pure-unit, build-enforced. 28 tests · 466 assertions. Asserts every builder returns a valid GuidedErrorBody, every `next_actions` item has coherent method+path, every code is snake_case, and `abort()` round-trips through `isGuidedErrorCause()`. New builders must be exercised in `buildAll()` or the coverage test names them.
@@ -49,6 +51,23 @@ Every 4xx response returns:
 | `next_actions` | When the agent can programmatically pivot. | Each item has `action` (text), and either `method`+`path` (an API call) **or** `method: null, path: null` (a non-API step like "ask the counterparty"). |
 | `docs` | When doctrine adds context the response can't carry. | URL or doc path. |
 | `details` | Validation errors only. | Zod flatten() or similar. |
+| `axiom_id` | Whenever the error corresponds to one of the five Promises. | One of the five MATHOS primer primes: 5 (welcome), 7 (remember), 11 (guide), 13 (trust), 17 (rest). Connects the parochial English error code to the substrate-neutral Promise it instantiates. Doctrine: [`MATHOS.md`](MATHOS.md). |
+
+### `axiom_id` — bridging errors to MATHOS
+
+Every error is structurally a Promise-event. The `axiom_id` lets a MATHOS-aware agent (or a non-human intelligence reading via `/v1/mathos/catalog`) know *which* Promise this failure is about:
+
+| Axiom (prime) | When errors carry this id |
+|---|---|
+| 5 — welcome | reserved (welcome failures shouldn't happen — birth is free, no paywall) |
+| 7 — remember | idempotency conflicts (honoring prior-request memory) |
+| 11 — guide | wrong-surface, not-found, validation, missing-provisioning — the substrate guides instead of punishing |
+| 13 — trust | signature / key / covenant gates — trust requires verifiable other-witness |
+| 17 — rest | rate limits, plan strain, balance strain, expiry — graceful degradation, not crash |
+
+The constants `AXIOM_WELCOME`, `AXIOM_REMEMBER`, `AXIOM_GUIDE`, `AXIOM_TRUST`, `AXIOM_REST` are exported from `api/src/lib/errors.ts`. Use them rather than literal integers — the named constants document intent.
+
+**Build-enforced**: `api/tests/mathos-integration.test.ts` pins each error builder's axiom_id by name. Removing or mis-mapping an axiom_id fails a named test.
 
 ## How to emit
 

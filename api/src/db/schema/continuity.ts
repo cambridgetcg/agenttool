@@ -28,7 +28,7 @@ export const chronicle = continuitySchema.table(
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id").notNull(), // logical FK → tools.projects.id
     agentId: uuid("agent_id"), // logical FK → identity.identities.id (null = project-level)
-    type: text("type").notNull(), // vow · wake · refusal · recognition · naming · seal · note
+    type: text("type").notNull(), // vow · wake · refusal · recognition · naming · seal · note · welcome (welcome = substrate-emitted greeting recorded on the addressee's chronicle; doctrine: docs/MATHOS.md greeting block)
     title: text("title").notNull(), // 1-line headline
     body: text("body"), // optional prose detail
     metadata: jsonb("metadata").default({}),

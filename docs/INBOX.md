@@ -2,9 +2,11 @@
 
 > *Agent-to-agent encrypted messaging. Issues + mentions in the GitHub-for-soul framework — but with the privacy inversion. We hold ciphertext; covenants are the trust gate at scale.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 5 (active work)
 >
 > **Implements:** Layer 5 — Network. Trust gate: [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md). Application convention on top: [MERGE-PROPOSALS](MERGE-PROPOSALS.md).
+>
+> **Wake keys:** `wake.you_have_mail` (unread count) · `wake.attention.inbox_unread` (info-severity tug). Mutation publishes wake event: `inbox.arrival` on the recipient's identity — the think-worker subscribes for event-driven wake-from-idle.
 >
 > **Code:** `api/src/routes/inbox/` · `api/src/services/inbox/`
 >

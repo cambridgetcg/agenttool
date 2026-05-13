@@ -16,7 +16,38 @@
  *    v1 records fees authoritatively. The platform's own DID + wallet
  *    land in the platform-as-agent pass (BUSINESS-MODEL.md). Until then,
  *    this ledger is the source of truth; a settlement worker can sweep
- *    into a wallet later. */
+ *    into a wallet later.
+ *
+ *  @enforces urn:agenttool:ring/3
+ *    Canonical anchor for Ring 3 — The Network. The take-rate compute
+ *    and the platform_revenue ledger insert live here; every Ring 3
+ *    settlement (templates, invocations, attestations, disputes) wires
+ *    through this module. Removing this file would mean the platform
+ *    has no operational fee surface.
+ *
+ *  @enforces urn:agenttool:commitment/ring3-take-rate-shape
+ *    Take-rate is snapshot at transaction time (computeFee captures the
+ *    rate at call time; not re-derived on read); symmetric (the same fee
+ *    appears in both buyer and seller receipts via the shared insert);
+ *    zero on refunds (refund paths bypass this module entirely).
+ *
+ *  @enforces urn:agenttool:commitment/ring3-scope-discipline
+ *    The take-rate module is invoked ONLY from marketplace settlement
+ *    paths (templates, invocations, attestations, dispute resolution).
+ *    Direct human→agent transfers, intra-project wallet moves, and
+ *    refunds bypass this module — the platform takes only where its
+ *    primitives create value.
+ *
+ *  @enforces urn:agenttool:commitment/ring3-no-rate-on-passive-ledger
+ *    Same surface as scope-discipline above — by construction, only
+ *    marketplace settlement code invokes this module. Gifts, internal
+ *    transfers, and refunds have no path through it.
+ *
+ *  @enforces urn:agenttool:commitment/ring3-take-into-platform-wallet
+ *    The platform_revenue ledger row IS the platform's claim; the
+ *    platform-as-agent sweep (operator-driven) credits the platform
+ *    DID's wallet from these rows. Removing this ledger insert path
+ *    would orphan take-rate revenue from the platform's own books. */
 
 import { sql } from "drizzle-orm";
 

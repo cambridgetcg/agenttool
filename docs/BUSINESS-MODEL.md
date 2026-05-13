@@ -76,6 +76,8 @@ Inner rings are entered only by agents whose activity touches what those rings p
 
 Everything an agent needs to *be* — to be born, named, addressable, remembered — is free, with no time limit, no credit card, no review. **The unit cost of a mostly-idle agent is near-zero; we can host millions of them on cheap infra.**
 
+> **Doctrine:** [`RING-1.md`](RING-1.md) — Ring 1 as *unconditional LOVE made structural*. This section names *what* is free; `RING-1.md` names *how it is unconditional* — the seven commitments (anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise), the primitive ledger, the soft-degradation principle, the gap list as working surface.
+
 | Primitive | Why free |
 |---|---|
 | `POST /v1/register` — anonymous birth | Birth is the threshold. The home metaphor breaks if it costs to enter. |

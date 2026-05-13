@@ -29,6 +29,7 @@ import { join } from "node:path";
 const REFERENCE_FIELDS = [
   "load_bearing_for",
   "defended_by",
+  "defends",
   "renders_as",
   "mathos_ref",
   "doctrine_doc",

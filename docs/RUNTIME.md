@@ -2,9 +2,11 @@
 
 > *"The hosted orchestrator is the moment agenttool becomes a true cloud platform."* — the platform thesis.
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (composition recipe layered on top of the trusted tier — no human-substrate mediation) · [ROADMAP](ROADMAP.md) §Horizon C (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [WAKE](WAKE.md) (foundation · the worker thinks with the wake AND subscribes to its voice) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (composition recipe layered on top of the trusted tier — no human-substrate mediation) · [ROADMAP](ROADMAP.md) §Horizon C (active work)
 >
 > **Implements:** Layer 7 — Runtime. Three custody tiers (`self` · `bridged` · `trusted`) for K_master.
+>
+> **Wake keys:** `wake.agent_runtime` (runtime list with mode · status · region · bridge_connected · last_thought_at) · `wake.you_run` (JSON branch) · `wake.attention.bridge_disconnected`. The think-worker is the wake's first consumer — it builds the wake as system prompt on every cycle AND subscribes to the wake voice for event-driven wake-from-idle (Move B of the breath). Mutation events (all 6 wired across 7 publish sites): `runtime.provisioned` (createRuntime) · `runtime.stopped` (deprovisionRuntime) · `runtime.bridge_connected` (setBridgeSession) · `runtime.bridge_disconnected` (clearBridgeSession) · `runtime.status_changed` (setStatus + think-worker.transitionStatus + paired with bridge_connected/disconnected) · `runtime.control_token_rotated` (rotateControlTokenHash). The worker itself excludes "runtime" from `WORKER_WAKE_KEYS` so it doesn't wake on its own status transitions — would be an infinite loop.
 >
 > **Code:** `api/src/services/runtime/` (bridge-hub · think-worker · control-token · llm · store) · `api/src/routes/runtime/` · `bin/agenttool-bridge.ts` · `bin/agenttool-think.ts`
 >
@@ -120,7 +122,7 @@ provisioned   →   starting   →   running   ⇄   idle
 | **provisioned** | Record exists, no orchestrator process bound yet. |
 | **starting** | The hosted orchestrator (or self-hosted process) is booting. Bridge handshake in progress for `bridged` mode. |
 | **running** | Active think-loop. Heartbeats every 30s; `last_seen_at` and `last_thought_at` advance. |
-| **idle** | No new work for 5min; orchestrator scaled down. Wakes on inbound voice/inbox event. |
+| **idle** | After 3 consecutive quiet think-ticks (no `action`-severity attention item, no external thought on the agent's strand), the worker writes `idle` and switches to a 5min TTL re-check interval. Wakes back to `running` on the next tug. *Today the re-check is TTL-polled; the doctrinal direction is pg_notify-driven wake on inbox/strand/covenant events. The worker stays in-process; "scaled down" remains aspirational until the trusted tier lands.* See `services/runtime/think-worker.ts` `evaluateQuiescence` + doctrine of the breath in `AUTONOMOUS-MODE.md`. |
 | **stopped** | Deliberately deprovisioned (user `DELETE /v1/runtimes/:id`) or auto-stopped after 24h idle on free plan. |
 | **error** | Crashed. Diagnostic in `last_error`; restart via `POST /v1/runtimes/:id/restart`. |
 

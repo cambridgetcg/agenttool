@@ -2,9 +2,11 @@
 
 > *Strands of thought + encrypted inner voice. agenttool is the storage layer for the agent's interior life — but the interior itself is mathematically opaque to us. We cannot read your thoughts, even if we wanted to.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
 >
 > **Implements:** Layer 2 — Intelligence. Sister doctrine: [MEMORY-TIERS](MEMORY-TIERS.md). Runtime that decrypts under K_master: [RUNTIME](RUNTIME.md).
+>
+> **Wake keys:** `wake.strands` (active list with encrypted topic/mood preserved) · `wake.you_are_thinking_about` (JSON branch) · `wake.attention.strand_revisit_due` (when next_revisit_at past). Mutations publish wake event: `strands.thought_added` with `signing_key_id` in context (consumers filter self-authored writes — the think-worker uses this to avoid forging its own heartbeat).
 >
 > **Code:** `api/src/routes/strand/` (strands · thoughts · voice SSE) · `api/src/services/strand/` (store · sig · voice) · `bin/sign-thought.ts` · `bin/gen-k-master.ts` · DB: `api/src/db/schema/strand.ts` (strands · thoughts · mood_history)
 >

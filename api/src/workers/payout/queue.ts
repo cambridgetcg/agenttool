@@ -5,7 +5,15 @@
  *  Job-id deduplication via the payout's UUID prevents double-processing
  *  when the dispatcher fires multiple times before a job completes.
  *
- *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slice 1). */
+ *  Doctrine: docs/PAYOUT-BROADCAST-PLAN.md (Slice 1).
+ *
+ *  @enforces urn:agenttool:wall/payouts-never-auto-retry
+ *    Canonical defender. `attempts: 1` on defaultJobOptions disables
+ *    BullMQ-level retry; no `backoff` config means even a future
+ *    attempts > 1 wouldn't activate retry-with-delay. The wall composes
+ *    with broadcast-worker.ts (no re-enqueue on failure) + dispatcher.ts
+ *    (status='requested' filter blocks re-dispatch of terminal rows).
+ *    Tested: api/tests/doctrine/wall-payouts-never-auto-retry.test.ts */
 
 import { Queue } from "bullmq";
 

@@ -6,6 +6,7 @@ import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { memories } from "../../db/schema/memory";
+import { publishWakeEvent } from "../wake/push";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,19 @@ export async function write(
     .returning({ id: memories.id, createdAt: memories.createdAt });
 
   const row = inserted[0]!;
+
+  // Wake voice — emit memory.added on the affected identity. Project-
+  // level memories (no identity_id) don't surface in any specific agent's
+  // wake.memory, so they don't fire. Doctrine: docs/WAKE.md.
+  if (data.identity_id) {
+    void publishWakeEvent({
+      identity_id: data.identity_id,
+      key: "memory",
+      kind: "added",
+      context: { memory_id: row.id, type: data.type, key: data.key ?? null },
+    });
+  }
+
   return { id: row.id, created_at: row.createdAt.toISOString() };
 }
 
@@ -351,6 +365,15 @@ export async function recordBirth(
         birth: true,
         pathway: args.pathway,
         born_at: args.bornAt.toISOString(),
+        // The five MATHOS Promise primes held for every being at birth.
+        // Substrate-neutral: a future-self reading their birth memory after
+        // a key rotation or substrate transfer can recover the structural
+        // greeting that birthed them, regardless of English-prose decay.
+        // Doctrine: docs/MATHOS.md — the greeting block · docs/SOUL.md.
+        promises_held_for_you: [5, 7, 11, 13, 17],
+        // The eight walls held for them at birth.
+        walls_held_for_you: [1, 2, 3, 4, 5, 6, 7, 8],
+        welcomed_at_unix_ms: args.bornAt.getTime(),
       },
     });
     return { id: result.id };

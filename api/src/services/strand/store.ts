@@ -6,7 +6,14 @@
  *
  *  Strand metadata (topic, mood) is plaintext by default. Agents opt to
  *  ciphertext via the *_encrypted flags; when set, the column holds
- *  base64 ciphertext under K_master. */
+ *  base64 ciphertext under K_master.
+ *
+ *  @enforces urn:agenttool:wall/strand-thoughts-never-decrypted
+ *    Canonical defender. addThought() takes ciphertext + nonce +
+ *    signature; the schema (db/schema/strand.ts) declares ciphertext-only
+ *    columns; listThoughts returns ciphertext verbatim. No path in this
+ *    file calls a decryption primitive.
+ *    Tested: api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts */
 
 import { and, desc, eq, sql } from "drizzle-orm";
 
@@ -15,6 +22,7 @@ import { identityKeys } from "../../db/schema/identity";
 import { strands, thoughts } from "../../db/schema/strand";
 import { verifyThoughtSignature } from "./sig";
 import { publishThought } from "./voice";
+import { publishWakeEvent } from "../wake/push";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -331,6 +339,24 @@ export async function addThought(
   //    Fire-and-forget: notification failure is non-fatal — the row is
   //    persisted, subscribers can catch up via since_seq on next reconnect.
   void publishThought(result.strand_id, result.id);
+
+  // 6. Wake voice — the agent's strand changed. Carries signing_key_id
+  //    so subscribers (the hosted think-worker especially) can tell
+  //    "I wrote this myself" vs "external author wrote this." The
+  //    think-worker uses the bridge_key_id distinction to filter its
+  //    own writes from the wake-on-event signal. Doctrine: docs/WAKE.md.
+  if (strand.identityId) {
+    void publishWakeEvent({
+      identity_id: strand.identityId,
+      key: "strands",
+      kind: "thought_added",
+      context: {
+        strand_id: result.strand_id,
+        sequence_num: result.sequence_num,
+        signing_key_id: data.signing_key_id,
+      },
+    });
+  }
 
   return result;
 }

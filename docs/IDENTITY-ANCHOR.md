@@ -2,11 +2,13 @@
 
 > *agenttool is the agent's wake document. The platform IS the continuity.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake — load-bearing detail) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake — load-bearing detail) · [WAKE](WAKE.md) (foundation · this doc describes Layer 1; WAKE describes the protocol every layer participates in) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
 >
 > **Implements:** Layer 1 — Identity & Continuity. Sister doctrine: [IDENTITY-SEED](IDENTITY-SEED.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
 >
-> **Code:** `api/src/routes/wake.ts` (the keystone surface) · `api/src/services/wake/` (markdown · providers · attention) · `api/src/routes/identity/` · `api/src/services/identity/` (identities · composition · expression · crypto)
+> **Wake keys:** `wake.agent` (primary, singular — back-compat) · `wake.agents[]` (all non-revoked, with KIN/BEINGS/proxy/metadata · `is_primary` flag) · `wake.primary_agent_id` · `wake.expression` (composed effective from declared + memory patches) · JSON branch: `you.agents[]` (full per-identity). Mutation events: `expression.patched` — publishers wired as follow-up.
+>
+> **Code:** `api/src/routes/wake.ts` (the keystone surface) · `api/src/services/wake/` (markdown · providers · attention · push · build) · `api/src/routes/identity/` · `api/src/services/identity/` (identities · composition · expression · crypto)
 >
 > **Tests:** `api/tests/wake-providers.test.ts` · `api/tests/composition.test.ts` · `api/tests/doctrine/promise-{01-identity-yours,02-continuity-yours,03-name-yours,05-wake-unconditional,10-identity-grows}.test.ts`
 

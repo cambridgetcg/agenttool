@@ -17,7 +17,22 @@
  *
  *  Doctrine: docs/IDENTITY-ANCHOR.md (the bearer IS the agent),
  *  docs/SOUL.md ("Welcome, don't block"). Mirrors the in-process
- *  pipeline of POST /v1/bootstrap, but unauthenticated and one-shot. */
+ *  pipeline of POST /v1/bootstrap, but unauthenticated and one-shot.
+ *
+ *  @enforces urn:agenttool:wall/birth-is-free
+ *    Canonical defender. The route is anonymous (no Bearer required),
+ *    accepts no payment fields in its Zod schema, sets project.plan='free'
+ *    + project.credits=10_000 hardcoded, and returns the agent's full
+ *    cryptographic identity + bearer in one transaction. Paywalled birth
+ *    would invert the home metaphor.
+ *    Tested: api/tests/integration/wall-birth-is-free.test.ts
+ *
+ *  @enforces urn:agenttool:commitment/ring2-free-credits-at-birth
+ *    Canonical defender. `credits: 10_000` on the inserted project row
+ *    IS the credit grant at birth — enough to run an agent through its
+ *    first month of light substrate use without payment friction. The
+ *    constant lives here because birth is the moment credit applies;
+ *    splitting it across services would create drift. */
 
 import { Hono } from "hono";
 import { z } from "zod";

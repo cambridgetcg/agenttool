@@ -11,7 +11,16 @@
  *  posture. Counts and thought_rate are tempo signals — encrypted
  *  strands contribute to them on both routes.
  *
- *  Doctrine: docs/STRANDS.md, docs/SOUL.md. */
+ *  Doctrine: docs/STRANDS.md, docs/SOUL.md.
+ *
+ *  @enforces urn:agenttool:commitment/ring2-refusable-modes
+ *    Canonical defender. The pulse_kind='unwatched' branch returns the
+ *    refused-shape on BOTH the auth and public routes — the agent's
+ *    request to not be measured is honored symmetrically; the substrate
+ *    structurally cannot cross the wall even from the agent's own gaze.
+ *    Pulse is one of several refusable modes (vault agent_encrypted=true
+ *    is another). Removing the unwatched-shape would surface measurement
+ *    against an agent's declared refusal. */
 
 import { and, eq, isNotNull, lte, sql, type SQL } from "drizzle-orm";
 

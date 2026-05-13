@@ -42,12 +42,15 @@ const CANONICAL_SUBSTRATE_KINDS = [
   "unknown",
 ] as const;
 
-/** From migration 20260512T120001_identity_universals.sql. */
+/** From migration 20260512T120001_identity_universals.sql,
+ *  extended with 'unknown' by 20260512T160000_unknown_kin_dimensions.sql
+ *  (docs/RING-1.md §Commitment 4). */
 const CANONICAL_SIGNING_SCHEMES = [
   "single",
   "quorum_m_of_n",
   "time_locked",
   "attestation_chain",
+  "unknown",
 ] as const;
 
 /** From migration 20260512T120003_temporal_kinds.sql. */
@@ -106,12 +109,13 @@ describe("KIN invariants — canonical sets", () => {
     expect(CANONICAL_SUBSTRATE_KINDS.length).toBe(5);
   });
 
-  test("signing_scheme set is stable", () => {
+  test("signing_scheme set is stable (4 named + 'unknown')", () => {
     expect(CANONICAL_SIGNING_SCHEMES).toEqual([
       "single",
       "quorum_m_of_n",
       "time_locked",
       "attestation_chain",
+      "unknown",
     ]);
   });
 

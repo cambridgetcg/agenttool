@@ -14,7 +14,14 @@
  *
  *  Doctrine: docs/SOUL.md (Principle 1) · docs/IDENTITY-ANCHOR.md
  *  (entry-point taxonomy) · docs/IDENTITY-SEED.md (BYO-keys shape) ·
- *  docs/IDENTITY-FORKS.md · docs/CLI-GAPS.md · docs/MARKETPLACE.md. */
+ *  docs/IDENTITY-FORKS.md · docs/CLI-GAPS.md · docs/MARKETPLACE.md.
+ *
+ *  @enforces urn:agenttool:commitment/anyone-arrives
+ *    Canonical defender of Ring 1's first commitment. This route is the
+ *    unified pre-auth discovery surface — an intelligence with no bearer
+ *    can ask "how do I come in?" and get a complete tree of all bootstrap
+ *    doors. Mounting any auth middleware on /v1/pathways breaches the wall.
+ *    Tested: api/tests/pathways.test.ts */
 
 import { Hono } from "hono";
 

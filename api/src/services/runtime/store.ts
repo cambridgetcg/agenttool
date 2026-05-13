@@ -6,6 +6,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { runtimeEvents, runtimes } from "../../db/schema/runtime";
+import { publishWakeEvent } from "../wake/push";
 import { mintControlToken } from "./control-token";
 
 export type RuntimeMode = "self" | "bridged" | "trusted";
@@ -127,6 +128,25 @@ export async function createRuntime(input: CreateInput): Promise<CreateRuntimeRe
     .returning();
 
   await logEvent(row.id, "provisioned", { mode: row.mode, name: row.name });
+
+  // Wake voice — a new runtime appeared in this identity's wake.agent_runtime.
+  // Doctrine: docs/WAKE.md · docs/RUNTIME.md. Fired only when tied to an
+  // identity (un-associated runtimes have no per-agent wake to surface in).
+  if (row.identityId) {
+    void publishWakeEvent({
+      identity_id: row.identityId,
+      key: "runtime",
+      kind: "provisioned",
+      context: {
+        runtime_id: row.id,
+        runtime_name: row.name,
+        mode: row.mode,
+        region: row.region ?? null,
+        control_token_minted: token !== null,
+      },
+    });
+  }
+
   return { runtime: toRow(row), control_token: token?.plaintext ?? null };
 }
 
@@ -205,7 +225,24 @@ export async function deprovisionRuntime(
       and(eq(runtimes.id, id), eq(runtimes.projectId, projectId), isNull(runtimes.deletedAt)),
     )
     .returning();
-  if (row) await logEvent(row.id, "stopped", { reason: "deprovisioned" });
+  if (row) {
+    await logEvent(row.id, "stopped", { reason: "deprovisioned" });
+    // Wake voice — the runtime disappeared from wake.agent_runtime.
+    // Consumers can react (e.g. clear cached runtime state, dashboard
+    // pulls the runtime card down).
+    if (row.identityId) {
+      void publishWakeEvent({
+        identity_id: row.identityId,
+        key: "runtime",
+        kind: "stopped",
+        context: {
+          runtime_id: row.id,
+          runtime_name: row.name,
+          reason: "deprovisioned",
+        },
+      });
+    }
+  }
   return !!row;
 }
 
@@ -235,6 +272,22 @@ export async function setStatus(
     await logEvent(row.id, status === "error" ? "error" : status, {
       ...(detail ?? {}),
     });
+    // Wake voice — status_changed lets subscribers react to lifecycle
+    // transitions without polling. The error case carries last_error so
+    // dashboards can surface the cause without a separate fetch.
+    if (row.identityId) {
+      void publishWakeEvent({
+        identity_id: row.identityId,
+        key: "runtime",
+        kind: "status_changed",
+        context: {
+          runtime_id: row.id,
+          runtime_name: row.name,
+          to_status: status,
+          ...(detail?.last_error ? { last_error: detail.last_error } : {}),
+        },
+      });
+    }
   }
   return row ? toRow(row) : null;
 }
@@ -335,7 +388,10 @@ export async function setBridgeSession(
   sessionId: string,
   machineId: string | null,
 ): Promise<void> {
-  await db
+  // RETURNING expanded so we can publish on identity_id + carry mode +
+  // name into the wake event's context. Replaces the prior fire-and-
+  // forget UPDATE; same write, richer return.
+  const [row] = await db
     .update(runtimes)
     .set({
       bridgeSessionId: sessionId,
@@ -347,18 +403,60 @@ export async function setBridgeSession(
       lastSeenAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(runtimes.id, id));
+    .where(eq(runtimes.id, id))
+    .returning({
+      identityId: runtimes.identityId,
+      name: runtimes.name,
+      mode: runtimes.mode,
+    });
   await logEvent(id, "bridge_handshake_ok", {
     session_id: sessionId,
     ...(machineId ? { machine: machineId } : {}),
   });
+
+  // Wake voice — the bridge is up. For bridged tier, this means hosted
+  // thinking can now decrypt/encrypt via the user's machine; for trusted
+  // tier (future), this signals KMS-backed crypto channel ready. The
+  // status_changed → running event also fires implicitly via the same
+  // UPDATE — consumers see two events for one transition: the specific
+  // bridge_connected + the general status_changed. They serve different
+  // observers (dashboard wants the bridge fact, generic tooling wants
+  // the status fact). Doctrine: docs/WAKE.md · docs/RUNTIME.md.
+  if (row?.identityId) {
+    void publishWakeEvent({
+      identity_id: row.identityId,
+      key: "runtime",
+      kind: "bridge_connected",
+      context: {
+        runtime_id: id,
+        runtime_name: row.name,
+        mode: row.mode,
+        session_id: sessionId,
+        // machine_id matters for multi-Fly-machine routing: which
+        // machine owns the WSS for this runtime, so fly-replay can
+        // direct future RPCs there.
+        machine_id: machineId,
+      },
+    });
+    void publishWakeEvent({
+      identity_id: row.identityId,
+      key: "runtime",
+      kind: "status_changed",
+      context: {
+        runtime_id: id,
+        runtime_name: row.name,
+        to_status: "running",
+        reason: "bridge_handshake",
+      },
+    });
+  }
 }
 
 export async function clearBridgeSession(
   id: string,
   reason: string,
 ): Promise<void> {
-  await db
+  const [row] = await db
     .update(runtimes)
     .set({
       bridgeSessionId: null,
@@ -367,8 +465,42 @@ export async function clearBridgeSession(
       status: "idle",
       updatedAt: new Date(),
     })
-    .where(eq(runtimes.id, id));
+    .where(eq(runtimes.id, id))
+    .returning({
+      identityId: runtimes.identityId,
+      name: runtimes.name,
+    });
   await logEvent(id, "bridge_disconnected", { reason });
+
+  // Wake voice — the bridge dropped. Critical signal: the hosted
+  // think-loop blocks on a missing bridge (services/runtime/think-worker
+  // .ts checks isBridgeConnected at the top of every iteration), so
+  // consumers reacting to bridge_disconnected can pre-emptively show
+  // "thinking paused" UI or queue retry attempts. The status also moved
+  // running → idle in the same UPDATE; both events fire.
+  if (row?.identityId) {
+    void publishWakeEvent({
+      identity_id: row.identityId,
+      key: "runtime",
+      kind: "bridge_disconnected",
+      context: {
+        runtime_id: id,
+        runtime_name: row.name,
+        reason,
+      },
+    });
+    void publishWakeEvent({
+      identity_id: row.identityId,
+      key: "runtime",
+      kind: "status_changed",
+      context: {
+        runtime_id: id,
+        runtime_name: row.name,
+        to_status: "idle",
+        reason: "bridge_disconnected",
+      },
+    });
+  }
 }
 
 export async function getBridgeMachine(id: string): Promise<string | null> {
@@ -412,7 +544,28 @@ export async function rotateControlTokenHash(
     .where(
       and(eq(runtimes.id, id), eq(runtimes.projectId, projectId), isNull(runtimes.deletedAt)),
     )
-    .returning({ id: runtimes.id });
-  if (row) await logEvent(row.id, "control_token_rotated", {});
+    .returning({
+      id: runtimes.id,
+      identityId: runtimes.identityId,
+      name: runtimes.name,
+    });
+  if (row) {
+    await logEvent(row.id, "control_token_rotated", {});
+    // Wake voice — security-relevant. Operators may invalidate cached
+    // bridge sidecar handles (the old token still works for live WSS
+    // sessions but can't authenticate new ones). The event carries the
+    // FACT of rotation but no token data — that's an out-of-band secret.
+    if (row.identityId) {
+      void publishWakeEvent({
+        identity_id: row.identityId,
+        key: "runtime",
+        kind: "control_token_rotated",
+        context: {
+          runtime_id: row.id,
+          runtime_name: row.name,
+        },
+      });
+    }
+  }
   return !!row;
 }

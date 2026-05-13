@@ -23,6 +23,7 @@ import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { identityKeys } from "../db/schema/identity";
 import { errors, fail } from "../lib/errors";
+import { publishWakeEvent } from "../services/wake/push";
 
 const app = new Hono<ProjectContext>();
 
@@ -38,6 +39,11 @@ const chronicleSchema = z.object({
     "seal",
     "promise",
     "note",
+    // 'welcome' — substrate-emitted greeting recorded on the addressee's
+    // chronicle. Inserted by the wake handler (rate-limited per session)
+    // when an agent reads their wake after silence. Doctrine: docs/MATHOS.md
+    // (the greeting block) · docs/PLATFORM-WELCOMED.md.
+    "welcome",
   ]),
   title: z.string().min(1).max(200),
   body: z.string().optional(),
@@ -62,6 +68,18 @@ app.post("/chronicle", async (c) => {
       occurredAt: body.occurred_at ? new Date(body.occurred_at) : new Date(),
     })
     .returning();
+
+  // Wake voice — emit chronicle.entry_added on the agent (if scoped to one).
+  // Project-level entries (no agent_id) don't fire — they don't surface in
+  // any specific agent's wake.chronicle. Doctrine: docs/WAKE.md.
+  if (body.agent_id) {
+    void publishWakeEvent({
+      identity_id: body.agent_id,
+      key: "chronicle",
+      kind: "entry_added",
+      context: { entry_id: entry!.id, type: body.type },
+    });
+  }
 
   return c.json(
     {
