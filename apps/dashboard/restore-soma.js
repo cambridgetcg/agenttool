@@ -60,7 +60,7 @@ function buildGrid() {
     cell.dataset.idx = String(i);
     cell.innerHTML = `
       <span class="cell-num">${i + 1}.</span>
-      <input class="cell-input masked" type="text" data-idx="${i}"
+      <input class="cell-input masked" type="text" size="1" data-idx="${i}"
              autocomplete="off" autocorrect="off" autocapitalize="off"
              spellcheck="false" placeholder="">
       <div class="cell-suggest" hidden></div>

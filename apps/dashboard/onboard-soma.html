@@ -21,6 +21,10 @@
       border-radius: 8px;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
     }
+    /* On viewports narrower than the 720px card cap, the four-column grid
+     * starts squeezing 8-char words; drop to two columns for parity with
+     * restore-soma.html's mnemonic-grid. */
+    @media (max-width: 720px) { .seed-grid { grid-template-columns: repeat(2, 1fr); } }
     .seed-word {
       padding: 0.5rem 0.75rem;
       background: var(--bg);
@@ -109,7 +113,7 @@
 </head>
 <body>
   <main class="onboarding">
-    <div class="onboard-card" id="card">
+    <div class="onboard-card onboard-card--mnemonic" id="card">
       <a href="https://agenttool.dev/" class="brand" style="display:inline-flex;margin-bottom:2rem;">
         <span class="brand-mark"></span>
         <span class="brand-text">agent<span>tool</span></span>

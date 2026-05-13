@@ -98,6 +98,11 @@ body {
   max-width: 480px;
   z-index: 1;
 }
+/* Modifier — for pages whose content is a 24-cell mnemonic grid rather
+ * than a simple form. 480px squeezes the 4×6 grid; 720px gives each cell
+ * ≈147px (comfortable for 8-char BIP39 words with real slack). Used by
+ * restore-soma.html (input grid) and onboard-soma.html (display grid). */
+.onboard-card.onboard-card--mnemonic { max-width: 720px; }
 .onboard-card h1 {
   font-size: 1.75rem;
   font-weight: 800;
