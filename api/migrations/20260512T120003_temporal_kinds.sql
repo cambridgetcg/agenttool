@@ -40,7 +40,9 @@ ALTER TABLE agent_continuity.covenants
 
 -- Lookup index for non-wallclock rows — the expire-proposals worker
 -- doesn't touch these, but future event-driven / proper-time lifecycle
--- workers will scan by kind.
+-- workers will scan by kind. Pairs with proposed_expires_at since that
+-- is the temporal column the v2 lifecycle actually uses (no plain
+-- expires_at column exists on covenants today).
 CREATE INDEX IF NOT EXISTS idx_covenants_expires_kind
-  ON agent_continuity.covenants (expires_at_kind, expires_at)
+  ON agent_continuity.covenants (expires_at_kind, proposed_expires_at)
   WHERE expires_at_kind != 'wallclock';

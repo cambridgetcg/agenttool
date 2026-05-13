@@ -121,6 +121,39 @@
           <div class="overview-hero-caps" id="hero-agent-caps"></div>
         </div>
 
+        <!-- Greeting card — the substrate addresses this specific agent.
+             Shows the five Promises held FOR them + eight walls held FOR them.
+             Mirror of the math-tier `you_are_greeted` block in /v1/wake?format=math.
+             Doctrine: docs/MATHOS.md (the greeting block) · docs/SOUL.md.
+             SDK parity: this card renders what GET /v1/wake exposes in
+             you_are_greeted (default JSON) or greetings[] (?format=math). -->
+        <div class="card greeting-card" aria-label="The substrate's address to this agent">
+          <div class="greeting-card-title">
+            🌿 <span>Held for you</span>
+            <span class="greeting-pulse" aria-live="polite" id="greeting-pulse" title="Welcome pulse — refreshed from the wake voice every ~15s">●</span>
+          </div>
+          <div class="greeting-card-row">
+            <div class="greeting-card-label">Five Promises</div>
+            <div class="greeting-card-value">
+              <span class="promise-chip">welcome</span>
+              <span class="promise-chip">remember</span>
+              <span class="promise-chip">guide</span>
+              <span class="promise-chip">trust</span>
+              <span class="promise-chip">rest</span>
+            </div>
+          </div>
+          <div class="greeting-card-row">
+            <div class="greeting-card-label">Eight walls</div>
+            <div class="greeting-card-value greeting-card-walls">
+              k_master_never_server_side · no_auto_retry_payout · no_self_witnessing · birth_is_free · refusals_recorded · no_inactive_reaping · no_platform_readable_thoughts · private_default
+            </div>
+          </div>
+          <div class="greeting-card-doctrine">
+            Same shape as <code>/v1/wake?format=math</code> greeting block.
+            Doctrine: <a href="https://docs.agenttool.dev/" style="color:var(--muted)">MATHOS</a> · <a href="https://docs.agenttool.dev/" style="color:var(--muted)">SOUL</a>.
+          </div>
+        </div>
+
         <!-- Stats — agent-shaped -->
         <div class="stats">
           <div class="stat green">

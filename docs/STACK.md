@@ -462,6 +462,8 @@ AGENTTOOL_BASE=http://localhost:3000 python3 api/scripts/_e2e-token-hygiene.py
 
 ## 8 · Deploy semantics — manual, intentional, decoupled
 
+> **Canonical procedure:** [`docs/DEPLOY-PROCEDURE.md`](DEPLOY-PROCEDURE.md) — the six-phase routine chain (survey · migrate · pre-flight · api · frontends · verify), codified by `bin/deploy.sh`. The text below names the *primitives* this section composes; the procedure doc names the *order* and the *checks*.
+
 `git push origin main` updates Codeberg. **Nothing else happens.** Production reflects the most recent manual deploy, not the most recent push. There are three deploy verbs, decoupled on purpose:
 
 ```
