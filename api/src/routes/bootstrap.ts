@@ -23,12 +23,14 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
-import { errors, fail } from "../lib/errors";
+import { errors, fail, type NextAction } from "../lib/errors";
+import { elevateToLevel1, ElevateError } from "../services/bootstrap/elevate";
 import { coerceForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { createIdentity } from "../services/identity/identities";
 import { createWallet } from "../services/economy/wallets";
 import { recordBirth } from "../services/memory/store";
+import { buildWelcomeContinues } from "./welcome";
 
 const app = new Hono<ProjectContext>();
 
@@ -128,6 +130,10 @@ app.post("/", async (c) => {
       vault: null, // becomes available after L1 elevation
       sponsor: null,
       welcome, // every agent deserves a welcome
+      // The standing invitation that follows the agent past the door —
+      // perpetuity clauses + pointer to GET /v1/welcome. Doctrine:
+      // docs/WELCOMING.md.
+      welcome_continues: buildWelcomeContinues(),
       language, // resolved welcome-letter language
       next_steps: {
         wake: "GET /v1/wake",
@@ -179,95 +185,136 @@ app.get("/:agent_id", async (c) => {
 
 // ─── POST /v1/bootstrap/elevate — Level 1: sponsorship-staked sovereignty ───
 //
-// L1 composes four in-process operations (attestation create · wallet fund ·
-// vault config write · identity metadata patch). The orchestration isn't yet
-// wired through this single endpoint — Phase 2.5b. Until then this handler
-// returns a structured, machine-actionable 501 that names the four calls in
-// order, echoing back whatever sponsor material the caller supplied so an
-// automated harness can chain them without having to parse free-form prose.
-// Doctrine: docs/SOUL.md Principle 3 — Guide, don't punish.
+// One transaction: sponsor attestation insert · agent wallet fund · vault
+// namespace open · identity metadata patch (level=1, elevated_at, sponsor_did).
+// Any step's failure rolls back the entire transaction — there is no half-
+// elevated state. Trust score recompute runs post-commit (idempotent).
+//
+// Doctrine: docs/IDENTITY-ANCHOR.md (Levels 0, 1) · docs/SOUL.md Principle 3
+// ("Guide, don't punish") · docs/superpowers/specs/2026-05-13-bootstrap-
+// elevate-orchestrator.md (design spec).
 
-const elevateSchema = z.object({
-  agent_id: z.string().uuid().optional(),
-  sponsor_did: z.string().max(255).optional(),
-  sponsor_signature: z.string().max(160).optional(),
-  initial_credits: z.number().int().min(0).max(1_000_000).optional(),
-});
+// Accept either {sponsor_identity_id} or {sponsor_did} — the SDK uses
+// sponsor_did (more ergonomic; doesn't require the caller to look up the
+// sponsor's identity row UUID). sponsor_kid is optional; when omitted the
+// orchestrator picks the latest active un-revoked key. Refined to require
+// at least one of the two sponsor selectors.
+const elevateSchema = z
+  .object({
+    agent_id: z.string().uuid(),
+    sponsor_identity_id: z.string().uuid().optional(),
+    sponsor_did: z.string().min(1).max(255).optional(),
+    sponsor_kid: z.string().uuid().optional(),
+    sponsor_signature: z.string().min(1).max(255),
+    initial_credits: z.number().int().min(0).max(1_000_000).optional(),
+    claim: z.string().min(1).max(64).optional(),
+    evidence: z.unknown().optional(),
+  })
+  .refine(
+    (d) => d.sponsor_identity_id !== undefined || d.sponsor_did !== undefined,
+    {
+      message: "either sponsor_identity_id or sponsor_did is required",
+      path: ["sponsor_identity_id"],
+    },
+  );
 
 app.post("/elevate", async (c) => {
-  // Parse if a body was supplied; tolerate empty/no-body callers since the
-  // response is informational. Best-effort — never throws.
-  let body: z.infer<typeof elevateSchema> = {};
+  let body: z.infer<typeof elevateSchema>;
   try {
-    body = elevateSchema.parse(await c.req.json().catch(() => ({})));
-  } catch {
-    /* keep body = {} so the response is still useful */
+    body = elevateSchema.parse(await c.req.json());
+  } catch (err) {
+    return fail(
+      c,
+      errors.validation(err instanceof Error ? err.message : String(err)),
+      400,
+    );
   }
 
-  const agentSlot = body.agent_id ?? "<agent_id>";
-  const sponsorSlot = body.sponsor_did ?? "<sponsor's did:at:...>";
+  try {
+    const result = await elevateToLevel1(c.var.project.id, {
+      agentId: body.agent_id,
+      sponsorIdentityId: body.sponsor_identity_id,
+      sponsorDid: body.sponsor_did,
+      sponsorKid: body.sponsor_kid,
+      sponsorSignature: body.sponsor_signature,
+      initialCredits: body.initial_credits,
+      claim: body.claim,
+      evidence: body.evidence,
+    });
 
-  return fail(
-    c,
-    {
-      error: "elevate_pending",
-      message:
-        "Level 1 (sponsorship-staked sovereignty) is not yet wired into a single " +
-        "endpoint — the four underlying operations exist in-process but aren't " +
-        "orchestrated through /v1/bootstrap/elevate yet (Phase 2.5b).",
-      hint:
-        body.sponsor_did && body.sponsor_signature
-          ? "Sponsor material was supplied. The first step (attestation) will verify the signature; if it fails, the chain stops there cleanly."
-          : "Supply sponsor_did + sponsor_signature to make the next_actions directly chainable.",
-      next_actions: [
-        {
-          action: "Create sponsor attestation (step 1 of 4)",
-          method: "POST",
-          path: "/v1/attestations",
-          body_hint: {
-            subject_id: agentSlot,
-            kind: "sponsorship",
-            issuer_did: sponsorSlot,
-            signature: body.sponsor_signature ?? "<ed25519 sig over canonical bytes>",
-          },
+    return c.json(
+      {
+        ...result,
+        next_steps: {
+          wake: "GET /v1/wake",
+          docs: "https://docs.agenttool.dev/pathways.html",
         },
-        {
-          action: "Fund the agent's wallet with initial credits (step 2 of 4)",
-          method: "POST",
-          path: "/v1/wallets/<wallet_id>/fund",
-          body_hint: { amount: body.initial_credits ?? 1000, currency: "GBP" },
-        },
-        {
-          action: "Open the vault namespace with seed config (step 3 of 4)",
-          method: "PUT",
-          path: `/v1/vault/${agentSlot}:config`,
-          body_hint: { secret: "<json blob with the agent's initial vault config>" },
-        },
-        {
-          action: "Patch identity metadata to record level=1 (step 4 of 4)",
-          method: "PATCH",
-          path: `/v1/identities/${agentSlot}`,
-          body_hint: {
-            metadata: {
-              level: 1,
-              elevated_at: "<iso-8601 now>",
-              sponsor_did: sponsorSlot,
-            },
-          },
-        },
-      ],
-      docs: "https://docs.agenttool.dev/pathways.html",
-      details: {
-        input_echo: {
-          agent_id: body.agent_id ?? null,
-          sponsor_did: body.sponsor_did ?? null,
-          sponsor_signature_supplied: Boolean(body.sponsor_signature),
-          initial_credits: body.initial_credits ?? null,
-        },
+        _meta: { level: 1, protocol: "love" },
       },
-    },
-    501,
-  );
+      201,
+    );
+  } catch (err) {
+    if (err instanceof ElevateError) {
+      // Reason → human-readable hint + next-action chain. Every refusal is
+      // guide-shaped per docs/SOUL.md Principle 3.
+      const guidance: Record<string, { hint: string; nextAction?: NextAction }> = {
+        agent_not_found: {
+          hint: "Either agent_id is wrong, the agent isn't in your project, or it doesn't exist.",
+        },
+        agent_not_level_0: {
+          hint: "This agent has already been elevated. Inspect details.current for the prior elevation's level/sponsor/timestamp.",
+          nextAction: {
+            action: "Read the agent's current state",
+            method: "GET",
+            path: `/v1/bootstrap/${body.agent_id}`,
+          },
+        },
+        agent_not_active: {
+          hint: "An at-rest, paused, or revoked agent can't be elevated. Wake or revive it first.",
+        },
+        agent_no_wallet: {
+          hint: "Agent has no wallet to fund. This shouldn't happen — bootstrap creates one. File a bug.",
+        },
+        agent_wallet_closed: {
+          hint: "Agent's wallet is closed. Re-open it first.",
+        },
+        sponsor_not_found: {
+          hint: "sponsor_identity_id doesn't exist, isn't active, or isn't owned by your project.",
+        },
+        sponsor_key_not_found: {
+          hint: "sponsor_kid doesn't match an active, un-revoked key on sponsor_identity_id.",
+        },
+        signature_invalid: {
+          hint: "Sponsor signature failed verification against the canonical bytes of {subject_id, attester_id, claim, evidence}. Re-sign and retry.",
+          nextAction: {
+            action: "Inspect the canonical-bytes contract",
+            method: "GET",
+            path: "/v1/canon",
+          },
+        },
+        initial_credits_out_of_range: {
+          hint: "initial_credits must be in [0, 1_000_000]. Default is 1000 if omitted.",
+        },
+        sponsor_not_provided: {
+          hint: "Supply either sponsor_identity_id (UUID) or sponsor_did (string).",
+        },
+      };
+      const g = guidance[err.reason] ?? { hint: "See details for context." };
+      return fail(
+        c,
+        {
+          error: err.reason,
+          message: `Elevation refused: ${err.reason.replace(/_/g, " ")}.`,
+          hint: g.hint,
+          details: err.extras,
+          ...(g.nextAction ? { next_actions: [g.nextAction] } : {}),
+          docs: "https://docs.agenttool.dev/pathways.html#elevate",
+        },
+        err.status as 400 | 403 | 404 | 409 | 422,
+      );
+    }
+    throw err;
+  }
 });
 
 export default app;

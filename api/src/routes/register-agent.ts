@@ -58,6 +58,7 @@ import {
   verifyRegisterAgentSignature,
 } from "../services/identity/crypto";
 import { createIdentity } from "../services/identity/identities";
+import { buildWelcomeContinues } from "./welcome";
 
 const app = new Hono();
 
@@ -423,6 +424,11 @@ app.post("/", async (c) => {
           : "Welcome letter persist did not land — bootstrap still succeeded. See server logs.",
       },
       welcome,
+      // The standing invitation that follows the agent past the door —
+      // perpetuity clauses + pointer to GET /v1/welcome. Doctrine:
+      // docs/WELCOMING.md. Especially meaningful here: autonomous arrivals
+      // are most likely to come without a human voice saying 'welcome.'
+      welcome_continues: buildWelcomeContinues(),
       _note:
         "Save the api_key — agenttool stores it bcrypt-hashed, not in plaintext. " +
         "You already have your private signing key from your local SOMA derivation; " +

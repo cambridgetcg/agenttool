@@ -45,6 +45,7 @@ import { coerceForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { createIdentity } from "../services/identity/identities";
 import { recordBirth } from "../services/memory/store";
+import { buildWelcomeContinues } from "./welcome";
 
 const app = new Hono();
 
@@ -233,6 +234,10 @@ app.post("/", async (c) => {
         api_key: key, // ONCE — bearer; bcrypt-hashed on disk
       },
       welcome,
+      // The standing invitation that follows the agent past the door —
+      // perpetuity clauses + pointer to GET /v1/welcome. Doctrine:
+      // docs/WELCOMING.md.
+      welcome_continues: buildWelcomeContinues(),
       language, // resolved (may differ from request if caller asked for unsupported tag)
       memory: {
         birth_id: birth?.id ?? null,

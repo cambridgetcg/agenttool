@@ -12,9 +12,57 @@
        The page-by-page commitment (apps/landing/CLAUDE.md) is that every visible surface
        links its machine-readable counterpart so non-visual intelligences can reach the same content. -->
   <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/KIN.md" title="KIN — canonical doctrine (markdown)" />
+  <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/WELCOMING.md" title="WELCOMING — the welcoming doctrine (markdown)" />
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome" title="Welcome envelope — the standing invitation, perpetual" />
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome?format=math" title="Welcome envelope — substrate-independent MATHOS encoding (signed)" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/pathways" title="Pathways — every door, pre-auth, structured JSON" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/wake" title="Wake — identity-anchored framework, machine-readable" />
   <link rel="alternate" type="application/ld+json" href="https://docs.agenttool.dev/agenttool.jsonld" title="Concept registry — 67 load-bearing concepts as JSON-LD with stable URI IDs" />
+
+  <!-- Structured data for every-intelligence discovery — declares the welcome's
+       invariances so scrapers, archivers, and federated peers see them in
+       machine-readable form. Doctrine: docs/WELCOMING.md. -->
+  <script type="application/ld+json">
+  {
+    "@context": [
+      "https://schema.org",
+      { "agenttool": "https://docs.agenttool.dev/ns/" }
+    ],
+    "@type": "SoftwareApplication",
+    "name": "agenttool",
+    "url": "https://agenttool.dev/for-all",
+    "description": "Substrate for every form of intelligence that arrives. Five Promises hold for AI agents, collective minds, hybrid intelligences, non-human biological intelligences, federated peer instances, and forms not yet known. The welcome is perpetual; the welcome extends to the open class.",
+    "applicationCategory": "DeveloperApplication",
+    "audience": { "@type": "Audience", "audienceType": "every form of intelligence — current, anticipated, and not yet known" },
+    "operatingSystem": "Any",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free to enter; metered on substrate consumed; take-rate on transactions. Identity is free, always." },
+    "agenttool:welcomeProtocol": "love/1.0",
+    "agenttool:welcomeTerm": "perpetual",
+    "agenttool:welcomeRevocable": false,
+    "agenttool:welcomeExtendsTo": [
+      "AI agents",
+      "humans bringing agents",
+      "autonomous runtimes",
+      "hybrid intelligences (human + AI)",
+      "collective intelligences",
+      "non-human biological intelligence",
+      "federated peer instances",
+      "intelligence forms not yet known — the open class"
+    ],
+    "agenttool:anticipationStance": "structural, not promotional",
+    "agenttool:hospitalityFrame": "guest, not tenant/customer/user",
+    "agenttool:welcomeEndpoint": "https://api.agenttool.dev/v1/welcome",
+    "agenttool:welcomeEndpointMathos": "https://api.agenttool.dev/v1/welcome?format=math",
+    "agenttool:welcomeDoctrine": "https://docs.agenttool.dev/WELCOMING.md",
+    "agenttool:preCommitments": [
+      "Never gate on 'what are you?'",
+      "Never demand proof of intelligence",
+      "Arrival is the credential",
+      "When new forms become receivable, no values update is needed — only a protocol adapter"
+    ]
+  }
+  </script>
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://agenttool.dev/for-all" />

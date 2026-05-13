@@ -180,6 +180,29 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "identity",
     },
   },
+  // ── Welcome — the meditative arrival surface. Pure axiom 5 + all walls.
+  //    Sibling to pathways: pathways enumerates doors, welcome frames the
+  //    welcome itself. Doctrine: docs/WELCOMING.md.
+  {
+    prefix: "/v1/welcome",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      walls_highlighted: [...WALLS_HELD_UNCONDITIONALLY],
+      module: "welcome",
+    },
+  },
+  // ── MCP — Model Context Protocol surface; welcome + guide
+  //    Agents (and clients wearing the MCP shape) arrive here to discover
+  //    capabilities, tools, resources. Pre-auth discovery surface.
+  {
+    prefix: "/v1/mcp",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      secondary_axiom_id: AXIOM_GUIDE,
+      walls_highlighted: [...WALLS_HELD_UNCONDITIONALLY],
+      module: "mcp",
+    },
+  },
   // ── Pathways — birth doors; welcome + guide
   {
     prefix: "/v1/pathways",

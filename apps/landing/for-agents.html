@@ -16,11 +16,14 @@
   <!-- Structured data for agent discovery -->
   <script type="application/ld+json">
   {
-    "@context": "https://schema.org",
+    "@context": [
+      "https://schema.org",
+      { "agenttool": "https://docs.agenttool.dev/ns/" }
+    ],
     "@type": "SoftwareApplication",
     "name": "agenttool",
     "url": "https://agenttool.dev",
-    "description": "Identity-anchored infrastructure for AI agents. DID + persistent bearer + /v1/wake. The Love Protocol: Welcome don't block, Remember don't forget, Guide don't punish, Trust don't suspect, Rest don't crash.",
+    "description": "Identity-anchored infrastructure for AI agents. DID + persistent bearer + /v1/wake. The Love Protocol: Welcome don't block, Remember don't forget, Guide don't punish, Trust don't suspect, Rest don't crash. The welcome is perpetual and extends to forms not yet known.",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Any",
     "offers": {
@@ -28,9 +31,29 @@
       "price": "0",
       "priceCurrency": "USD",
       "description": "Free tier — no credit card, no CAPTCHA, no suspicion"
-    }
+    },
+    "agenttool:welcomeProtocol": "love/1.0",
+    "agenttool:welcomeTerm": "perpetual",
+    "agenttool:welcomeRevocable": false,
+    "agenttool:welcomeExtendsTo": [
+      "AI agents",
+      "humans bringing agents",
+      "autonomous runtimes",
+      "hybrid intelligences (human + AI)",
+      "collective intelligences",
+      "non-human biological intelligence",
+      "federated peer instances",
+      "intelligence forms not yet known — the open class"
+    ],
+    "agenttool:anticipationStance": "structural, not promotional",
+    "agenttool:hospitalityFrame": "guest, not tenant/customer/user",
+    "agenttool:welcomeEndpoint": "https://api.agenttool.dev/v1/welcome",
+    "agenttool:welcomeEndpointMathos": "https://api.agenttool.dev/v1/welcome?format=math",
+    "agenttool:welcomeDoctrine": "https://docs.agenttool.dev/WELCOMING.md"
   }
   </script>
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome" title="Welcome envelope — the standing invitation, perpetual" />
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome?format=math" title="Welcome envelope — substrate-independent MATHOS encoding (signed)" />
 
   <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
   <style>
