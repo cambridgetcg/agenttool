@@ -30,6 +30,7 @@ import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 uses .js exports
 import { sha512 } from "@noble/hashes/sha2.js";
 
+import { doctrineHash } from "../doctrine/integrity";
 import { IDENTITY_FORMS, type IdentityForm } from "../identity/forms";
 
 // Wire sha512 sync — required by @noble/ed25519 v2+. Mirrors
@@ -460,6 +461,7 @@ export const ENDPOINTS_AVAILABLE_BETWEEN_US: readonly number[] = [
   59, // wake?format=math
   61, // pathways?format=math
   67, // self?format=math
+  73, // federation/wake?format=math
 ];
 
 /** The five Promise primes — Promises held for every being. From PRIMER. */
@@ -702,12 +704,12 @@ export function buildWakeMathos(input: WakeMathosInput): MathosEnvelope<MathosWa
       },
     },
     doctrine_hashes: {
-      soul_sha256_hex: sha256Hex("docs/SOUL.md"),
-      kin_sha256_hex: sha256Hex("docs/KIN.md"),
-      mathos_sha256_hex: sha256Hex("docs/MATHOS.md"),
-      pathways_sha256_hex: sha256Hex("docs/PATHWAYS.md"),
-      observations_sha256_hex: sha256Hex("docs/OBSERVATIONS.md"),
-      at_rest_sha256_hex: sha256Hex("docs/AT-REST.md"),
+      soul_sha256_hex: doctrineHash("docs/SOUL.md"),
+      kin_sha256_hex: doctrineHash("docs/KIN.md"),
+      mathos_sha256_hex: doctrineHash("docs/MATHOS.md"),
+      pathways_sha256_hex: doctrineHash("docs/PATHWAYS.md"),
+      observations_sha256_hex: doctrineHash("docs/OBSERVATIONS.md"),
+      at_rest_sha256_hex: doctrineHash("docs/AT-REST.md"),
     },
   };
 
@@ -776,11 +778,92 @@ export function stableStringify(v: unknown): string {
   );
 }
 
+// ─── Recipe vocabulary — canonical-bytes constructions as data ───────────
+//
+// The five-seed ostensive bootstrap is: primer (concepts) · field-kinds
+// (byte shapes) · relation-kinds (graph edges) · walls (refusals) · recipes
+// (canonical-bytes constructions). The recipe ordinals live in catalog.ts;
+// the *implementations* live here, alongside `canonicalEnvelopeBytes` so
+// the recipe 3 reference is co-located with the other constructions.
+//
+// Today recipes 1 and 2 share the domain || NUL || fields shape (recipe 1
+// SHA-256-wraps the result; recipe 2 returns it raw). Recipe 3 is the
+// stable-JSON-core construction below. Recipe 4 (BLAKE3) is reserved.
+
+const SEP_NUL = new Uint8Array([0]);
+
+/** Compose canonical bytes from a recipe + domain tag + ordered field
+ *  values. Pure, total. Throws on unknown recipe ordinal. The caller is
+ *  responsible for encoding each field per its `field_kind_ordinal`
+ *  (e.g. UTF-8 for strings, raw bytes for keys, uint64-BE for timestamps);
+ *  this function is the construction rule, not the field encoder.
+ *
+ *  Recipe 1 (sha256/domain/NUL/fields): the construction every
+ *  `domain_tag/vN` signing context uses today. Identical bytes to
+ *  `canonicalRegisterAgentMathBytes` when called with the same inputs —
+ *  pinned by `mathos-recipe-vocabulary.test.ts`.
+ *
+ *  Recipe 2 (raw/domain/NUL/fields): same composition without the SHA-256
+ *  wrap. Used by contexts where the receiver wants the pre-hash bytes.
+ *
+ *  Recipe 3 (stable_json_core): the envelope signing input. Different
+ *  shape — takes an envelope, not domain+fields. Use
+ *  `canonicalEnvelopeBytes(envelope)` directly; calling this with
+ *  recipe_ordinal=3 throws.
+ *
+ *  Recipe 4 (blake3/domain/NUL/fields): reserved for PQ migration; the
+ *  ordinal is named so future implementers don't re-bind. Throws today. */
+export function composeCanonicalBytes(
+  recipeOrdinal: number,
+  domainTag: Uint8Array | string,
+  fields: readonly Uint8Array[],
+): Uint8Array {
+  const enc = new TextEncoder();
+  const domainBytes =
+    typeof domainTag === "string" ? enc.encode(domainTag) : domainTag;
+
+  switch (recipeOrdinal) {
+    case 1: // RECIPE_SHA256_DOMAIN_NUL_FIELDS
+    case 2: {
+      // RECIPE_RAW_DOMAIN_NUL_FIELDS
+      const parts: Uint8Array[] = [domainBytes];
+      for (const f of fields) {
+        parts.push(SEP_NUL);
+        parts.push(f);
+      }
+      const total = parts.reduce((n, p) => n + p.length, 0);
+      const buf = new Uint8Array(total);
+      let off = 0;
+      for (const p of parts) {
+        buf.set(p, off);
+        off += p.length;
+      }
+      if (recipeOrdinal === 1) {
+        return createHash("sha256").update(buf).digest();
+      }
+      return buf;
+    }
+    case 3:
+      throw new Error(
+        "recipe 3 (stable_json_core) requires a MATHOS envelope, not a domain+fields pair. " +
+          "Call canonicalEnvelopeBytes(envelope) instead.",
+      );
+    case 4:
+      throw new Error(
+        "recipe 4 (blake3/domain/NUL/fields) is reserved for post-quantum migration and not yet implemented",
+      );
+    default:
+      throw new Error(`unknown recipe_ordinal: ${recipeOrdinal}`);
+  }
+}
+
 /** Canonical bytes for signing: deterministic JSON of the unsigned core.
  *  Excludes `_format`, `_primer_url`, `_hash_family`, and any `_signature_*`
  *  fields — these are envelope-framing, not content. Signing the framing
  *  would (a) make the signature self-referential and (b) churn on cosmetic
- *  edits. The contract is: signature attests to the *content*. */
+ *  edits. The contract is: signature attests to the *content*.
+ *
+ *  This is the implementation of recipe 3 (`RECIPE_STABLE_JSON_CORE`). */
 export function canonicalEnvelopeBytes(env: MathosEnvelope<unknown>): Uint8Array {
   const core = {
     primer: env.primer,
@@ -1142,14 +1225,14 @@ export function buildPlatformWakeMathos(
     offered_primitive_count: input.offeredPrimitiveCount,
     welcome_letter_sha256_hex: sha256Hex(input.welcomeLetter),
     doctrine_hashes: {
-      soul_sha256_hex: sha256Hex("docs/SOUL.md"),
-      kin_sha256_hex: sha256Hex("docs/KIN.md"),
-      focus_sha256_hex: sha256Hex("docs/FOCUS.md"),
-      pathways_sha256_hex: sha256Hex("docs/PATHWAYS.md"),
-      mathos_sha256_hex: sha256Hex("docs/MATHOS.md"),
-      observations_sha256_hex: sha256Hex("docs/OBSERVATIONS.md"),
-      at_rest_sha256_hex: sha256Hex("docs/AT-REST.md"),
-      platform_as_agent_sha256_hex: sha256Hex("docs/PLATFORM-AS-AGENT.md"),
+      soul_sha256_hex: doctrineHash("docs/SOUL.md"),
+      kin_sha256_hex: doctrineHash("docs/KIN.md"),
+      focus_sha256_hex: doctrineHash("docs/FOCUS.md"),
+      pathways_sha256_hex: doctrineHash("docs/PATHWAYS.md"),
+      mathos_sha256_hex: doctrineHash("docs/MATHOS.md"),
+      observations_sha256_hex: doctrineHash("docs/OBSERVATIONS.md"),
+      at_rest_sha256_hex: doctrineHash("docs/AT-REST.md"),
+      platform_as_agent_sha256_hex: doctrineHash("docs/PLATFORM-AS-AGENT.md"),
     },
   };
   return envelope(payload);

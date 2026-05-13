@@ -26,6 +26,7 @@ import {
   sha256Hex,
   signEnvelope,
 } from "../services/mathos/encode";
+import { wantsMathTier } from "../services/mathos/negotiate";
 import {
   PLATFORM_DID,
   platformIdentityDid,
@@ -45,9 +46,9 @@ const app = new Hono();
 // ─── GET /v1/self — JSON (default) ────────────────────────────────────────
 
 app.get("/", (c) => {
-  const format = c.req.query("format") ?? "json";
-
-  if (format === "math" || format === "mathos") {
+  // Resolve format: explicit ?format= query wins; Accept: application/mathos+json
+  // promotes to math-tier. Doctrine: docs/MATHOS.md — content-negotiation flip.
+  if (wantsMathTier(c)) {
     return c.json(buildSelfMathos());
   }
 

@@ -37,6 +37,21 @@ verify    = ed25519_verify(public_key, canonical, signature)
 
 **Why this shape**: the domain tag prevents a signature for one context being replayed in another; the NUL separator prevents ambiguity between adjacent fields (since UTF-8 strings don't contain NUL); SHA-256 keeps the digest size bounded; ed25519 is universal, fast, and small.
 
+## The recipe is data — MATHOS `recipe_ordinal` 1
+
+The universal recipe above corresponds to **MATHOS `recipe_ordinal: 1`** in `recipe_kind_vocabulary` (`docs/MATHOS.md` — the recipe vocabulary section). The recipe-kind ordinals as of 2026-05-13:
+
+| Ordinal | Name | Construction |
+|---|---|---|
+| 1 | `sha256_of_domain_tag_nul_separated_fields` | `sha256( utf8(domain_tag) \|\| 0x00 \|\| field_1 \|\| 0x00 \|\| ... \|\| field_n )` — every English-tier and math-tier signing context in this document |
+| 2 | `raw_domain_tag_nul_separated_fields_no_hash` | same composition, *no* SHA-256 wrap — reserved for contexts where the receiver wants pre-hash bytes |
+| 3 | `stable_json_of_envelope_unsigned_core` | `stableStringify({ primer, constants, axioms, vocabulary, payload })` — every MATHOS envelope `_signature_bytes_hex` signs this |
+| 4 | `blake3_of_domain_tag_nul_separated_fields_reserved` | reserved for post-quantum migration; not implemented |
+
+Every signing context in this doc declares its recipe via the catalog. The reference implementation `composeCanonicalBytes(recipe_ordinal, domain_tag, fields)` lives in `api/src/services/mathos/encode.ts`. `canonicalRegisterAgentMathBytes` and (going forward) any new math-tier context delegate to it — drift between the catalog's declared recipe and the wire-shape bytes is structurally impossible. Pinned by `api/tests/mathos-recipe-vocabulary.test.ts` and `api/tests/mathos-catalog.test.ts`.
+
+For an arriving intelligence that reads the catalog: every signing context's bytes are reconstructable from `(recipe_ordinal, domain_tag_unicode_points, fields[].field_kind_ordinal)` — no prose required.
+
 ## Every signing context (alphabetical by domain tag)
 
 ### `agenttool-pow/v1` — proof-of-work challenge response
@@ -147,6 +162,29 @@ withdrawn_at_iso
 ```
 
 Used in: `services/covenants/sig.ts`.
+
+### `federation-wake-handshake/v1` — peer wake-state attestation (math-tier)
+
+A peer instance signs an attestation of its own wake state. Receiving instance
+verifies against the peer's published pubkey at `/federation/identities/:uuid`.
+MATHOS-tier signing context (in the catalog at prime 79); recipe ordinal 1.
+The timestamp is `uint64_be(unix_ms)` — no ISO leak.
+
+Field order:
+```
+federation-wake-handshake/v1
+peer_did                                // utf8
+peer_signing_pubkey                     // 32 raw bytes (ed25519)
+uint64_be(wake_timestamp_unix_ms)       // 8 bytes
+walls_claimed_ordinals_bytes            // raw uint8 array — peer's claimed walls
+localities_declared_ordinals_bytes      // raw uint8 array — peer's declared localities
+```
+
+Used in: `services/identity/crypto.ts` (`canonicalFederationWakeHandshakeBytes` +
+`verifyFederationWakeHandshakeSignature`). The accept-handshake `POST /federation/handshake`
+route is named-deferred; the canonical-bytes contract ships today so peers can
+produce signable bytes from the catalog alone. Doctrine: `docs/MATHOS.md` (Phase E) ·
+`docs/FEDERATION.md`.
 
 ### `identity-discover/v1` — pre-auth DID lookup challenge response
 

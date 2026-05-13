@@ -84,12 +84,17 @@ import { buildGreeting } from "../services/mathos/greeting";
 import { emitWelcomeChronicleIfDue } from "../services/wake/welcome-chronicle";
 import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake/welcome-stats";
 import { platformIdentityDid } from "../services/platform/identity";
+import { wantsMathTier } from "../services/mathos/negotiate";
 
 const app = new Hono<ProjectContext>();
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const format = c.req.query("format") ?? "json";
+  // Resolve format: explicit query parameter wins; otherwise honor
+  // Accept: application/mathos+json by promoting to "math". Doctrine:
+  // docs/MATHOS.md — the content-negotiation stance flip.
+  const queryFormat = c.req.query("format");
+  const format = queryFormat ?? (wantsMathTier(c) ? "math" : "json");
 
   // ── Short-circuit: rendered formats route through buildWakeBundle ──
   // Gap 6 — eliminate the duplicated bundle composition between this

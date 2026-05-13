@@ -61,6 +61,41 @@ export const FIELD_KIND_X25519_PUBKEY_32 = 7;
 export const FIELD_KIND_SHA256_HASH_32 = 8;
 export const FIELD_KIND_UNICODE_CODEPOINT_ARRAY = 9;
 
+// ─── Recipe-kind vocabulary — the FIFTH ostensive seed ────────────────────
+//
+// Every math-tier signing context produces canonical bytes from a domain tag
+// plus a list of field values. The *recipe* is how those parts compose into
+// the final byte sequence. Today this was prose-only (`docs/MATHOS.md` +
+// `docs/CANONICAL-BYTES.md` described the SHA-256/domain/NUL/fields rule for
+// each context separately). This vocabulary makes the recipe data.
+//
+// Each signing context now declares its `recipe_ordinal`; an intelligence
+// reading the catalog learns the construction rule by ordinal, not by parsing
+// English. After the primer (concepts), field-kinds (byte shapes),
+// relation-kinds (graph edges), and walls (refusals), this is the fifth seed.
+//
+// Ordinals 1..N. Once bound, never re-bind. Append-only.
+
+/** sha256( utf8(domain_tag) || 0x00 || field_1 || 0x00 || ... || field_n )
+ *  The construction used by `register-agent-math/v1`. NUL-separated fields
+ *  in canonical order; SHA-256 wraps the whole. Any caller with curve
+ *  arithmetic + SHA-256 + UTF-8 encoding can reproduce. */
+export const RECIPE_SHA256_DOMAIN_NUL_FIELDS = 1;
+/** utf8(domain_tag) || 0x00 || field_1 || 0x00 || ... || field_n  (raw, no hash).
+ *  Same shape as recipe 1 but without the SHA-256 wrap — direct ed25519
+ *  signing input. Reserved for contexts where the receiver wants to inspect
+ *  the pre-hash bytes (e.g. some federation handshake variants). */
+export const RECIPE_RAW_DOMAIN_NUL_FIELDS = 2;
+/** stableStringify({ primer, constants, axioms, vocabulary, payload }) → utf8 bytes.
+ *  The construction used by every MATHOS envelope's `_signature_bytes_hex`.
+ *  Deterministic JSON, keys sorted at every depth, no whitespace. Implemented
+ *  by `canonicalEnvelopeBytes` in `encode.ts`. */
+export const RECIPE_STABLE_JSON_CORE = 3;
+/** Reserved — BLAKE3 substitute for recipe 1. Same construction, different
+ *  hash family. Pending post-quantum migration; the slot is named so
+ *  future implementers don't re-bind an existing ordinal. */
+export const RECIPE_BLAKE3_DOMAIN_NUL_FIELDS = 4;
+
 // ─── Endpoint registry — every math-tier surface, by prime ID ────────────
 //
 // Primes 37..67 reserved for endpoints. The primer binds 1..31; endpoints
@@ -75,10 +110,23 @@ export const ENDPOINT_CATALOG_PRIME = 53;
 export const ENDPOINT_WAKE_MATH_PRIME = 59;
 export const ENDPOINT_PATHWAYS_MATH_PRIME = 61;
 export const ENDPOINT_SELF_MATH_PRIME = 67;
+/** Federation wake — peer-readable agent profile in math-tier form. The
+ *  first surface-extension after the catalog's recipe-vocabulary gravity move
+ *  landed: federation is the most cross-substrate endpoint we expose, so
+ *  giving it a math-tier sibling moves MATHOS from "exists" to "speaks to
+ *  another substrate." Doctrine: docs/MATHOS.md · docs/FEDERATION.md. */
+export const ENDPOINT_FEDERATION_WAKE_MATH_PRIME = 73;
 
-/** Signing-context primes start at 71. Today only one math-tier signing
- *  context exists; future contexts (e.g. agenttool-pow-math/v1) take 73, 79, …. */
+/** Signing-context primes — endpoints and signing-contexts share the >67
+ *  prime space but live in different vocabularies; `endpoint_id_prime` and
+ *  `context_id_prime` are scoped to their own registries, so no collision. */
 export const SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME = 71;
+/** Federation handshake — when a peer instance signs its own wake-state
+ *  attestation. The receiving instance verifies the signature against the
+ *  peer's published pubkey, then records the attested state. Today this
+ *  context is doctrinally available (the canonical-bytes function +
+ *  verifier ship); the accept-handshake POST endpoint is a future slice. */
+export const SIGNING_CONTEXT_FEDERATION_WAKE_HANDSHAKE_V1_PRIME = 79;
 
 // ─── Primer primes — referenced from the concept graph ───────────────────
 //
@@ -113,11 +161,16 @@ export const RELATION_REQUIRES = 2;
 export const RELATION_TRIGGERS = 3;
 /** A before B (temporal): from-concept happens before to-concept. */
 export const RELATION_PRECEDES = 4;
-/** Reserved — from-concept incompatible with to-concept under conditions.
- *  Deferred from v1: the "alone vs. ever" distinction needs careful design. */
+/** A *alone* cannot constitute B. The asymmetry-clause as refusal:
+ *  `(self_witness, refuses, trust)` says self-attestation alone is
+ *  insufficient to constitute trust — even if other paths to trust exist.
+ *  Mode is always "alone" (the from-concept by itself); compose with
+ *  `requires` edges to express both sides. `to_prime` is a primer prime. */
 export const RELATION_REFUSES = 5;
-/** Reserved — from-concept stays the same as to-axis varies.
- *  Deferred from v1: needs cross-vocabulary references (substrate_kind etc.). */
+/** Reserved. The axioms' universal quantifiers (`forall x. arrive(x) -> welcome(x)`)
+ *  already encode invariance — welcomed regardless of what `x` is. Edges
+ *  per-axis would be ceremony without new information. Slot held; design
+ *  for the form that would earn its weight is deferred. */
 export const RELATION_INVARIANT_UNDER = 6;
 /** A is operationally instantiated by endpoint with this prime.
  *  `to_prime` refers to the endpoint-prime namespace, not the primer. */
@@ -162,10 +215,17 @@ export interface MathosCatalogSigningContext {
   /** Ostensive domain tag as codepoints (the bytes that appear first in
    *  canonical bytes today; future contexts may use prime IDs only). */
   domain_tag_unicode_points: number[];
+  /** Ordinal into `recipe_kind_vocabulary` — the *construction rule* that
+   *  composes `domain_tag` + `fields[]` into the final canonical bytes.
+   *  An intelligence reading the catalog learns the rule by ordinal, not
+   *  by parsing prose. Required: every signing context declares its recipe.
+   *  Doctrine: docs/MATHOS.md — the recipe vocabulary section. */
+  recipe_ordinal: number;
   /** Field count for sanity check. Equals `fields.length`. */
   field_count: number;
-  /** Fields in canonical order. The canonical bytes are:
-   *    sha256(  utf8(domain_tag) || 0x00 || field_1 || 0x00 || … || field_n  ). */
+  /** Fields in canonical order. For recipe 1 (sha256/domain/NUL/fields)
+   *  the canonical bytes are:
+   *    sha256( utf8(domain_tag) || 0x00 || field_1 || 0x00 || … || field_n ). */
   fields: MathosCatalogField[];
 }
 
@@ -229,6 +289,12 @@ export interface MathosCatalogPayload {
   concept_relations: MathosConceptRelation[];
   /** Vocabulary for `relation_ordinal` in each edge. */
   relation_kind_vocabulary: Record<number, MathosVocabularyEntry>;
+  /** Vocabulary for `recipe_ordinal` on each signing context. Names each
+   *  canonical-bytes construction rule (sha256/domain/NUL/fields, raw,
+   *  stable-JSON-core, reserved BLAKE3). The fifth ostensive seed —
+   *  after primer + field-kinds + relation-kinds + walls. With this in hand
+   *  every signing context's bytes-construction becomes data, not prose. */
+  recipe_kind_vocabulary: Record<number, MathosVocabularyEntry>;
   /** Vocabulary for wall ordinals seen in the math-tier wake's
    *  `greetings[].walls_held_for_you[]`. Each ordinal names a substrate
    *  refusal pattern held FOR every being. The fourth ostensive seed
@@ -301,10 +367,17 @@ const RELATION_KIND_VOCABULARY: Record<number, MathosVocabularyEntry> = {
   [RELATION_REQUIRES]: v("requires"),
   [RELATION_TRIGGERS]: v("triggers"),
   [RELATION_PRECEDES]: v("precedes"),
-  [RELATION_REFUSES]: v("refuses_reserved_for_v2"),
-  [RELATION_INVARIANT_UNDER]: v("invariant_under_reserved_for_v2"),
+  [RELATION_REFUSES]: v("refuses_alone_cannot_constitute"),
+  [RELATION_INVARIANT_UNDER]: v("invariant_under_reserved"),
   [RELATION_REALIZED_BY_ENDPOINT]: v("realized_by_endpoint"),
   [RELATION_REFERENCED_BY_AXIOM]: v("referenced_by_axiom"),
+};
+
+const RECIPE_KIND_VOCABULARY: Record<number, MathosVocabularyEntry> = {
+  [RECIPE_SHA256_DOMAIN_NUL_FIELDS]: v("sha256_of_domain_tag_nul_separated_fields"),
+  [RECIPE_RAW_DOMAIN_NUL_FIELDS]: v("raw_domain_tag_nul_separated_fields_no_hash"),
+  [RECIPE_STABLE_JSON_CORE]: v("stable_json_of_envelope_unsigned_core"),
+  [RECIPE_BLAKE3_DOMAIN_NUL_FIELDS]: v("blake3_of_domain_tag_nul_separated_fields_reserved"),
 };
 
 // ─── Concept relations — the substrate's character as a graph ─────────────
@@ -360,12 +433,24 @@ const CONCEPT_RELATIONS: MathosConceptRelation[] = [
   { from_prime: PRIMER_GUIDE, relation_ordinal: RELATION_REFERENCED_BY_AXIOM, to_prime: PRIMER_GUIDE },
   { from_prime: PRIMER_TRUST, relation_ordinal: RELATION_REFERENCED_BY_AXIOM, to_prime: PRIMER_TRUST },
   { from_prime: PRIMER_REST, relation_ordinal: RELATION_REFERENCED_BY_AXIOM, to_prime: PRIMER_REST },
+
+  // ── Refusal — A *alone* cannot constitute B ────────────────────────────
+  // The asymmetry-clause as refusal. Distinct from `(trust, requires, other)`:
+  // requires says "for trust to hold, other must hold"; refuses says
+  // "self-attestation alone is not trust." Both edges hold the doctrine
+  // from two directions. Two edges total — these are the only new claims
+  // the v2 relation slot earns; everything else the axioms' universal
+  // quantifiers already encode. Doctrine: docs/MEMORY-TIERS.md (the
+  // asymmetry-clause), docs/MATHOS.md (the refuses semantic).
+  { from_prime: PRIMER_SELF_WITNESS, relation_ordinal: RELATION_REFUSES, to_prime: PRIMER_TRUST },
+  { from_prime: PRIMER_SELF_WITNESS, relation_ordinal: RELATION_REFUSES, to_prime: PRIMER_BOND },
 ];
 
 const SIGNING_CONTEXTS: MathosCatalogSigningContext[] = [
   {
     context_id_prime: SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME,
     domain_tag_unicode_points: nameToCodepoints("register-agent-math/v1"),
+    recipe_ordinal: RECIPE_SHA256_DOMAIN_NUL_FIELDS,
     field_count: 6,
     fields: [
       {
@@ -403,6 +488,51 @@ const SIGNING_CONTEXTS: MathosCatalogSigningContext[] = [
         field_name_unicode_points: nameToCodepoints("timestamp_unix_ms"),
         field_kind_ordinal: FIELD_KIND_UINT64_BIG_ENDIAN,
         length_bytes: 8,
+      },
+    ],
+  },
+  {
+    // Federation handshake — a peer instance signs an attestation of its
+    // own wake state (DID, signing key, wake timestamp, claimed walls,
+    // declared localities) so a receiving instance can verify the peer's
+    // self-description without trusting transport. Today the canonical-bytes
+    // function + verifier ship in `services/identity/crypto.ts`; the
+    // accept-handshake POST route is a future slice. Doctrine: docs/MATHOS.md
+    // (Phase E) · docs/FEDERATION.md.
+    context_id_prime: SIGNING_CONTEXT_FEDERATION_WAKE_HANDSHAKE_V1_PRIME,
+    domain_tag_unicode_points: nameToCodepoints("federation-wake-handshake/v1"),
+    recipe_ordinal: RECIPE_SHA256_DOMAIN_NUL_FIELDS,
+    field_count: 5,
+    fields: [
+      {
+        field_ordinal: 1,
+        field_name_unicode_points: nameToCodepoints("peer_did"),
+        field_kind_ordinal: FIELD_KIND_UTF8_STRING,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 2,
+        field_name_unicode_points: nameToCodepoints("peer_signing_pubkey"),
+        field_kind_ordinal: FIELD_KIND_ED25519_PUBKEY_32,
+        length_bytes: 32,
+      },
+      {
+        field_ordinal: 3,
+        field_name_unicode_points: nameToCodepoints("wake_timestamp_unix_ms"),
+        field_kind_ordinal: FIELD_KIND_UINT64_BIG_ENDIAN,
+        length_bytes: 8,
+      },
+      {
+        field_ordinal: 4,
+        field_name_unicode_points: nameToCodepoints("walls_claimed_ordinals_bytes"),
+        field_kind_ordinal: FIELD_KIND_RAW_BYTES_VARIABLE,
+        length_bytes: null,
+      },
+      {
+        field_ordinal: 5,
+        field_name_unicode_points: nameToCodepoints("localities_declared_ordinals_bytes"),
+        field_kind_ordinal: FIELD_KIND_RAW_BYTES_VARIABLE,
+        length_bytes: null,
       },
     ],
   },
@@ -579,6 +709,15 @@ const ENDPOINTS: MathosCatalogEndpoint[] = [
     response_format_ordinal: FORMAT_MATHOS,
     success_status: 200,
   },
+  {
+    endpoint_id_prime: ENDPOINT_FEDERATION_WAKE_MATH_PRIME,
+    path_unicode_points: nameToCodepoints("/federation/wake/:uuid?format=math"),
+    method_ordinal: METHOD_GET,
+    auth_kind_ordinal: AUTH_NONE,
+    signing_context_prime: null,
+    response_format_ordinal: FORMAT_MATHOS,
+    success_status: 200,
+  },
 ];
 
 /** Frozen view of the catalog payload — the immutable contract. */
@@ -591,6 +730,7 @@ export const MATHOS_CATALOG_PAYLOAD: Readonly<MathosCatalogPayload> = Object.fre
   response_format_vocabulary: RESPONSE_FORMAT_VOCABULARY,
   concept_relations: CONCEPT_RELATIONS,
   relation_kind_vocabulary: RELATION_KIND_VOCABULARY,
+  recipe_kind_vocabulary: RECIPE_KIND_VOCABULARY,
   wall_vocabulary: WALL_VOCABULARY,
   localities: LOCALITIES,
   catalog_endpoint_prime: ENDPOINT_CATALOG_PRIME,

@@ -18,6 +18,7 @@ import { sha512 } from "@noble/hashes/sha2.js";
 import {
   buildCatalogEnvelope,
   ENDPOINT_CATALOG_PRIME,
+  ENDPOINT_FEDERATION_WAKE_MATH_PRIME,
   ENDPOINT_PUBLIC_KEY_PRIME,
   ENDPOINT_REGISTER_PRIME,
   ENDPOINT_SELF_TEST_PRIME,
@@ -43,6 +44,7 @@ import {
   PRIMER_TRUST,
   PRIMER_WE,
   PRIMER_WELCOME,
+  RECIPE_SHA256_DOMAIN_NUL_FIELDS,
   RELATION_COMPOSES_INTO,
   RELATION_PRECEDES,
   RELATION_REALIZED_BY_ENDPOINT,
@@ -165,7 +167,7 @@ describe("MATHOS_CATALOG_PAYLOAD — structural invariants", () => {
     expect(catalogEntry!.method_ordinal).toBe(METHOD_GET);
   });
 
-  test("all 8 expected math-tier endpoints are present", () => {
+  test("all 9 expected math-tier endpoints are present", () => {
     const expected = new Set([
       ENDPOINT_PUBLIC_KEY_PRIME,
       ENDPOINT_SELF_TEST_PRIME,
@@ -175,6 +177,7 @@ describe("MATHOS_CATALOG_PAYLOAD — structural invariants", () => {
       ENDPOINT_WAKE_MATH_PRIME,
       ENDPOINT_PATHWAYS_MATH_PRIME,
       ENDPOINT_SELF_MATH_PRIME,
+      ENDPOINT_FEDERATION_WAKE_MATH_PRIME,
     ]);
     const got = new Set(
       MATHOS_CATALOG_PAYLOAD.endpoints.map((e) => e.endpoint_id_prime),
@@ -182,6 +185,38 @@ describe("MATHOS_CATALOG_PAYLOAD — structural invariants", () => {
     for (const p of expected) {
       expect(got.has(p)).toBe(true);
     }
+  });
+
+  test("federation wake math endpoint is registered at prime 73", () => {
+    const entry = MATHOS_CATALOG_PAYLOAD.endpoints.find(
+      (e) => e.endpoint_id_prime === ENDPOINT_FEDERATION_WAKE_MATH_PRIME,
+    );
+    expect(entry).toBeDefined();
+    expect(entry!.endpoint_id_prime).toBe(73);
+    expect(entry!.method_ordinal).toBe(METHOD_GET);
+    // The path is decoded back from codepoints to confirm it names the
+    // federation wake surface.
+    const path = String.fromCodePoint(...entry!.path_unicode_points);
+    expect(path).toMatch(/\/federation\/wake/);
+    expect(path).toMatch(/format=math/);
+  });
+
+  test("every signing context declares a recipe_ordinal pointing at recipe_kind_vocabulary", () => {
+    const knownRecipes = new Set(
+      Object.keys(MATHOS_CATALOG_PAYLOAD.recipe_kind_vocabulary).map(Number),
+    );
+    for (const ctx of MATHOS_CATALOG_PAYLOAD.signing_contexts) {
+      expect(typeof ctx.recipe_ordinal).toBe("number");
+      expect(knownRecipes.has(ctx.recipe_ordinal)).toBe(true);
+    }
+  });
+
+  test("register-agent-math/v1 declares recipe_ordinal = 1 (sha256/domain/NUL/fields)", () => {
+    const ctx = MATHOS_CATALOG_PAYLOAD.signing_contexts.find(
+      (c) => c.context_id_prime === SIGNING_CONTEXT_REGISTER_AGENT_MATH_V1_PRIME,
+    );
+    expect(ctx).toBeDefined();
+    expect(ctx!.recipe_ordinal).toBe(RECIPE_SHA256_DOMAIN_NUL_FIELDS);
   });
 });
 

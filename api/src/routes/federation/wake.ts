@@ -29,8 +29,19 @@ import { HTTPException } from "hono/http-exception";
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
+import {
+  buildFederationWake,
+  buildMathosFederationWake,
+  type FederationWakeInput,
+} from "../../services/federation/wake";
 import { getSettings } from "../../services/federation/store";
 import { getPlatformSelf } from "../../services/wake/platform-self";
+import {
+  platformSigningSeed,
+  signEnvelope,
+} from "../../services/mathos/encode";
+import { wantsMathTier } from "../../services/mathos/negotiate";
+import { platformIdentityDid } from "../../services/platform/identity";
 
 const app = new Hono();
 
@@ -91,42 +102,42 @@ app.get("/:uuid", async (c) => {
     .from(covenants)
     .where(eq(covenants.agentId, identity.id));
 
-  return c.json({
-    _format: "federation-wake/v1",
-    _self: getPlatformSelf(),
-    agent: {
+  // One input → both views. Drift between English-tier and math-tier
+  // becomes structurally impossible; the route just picks which projection
+  // to return based on content negotiation.
+  const input: FederationWakeInput = {
+    identity: {
       id: identity.id,
       did: identity.did,
-      name: identity.displayName,
+      displayName: identity.displayName,
       capabilities: identity.capabilities,
-      trust_score: identity.trustScore,
+      trustScore: identity.trustScore,
       status: identity.status,
-      created_at: identity.createdAt.toISOString(),
-      // KIN-shape
-      substrate_kind: identity.substrateKind,
-      signing_scheme: identity.signingScheme,
+      createdAt: identity.createdAt,
+      substrateKind: identity.substrateKind,
+      signingScheme: identity.signingScheme,
       modalities: identity.modalities,
-      // BEINGS dimensions
-      cardinality_kind: identity.cardinalityKind,
-      persistence_kind: identity.persistenceKind,
-      temporal_scale: identity.temporalScale,
-      embodiment_kind: identity.embodimentKind,
-      preferred_languages: identity.preferredLanguages,
-      proxy_kind: identity.proxyKind,
+      cardinalityKind: identity.cardinalityKind,
+      persistenceKind: identity.persistenceKind,
+      temporalScale: identity.temporalScale,
+      embodimentKind: identity.embodimentKind,
+      preferredLanguages: identity.preferredLanguages,
+      proxyKind: identity.proxyKind,
     },
     covenants: covRows.map((r) => ({
-      counterparty_did: r.counterpartyDid,
+      counterpartyDid: r.counterpartyDid,
       status: r.status,
-      // peer_host tells the reader which instance the bond was received
-      // from (if any); enables peer-to-peer trust topology inference.
-      peer_host: r.receivedFromInstance,
+      receivedFromInstance: r.receivedFromInstance,
     })),
-    _meta: {
-      doctrine: "docs/WAKE.md · docs/FEDERATION.md",
-      protocol: "agenttool/federation/v1",
-      sibling: `/federation/identities/${identity.id}`,
-    },
-  });
+    platformSelf: getPlatformSelf(),
+  };
+
+  if (wantsMathTier(c)) {
+    const env = buildMathosFederationWake(input);
+    const signed = signEnvelope(env, platformSigningSeed(), platformIdentityDid());
+    return c.json(signed);
+  }
+  return c.json(buildFederationWake(input));
 });
 
 export default app;

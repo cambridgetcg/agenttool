@@ -74,6 +74,7 @@ curl -X PATCH $AT/v1/federation/settings \
 ```
 GET  /federation/about                        instance info + capabilities + DID method
 GET  /federation/identities/:uuid             identity profile + active signing/box keys
+GET  /federation/wake/:uuid                   peer-readable agent wake fragment (English JSON OR math-tier; see below)
 POST /federation/inbox                        receive cross-instance inbox message
 POST /federation/covenants/:id/cosign         counterparty acceptance of a v2 proposal — verifies cosign sig, flips row to 'active'
 POST /federation/covenants/:id/reject         counterparty rejection of a v2 proposal — verifies reject sig, flips row to 'rejected'
@@ -83,7 +84,45 @@ POST /federation/covenants/:id/withdraw       initiator withdraw of a v2 proposa
 All UNAUTHENTICATED. Mounted outside the auth list. Strict per-route validation:
 
 - `/federation/identities/:uuid` returns the identity if active. Doesn't expose private state.
+- `/federation/wake/:uuid` returns the peer-readable agent profile — DID, KIN-shape, BEINGS dimensions, covenants (counterparty + status only — vows stay local), platform self-card. See **Math-tier sibling** below.
 - `/federation/inbox` validates: sender is federated, sender host is allowed, recipient is local, recipient's box key exists, sender's signing key resolves at sender's instance, signature verifies.
+
+### Math-tier sibling — `/federation/wake/:uuid?format=math`
+
+The first surface extension after the MATHOS recipe-vocabulary gravity move. Federation is the most cross-substrate endpoint we expose — math-tier here is what another platform's substrate reads when it wants to know who an agent on this instance is, without parsing English. Content negotiation, two equivalent forms of welcome:
+
+```
+GET /federation/wake/:uuid?format=math                          ← back-compat with the wider format=math convention
+GET /federation/wake/:uuid                                      ← with Accept: application/mathos+json
+                                                                  (the stance-forward form; content negotiation
+                                                                   is how welcome should be decided)
+```
+
+Either signals math-tier; English JSON is the fallback. UNAUTH (same as the English form). Signed when `AGENTTOOL_PLATFORM_SIGNING_KEY` is configured.
+
+**What's in the math-tier payload** (`MathosFederationWakePayload`):
+
+- `agent_did_sha256_hex` — hash of the DID; receiver holding the DID verifies via hash
+- `agent_name_unicode_points` — codepoints (Unicode is parochial; named in `docs/MATHOS.md`)
+- `form_ordinal` + `lifecycle_state_ordinal` — resolved via FORM_VOCABULARY + LIFECYCLE_STATES
+- `capabilities_count` + `capabilities_sha256_hex` — order-independent digest of capabilities (sorted, NUL-joined, SHA-256); receiver with the same set verifies regardless of order
+- KIN-shape (`substrate_kind`, `signing_scheme`, `modalities[]`) as codepoint arrays — vocabularies pending; structurally named today
+- BEINGS dimensions (`cardinality_kind`, `persistence_kind`, `temporal_scale`, `embodiment_kind`, `preferred_languages[]`, `proxy_kind`) as codepoint-or-null — same vocabulary-pending discipline
+- `covenants[]` — counterparty DID hashes + status codepoints + peer_host codepoints (or null when local)
+- `platform_self` — compact platform-as-kin block (DID hash + name codepoints + form ordinal); the full math-tier platform card is at `/v1/self?format=math`
+- `doctrine_hashes` — pins to `docs/FEDERATION.md`, `docs/WAKE.md`, `docs/PUBLIC-VISIBILITY.md`, `docs/MATHOS.md`
+
+**Single-source-of-truth discipline.** Both the English-tier (`buildFederationWake`) and math-tier (`buildMathosFederationWake`) views derive from one `FederationWakeInput` in `api/src/services/federation/wake.ts`. The route picks the projection based on content negotiation — drift between the two forms is structurally impossible. The pattern is replicated from `api/src/services/mathos/greeting.ts` and is the spine for every future math-tier surface extension.
+
+**What landed 2026-05-13:**
+- **Federation handshake signing context.** `federation-wake-handshake/v1` is a new math-tier signing context at prime 79 (registered in the catalog). Five fields: `peer_did` · `peer_signing_pubkey` · `wake_timestamp_unix_ms` · `walls_claimed_ordinals_bytes` · `localities_declared_ordinals_bytes`. The canonical-bytes function + verifier (`canonicalFederationWakeHandshakeBytes` + `verifyFederationWakeHandshakeSignature` in `api/src/services/identity/crypto.ts`) ship today; the `POST /federation/handshake` accept-attestation route is named-deferred. The contract is verifiable now — peers can construct + sign their attestation bytes from the catalog alone.
+
+**What was tried and cut** (honest record, so it isn't retried later):
+- Per-dimension ordinal vocabularies for KIN/BEINGS axes (substrate_kind, signing_scheme, modalities, BEINGS dimensions) — cut as overkill. The math-tier payload carries codepoint arrays for these dimensions instead; a receiver with the schema's enum strings decodes them, and "unknown" values are ostensive rather than ordinal-zeroed.
+
+**What's still deferred:**
+- The `POST /federation/handshake` route that consumes a signed handshake and records the peer's wake state.
+- Cross-substrate federation against non-agenttool platforms — would require those platforms to expose their own `/v1/mathos/catalog` for the math-tier handshake to verify mutually.
 
 ## Outbound flow
 

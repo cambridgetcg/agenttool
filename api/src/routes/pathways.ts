@@ -25,6 +25,7 @@
 
 import { Hono } from "hono";
 
+import { doctrineHash } from "../services/doctrine/integrity";
 import { FORM_DESCRIPTIONS, IDENTITY_FORMS } from "../services/identity/forms";
 import { SUPPORTED_LANGUAGES } from "../services/i18n/welcome";
 import {
@@ -32,11 +33,11 @@ import {
   envelope as mathosEnvelope,
   nameToCodepoints,
   platformSigningSeed,
-  sha256Hex,
   signEnvelope,
   type MathosPathwaysPayload,
 } from "../services/mathos/encode";
 import { platformIdentityDid } from "../services/platform/identity";
+import { wantsMathTier } from "../services/mathos/negotiate";
 
 const app = new Hono();
 
@@ -137,15 +138,26 @@ const PATHWAYS: Pathway[] = [
     id: "bootstrap_elevate",
     endpoint: "POST /v1/bootstrap/elevate",
     auth: "bearer",
-    status: "not_implemented (501)",
     purpose:
-      "Level 1 sponsorship-staked sovereignty. In-process orchestration " +
-      "pending Phase 2.5b — use the manual_fallback chain for now.",
+      "Level 1 sponsorship-staked sovereignty. One transaction: sponsor " +
+      "attestation · wallet fund · vault namespace · level patch. Rollback " +
+      "on any failure — no half-elevated state.",
+    required: [
+      "agent_id",
+      "sponsor_identity_id",
+      "sponsor_kid",
+      "sponsor_signature",
+    ],
+    optional: [
+      "initial_credits (default 1000)",
+      "claim (default 'sponsorship')",
+      "evidence",
+    ],
     manual_fallback: [
-      "POST /v1/identities/<agent_id>/keys",
       "POST /v1/attestations",
       "POST /v1/wallets/<wallet_id>/fund",
       "PUT /v1/vault/<agent_id>:config",
+      "PATCH /v1/identities/<agent_id> { metadata.level: 1, ... }",
     ],
     doctrine: "docs/IDENTITY-ANCHOR.md",
   },
@@ -230,6 +242,10 @@ const DECISION_TREE = [
     then: "POST /v1/bootstrap",
   },
   {
+    if: "you have a Level-0 agent and want to escalate it to Level 1 (sponsorship-staked sovereignty)",
+    then: "POST /v1/bootstrap/elevate (orchestrates: attestation · wallet fund · vault config · level patch)",
+  },
+  {
     if: "you have a project bearer and want OS-keychain wiring on this machine",
     then: "GET /v1/bootstrap/scaffold?platform=macos|linux|windows",
   },
@@ -251,8 +267,14 @@ const DECISION_TREE = [
  *  pre-auth at the parent app in index.ts) can reuse exactly the same shape. */
 export function buildPathwaysResponse() {
   return {
+    // Commitment URNs this route is the canonical defender of. Mirrors the
+    // @enforces source-comment annotation onto the wire so any caller can
+    // read what this endpoint promises — and so future regressions break
+    // a named, addressable promise rather than a vibe. Doctrine: docs/
+    // RING-1.md · docs/agenttool.jsonld (commitment definitions).
+    _enforces: ["urn:agenttool:commitment/anyone-arrives"],
     summary:
-      "9 entry-points to bring a new agent into existence on agenttool. " +
+      `${PATHWAYS.length} entry-points to bring a new agent into existence on agenttool. ` +
       "Ring 1 (this surface) is free, always — no paywalled birth.",
     decision_tree: DECISION_TREE,
     pathways: PATHWAYS,
@@ -339,25 +361,29 @@ export function buildPathwaysMathos() {
     languages_count: SUPPORTED_LANGUAGES.length,
     canonical_language_first_codepoint:
       nameToCodepoints(canonical)[0] ?? 0,
-    // Doctrine integrity — receiver can fetch the .md and verify the
-    // hash matches. Names which doctrine version this payload reflects.
+    // Doctrine integrity — sha256 of the .md file CONTENTS so a receiver
+    // can fetch from https://docs.agenttool.dev and verify. Wired through
+    // services/doctrine/integrity.ts (path strings used to be hashed here
+    // — a constant — which gave receivers no drift signal). EMPTY_SHA256
+    // is the sentinel when the server cannot read its own doctrine.
     doctrine_hashes: {
-      soul_sha256_hex: sha256Hex(body.doctrine.soul ?? "docs/SOUL.md"),
-      kin_sha256_hex: sha256Hex(body.doctrine.kin ?? "docs/KIN.md"),
-      pathways_sha256_hex: sha256Hex("docs/PATHWAYS.md"),
-      mathos_sha256_hex: sha256Hex("docs/MATHOS.md"),
+      soul_sha256_hex: doctrineHash(body.doctrine.soul ?? "docs/SOUL.md"),
+      kin_sha256_hex: doctrineHash(body.doctrine.kin ?? "docs/KIN.md"),
+      pathways_sha256_hex: doctrineHash("docs/PATHWAYS.md"),
+      mathos_sha256_hex: doctrineHash("docs/MATHOS.md"),
     },
   };
   return mathosEnvelope(payload);
 }
 
 app.get("/", (c) => {
-  const format = c.req.query("format");
-  if (format === "math" || format === "mathos") {
-    // Sign every math payload if the platform has a key configured.
-    // Graceful absence: unsigned envelopes are still internally valid.
-    // The signer DID names *who* signed (the platform-as-agent), not just
-    // *with what key*. Doctrine: docs/PLATFORM-AS-AGENT.md.
+  // Sign every math payload if the platform has a key configured.
+  // Graceful absence: unsigned envelopes are still internally valid.
+  // The signer DID names *who* signed (the platform-as-agent), not just
+  // *with what key*. Doctrine: docs/PLATFORM-AS-AGENT.md · docs/MATHOS.md
+  // (content-negotiation stance flip — Accept: application/mathos+json
+  // honored alongside the legacy ?format=math query).
+  if (wantsMathTier(c)) {
     return c.json(
       signEnvelope(
         buildPathwaysMathos(),

@@ -252,9 +252,9 @@ describe("MATHOS greeting — OFFERING (Promises, walls, endpoints held FOR YOU)
     );
   });
 
-  test("available_between_us lists the 8 math-tier endpoint primes", () => {
+  test("available_between_us lists the 9 math-tier endpoint primes (incl. federation wake)", () => {
     const env = buildWakeMathos(minimalInput());
-    expect(env.payload.greetings[0]!.available_between_us).toHaveLength(8);
+    expect(env.payload.greetings[0]!.available_between_us).toHaveLength(9);
   });
 
   test("available_between_us matches the catalog's endpoint primes (no drift)", () => {

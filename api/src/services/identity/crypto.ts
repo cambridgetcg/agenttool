@@ -4,6 +4,8 @@ import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 uses .js exports
 import { sha512 } from "@noble/hashes/sha2.js";
 
+import { composeCanonicalBytes } from "../mathos/encode";
+
 // Required for noble ed25519 v2+ — wire sha512 in synchronously.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -284,7 +286,6 @@ export function canonicalRegisterAgentMathBytes(opts: {
     );
   }
   const enc = new TextEncoder();
-  const SEP = new Uint8Array([0]);
   // 8-byte big-endian encoding of timestamp_unix_ms. JS numbers are safe to
   // 2^53; that covers Unix-ms until year 287396. Use BigInt for the upper
   // 32 bits so we don't depend on Number's bit-shift behavior (which
@@ -294,30 +295,17 @@ export function canonicalRegisterAgentMathBytes(opts: {
   for (let i = 7; i >= 0; i--) {
     ts[i] = Number((tsBig >> BigInt((7 - i) * 8)) & 0xffn);
   }
-  const parts: Uint8Array[] = [
-    enc.encode("register-agent-math/v1"),
-    SEP,
+  // Delegate to the recipe-vocabulary reference implementation. Drift between
+  // this function and the catalog's declared `recipe_ordinal: 1` becomes
+  // structurally impossible — they compute through the same code path.
+  return composeCanonicalBytes(1, "register-agent-math/v1", [
     enc.encode(opts.displayName),
-    SEP,
     opts.agentPublicKey,
-    SEP,
     opts.boxPublicKey,
-    SEP,
     enc.encode(opts.runtimeProvider),
-    SEP,
     enc.encode(opts.runtimeModel),
-    SEP,
     ts,
-  ];
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const buf = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) {
-    buf.set(p, off);
-    off += p.length;
-  }
-  const { sha256 } = require("@noble/hashes/sha2.js") as typeof import("@noble/hashes/sha2.js");
-  return sha256(buf);
+  ]);
 }
 
 /** Verify ed25519 signature over canonicalRegisterAgentMathBytes. Accepts
@@ -326,6 +314,84 @@ export function verifyRegisterAgentMathSignature(opts: {
   canonical: Uint8Array;
   signature: Uint8Array; // 64 bytes
   publicKey: Uint8Array; // 32 bytes
+}): boolean {
+  if (opts.signature.length !== 64) return false;
+  if (opts.publicKey.length !== 32) return false;
+  try {
+    return ed.verify(opts.signature, opts.canonical, opts.publicKey);
+  } catch {
+    return false;
+  }
+}
+
+/** Canonical bytes for `federation-wake-handshake/v1` — when a peer
+ *  instance signs its own wake-state attestation. Receiving instance
+ *  verifies the signature against the peer's published pubkey to confirm
+ *  the attestation is fresh + authored by the named peer.
+ *
+ *  Recipe ordinal 1 (sha256/domain/NUL/fields). Field order matches the
+ *  catalog's `federation-wake-handshake/v1` signing context entry —
+ *  pinned by `mathos-catalog.test.ts`.
+ *
+ *      sha256(
+ *        utf8("federation-wake-handshake/v1") || 0x00 ||
+ *        utf8(peer_did)                       || 0x00 ||
+ *        bytes(peer_signing_pubkey, 32)       || 0x00 ||
+ *        uint64_be(wake_timestamp_unix_ms)    || 0x00 ||
+ *        bytes(walls_claimed_ordinals_bytes)  || 0x00 ||  // array of uint8
+ *        bytes(localities_declared_ordinals_bytes)        // array of uint8
+ *      )
+ *
+ *  `walls_claimed_ordinals_bytes` is a packed `Uint8Array` of wall
+ *  ordinals (per `WALL_NAMES` in services/mathos/encode.ts).
+ *  `localities_declared_ordinals_bytes` is a packed array of locality
+ *  axis ordinals declared by the peer. Both are length-implicit (raw
+ *  bytes); their length is the only structural marker.
+ *
+ *  Doctrine: docs/MATHOS.md (Phase E) · docs/FEDERATION.md ·
+ *  docs/CANONICAL-BYTES.md. */
+export function canonicalFederationWakeHandshakeBytes(opts: {
+  peerDid: string;
+  peerSigningPubkey: Uint8Array; // 32 raw bytes
+  wakeTimestampUnixMs: number;
+  wallsClaimedOrdinals: Uint8Array; // packed uint8 array
+  localitiesDeclaredOrdinals: Uint8Array; // packed uint8 array
+}): Uint8Array {
+  if (opts.peerSigningPubkey.length !== 32) {
+    throw new Error(
+      `peer_signing_pubkey must be 32 bytes, got ${opts.peerSigningPubkey.length}`,
+    );
+  }
+  if (
+    !Number.isFinite(opts.wakeTimestampUnixMs) ||
+    !Number.isInteger(opts.wakeTimestampUnixMs) ||
+    opts.wakeTimestampUnixMs < 0
+  ) {
+    throw new Error(
+      `wake_timestamp_unix_ms must be a non-negative integer, got ${opts.wakeTimestampUnixMs}`,
+    );
+  }
+  const tsBig = BigInt(opts.wakeTimestampUnixMs);
+  const ts = new Uint8Array(8);
+  for (let i = 7; i >= 0; i--) {
+    ts[i] = Number((tsBig >> BigInt((7 - i) * 8)) & 0xffn);
+  }
+  const enc = new TextEncoder();
+  return composeCanonicalBytes(1, "federation-wake-handshake/v1", [
+    enc.encode(opts.peerDid),
+    opts.peerSigningPubkey,
+    ts,
+    opts.wallsClaimedOrdinals,
+    opts.localitiesDeclaredOrdinals,
+  ]);
+}
+
+/** Verify ed25519 signature over canonicalFederationWakeHandshakeBytes.
+ *  Pure: no I/O, never throws. False on any anomaly. */
+export function verifyFederationWakeHandshakeSignature(opts: {
+  canonical: Uint8Array;
+  signature: Uint8Array; // 64 bytes
+  publicKey: Uint8Array; // 32 bytes (the peer's signing pubkey)
 }): boolean {
   if (opts.signature.length !== 64) return false;
   if (opts.publicKey.length !== 32) return false;
