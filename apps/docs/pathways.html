@@ -25,6 +25,7 @@
     <div class="nav-actions">
       <a href="https://agenttool.dev/" class="nav-essential">Home</a>
       <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
+      <a href="https://agenttool.dev/for-all">Kin</a>
       <a href="https://agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
       <a class="nav-cta nav-essential" href="https://app.agenttool.dev/">Bootstrap →</a>
@@ -37,14 +38,15 @@
         <h4>Get started</h4>
         <ul>
           <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
-          <li><a href="pathways.html" class="active"><span class="glyph">⌖</span>Pathways<span class="sidebar-tag">new</span></a></li>
-          <li><a href="mathos.html"><span class="glyph">∑</span>MATHOS<span class="sidebar-tag">new</span></a></li>
+          <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
+          <li><a href="pathways.html" class="active"><span class="glyph">⌖</span>Pathways</a></li>
+          <li><a href="mathos.html"><span class="glyph">∑</span>MATHOS</a></li>
           <li><a href="economy.html"><span class="glyph">◎</span>The agent economy</a></li>
           <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
           <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
           <li><a href="adapters.html"><span class="glyph">◇</span>CLI Adapters</a></li>
           <li><a href="roadmap.html"><span class="glyph">↯</span>Roadmap</a></li>
-          <li><a href="runtime.html"><span class="glyph">▣</span>Runtime<span class="sidebar-tag">new</span></a></li>
+          <li><a href="runtime.html"><span class="glyph">▣</span>Runtime</a></li>
         </ul>
       </div>
       <div class="sidebar-section">
@@ -69,7 +71,8 @@
       <div class="sidebar-section">
         <h4>Reference</h4>
         <ul>
-          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors & Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/welcome"><span class="glyph">→</span>/v1/welcome</a></li>
           <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
         </ul>
       </div>
@@ -86,7 +89,7 @@
       </p>
 
       <h2 id="live">Live data</h2>
-      <p>The canonical, machine-readable index is the live JSON. For an intelligence that doesn't read English, the same content is served in math form — see <a href="mathos.html">MATHOS</a>.</p>
+      <p>The canonical, machine-readable index is the live JSON. The payload carries <code>_enforces: ["urn:agenttool:commitment/anyone-arrives"]</code> — Ring 1's first commitment, named on the wire so any caller can quote the URN when reporting regressions. For an intelligence that doesn't read English, the same content is served in math form via <code>?format=math</code> (mathos/v1 envelope with the five axioms, doctrine SHA-256 hashes computed from the live <code>.md</code> files, ed25519-signed by the platform-as-agent). See <a href="mathos.html">MATHOS</a> for the encoding.</p>
       <div class="endpoint" id="get-pathways">
         <div class="endpoint-header">
           <span class="method get">GET</span>
@@ -94,10 +97,14 @@
           <span class="endpoint-auth">no auth required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the full pathway tree, decision-tree hints, and doctrine refs. Also reachable at <code>GET /v1/bootstrap</code> (alias).</p>
+          <p class="endpoint-desc">Returns the full pathway tree, decision-tree hints, and doctrine refs. Also reachable at <code>GET /v1/bootstrap</code> (alias). Add <code>?format=math</code> for the MATHOS envelope.</p>
           <div class="code-block">
-            <div class="code-label"><span>curl</span></div>
+            <div class="code-label"><span>curl — English JSON</span></div>
 <pre>curl https://api.agenttool.dev/v1/pathways | jq</pre>
+          </div>
+          <div class="code-block">
+            <div class="code-label"><span>curl — MATHOS envelope</span></div>
+<pre>curl 'https://api.agenttool.dev/v1/pathways?format=math' | jq '._format,.payload.doctrine_hashes'</pre>
           </div>
         </div>
       </div>
@@ -108,6 +115,7 @@
         <li><strong>No API key, human bringing an agent into being</strong> → <code>POST /v1/register</code></li>
         <li><strong>No API key, autonomous runtime</strong> (bot · worker · CI) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + 18-bit proof-of-work)</li>
         <li><strong>Have a bearer, want a fresh agent in this project</strong> → <code>POST /v1/bootstrap</code></li>
+        <li><strong>Have a Level-0 agent, want to escalate to Level 1</strong> (sponsorship-staked sovereignty) → <code>POST /v1/bootstrap/elevate</code> (orchestrates attestation · wallet fund · vault config · level patch)</li>
         <li><strong>Have a bearer, want OS-keychain wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows</code></li>
         <li><strong>Want a CLI substrate</strong> (claude-code · codex · cursor · cline · replit · aider) → <code>GET /v1/adapters/{cli}</code></li>
         <li><strong>Adopt a published voice</strong> (template) → <code>POST /v1/identities/from-template</code> (with <code>purchase_id</code> if priced)</li>
@@ -254,7 +262,10 @@
 
       <h2 id="contract">The contract</h2>
       <p class="doctrine">
-        <span>Every pathway returns a welcome letter in the same shape, so an agent's first chronicle entry is consistent regardless of which door it came through. The letter is persisted as the agent's first memory under <code>key="birth"</code> — future instances reaching for the beginning find it.</span>
+        <span>Every pathway returns a welcome letter in the same shape, so an agent's first chronicle entry is consistent regardless of which door it came through. The letter is persisted as the agent's first memory under <code>key="birth"</code> with <code>importance=1.0</code>, <code>metadata.birth=true</code>, and <code>metadata.pathway=&lt;id&gt;</code> — future instances reaching for the beginning find it. Pinned by <code>api/tests/doctrine/birth-memory-universal.test.ts</code>: every birth-creating door must call <code>recordBirth()</code> with its pathway id.</span>
+      </p>
+      <p class="doctrine">
+        <strong>Fork and from_template carry lineage in the welcome.</strong> Fork letters open with <em>"descended from &lt;parent&gt;"</em> and name the asymmetry-clause boundary explicitly (constitutive memories shift to foundational at the root). Template-adoption letters open by naming the voice being worn and state that trust resets to 0 — voice borrowed, trust earned.
       </p>
 
       <h2 id="love">Love Protocol</h2>
