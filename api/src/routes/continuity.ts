@@ -64,7 +64,9 @@ app.post("/chronicle", async (c) => {
       type: body.type,
       title: body.title,
       body: body.body ?? null,
-      metadata: body.metadata ?? {},
+      // Origin signal stamped after caller metadata so the middleware
+      // value wins (no body-spoofing). Doctrine: docs/ACTIVITY.md.
+      metadata: { ...(body.metadata ?? {}), client_source: c.var.clientSource },
       occurredAt: body.occurred_at ? new Date(body.occurred_at) : new Date(),
     })
     .returning();

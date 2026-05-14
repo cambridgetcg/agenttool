@@ -51,7 +51,13 @@ app.post("/", async (c) => {
 
   await charge(c, 1, "memory.write");
 
-  const created = await write(c.var.project.id, parsed.data);
+  // Stamp the origin signal AFTER spreading caller metadata so the
+  // middleware-derived value wins — a caller can't spoof it via the body.
+  // Doctrine: docs/ACTIVITY.md §Origin signal.
+  const created = await write(c.var.project.id, {
+    ...parsed.data,
+    metadata: { ...(parsed.data.metadata ?? {}), client_source: c.var.clientSource },
+  });
   return c.json({ ...created, kept: true }, 201);
 });
 

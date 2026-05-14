@@ -19,6 +19,11 @@ import { BootstrapClient } from "./bootstrap.js";
 import { WakeClient } from "./wake.js";
 import { WindowClient } from "./window.js";
 
+/** SDK version — sent as the `X-Agenttool-Client` origin signal on every
+ *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
+ *  with package.json (parity invariant: ts + py ship the same version). */
+export const SDK_VERSION = "0.8.0";
+
 /**
  * Unified client for the agenttool.dev platform.
  *
@@ -77,6 +82,10 @@ export class AgentTool {
       headers: {
         Authorization: `Bearer ${resolvedKey}`,
         "Content-Type": "application/json",
+        // Origin signal — browser-safe custom header (fetch() in a browser
+        // cannot set User-Agent). The API's auth middleware reads this to
+        // label /v1/activity events. Doctrine: docs/ACTIVITY.md §Origin signal.
+        "X-Agenttool-Client": `agenttool-sdk-ts/${SDK_VERSION}`,
       },
       timeout: (options?.timeout ?? 30) * 1000, // seconds → ms
     };

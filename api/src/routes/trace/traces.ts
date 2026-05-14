@@ -72,7 +72,12 @@ app.post("/", async (c) => {
 
   await charge(c, 1, "trace.write");
 
-  const created = await createTrace(c.var.project.id, parsed.data);
+  // Stamp origin AFTER caller metadata so the middleware value wins —
+  // unspoofable via the body. Doctrine: docs/ACTIVITY.md §Origin signal.
+  const created = await createTrace(c.var.project.id, {
+    ...parsed.data,
+    metadata: { ...(parsed.data.metadata ?? {}), client_source: c.var.clientSource },
+  });
   return c.json({ ...created, recorded: true }, 201);
 });
 

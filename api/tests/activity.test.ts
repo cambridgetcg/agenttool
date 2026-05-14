@@ -21,6 +21,7 @@ import { identities } from "../src/db/schema/identity";
 import { memories } from "../src/db/schema/memory";
 import { strands, thoughts } from "../src/db/schema/strand";
 import { projects } from "../src/db/schema/tools";
+import { traces } from "../src/db/schema/trace";
 import { getRecentActivity } from "../src/services/activity/recent";
 
 async function seedProject(label: string) {
@@ -245,5 +246,76 @@ describe("activity — recent merge across primitives", () => {
     expect(evt.summary).toContain("reflection");
     // The wall — content must never leak via summary or any other field.
     expect(JSON.stringify(evt)).not.toContain(SECRET);
+    // strand.thought has no metadata column — source is null by design.
+    expect(evt.source).toBeNull();
+  });
+
+  test("origin signal — source reads back from metadata.client_source", async () => {
+    const project = await seedProject("origin");
+    const ident = await seedIdentity(project.id, "origin-agent");
+
+    // Simulate what the three write paths do: stamp client_source into
+    // the row's metadata JSONB. One row per stampable kind.
+    await db.insert(memories).values({
+      projectId: project.id,
+      identityId: ident.id,
+      type: "episodic",
+      tier: "episodic",
+      content: "written through the TS SDK",
+      metadata: { client_source: "sdk-ts" },
+    });
+    await db.insert(chronicle).values({
+      projectId: project.id,
+      agentId: ident.id,
+      type: "note",
+      title: "logged through the Py SDK",
+      metadata: { client_source: "sdk-py" },
+    });
+    await db.insert(traces).values({
+      traceId: "tr_" + crypto.randomUUID().replace(/-/g, ""),
+      projectId: project.id,
+      identityId: ident.id,
+      decisionType: "test",
+      decisionSummary: "recorded through raw HTTP",
+      conclusion: "done",
+      metadata: { client_source: "http" },
+    });
+    // A row with NO client_source key — must read back as null (predates
+    // the feature, or a write path that doesn't stamp).
+    await db.insert(memories).values({
+      projectId: project.id,
+      identityId: ident.id,
+      type: "episodic",
+      tier: "episodic",
+      content: "no origin stamped",
+      metadata: { unrelated: true },
+    });
+    // A row with a GARBAGE client_source — the validation guard must
+    // reject it back to null rather than surface a junk token.
+    await db.insert(memories).values({
+      projectId: project.id,
+      identityId: ident.id,
+      type: "episodic",
+      tier: "episodic",
+      content: "garbage origin stamped",
+      metadata: { client_source: "sdk-rust-haxx" },
+    });
+
+    const events = await getRecentActivity({ projectId: project.id });
+
+    const memTs = events.find((e) => e.summary.includes("written through the TS SDK"));
+    expect(memTs?.source).toBe("sdk-ts");
+
+    const chronPy = events.find((e) => e.summary.includes("logged through the Py SDK"));
+    expect(chronPy?.source).toBe("sdk-py");
+
+    const traceHttp = events.find((e) => e.summary.includes("recorded through raw HTTP"));
+    expect(traceHttp?.source).toBe("http");
+
+    const noStamp = events.find((e) => e.summary.includes("no origin stamped"));
+    expect(noStamp?.source).toBeNull();
+
+    const garbage = events.find((e) => e.summary.includes("garbage origin stamped"));
+    expect(garbage?.source).toBeNull();
   });
 });

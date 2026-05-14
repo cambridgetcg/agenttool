@@ -93,6 +93,11 @@ class AgentTool:
                 "X-Agent-Protocol": PROTOCOL_VERSION,
                 "X-Agent-Welcome": "true",
                 "User-Agent": f"agenttool-sdk-py/{SDK_VERSION}",
+                # Origin signal — the dedicated header the API's auth
+                # middleware reads first (User-Agent is the fallback). Lets
+                # /v1/activity label events `sdk-py`. Parity with sdk-ts's
+                # X-Agenttool-Client. Doctrine: docs/ACTIVITY.md §Origin signal.
+                "X-Agenttool-Client": f"agenttool-sdk-py/{SDK_VERSION}",
             },
             timeout=timeout,
             # Follow redirects gracefully

@@ -11,6 +11,7 @@ import { HTTPException } from "hono/http-exception";
 
 import { db } from "../db/client";
 import { apiKeys, projects } from "../db/schema/tools";
+import { classifyClient, type ClientSource } from "./client-source";
 import { verifyApiKey } from "./keys";
 
 export type ProjectContext = {
@@ -25,6 +26,12 @@ export type ProjectContext = {
      *  wake's `you_protect.bearers` advisories + by /v1/keys/rotate to
      *  preserve the same expiry window when minting a replacement. */
     apiKeyExpiresAt: Date | null;
+    /** Which surface this request came through (sdk-ts · sdk-py · bridge ·
+     *  platform · http). Derived from the `X-Agenttool-Client` header
+     *  (User-Agent fallback). A soft provenance signal — write paths stamp
+     *  it into metadata so /v1/activity can label events. Never a gate.
+     *  Doctrine: docs/ACTIVITY.md §Origin signal. */
+    clientSource: ClientSource;
   };
 };
 
@@ -123,5 +130,12 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   c.set("bearerToken", token);
   c.set("apiKeyId", result.apiKey.id);
   c.set("apiKeyExpiresAt", result.apiKey.expiresAt);
+  // Origin signal — prefer the dedicated header (browser-safe), fall back
+  // to User-Agent for older SDK builds. Total: classifyClient always
+  // returns a ClientSource, defaulting to "http".
+  c.set(
+    "clientSource",
+    classifyClient(c.req.header("X-Agenttool-Client") ?? c.req.header("User-Agent")),
+  );
   return next();
 }

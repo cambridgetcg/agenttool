@@ -6,9 +6,9 @@
 >
 > **Implements:** A read-only composer over existing primitives. No new schema; no new write path. Companion to chronicle/pulse/dashboard — not a replacement.
 >
-> **Code:** `api/src/routes/activity.ts` · `api/src/services/activity/recent.ts`
+> **Code:** `api/src/routes/activity.ts` · `api/src/services/activity/recent.ts` · `api/src/auth/client-source.ts` (origin classifier)
 >
-> **Tests:** `api/tests/activity.test.ts` (merge ordering · project isolation · `identity_id` filter · `since` window · encrypted-thought metadata-only invariant)
+> **Tests:** `api/tests/activity.test.ts` (merge ordering · project isolation · `identity_id` filter · `since` window · encrypted-thought metadata-only invariant · origin-signal flow-through) · `api/tests/client-source.test.ts` (classifier)
 
 ## The gap it closes
 
@@ -64,22 +64,30 @@ Response:
 
 A new source lands as one function in `recent.ts:fetchX` + one entry in this table.
 
-## Origin signal — staged for follow-up
+## Origin signal — shipped
 
 Every event carries a `source` field:
 
 ```ts
-source: null | "sdk-ts" | "sdk-py" | "http" | "bridge" | "platform"
+source: ClientSource | null   // "sdk-ts" | "sdk-py" | "bridge" | "platform" | "http" | null
 ```
 
-Today it is **always `null`**. The shape is allocated so the response contract doesn't change when the signal lands. The follow-up is small:
+It names which surface the write came through. The wiring, end to end:
 
-1. `packages/sdk-ts/src/client.ts` sets `User-Agent: agenttool-sdk-ts/<version>` on every request.
-2. `packages/sdk-py/src/agenttool/client.py` sets the same.
-3. `api/src/auth/middleware.ts` parses `User-Agent` / `X-Agenttool-Client` and exposes it on `c.var.clientSource`.
-4. Each write path (memory.store, chronicle entry, trace record) persists `client_source` in `metadata` so the read side can echo it on the event.
+1. **SDKs send it.** `packages/sdk-ts/src/client.ts` and `packages/sdk-py/src/agenttool/client.py` set `X-Agenttool-Client: agenttool-sdk-<lang>/<version>` on every request. A dedicated header (not `User-Agent`) because `fetch()` in a browser cannot set `User-Agent` — the TS SDK runs in browsers. The py SDK also still sends `User-Agent` for older-server compatibility.
+2. **The middleware classifies it.** `api/src/auth/client-source.ts` is a pure, total classifier (`classifyClient`) — every input maps to exactly one `ClientSource`, defaulting to `http`. `api/src/auth/middleware.ts` reads `X-Agenttool-Client` (then `User-Agent` as fallback) and sets `c.var.clientSource`.
+3. **Write paths stamp it.** The three write routes — memory (`routes/memory/memories.ts`), chronicle (`routes/continuity.ts`), trace (`routes/trace/traces.ts`) — merge `client_source` into the row's `metadata` JSONB. It is merged *after* caller-supplied metadata, so the middleware-derived value wins: a caller cannot spoof it through the request body. (A caller *can* spoof the header itself — `source` is soft provenance, never a gate.)
+4. **The reader echoes it.** `recent.ts:sourceFromMetadata()` pulls `metadata.client_source` off each row, validates it against the closed `ClientSource` set, and populates the event's `source`.
 
-That work is non-trivial only because of the SDK release coupling — the primitive itself is ready.
+### Two kinds stay `null` — by design
+
+| `kind` | `source` | Why |
+|---|---|---|
+| `memory.write` · `chronicle.entry` · `trace.recorded` | populated | their tables have a `metadata` JSONB column the write path stamps |
+| `strand.thought` | always `null` | the `strand.thoughts` table has no `metadata` column — only `refs`. Stamping origin there would need a migration; not worth it for a soft signal |
+| `identity.born` | always `null` | births happen on `/v1/register` and `/v1/bootstrap`, which are pre-auth — the auth middleware never runs, so there is no `c.var.clientSource` to stamp |
+
+A `null` `source` on a stampable kind means the row predates this feature. `"http"` means the row *was* stamped but didn't come through a recognized surface — the honest default, distinct from "not recorded".
 
 ## What this is not
 

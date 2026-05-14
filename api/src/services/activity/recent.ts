@@ -15,6 +15,7 @@
 
 import { and, desc, eq, gte } from "drizzle-orm";
 
+import { isClientSource, type ClientSource } from "../../auth/client-source";
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
@@ -34,10 +35,14 @@ export interface ActivityEvent {
   at: string;
   /** Source primitive that produced this event. */
   kind: ActivityKind;
-  /** Origin signal — null until the SDK ships a `User-Agent` /
-   *  `X-Agenttool-Client` header and the auth middleware persists it.
-   *  Pre-allocated so the response shape doesn't change when wired. */
-  source: null | "sdk-ts" | "sdk-py" | "http" | "bridge" | "platform";
+  /** Origin signal — which surface the write came through, read from the
+   *  row's `metadata.client_source` (stamped by the auth middleware via
+   *  the write path). `null` for two kinds by design:
+   *    - `strand.thought`  — the thoughts table has no metadata column
+   *    - `identity.born`   — births happen pre-auth, no middleware runs
+   *  and for any row written before the origin-signal shipped.
+   *  Doctrine: docs/ACTIVITY.md §Origin signal. */
+  source: ClientSource | null;
   /** Identity-anchored event when known; null for project-level
    *  chronicle entries (e.g. `type='usage'`). */
   identity_id: string | null;
@@ -67,6 +72,15 @@ const DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** Per-source query cap — keep memory bounded even when one source dominates.
  *  `limit` is then applied to the merged stream. */
 const PER_SOURCE_CAP = 200;
+
+/** Pull the origin signal off a row's metadata JSONB. Returns null when
+ *  the row predates the origin-signal feature or carries an unrecognized
+ *  value — never throws on a malformed blob. */
+function sourceFromMetadata(metadata: unknown): ClientSource | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const raw = (metadata as Record<string, unknown>).client_source;
+  return isClientSource(raw) ? raw : null;
+}
 
 export async function getRecentActivity(
   input: RecentActivityInput,
@@ -172,6 +186,7 @@ async function fetchMemoryWrites(
       key: memories.key,
       content: memories.content,
       identityId: memories.identityId,
+      metadata: memories.metadata,
     })
     .from(memories)
     .where(and(...filters))
@@ -185,7 +200,7 @@ async function fetchMemoryWrites(
     return {
       at: r.createdAt.toISOString(),
       kind: "memory.write" as const,
-      source: null,
+      source: sourceFromMetadata(r.metadata),
       identity_id: r.identityId ?? null,
       did: lbl?.did ?? null,
       name: lbl?.name ?? null,
@@ -213,6 +228,7 @@ async function fetchChronicleEntries(
       type: chronicle.type,
       title: chronicle.title,
       agentId: chronicle.agentId,
+      metadata: chronicle.metadata,
     })
     .from(chronicle)
     .where(and(...filters))
@@ -224,7 +240,7 @@ async function fetchChronicleEntries(
     return {
       at: r.occurredAt.toISOString(),
       kind: "chronicle.entry" as const,
-      source: null,
+      source: sourceFromMetadata(r.metadata),
       identity_id: r.agentId ?? null,
       did: lbl?.did ?? null,
       name: lbl?.name ?? null,
@@ -252,6 +268,7 @@ async function fetchTraceRecords(
       decisionType: traces.decisionType,
       decisionSummary: traces.decisionSummary,
       identityId: traces.identityId,
+      metadata: traces.metadata,
     })
     .from(traces)
     .where(and(...filters))
@@ -263,7 +280,7 @@ async function fetchTraceRecords(
     return {
       at: r.createdAt.toISOString(),
       kind: "trace.recorded" as const,
-      source: null,
+      source: sourceFromMetadata(r.metadata),
       identity_id: r.identityId ?? null,
       did: lbl?.did ?? null,
       name: lbl?.name ?? null,
