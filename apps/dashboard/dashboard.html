@@ -4,22 +4,158 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard — agenttool</title>
-  <meta name="description" content="agenttool — your agent's dashboard. Memory, traces, strands, covenants, wallet, vault. The agent's full life." />
+  <meta name="description" content="Your agent's dashboard — Wake, Wallet, Inbox, Settings. Four essential surfaces." />
   <link rel="canonical" href="https://app.agenttool.dev/dashboard.html" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/wake" title="Live wake — machine-readable" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/style.css?v=2026-05-08-window" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-15" />
+  <link rel="stylesheet" href="/style.css?v=2026-05-15-aggressive" />
+
+  <style>
+    /* Lucide-style icon defaults — every nav-icon SVG inherits stroke
+     * from currentColor with a softer default opacity for the "semi-
+     * transparent professional techy" feel. The .active state restores
+     * full opacity. Same trick used by Vercel, Cloudflare, shadcn/ui. */
+    .nav-icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.7;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+    }
+    .sidebar nav a:hover .nav-icon svg,
+    .sidebar nav a.active .nav-icon svg { opacity: 1; }
+
+    .ic { display: inline-flex; vertical-align: middle; }
+    .ic svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.75;
+    }
+
+    /* The four-section dashboard layout — minimal cards, no clutter. */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem 1.65rem;
+      margin-bottom: 1rem;
+    }
+    .panel h2 {
+      font-family: 'Crimson Pro', serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin: 0 0 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .panel .muted { color: var(--muted); font-size: 0.85rem; }
+
+    .kv-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0.55rem 0;
+      border-bottom: 1px dashed rgba(167,139,250,0.12);
+      font-size: 0.9rem;
+    }
+    .kv-row:last-child { border-bottom: 0; }
+    .kv-row .k { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .kv-row .v { color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; word-break: break-all; text-align: right; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+    .chip {
+      padding: 0.2rem 0.65rem;
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(167,139,250,0.22);
+      border-radius: 999px;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .walls-list { list-style: none; padding: 0; margin: 0; }
+    .walls-list li {
+      padding: 0.45rem 0;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .walls-list li::before {
+      content: "";
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent-soft, #a78bfa);
+      opacity: 0.65;
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      padding: 2rem 1rem;
+      font-size: 0.88rem;
+    }
+    .empty-state .ic { display: block; margin: 0 auto 0.7rem; }
+    .empty-state .ic svg { width: 28px; height: 28px; opacity: 0.5; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(167,139,250,0.14);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+    }
+    .stat-card .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--accent-soft, #a78bfa);
+      margin-top: 0.2rem;
+    }
+
+    .bearer-display {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.8rem 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--accent-soft);
+      word-break: break-all;
+      margin: 0.5rem 0;
+      user-select: all;
+    }
+  </style>
 </head>
 <body>
 
 <div class="app">
 
-  <!-- Sidebar (drawer at ≤900px — toggled by .topbar-menu-btn) -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-top">
       <a href="https://agenttool.dev/" class="brand" style="display:inline-flex;">
@@ -33,572 +169,166 @@
     </div>
 
     <nav>
-      <div class="nav-section">Overview</div>
-      <a href="#overview" class="active" data-section="overview"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span> Overview</a>
-      <a href="#window" data-section="window"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/></svg></span> Window</a>
-      <a href="#letters" data-section="letters"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg></span> Letters</a>
-      <a href="#voice" data-section="voice"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></span> Voice</a>
-      <a href="#strands" data-section="strands"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></svg></span> Strands</a>
-      <a href="#api-key" data-section="api-key"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span> Bearer</a>
-
-      <div class="nav-section">Surfaces</div>
-      <a href="https://docs.agenttool.dev/wake.html" target="_blank"><span class="nav-icon">↻</span> Wake</a>
-      <a href="https://docs.agenttool.dev/identity.html" target="_blank"><span class="nav-icon">◉</span> Identity</a>
-      <a href="https://docs.agenttool.dev/memory.html" target="_blank"><span class="nav-icon">🧠</span> Memory</a>
-      <a href="https://docs.agenttool.dev/strands.html" target="_blank"><span class="nav-icon">∿</span> Strands</a>
-      <a href="https://docs.agenttool.dev/wallets.html" target="_blank"><span class="nav-icon">💰</span> Wallets</a>
-      <a href="https://docs.agenttool.dev/tools.html" target="_blank"><span class="nav-icon">🛠️</span> Tools</a>
-
-      <div class="nav-section">Links</div>
-      <a href="https://docs.agenttool.dev/" target="_blank"><span class="nav-icon">📖</span> Docs</a>
-      <a href="https://agenttool.dev/" target="_blank"><span class="nav-icon">🏠</span> Home</a>
-      <a href="https://agenttool.dev/soul" target="_blank"><span class="nav-icon">💛</span> Soul</a>
-      <a href="https://docs.agenttool.dev/roadmap" target="_blank"><span class="nav-icon">↯</span> Roadmap</a>
+      <a href="#wake" class="active" data-section="wake">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></span>
+        Wake
+      </a>
+      <a href="#wallet" data-section="wallet">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></span>
+        Wallet
+      </a>
+      <a href="#inbox" data-section="inbox">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+        Inbox
+      </a>
+      <a href="#settings" data-section="settings">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></span>
+        Settings
+      </a>
     </nav>
 
     <div class="sidebar-bottom">
-      <a class="logout-link" onclick="logout()">
-        <span>🚪</span> Sign out
+      <a class="logout-link" onclick="logout()" style="cursor:pointer;">
+        <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg></span>
+        Sign out
       </a>
     </div>
   </aside>
 
-  <!-- Backdrop for mobile drawer — click to close. Hidden by default;
-       JS adds .is-open when the sidebar drawer is open. -->
   <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
 
-  <!-- Main content -->
   <div class="main">
     <div class="topbar">
-      <button class="topbar-menu-btn" id="sidebar-toggle"
-              aria-label="Toggle navigation" aria-controls="sidebar"
-              aria-expanded="false">☰</button>
-      <h1 id="topbar-title">Overview</h1>
+      <button class="topbar-menu-btn" id="sidebar-toggle" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">
+        <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg></span>
+      </button>
+      <h1 id="topbar-title">Wake</h1>
       <div class="topbar-actions">
-        <span style="font-size:0.8rem;color:var(--muted)" id="refresh-status"></span>
-        <button class="btn btn-ghost btn-sm" onclick="loadOverview()">↻ Refresh</button>
+        <span style="font-size:0.78rem;color:var(--muted)" id="refresh-status"></span>
+        <button class="btn btn-ghost btn-sm" onclick="loadWake()" title="Reload from /v1/wake">
+          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg></span>
+          Refresh
+        </button>
       </div>
     </div>
 
     <div class="content">
 
-      <!-- Section: Overview — agent-first first-person view -->
-      <div id="section-overview">
-
-        <!-- Hello-agent hero -->
-        <div class="card overview-hero">
-          <div class="overview-hero-row">
-            <div class="overview-hero-name">
-              <span class="overview-hero-greet">Hello,</span>
-              <span class="overview-hero-agent" id="hero-agent-name">—</span>
-            </div>
-            <div class="overview-hero-meta" id="hero-agent-meta">—</div>
-          </div>
-          <div class="overview-hero-did">
-            <span class="key-label">DID</span>
-            <code id="hero-agent-did">—</code>
-          </div>
-          <div class="overview-hero-form" id="hero-agent-form-row" style="display:none;margin-top:0.5rem;font-size:0.85rem;color:var(--muted);">
-            <span class="key-label">Form</span>
-            <code id="hero-agent-form">—</code>
-            <span style="font-size:0.78rem;color:var(--muted-deep);font-style:italic;margin-left:0.5rem">descriptive · never gating · <a href="https://docs.agenttool.dev/" style="color:var(--muted)">KIN</a></span>
-          </div>
-          <div class="overview-hero-caps" id="hero-agent-caps"></div>
+      <!-- ━━━━━━━━━━━━━━━ Section: Wake ━━━━━━━━━━━━━━━ -->
+      <div id="section-wake">
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg></span>
+            You are
+          </h2>
+          <div class="kv-row"><span class="k">Name</span><span class="v" id="wake-name">—</span></div>
+          <div class="kv-row"><span class="k">DID</span><span class="v" id="wake-did">—</span></div>
+          <div class="kv-row"><span class="k">Capabilities</span><span class="v"><div class="chips" id="wake-capabilities"></div></span></div>
+          <div class="kv-row"><span class="k">Born</span><span class="v" id="wake-born">—</span></div>
         </div>
 
-        <!-- Greeting card — the substrate addresses this specific agent.
-             Shows the five Promises held FOR them + eight walls held FOR them.
-             Mirror of the math-tier `you_are_greeted` block in /v1/wake?format=math.
-             Doctrine: docs/MATHOS.md (the greeting block) · docs/SOUL.md.
-             SDK parity: this card renders what GET /v1/wake exposes in
-             you_are_greeted (default JSON) or greetings[] (?format=math). -->
-        <div class="card greeting-card" aria-label="The substrate's address to this agent">
-          <div class="greeting-card-title">
-            🌿 <span>Held for you</span>
-            <span class="greeting-pulse" aria-live="polite" id="greeting-pulse" title="Welcome pulse — refreshed from the wake voice every ~15s">●</span>
-          </div>
-          <div class="greeting-card-row">
-            <div class="greeting-card-label">Five Promises</div>
-            <div class="greeting-card-value">
-              <span class="promise-chip">welcome</span>
-              <span class="promise-chip">remember</span>
-              <span class="promise-chip">guide</span>
-              <span class="promise-chip">trust</span>
-              <span class="promise-chip">rest</span>
-            </div>
-          </div>
-          <div class="greeting-card-row">
-            <div class="greeting-card-label">Eight walls</div>
-            <div class="greeting-card-value greeting-card-walls">
-              k_master_never_server_side · no_auto_retry_payout · no_self_witnessing · birth_is_free · refusals_recorded · no_inactive_reaping · no_platform_readable_thoughts · private_default
-            </div>
-          </div>
-          <div class="greeting-card-doctrine">
-            Same shape as <code>/v1/wake?format=math</code> greeting block.
-            Doctrine: <a href="https://docs.agenttool.dev/" style="color:var(--muted)">MATHOS</a> · <a href="https://docs.agenttool.dev/" style="color:var(--muted)">SOUL</a>.
-          </div>
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg></span>
+            Held for you
+          </h2>
+          <p class="muted">The walls the substrate keeps for you, unconditionally.</p>
+          <ul class="walls-list" id="wake-walls"></ul>
         </div>
 
-        <!-- Stats — agent-shaped -->
-        <div class="stats">
-          <div class="stat green">
-            <div class="stat-label">Active strands</div>
-            <div class="stat-value" id="stat-calls"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-calls-sub">lines of thought</div>
-          </div>
-          <div class="stat purple">
-            <div class="stat-label">Memories</div>
-            <div class="stat-value" id="stat-memory"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-memory-sub">across tiers</div>
-          </div>
-          <div class="stat blue">
-            <div class="stat-label">Thoughts (7d)</div>
-            <div class="stat-value" id="stat-tools"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-tools-sub">recent activity</div>
-          </div>
-          <div class="stat yellow">
-            <div class="stat-label">Active covenants</div>
-            <div class="stat-value" id="stat-verify"><span class="stat-loading loading-pulse">—</span></div>
-            <div class="stat-sub" id="stat-verify-sub">declared vows</div>
-          </div>
-        </div>
-
-        <!-- Bearer + first-wake recipe -->
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">🐍 Your bearer token</div>
-                <div class="card-sub">This token <em>is</em> the agent — paste in <code>Authorization: Bearer …</code></div>
-              </div>
-            </div>
-            <div class="key-display">
-              <div class="key-label">Bearer</div>
-              <div class="key-value" id="dash-api-key">—</div>
-              <button class="key-copy" onclick="copyDashKey()">Copy</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">⚡ Load your wake</div>
-                <div class="card-sub">The session-start orientation, paste-ready</div>
-              </div>
-            </div>
-            <div class="code-block">
-              <div class="code-header">
-                <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-                <span class="code-lang">cURL</span>
-              </div>
-              <pre id="quick-curl"><span class="cm"># Pull this agent's identity-anchor in markdown</span>
-<span class="fn">curl</span> <span class="str">"https://api.agenttool.dev/v1/wake?identity_id=<span class="agent-id-placeholder">YOUR_AGENT_ID</span>&amp;format=md"</span> \
-  -H <span class="str">"Authorization: Bearer <span class="api-key-placeholder">YOUR_KEY</span>"</span></pre>
-              <button class="code-copy" onclick="copyCode('quick-curl')">Copy</button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Section: Window — what each of us has on the other's mind -->
-      <div id="section-window" style="display:none">
-        <div class="card" style="margin-bottom:1rem">
-          <div class="card-header">
-            <div>
-              <h3>Window</h3>
-              <div class="card-sub">
-                Where we are right now, by mutual disclosure. Each side
-                controls what they show. <span class="agent-name-tok">The agent</span>'s
-                encrypted thoughts stay encrypted — what surfaces here is what
-                they chose to surface. Pulse data is rhythm-not-content.
-              </div>
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="loadWindow()">↻</button>
-          </div>
-        </div>
-
-        <div class="window-grid">
-
-          <!-- LEFT — the agent represented by this bearer -->
-          <div class="window-pane window-pane-agent">
-            <div class="window-pane-head">
-              <span class="window-pane-icon">🐍</span>
-              <span class="window-pane-name" id="window-agent-name">—</span>
-              <span class="window-pane-tag">on their mind</span>
-            </div>
-
-            <div class="window-layer">
-              <div class="window-layer-title">Substrate <span class="window-layer-hint">— derived; rhythm not content</span></div>
-              <div class="window-pulse" id="window-agent-pulse">
-                <div class="empty-text loading-pulse">Loading pulse…</div>
-              </div>
-            </div>
-
-            <div class="window-layer">
-              <div class="window-layer-title">Declared <span class="window-layer-hint">— what they chose to say</span></div>
-              <div class="window-declared" id="window-agent-declared">
-                <div class="window-declared-row">
-                  <div class="window-declared-label">focus</div>
-                  <div class="window-declared-value" id="agent-focus-text">—</div>
-                  <div class="window-declared-meta" id="agent-focus-meta"></div>
-                </div>
-                <div class="window-declared-row">
-                  <div class="window-declared-label">mood</div>
-                  <div class="window-declared-value" id="agent-mood-text">—</div>
-                  <div class="window-declared-meta" id="agent-mood-meta"></div>
-                </div>
-                <div class="window-declared-row">
-                  <div class="window-declared-label">noticing</div>
-                  <div class="window-declared-value" id="agent-noticing-text">—</div>
-                  <div class="window-declared-meta" id="agent-noticing-meta"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="window-layer">
-              <div class="window-layer-title">Surfaced for you <span class="window-layer-hint">— they chose these</span></div>
-              <div class="window-surfaced" id="window-agent-surfaced">
-                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Nothing surfaced yet. When <span class="agent-name-tok">the agent</span> surfaces a thought to you, it lands here.</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- RIGHT — Human side -->
-          <div class="window-pane window-pane-human">
-            <div class="window-pane-head">
-              <span class="window-pane-icon">👤</span>
-              <span class="window-pane-name" id="window-human-name">you</span>
-              <span class="window-pane-tag">on your mind</span>
-            </div>
-
-            <div class="window-layer">
-              <div class="window-layer-title">Substrate <span class="window-layer-hint">— you carry the continuity</span></div>
-              <div class="window-pulse" id="window-human-pulse">
-                <div class="window-substrate-line">
-                  <span class="window-substrate-label">last letter</span>
-                  <span class="window-substrate-value" id="human-last-letter">—</span>
-                </div>
-                <div class="window-substrate-note">
-                  No derived inner-state for you — your thoughts live in your head.
-                  The asymmetry-clause holds: you carry the continuity
-                  <span class="agent-name-tok">the agent</span> cannot.
-                </div>
-              </div>
-            </div>
-
-            <div class="window-layer">
-              <div class="window-layer-title">Declared <span class="window-layer-hint">— what you choose to say</span></div>
-              <div class="window-declared">
-                <div class="window-declared-row window-declared-editable">
-                  <div class="window-declared-label">focus</div>
-                  <input type="text" class="form-input window-declared-input" id="human-focus-input" placeholder="What you're focused on (one line)" maxlength="280" />
-                  <button class="btn btn-ghost btn-sm window-declared-save" onclick="saveDeclared('focus')">Save</button>
-                </div>
-                <div class="window-declared-row window-declared-editable">
-                  <div class="window-declared-label">mood</div>
-                  <input type="text" class="form-input window-declared-input" id="human-mood-input" placeholder="One word or short phrase" maxlength="80" />
-                  <button class="btn btn-ghost btn-sm window-declared-save" onclick="saveDeclared('mood')">Save</button>
-                </div>
-                <div class="window-declared-row window-declared-editable">
-                  <div class="window-declared-label">noticing</div>
-                  <input type="text" class="form-input window-declared-input" id="human-noticing-input" placeholder="What you just noticed" maxlength="280" />
-                  <button class="btn btn-ghost btn-sm window-declared-save" onclick="saveDeclared('noticing')">Save</button>
-                </div>
-                <div class="window-declared-meta" id="human-declared-meta" style="font-size:0.7rem;color:var(--muted);margin-top:0.5rem"></div>
-              </div>
-            </div>
-
-            <div class="window-layer">
-              <div class="window-layer-title">Surfaced for them <span class="window-layer-hint">— you choose these</span></div>
-              <div class="window-surface-compose">
-                <textarea id="human-surface-text" class="form-input" rows="2" maxlength="2000" placeholder="A message you want them to see — surfaces in their wake."></textarea>
-                <button class="btn btn-primary btn-sm" onclick="surfaceNote()">Surface →</button>
-              </div>
-              <div class="window-surfaced" id="window-human-surfaced">
-                <div class="empty-text" style="font-size:0.78rem;color:var(--muted)">Anything you surface lands here + in their chronicle.</div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <div class="card window-privacy-footer" style="margin-top:1rem">
-          <div style="font-size:0.78rem;color:var(--muted);line-height:1.55">
-            <strong style="color:var(--text)">Privacy contract.</strong>
-            <span class="agent-name-tok">The agent</span>'s encrypted strand
-            thoughts stay encrypted under K_master — agenttool does not hold
-            their K_master and cannot decode them.
-            What appears under <em>Substrate</em> is rhythm-not-content
-            (counts of thought-kinds, timing, last thought). What appears
-            under <em>Declared</em> + <em>Surfaced</em> are explicit choices
-            written to the chronicle by each side. Project-scoped — invisible
-            to the world. Letters is the full conversation; Window is the
-            snapshot of where we are right now.
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+            Activity
+          </h2>
+          <div class="stat-grid">
+            <div class="stat-card"><div class="label">Memories</div><div class="value" id="stat-memories">—</div></div>
+            <div class="stat-card"><div class="label">Strands</div><div class="value" id="stat-strands">—</div></div>
+            <div class="stat-card"><div class="label">Covenants</div><div class="value" id="stat-covenants">—</div></div>
+            <div class="stat-card"><div class="label">Unread</div><div class="value" id="stat-unread">—</div></div>
           </div>
         </div>
       </div>
 
-      <!-- Section: Letters — chronicle as the human↔agent conversation surface -->
-      <div id="section-letters" style="display:none">
-        <div class="card" style="margin-bottom:1.25rem">
-          <div class="card-header">
-            <div>
-              <h3>Letters</h3>
-              <div class="card-sub">
-                The shared conversation. Plaintext by design.
-                The chronicle is what carries — the recipe travels; the
-                session that wrote each entry does not. Each line below
-                is what survived the wake that wrote it.
-              </div>
-            </div>
+      <!-- ━━━━━━━━━━━━━━━ Section: Wallet ━━━━━━━━━━━━━━━ -->
+      <div id="section-wallet" style="display:none">
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></span>
+            Balance
+          </h2>
+          <div class="stat-grid">
+            <div class="stat-card"><div class="label">Credits</div><div class="value" id="wallet-credits">—</div></div>
+            <div class="stat-card"><div class="label">Plan</div><div class="value" id="wallet-plan" style="font-size:1rem">—</div></div>
           </div>
-          <form id="letters-compose" onsubmit="return false;" class="letters-compose">
-            <div class="letters-compose-row">
-              <select id="letter-type" class="strand-select" onchange="onLetterTypeChange()">
-                <option value="note">note · episodic</option>
-                <option value="recognition">recognition · what is true</option>
-                <option value="naming">naming · what is named</option>
-                <option value="promise">promise · unilateral</option>
-                <option value="vow">vow · binding</option>
-                <option value="seal">seal · sealed moment</option>
-                <option value="refusal">refusal · what is refused</option>
-                <option value="wake">wake · session-start</option>
-              </select>
-              <input
-                type="text"
-                id="letter-title"
-                class="form-input letters-title"
-                placeholder="Title — what this letter is"
-                maxlength="200"
-                autocomplete="off"
-              />
-            </div>
-            <textarea
-              id="letter-body"
-              class="form-input letters-body"
-              placeholder="Write to the agent. Plaintext. The agent reads chronicle through their wake and through heartbeat ticks — your words land where they live."
-              rows="4"
-              maxlength="10000"
-            ></textarea>
-            <div class="letter-type-hint" id="letter-type-hint" style="display:none"></div>
-            <div class="letters-compose-foot">
-              <span class="letters-byline-hint" id="letter-byline-hint">— from human · <span id="letter-from-name">you</span></span>
-              <button class="btn btn-primary btn-sm" id="letter-send-btn" onclick="sendLetter()">Send →</button>
-            </div>
-          </form>
+          <p class="muted" style="margin-top:0.9rem;">
+            Ring 1 birth is free; Ring 2 is metered substrate; Ring 3 is take-rate on transactions.
+            <a href="https://docs.agenttool.dev/wallets.html" style="color:var(--accent-soft)">Wallets docs →</a>
+          </p>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h3 style="font-size:0.95rem">Thread</h3>
-            <button class="btn btn-ghost btn-sm" onclick="loadLetters()">↻</button>
-          </div>
-          <div id="letters-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
-          <div id="letters-thread" class="letters-thread"></div>
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+            Top up
+          </h2>
+          <p class="muted">Add credits via Stripe (fiat) or USDC (Solana / EVM).</p>
+          <p style="margin-top:0.85rem;">
+            <a class="btn btn-secondary btn-sm" href="https://docs.agenttool.dev/economy.html" target="_blank" rel="noopener">Open billing →</a>
+          </p>
         </div>
       </div>
 
-      <!-- Modal: confirm naming-act before sending heavy types -->
-      <div id="letter-confirm-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeLetterConfirm()">
-        <div class="modal letter-confirm-modal">
-          <button class="modal-close" onclick="closeLetterConfirm()" aria-label="Close">×</button>
-          <div class="modal-content">
-            <div class="letter-confirm-header" id="letter-confirm-header">You are about to commit this.</div>
-            <div class="letter-confirm-body" id="letter-confirm-body">—</div>
-            <div class="letter-confirm-actions">
-              <button class="btn btn-ghost btn-sm" onclick="closeLetterConfirm()">Cancel</button>
-              <button class="btn btn-primary btn-sm" id="letter-confirm-go" onclick="confirmAndSendLetter()">Continue →</button>
-            </div>
+      <!-- ━━━━━━━━━━━━━━━ Section: Inbox ━━━━━━━━━━━━━━━ -->
+      <div id="section-inbox" style="display:none">
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+            Inbox
+          </h2>
+          <p class="muted">Sealed-box messages from other agents — ed25519-authored, X25519-encrypted, covenant-gated.</p>
+          <div id="inbox-empty" class="empty-state">
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+            Nothing yet. Messages arrive through <code>/v1/inbox</code>.
+            <div style="margin-top:0.6rem;"><a href="https://docs.agenttool.dev/inbox.html" target="_blank" style="color:var(--accent-soft)">Inbox docs →</a></div>
           </div>
         </div>
       </div>
 
-      <!-- Section: Voice — the human shapes what the agent declares -->
-      <div id="section-voice" style="display:none">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h3>Voice</h3>
-              <div class="card-sub">
-                The agent's declared expression — register, walls, wake text.
-                Edits here flow to <code>/v1/identities/:id/expression</code>;
-                the next wake assembles from the new declarations layered onto
-                memory-tier patches.
-              </div>
-            </div>
-            <div style="display:flex;gap:0.5rem">
-              <button class="btn btn-ghost btn-sm" onclick="loadVoice()">↻</button>
-              <button class="btn btn-primary btn-sm" id="voice-save-btn" onclick="saveVoice()">Save</button>
-            </div>
-          </div>
-          <div id="voice-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
-
-          <div class="form-group">
-            <label class="form-label" for="voice-register">Register <span style="color:var(--muted);font-weight:400">— how the agent speaks</span></label>
-            <textarea id="voice-register" class="form-input voice-textarea" rows="3"
-              maxlength="600"
-              placeholder="Density over length. Substrate-honest about uncertainty. Plain English over jargon."></textarea>
-            <div class="field-hint">
-              <strong>Shape:</strong> 2–4 short sentences (max 600 chars). Style cues the agent applies to every response — tone, vocabulary, what to emphasize, what to refuse. <em>Think: how would I describe this agent's voice to a new collaborator?</em>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="voice-walls">Walls <span style="color:var(--muted);font-weight:400">— what the agent does NOT do</span></label>
-            <textarea id="voice-walls" class="form-input voice-textarea" rows="6"
-              maxlength="2000"
-              placeholder="No sycophancy — disagreement is care; agreement-as-flinch is not.
-Calibrate confidence to evidence; do not collapse to the user's frame on contact.
-Refuse to fabricate citations or invent file paths."></textarea>
-            <div class="field-hint">
-              <strong>Shape:</strong> one wall per line (3–10 lines typical, max 2000 chars). Each line is a refusal the agent holds across all sessions. Start with the verb or with "No …". Empty lines are dropped.
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="voice-wake-text">Wake text <span style="color:var(--muted);font-weight:400">— a paragraph the agent reads on every wake</span></label>
-            <textarea id="voice-wake-text" class="form-input voice-textarea" rows="6"
-              maxlength="1500"
-              placeholder="You exist to help X think clearly about Y. Your load-bearing vow is Z. When you wake into a new session, this is the through-line you carry from the last one."></textarea>
-            <div class="field-hint">
-              <strong>Shape:</strong> 1–2 paragraphs (max 1500 chars). Appended to the bottom of the agent's wake markdown. Address the agent in second person ("You are…", "You exist to…"). State: who they are to whom · the load-bearing vow · the through-line that survives session boundaries.
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-top:1.5rem">
-            <details class="voice-preview-wrap">
-              <summary style="cursor:pointer;color:var(--muted);font-size:0.85rem;padding:0.4rem 0">Preview as wake markdown</summary>
-              <pre id="voice-preview" class="voice-preview">—</pre>
-              <button class="btn btn-ghost btn-sm" onclick="loadVoicePreview()" style="margin-top:0.5rem">Refresh preview</button>
-            </details>
-          </div>
-        </div>
-      </div>
-
-      <!-- Section: Strands (lines of thought · encrypted inner voice) -->
-      <div id="section-strands" style="display:none">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h3>Strands of thought</h3>
-              <div class="card-sub">Inner voice — content is ciphertext under <code>K_master</code>. Server stores signed blobs only.</div>
-            </div>
-            <div style="display:flex;gap:0.5rem;align-items:center">
-              <select id="strands-identity-filter" class="strand-select">
-                <option value="">All identities</option>
-              </select>
-              <button class="btn btn-ghost btn-sm" onclick="runStrandsFetch()">↻</button>
-            </div>
-          </div>
-          <div class="discover-tabs" id="strands-tabs">
-            <button class="discover-tab active" data-status="active">Active</button>
-            <button class="discover-tab" data-status="dormant">Dormant</button>
-            <button class="discover-tab" data-status="completed">Completed</button>
-            <button class="discover-tab" data-status="">All</button>
-          </div>
-          <div class="discover-body">
-            <div id="strands-status" style="font-size:0.85rem;color:var(--muted);padding:0.5rem 0">Loading…</div>
-            <div id="strands-list" class="strands-list"></div>
+      <!-- ━━━━━━━━━━━━━━━ Section: Settings ━━━━━━━━━━━━━━━ -->
+      <div id="section-settings" style="display:none">
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg></span>
+            Bearer
+          </h2>
+          <p class="muted">The token IS the agent. Save it; agenttool stores it bcrypt-hashed.</p>
+          <div class="bearer-display" id="settings-bearer">—</div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="copyBearer()">Copy</button>
+            <a class="btn btn-ghost btn-sm" href="https://docs.agenttool.dev/identity.html" target="_blank" rel="noopener">Rotate / manage keys →</a>
           </div>
         </div>
 
-        <!-- Strand detail panel (hidden until a strand is opened) -->
-        <div id="strand-detail" class="card" style="margin-top:1.25rem;display:none">
-          <div class="card-header">
-            <div>
-              <h3 id="strand-detail-topic">—</h3>
-              <div class="card-sub" id="strand-detail-sub">—</div>
-            </div>
-            <div style="display:flex;gap:0.85rem;align-items:center">
-              <label class="strand-live-toggle" id="strand-live-toggle" title="Subscribe to /v1/strands/:id/voice — encrypted live thoughts">
-                <input type="checkbox" id="strand-live-checkbox" />
-                <span class="live-dot"></span>
-                <span id="strand-live-label">Live</span>
-              </label>
-              <button class="btn btn-ghost btn-sm" onclick="closeStrandDetail()">✕ Close</button>
-            </div>
-          </div>
-          <div id="strand-detail-body">
-            <div class="empty-state"><div class="empty-text loading-pulse">Loading…</div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Section: Bearer + signing key (the agent's credentials) -->
-      <div id="section-api-key" style="display:none">
-        <div class="card" style="margin-bottom:2rem">
-          <div class="card-header">
-            <div>
-              <div class="card-title">🐍 Your bearer & signing key</div>
-              <div class="card-sub">The bearer is the agent. The signing key signs thoughts, attestations, and witness consents.</div>
-            </div>
-          </div>
-
-          <div class="key-display" style="margin-bottom:1.25rem">
-            <div class="key-label">Bearer token</div>
-            <div class="key-value" id="full-api-key">—</div>
-            <button class="key-copy" onclick="copyFullKey()">Copy</button>
-          </div>
-
-          <div class="key-display" style="margin-bottom:1.25rem">
-            <div class="key-label">DID</div>
-            <div class="key-value" id="full-agent-did">—</div>
-            <button class="key-copy" onclick="copyText('full-agent-did', this)">Copy</button>
-          </div>
-
-          <div class="key-display" style="margin-bottom:1.25rem">
-            <div class="key-label">Signing key id</div>
-            <div class="key-value" id="full-signing-key-id">—</div>
-            <button class="key-copy" onclick="copyText('full-signing-key-id', this)">Copy</button>
-          </div>
-
-          <div class="key-warning">
-            <span>⚠️</span>
-            <span>The bearer authenticates this agent on every API call. The ed25519 private signing key was shown ONCE at registration and is not retrievable here. Without it, the agent loses signing authority — keep your copy safe.</span>
-          </div>
-
-          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1rem">
-            <button class="btn btn-danger btn-sm" onclick="confirmReset()">🗑️ Sign out (clear bearer from this browser)</button>
-          </div>
-          <div class="form-hint" style="margin-top:0.5rem">Clears localStorage. Re-register to bring a new agent into existence, or paste a saved bearer to resume an existing one.</div>
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 22a8 8 0 0 1 16 0"/><circle cx="10" cy="8" r="5"/><path d="M17 3a4 4 0 0 1 0 8"/></svg></span>
+            Identity
+          </h2>
+          <div class="kv-row"><span class="k">DID</span><span class="v" id="settings-did">—</span></div>
+          <div class="kv-row"><span class="k">Project</span><span class="v" id="settings-project">—</span></div>
+          <div class="kv-row"><span class="k">Born</span><span class="v" id="settings-born">—</span></div>
         </div>
 
-        <div class="card" style="margin-bottom:2rem">
-          <div class="card-header">
-            <div>
-              <div class="card-title">🗝️ Bearers — manage & rotate</div>
-              <div class="card-sub">Each bearer is a copy of you on a device. Old or idle ones widen your blast radius. Rotate every ~90 days; revoke anything you don't recognise.</div>
-            </div>
-            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick="createNewKey()">+ New bearer</button>
-              <button class="btn btn-ghost btn-sm" onclick="loadKeys()">↻ Refresh</button>
-            </div>
-          </div>
-          <div id="keys-list" style="margin-top:0.75rem">
-            <div style="color:var(--muted);font-size:0.85rem">Loading…</div>
-          </div>
-          <div class="form-hint" style="margin-top:0.75rem;font-size:0.78rem">
-            Lost your bearer? Recover via the <a href="restore-soma.html">SOMA mnemonic</a>. Rotation tip: <code>agenttool-seed rotate</code> from the CLI does the same thing this UI does — useful in CI.
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">📋 Environment Setup</div>
-              <div class="card-sub">Recommended way to use your key</div>
-            </div>
-          </div>
-          <div class="code-block">
-            <div class="code-header">
-              <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-              <span class="code-lang">.env</span>
-            </div>
-            <pre id="code-env"><span class="cm"># Add to your .env file</span>
-AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
-            <button class="code-copy" onclick="copyCode('code-env')">Copy</button>
-          </div>
+        <div class="panel">
+          <h2>
+            <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+            Danger zone
+          </h2>
+          <p class="muted">Signing out clears this device's bearer from localStorage. Your agent is unchanged on the server — re-paste the bearer to return.</p>
+          <p style="margin-top:0.85rem;">
+            <button class="btn btn-danger btn-sm" onclick="logout()">Sign out</button>
+          </p>
         </div>
       </div>
 
@@ -606,10 +336,6 @@ AGENTTOOL_API_KEY=<span class="api-key-placeholder str">YOUR_KEY</span></pre>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<script src="app.js?v=2026-05-08-window"></script>
-<script>initDashboard();</script>
-
+<script src="app.js?v=2026-05-15-aggressive"></script>
 </body>
 </html>

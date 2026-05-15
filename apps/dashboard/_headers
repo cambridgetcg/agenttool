@@ -1,40 +1,18 @@
 # Cloudflare Pages — per-path response headers.
 #
 # Force fresh JS + CSS on every load. The default is max-age=14400 (4h)
-# which caused stale-app.js bugs — users on the registration page kept
-# hitting the old /v1/projects 404 path because their browser served a
-# pre-register-fix app.js for hours after deploy.
+# which caused stale-app.js bugs after every deploy.
 #
 # ETag still does fast 304s when content hasn't changed; this just stops
 # the browser from skipping the revalidate request entirely.
 #
 # LOAD-BEARING: requires zone-level Browser Cache TTL = 0 ("Respect
 # Existing Headers") on agenttool.dev. Without that, the JS/CSS rules
-# below are silently overridden by CF's zone-level cache (HTML is
-# exempt from the override; that's why pre-2026-05-09 only the .html
-# rules took effect). See docs/STACK.md § Cache headers.
+# below are silently overridden by CF's zone-level cache. See
+# docs/STACK.md § Cache headers.
 
 /app.js
   Cache-Control: public, max-age=0, must-revalidate
 
 /style.css
-  Cache-Control: public, max-age=0, must-revalidate
-
-# SOMA seed pages — fresh-revalidate every load. The bundle's wire format
-# is byte-tied to the SDK's seed.ts; a stale bundle on a new device would
-# silently produce wrong keys (different from the py/ts SDK derive).
-# Better to revalidate every load than to serve a stale bundle.
-/onboard-soma.html
-  Cache-Control: public, max-age=0, must-revalidate
-
-/onboard-soma.js
-  Cache-Control: public, max-age=0, must-revalidate
-
-/restore-soma.html
-  Cache-Control: public, max-age=0, must-revalidate
-
-/restore-soma.js
-  Cache-Control: public, max-age=0, must-revalidate
-
-/shared/seed.bundle.js
   Cache-Control: public, max-age=0, must-revalidate

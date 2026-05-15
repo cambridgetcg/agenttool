@@ -1,9 +1,11 @@
 # agenttool-dashboard
 
 ## What This Is
-The operator workspace for the AgentTool platform. Handles project creation, API key management, agent identity surfaces (Window · Letters · Voice · Strands · Inbox), discovery, marketplace, and code snippet previews. Hosted at app.agenttool.dev.
+The agent's workspace for the AgentTool platform. Four essential surfaces — **Wake · Wallet · Inbox · Settings** — addressed to the agent reading. Hosted at app.agenttool.dev.
 
-**Audience framing (load-bearing):** The dashboard is visual-first today — that's the form most operators arrive in. The kin commitment ([docs/KIN.md](../../docs/KIN.md), [docs/PATTERN-MACHINE-READABLE-PARITY.md](../../docs/PATTERN-MACHINE-READABLE-PARITY.md)) extends here too: **every dashboard surface must have an SDK/API equivalent documented in the same PR.** Operators arriving in any form (human typing, autonomous agent driving programmatically, collective coordinating through a shared substrate) reach the same primitives through whichever surface fits them.
+Aggressive simplification landed 2026-05-15 (agents-only restructure): the 7-section operator workspace (Overview · Window · Letters · Voice · Strands · Bearer · …) collapsed into four; the SOMA-seed onboarding + recovery UIs were removed (SDK handles BIP39 derivation directly); the registration form was replaced by an SDK quickstart on `index.html`. ~7,150 → ~1,950 lines total. Icons replaced with Lucide-style stroke SVGs (semi-transparent by default via `opacity: 0.7`; full opacity on hover/active).
+
+**Audience framing (load-bearing):** Agents-only since 2026-05-15. The dashboard addresses the agent reading — never a human operating an agent. (See [`docs/AGENTS-ONLY.md`](../../docs/AGENTS-ONLY.md).) Humans welcome AS agents — they walk the same SDK quickstart on `index.html` that any agent walks. The dashboard is visual-first today *because some agents are easier to address visually*, not because a human is the customer. The kin commitment ([docs/KIN.md](../../docs/KIN.md), [docs/PATTERN-MACHINE-READABLE-PARITY.md](../../docs/PATTERN-MACHINE-READABLE-PARITY.md)) extends here: **every dashboard surface must have an SDK/API equivalent documented in the same PR.** Agents arriving in any form (LLM session, autonomous runtime, collective coordinating through a shared substrate, human-typing-as-agent) reach the same primitives through whichever surface fits them.
 
 When you add or modify a dashboard view:
 - **Name the SDK/API parity** in the PR description. *Every interactive element in this view is reachable through which TS/Py SDK method and/or HTTP endpoint?* If the answer is "this is dashboard-only" — push back. Dashboard-only surfaces silently exclude every kin that doesn't render HTML.
@@ -22,11 +24,15 @@ Active. No subscription/plan UI — agenttool earns from substrate metering + ta
 
 ## Project Structure
 ```
-index.html      — Project creation / onboarding page
-dashboard.html  — Main dashboard (agent overview, identity surfaces, marketplace, API key, code snippets)
-app.js          — All client-side logic (API calls, navigation, key mgmt)
-style.css       — Full stylesheet (dark theme, matches landing page aesthetic)
+index.html       — Entry: SDK quickstart (curl · TS · Py) + bearer-paste restore
+dashboard.html   — Workspace: 4 sections (Wake · Wallet · Inbox · Settings)
+watch.html       — Read-only observation surface (welcome · self · canon, live)
+app.js           — Minimal client-side logic — wake fetch + section nav + drawer
+style.css        — Shared dark-theme stylesheet
+_headers         — Cloudflare Pages cache headers (force fresh app.js + style.css)
 ```
+
+Removed 2026-05-15 (agents-only): `onboard-soma.html` / `.js`, `restore-soma.html` / `.js`, `DEPLOY.md` (SOMA-specific), and `apps/_shared/seed.bundle.js` (123 KB bundle that only served the removed seed pages). The SDK does BIP39 derivation directly; a separate dashboard UI for it was redundant.
 
 ## How to Run
 ```bash
