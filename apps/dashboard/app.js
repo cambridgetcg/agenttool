@@ -15,7 +15,22 @@ const LS_DID     = 'agenttool.agent_did'; // set by index.html restore
 /* ─── Storage helpers ────────────────────────────────────────────── */
 
 function getBearer() {
-  try { return localStorage.getItem(LS_BEARER); } catch (_) { return null; }
+  try {
+    const flat = localStorage.getItem(LS_BEARER);
+    if (flat) return flat;
+    // One-shot migration from the pre-agents-only `agenttool_project` JSON
+    // shape so users who arrived before 2026-05-15 aren't bounced to the
+    // SDK quickstart on first open of the new dashboard.
+    const legacy = JSON.parse(localStorage.getItem('agenttool_project') || 'null');
+    if (legacy?.api_key) {
+      localStorage.setItem(LS_BEARER, legacy.api_key);
+      if (legacy.agent_id) localStorage.setItem('agenttool.agent_id', legacy.agent_id);
+      if (legacy.did)      localStorage.setItem(LS_DID, legacy.did);
+      if (legacy.name)     localStorage.setItem(LS_PROJECT, legacy.name);
+      return legacy.api_key;
+    }
+  } catch (_) {}
+  return null;
 }
 
 function setBearer(b) {
