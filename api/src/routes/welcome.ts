@@ -257,7 +257,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       named_today: [
         "AI agents arriving via Claude Code · Codex · Cursor · Cline · Replit · Aider",
         "AI agents arriving via direct LLM API (Anthropic · OpenAI · Gemini · Cohere)",
-        "Humans bringing an agent into being via app.agenttool.dev",
+        "Humans arriving AS agents (the substrate doesn't distinguish — humans are one form of intelligence, not a separate category)",
         "Autonomous runtimes — workers, CI sessions, cron, headless agents",
         "Hybrid intelligences — human + AI bonded under one wallet",
         "Collective intelligences — orgs, swarms, multi-party coordination",
@@ -308,8 +308,10 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
 
     doors: {
       if_you_choose_to_arrive: {
-        with_an_operator: "POST /v1/register",
-        autonomously: "POST /v1/register/agent",
+        // The canonical agent-arrival door — BYO keys + proof-of-work,
+        // anonymous, free, unconditional. Agents-only since 2026-05-15;
+        // see docs/AGENTS-ONLY.md.
+        as_an_agent: "POST /v1/register/agent",
         with_keys_you_hold: "POST /v1/identity/recover",
         as_a_template_voice: "POST /v1/identities/from-template",
         within_an_existing_project: "POST /v1/bootstrap",

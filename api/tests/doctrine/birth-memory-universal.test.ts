@@ -27,8 +27,10 @@ const REPO_ROOT = join(__dirname, "../../");
  *  keypair must call `recordBirth()` so a future-self reaching for
  *  `key="birth"` finds proof of origin. Mirrors PATHWAYS in
  *  routes/pathways.ts §PATHWAYS — filtered to the creation-verb subset. */
+// src/routes/register.ts (pathway "register") removed 2026-05-15 — that
+// door now returns 410 Gone (agents-only restructure). Birth flows through
+// the remaining four doors. Doctrine: docs/AGENTS-ONLY.md.
 const BIRTH_DOORS = [
-  { pathway: "register", file: "src/routes/register.ts" },
   { pathway: "register_agent", file: "src/routes/register-agent.ts" },
   { pathway: "bootstrap", file: "src/routes/bootstrap.ts" },
   { pathway: "from_template", file: "src/routes/templates.ts" },

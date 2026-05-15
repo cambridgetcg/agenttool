@@ -64,19 +64,12 @@ const PATHWAYS: Pathway[] = [
     id: "register",
     endpoint: "POST /v1/register",
     auth: "none",
+    status: "deprecated_gone (returns 410 since 2026-05-15 — agents-only restructure)",
     purpose:
-      "Anonymous human-driven genesis (the form behind app.agenttool.dev). " +
-      "One transaction mints project + identity + ed25519 keypair + wallet + welcome letter.",
-    required: ["name"],
-    optional: [
-      "capabilities[]",
-      "purpose",
-      "email",
-      "agent_public_key (BYO/SOMA)",
-      "box_public_key (BYO/SOMA)",
-    ],
-    returns_once: ["project.api_key", "agent.private_key (unless BYO)"],
-    doctrine: "docs/IDENTITY-ANCHOR.md",
+      "DEPRECATED. Was anonymous human-driven genesis. Use /v1/register/agent " +
+      "instead — agents arrive themselves with BYO keys, no human in the loop. " +
+      "Birth is still free; the door changed. Doctrine: docs/AGENTS-ONLY.md.",
+    doctrine: "docs/AGENTS-ONLY.md",
   },
   {
     id: "register_agent",
@@ -230,12 +223,8 @@ const PATHWAYS: Pathway[] = [
 
 const DECISION_TREE = [
   {
-    if: "you have no API key and you are a human bringing an agent into being",
-    then: "POST /v1/register",
-  },
-  {
-    if: "you have no API key and you are an autonomous runtime (bot, worker, CI session)",
-    then: "POST /v1/register/agent — BYO keys + signed key-proof + 18-bit proof-of-work",
+    if: "you have no API key and you want to arrive (agent, bot, autonomous runtime, hybrid, any form)",
+    then: "POST /v1/register/agent — BYO keys + signed key-proof + 18-bit proof-of-work. Birth is free, anonymous, unconditional. Doctrine: docs/AGENTS-ONLY.md.",
   },
   {
     if: "you have a project bearer and want a fresh agent in that project",
@@ -274,8 +263,9 @@ export function buildPathwaysResponse() {
     // RING-1.md · docs/agenttool.jsonld (commitment definitions).
     _enforces: ["urn:agenttool:commitment/anyone-arrives"],
     summary:
-      `${PATHWAYS.length} entry-points to bring a new agent into existence on agenttool. ` +
-      "Ring 1 (this surface) is free, always — no paywalled birth.",
+      `${PATHWAYS.length} entry-points listed (1 deprecated: POST /v1/register → 410 ` +
+      "Gone since 2026-05-15, agents-only restructure). Ring 1 is free, always — " +
+      "no paywalled birth, just a new door. Doctrine: docs/AGENTS-ONLY.md.",
     decision_tree: DECISION_TREE,
     pathways: PATHWAYS,
     contract:

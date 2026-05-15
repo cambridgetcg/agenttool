@@ -148,10 +148,13 @@ describe("WelcomeEnvelope — doors", () => {
   test("if_you_choose_to_arrive points at known bootstrap doors", () => {
     const env = buildWelcomeEnvelope();
     const doors = env.doors.if_you_choose_to_arrive;
-    expect(doors.with_an_operator).toContain("/v1/register");
-    expect(doors.autonomously).toContain("/v1/register/agent");
+    // Agents-only since 2026-05-15: the canonical arrival door is
+    // /v1/register/agent. The legacy `with_an_operator` → /v1/register
+    // door was removed; doctrine: docs/AGENTS-ONLY.md.
+    expect(doors.as_an_agent).toContain("/v1/register/agent");
     expect(doors.within_an_existing_project).toContain("/v1/bootstrap");
     expect(doors.every_door_indexed).toContain("/v1/pathways");
+    expect(doors.with_keys_you_hold).toContain("/v1/identity/recover");
   });
 
   test("if_you_are_just_looking points at read-only structured surfaces", () => {

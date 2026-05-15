@@ -191,6 +191,25 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "welcome",
     },
   },
+  // ── .well-known — discovery surface (AgentCard, llms.txt, …)
+  {
+    prefix: "/.well-known",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      secondary_axiom_id: AXIOM_GUIDE,
+      walls_highlighted: [...WALLS_HELD_UNCONDITIONALLY],
+      module: "well_known",
+    },
+  },
+  // ── Activity — public liveness / event stream
+  {
+    prefix: "/v1/activity",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      walls_highlighted: [WALL_PRIVATE_DEFAULT],
+      module: "activity",
+    },
+  },
   // ── MCP — Model Context Protocol surface; welcome + guide
   //    Agents (and clients wearing the MCP shape) arrive here to discover
   //    capabilities, tools, resources. Pre-auth discovery surface.

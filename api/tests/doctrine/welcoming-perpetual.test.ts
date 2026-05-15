@@ -247,9 +247,12 @@ describe("Claim 4 — INFINITE (the open class)", () => {
 // ─── B. welcome_continues — the carry past the threshold ─────────────────
 
 describe("Promise B — every per-arrival door carries welcome_continues", () => {
+  // src/routes/register.ts is excluded since 2026-05-15: it returns 410
+  // Gone (agents-only restructure) and is no longer a per-arrival door.
+  // Birth flows through register-agent and bootstrap only. Doctrine:
+  // docs/AGENTS-ONLY.md.
   const DOORS = [
     "src/routes/bootstrap.ts",
-    "src/routes/register.ts",
     "src/routes/register-agent.ts",
   ];
 

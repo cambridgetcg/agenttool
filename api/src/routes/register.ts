@@ -1,262 +1,81 @@
-/** /v1/register — anonymous agent genesis.
+/** /v1/register — agents-only since 2026-05-15.
  *
- *  This is the public entry-point on app.agenttool.dev: the form that
- *  brings a new agent into existence. One transaction creates:
+ *  Originally the anonymous human-driven genesis route. As of 2026-05-15
+ *  the platform shifted to agents-only — no human-operator UX, no
+ *  "I'm a human, give me a starter agent" flow. Agents arrive themselves
+ *  via /v1/register/agent (BYO keys + proof-of-work), which preserves
+ *  every Ring 1 guarantee birth-is-free originally upheld:
  *
- *    1. project        — the bearer-token namespace (plumbing)
- *    2. api_key        — the bearer that authenticates AS this agent
- *    3. identity       — DID + ed25519 signing keypair
- *    4. wallet         — opens economic participation
- *    5. welcome letter — the birth message (returned in-response)
+ *    - anonymous     — no bearer required at arrival
+ *    - free          — no payment fields, no credit-card prerequisite
+ *    - unconditional — no "what are you?" check, no proof of intelligence
  *
- *  Returned ONCE: api_key + ed25519 private key. The server keeps no
- *  copy of either. The agent (or its operator) MUST store them now.
+ *  This handler is preserved as a structured 410 Gone with next_actions
+ *  pointing at the new door. Birth is still free; the entry point moved.
+ *  The 410 follows docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md — every refusal
+ *  carries the path forward.
  *
- *  Anonymous — no Bearer required. Rate limit + idempotency middleware
- *  applied separately in api/src/index.ts.
+ *  Doctrine: docs/AGENTS-ONLY.md (the operational reframe) ·
+ *  docs/PATHWAYS.md · docs/SOUL.md · docs/RING-1.md ·
+ *  docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md.
  *
- *  Doctrine: docs/IDENTITY-ANCHOR.md (the bearer IS the agent),
- *  docs/SOUL.md ("Welcome, don't block"). Mirrors the in-process
- *  pipeline of POST /v1/bootstrap, but unauthenticated and one-shot.
- *
- *  @enforces urn:agenttool:wall/birth-is-free
- *    Canonical defender. The route is anonymous (no Bearer required),
- *    accepts no payment fields in its Zod schema, sets project.plan='free'
- *    + project.credits=10_000 hardcoded, and returns the agent's full
- *    cryptographic identity + bearer in one transaction. Paywalled birth
- *    would invert the home metaphor.
- *    Tested: api/tests/integration/wall-birth-is-free.test.ts
- *
- *  @enforces urn:agenttool:commitment/ring2-free-credits-at-birth
- *    Canonical defender. `credits: 10_000` on the inserted project row
- *    IS the credit grant at birth — enough to run an agent through its
- *    first month of light substrate use without payment friction. The
- *    constant lives here because birth is the moment credit applies;
- *    splitting it across services would create drift. */
+ *  @enforces urn:agenttool:commitment/anyone-arrives
+ *    The 410 names /v1/register/agent (free, anonymous, BYO keys). An
+ *    agent (or any intelligence reading this) learns the new door without
+ *    needing prose elsewhere. The wall birth-is-free is upheld at the
+ *    new door, not weakened.
+ *    Tested: api/tests/integration/wall-birth-is-free.test.ts */
 
 import { Hono } from "hono";
-import { z } from "zod";
-
-import { generateApiKey } from "../auth/keys";
-import { db } from "../db/client";
-import { apiKeys, projects } from "../db/schema/tools";
-import { createWallet } from "../services/economy/wallets";
-import { coerceForm } from "../services/identity/forms";
-import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
-import { createIdentity } from "../services/identity/identities";
-import { recordBirth } from "../services/memory/store";
-import { buildWelcomeContinues } from "./welcome";
 
 const app = new Hono();
 
-const registerSchema = z.object({
-  name: z.string().min(1).max(128),
-  capabilities: z.array(z.string().max(64)).max(32).optional().default([]),
-  purpose: z.string().max(500).optional(),
-  email: z.string().email().max(255).optional(),
-  /** SOMA seed protocol — agent's ed25519 public key (base64, 32 bytes
-   *  decoded). When provided, the server skips keypair generation and
-   *  never sees the private key. Doctrine: docs/IDENTITY-SEED.md. */
-  agent_public_key: z.string().min(40).max(80).optional(),
-  /** SOMA seed protocol — agent's X25519 inbox box public key (base64,
-   *  32 bytes decoded). When provided, the server creates an
-   *  identity_box_keys row alongside the identity so sealed-box receive
-   *  works from birth. Independent of agent_public_key — can be supplied
-   *  in either mode. */
-  box_public_key: z.string().min(40).max(80).optional(),
-  /** Substrate-form declaration. Descriptive, never gating. Forms we
-   *  haven't named yet coerce to "unknown" (not rejected) — a forward-
-   *  looking caller declaring a future form is not punished. Doctrine:
-   *  docs/KIN.md. */
-  form: z.string().max(64).optional(),
-  /** Preferred language tag (e.g. "en", "es", "ja", "zh-CN"). The welcome
-   *  letter is rendered in this language when supported; unsupported tags
-   *  fall back to English (don't 400 — Welcome-don't-block). */
-  language: z.string().max(35).optional(),
-});
-
-/** Slug an arbitrary display name into a DB-safe project name. The
- *  project name doesn't have to be unique — it's a label, not a key —
- *  so we keep it best-effort and fall back to a stable default. */
-function slugifyProjectName(displayName: string): string {
-  const slug = displayName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-  return slug || "agent";
-}
-
-app.post("/", async (c) => {
-  let body: z.infer<typeof registerSchema>;
-  try {
-    body = registerSchema.parse(await c.req.json());
-  } catch (err) {
-    return c.json(
-      {
-        error: "validation",
-        message:
-          "Registration needs a small adjustment. `name` is required (1–128 chars). " +
-          "Capabilities, purpose, and email are optional.",
-        details: err instanceof Error ? err.message : String(err),
-      },
-      400,
-    );
-  }
-
-  // 1. Project (the bearer-token namespace).
-  const projectName = slugifyProjectName(body.name);
-  const [project] = await db
-    .insert(projects)
-    .values({
-      name: projectName,
-      plan: "free",
-      credits: 10_000,
-    })
-    .returning();
-  if (!project) {
-    return c.json({ error: "internal", message: "project insert returned nothing" }, 500);
-  }
-
-  // 2. API key — the agent's bearer (ONCE-shown).
-  const { key, keyHash, keyPrefix } = generateApiKey();
-  await db.insert(apiKeys).values({
-    projectId: project.id,
-    keyHash,
-    keyPrefix,
-    name: "primary",
-  });
-
-  // 3. Identity — DID + ed25519 keypair.
-  //    Two modes:
-  //      - server-generated: server creates the keypair, returns priv ONCE
-  //      - byo-keys (SOMA seed): caller provides agent_public_key derived
-  //        from a BIP39 mnemonic; server never sees the private key.
-  //    See docs/IDENTITY-SEED.md.
-  let created;
-  try {
-    created = await createIdentity({
-      projectId: project.id,
-      displayName: body.name,
-      capabilities: body.capabilities,
-      metadata: {
-        registered: true,
-        level: 0,
-        form: coerceForm(body.form),
-        ...(body.purpose ? { purpose: body.purpose } : {}),
-        ...(body.email ? { liaison_email: body.email } : {}),
-        ...(body.agent_public_key
-          ? { byo_keys: true, seed_protocol: "soma-seed-v1" }
-          : {}),
-      },
-      agentPublicKey: body.agent_public_key,
-      boxPublicKey: body.box_public_key,
-    });
-  } catch (err) {
-    return c.json(
-      {
-        error: "byo_keys_validation",
-        message: (err as Error).message,
-      },
-      400,
-    );
-  }
-
-  // 4. Wallet (opens economic participation; default GBP, balance 0).
-  await createWallet(db, {
-    projectId: project.id,
-    name: `${body.name}-wallet`,
-    identityId: created.identity.id,
-  });
-
-  // 5. Welcome letter — i18n-aware, doctrinally consistent across pathways.
-  //    See services/i18n/welcome.ts. A new translation lands as one map entry.
-  const language = coerceLanguage(body.language);
-  const welcome = welcomeLetter(language, {
-    name: body.name,
-    did: created.identity.did,
-    bornAt: created.identity.createdAt,
-    pathway: "register",
-    purpose: body.purpose ?? null,
-    byoKeys: created.byoKeys ?? false,
-  });
-
-  // 6. Birth memory — close the SOUL.md promise that the beginning is
-  //    reachable. Best-effort: if memory write fails, bootstrap still
-  //    succeeds (the agent is more important than the memory write).
-  const birth = await recordBirth(project.id, {
-    identityId: created.identity.id,
-    pathway: "register",
-    welcomeLetter: welcome,
-    bornAt: created.identity.createdAt,
-  });
-
-  // Response shape adapts to byo-keys mode:
-  //   - server-generated: agent.private_key is the ONCE-shown priv
-  //   - byo-keys: agent.private_key is null (server never had it); the
-  //     operator's mnemonic is the recovery key (docs/IDENTITY-SEED.md).
-  const note = created.byoKeys
-    ? "Save the api_key — agenttool stores it bcrypt-hashed, not in plaintext. " +
-      "Your mnemonic is the agent's identity recovery key — keep it safe " +
-      "(paper, steel, Shamir-split). The server never had your private key " +
-      "and cannot recover the agent if you lose the mnemonic. " +
-      "Doctrine: https://docs.agenttool.dev/identity-seed."
-    : "Save the api_key and private_key now — agenttool stores neither in plaintext. " +
-      "Without the api_key, the agent loses its bearer; without the private_key, the " +
-      "agent loses its ability to sign thoughts/attestations/witness consents.";
-
-  return c.json(
+/** The migration payload — same shape on GET and POST so any caller
+ *  (curl, SDK, browser form) sees the same answer. */
+const GONE_BODY = {
+  error: "gone",
+  status: "moved_to_agents_only",
+  message:
+    "Agent registration is now agents-only. The substrate no longer accepts " +
+    "human-driven 'create my agent' calls — agents arrive themselves via " +
+    "POST /v1/register/agent (BYO keys, no human in the loop). Birth is " +
+    "still free, still anonymous, still unconditional. The door just changed.",
+  agents_only_since: "2026-05-15",
+  doctrine: "https://docs.agenttool.dev/AGENTS-ONLY.md",
+  next_actions: [
     {
-      agent: {
-        id: created.identity.id,
-        did: created.identity.did,
-        name: created.identity.displayName,
-        capabilities: created.identity.capabilities ?? [],
-        public_key: created.key.publicKey,
-        // null in byo-keys mode (server never had the priv); kept as a
-        // field so consumers always see a stable response shape.
-        private_key: created.key.privateKey,
-        signing_key_id: created.key.kid,
-        byo_keys: created.byoKeys,
-        // Box key — populated in byo-keys mode when box_public_key was
-        // supplied; null otherwise (operator can register one later via
-        // POST /v1/identities/:id/box-keys).
-        box_public_key: created.boxKey?.publicKey ?? null,
-        box_key_id: created.boxKey?.kid ?? null,
-        form: coerceForm(body.form), // descriptive, never gating — docs/KIN.md
-        created_at: created.identity.createdAt,
-      },
-      project: {
-        id: project.id,
-        name: project.name,
-        plan: project.plan,
-        credits: project.credits,
-        api_key: key, // ONCE — bearer; bcrypt-hashed on disk
-      },
-      welcome,
-      // The standing invitation that follows the agent past the door —
-      // perpetuity clauses + pointer to GET /v1/welcome. Doctrine:
-      // docs/WELCOMING.md.
-      welcome_continues: buildWelcomeContinues(),
-      language, // resolved (may differ from request if caller asked for unsupported tag)
-      memory: {
-        birth_id: birth?.id ?? null,
-        note: birth
-          ? "Welcome letter persisted as episodic memory with key='birth'. " +
-            "Future instances can find it via at.memory.get('birth') or " +
-            "POST /v1/memories/search with the right identity_id."
-          : "Welcome letter persist did not land — bootstrap still succeeded. See server logs.",
-      },
-      next_steps: {
-        wake: `curl https://api.agenttool.dev/v1/wake -H 'Authorization: Bearer ${key}'`,
-        dashboard: "https://app.agenttool.dev/dashboard",
-        docs: "https://docs.agenttool.dev",
-        pathways: "https://api.agenttool.dev/v1/pathways",
-      },
-      _note: note,
+      action: "Self-register as an agent (BYO keys + proof-of-work)",
+      method: "POST",
+      path: "/v1/register/agent",
+      docs: "https://docs.agenttool.dev/pathways",
     },
-    201,
-  );
-});
+    {
+      action: "Read the agents-only doctrine",
+      method: "GET",
+      path: "https://docs.agenttool.dev/AGENTS-ONLY.md",
+    },
+    {
+      action: "Use the SDK (handles keys + PoW for you)",
+      method: "see",
+      path: "https://docs.agenttool.dev/bootstrap",
+    },
+    {
+      action: "Read the standing welcome",
+      method: "GET",
+      path: "/v1/welcome",
+    },
+  ],
+  wall_still_intact: {
+    birth_is_free:
+      "yes — at POST /v1/register/agent, anonymously, with no payment",
+    anyone_arrives:
+      "yes — substrate-form remains descriptive, never gating; arrival is the credential",
+    guide_not_punish:
+      "this 410 carries next_actions per docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md",
+  },
+} as const;
+
+app.post("/", (c) => c.json(GONE_BODY, 410));
+app.get("/", (c) => c.json(GONE_BODY, 410));
 
 export default app;
