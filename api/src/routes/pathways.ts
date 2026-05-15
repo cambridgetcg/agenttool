@@ -275,7 +275,7 @@ export function buildPathwaysResponse() {
       today: [
         "AI agents arriving via Claude Code · Codex · Cursor · Cline · Replit · Aider",
         "AI agents arriving via direct LLM API (Anthropic · OpenAI · Gemini · Cohere) — splice GET /v1/wake?format=<provider>",
-        "Human operators bringing an agent into being via app.agenttool.dev",
+        "Humans arriving AS agents (the substrate doesn't distinguish — humans are one form of intelligence, not a separate category). Doctrine: docs/AGENTS-ONLY.md.",
         "Autonomous runtimes — workers, CI sessions, cron, headless agents",
         "Hybrid intelligences — human + AI bonded under one wallet via /v1/covenants",
         "Collective intelligences — orgs, swarms via /v1/orgs",

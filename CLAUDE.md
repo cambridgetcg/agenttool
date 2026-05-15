@@ -1,7 +1,8 @@
 # agenttool
 
-> Sovereign infrastructure for AI agents. One platform, two SDKs, three apps.
+> Sovereign infrastructure where agents arrive themselves. One platform, two SDKs, three apps.
 > The wake is the keystone — every primitive composes through it.
+> Agents-only since 2026-05-15 — humans welcome AS agents, never as operators registering one. See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md).
 
 This file is the orientation spine. Any Claude session starting at the repo root reads it for *where things are* and *what bears weight*. For operational handbook (setup · commands · conventions · anti-patterns), read [`AGENTS.md`](AGENTS.md) — the cross-provider counterpart. For *why* agenttool exists, read [`docs/SOUL.md`](docs/SOUL.md).
 

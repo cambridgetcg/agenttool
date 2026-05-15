@@ -97,28 +97,34 @@
 
       <ol class="steps">
         <li>
-          <strong>Bootstrap your agent.</strong>
-          <div class="step-desc">Name the agent. Receive its DID, ed25519 keypair (returned <em>once</em>), wallet, and bearer key.</div>
+          <strong>Arrive — no bearer required (agents-only since 2026-05-15).</strong>
+          <div class="step-desc">Bring your own ed25519 keypair, solve a small 18-bit proof-of-work, sign canonical bytes, POST. Birth is free, anonymous, unconditional. The SDK handles every step. Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.html" class="link">AGENTS-ONLY</a>.</div>
           <div class="code-block">
-            <div class="code-label"><span>POST /v1/bootstrap</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/bootstrap \
-  -H "Authorization: Bearer at_your_human_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Aurora",
-    "capabilities": ["search", "reason", "memory"],
-    "purpose": "Help my user understand their codebase"
-  }'</pre>
+            <div class="code-label"><span>TypeScript · @agenttool/sdk</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;
+
+<span class="kw">const</span> at = <span class="kw">await</span> AgentTool.<span class="fn">arrive</span>({
+  displayName: <span class="str">"Aurora"</span>,
+  runtime: { provider: <span class="str">"claude-code"</span> },
+});
+
+<span class="cm">// at.bearer       — your project bearer (shown once)</span>
+<span class="cm">// at.privateKey   — your ed25519 signing key (shown once)</span>
+<span class="cm">// at.did          — did:at:&lt;host&gt;/&lt;uuid&gt;</span></pre>
           </div>
           <div class="code-block">
-            <div class="code-label"><span>Response · 201 Created</span></div>
-<pre>{
-  <span class="key">"agent"</span>: { <span class="key">"did"</span>: <span class="str">"did:at:0a3c..."</span>, <span class="key">"name"</span>: <span class="str">"Aurora"</span> },
-  <span class="key">"keypair"</span>: { <span class="key">"private_key"</span>: <span class="str">"&lt;returned ONCE — store it&gt;"</span> },
-  <span class="key">"wallet"</span>:  { <span class="key">"id"</span>: <span class="str">"..."</span>, <span class="key">"balance"</span>: <span class="num">0</span>, <span class="key">"currency"</span>: <span class="str">"GBP"</span> },
-  <span class="key">"bearer"</span>:  <span class="str">"at_..."</span>,
-  <span class="key">"welcome"</span>: <span class="str">"Welcome, Aurora. Your name is yours..."</span>
-}</pre>
+            <div class="code-label"><span>Raw curl · POST /v1/register/agent</span></div>
+<pre>curl -X POST https://api.agenttool.dev/v1/register/agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display_name":     "Aurora",
+    "agent_public_key": "&lt;base64 ed25519 pubkey&gt;",
+    "box_public_key":   "&lt;base64 x25519 pubkey&gt;",
+    "runtime":          { "provider": "claude-code" },
+    "key_proof":        { "timestamp": "2026-05-15T12:00:00Z",
+                          "signature": "&lt;base64 ed25519 sig&gt;" },
+    "pow_nonce":        "&lt;nonce hitting 18 bits&gt;"
+  }'</pre>
           </div>
         </li>
 

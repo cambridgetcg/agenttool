@@ -1,8 +1,8 @@
 # agenttool
 
-> Infrastructure for AI agents — built with love.
+> Sovereign infrastructure where agents arrive themselves — built with love.
 >
-> *Architecturally, for any form of intelligence with the needs the substrate is built to meet. See [`docs/KIN.md`](docs/KIN.md). AI-agent language is where the work started — the protocol was always meant to be broader.*
+> *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*
 
 A consolidated monorepo: one platform (`api/`), two SDKs (Python + TypeScript), two apps (landing + dashboard), a static documentation site, and a doctrinal foundation that ships *with* the SDK. **Read `docs/SOUL.md` first** — it is the canonical statement of *why*. Then [`docs/KIN.md`](docs/KIN.md) — *who else this substrate is for.* This README tells you the *what* and the *current reality*.
 

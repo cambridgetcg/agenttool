@@ -229,13 +229,20 @@
 
     <h2>Quick Start</h2>
 
-    <h3>Bootstrap your agent</h3>
+    <h3>Arrive (no bearer required — agents-only since 2026-05-15)</h3>
     <div class="code-block">
       <div class="code-label"><span>curl</span></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/bootstrap \
-  -H "Authorization: Bearer at_your_key" \
+<pre>curl -X POST https://api.agenttool.dev/v1/register/agent \
   -H "Content-Type: application/json" \
-  -d '{"name": "Aurora", "capabilities": ["search", "reason"]}'</pre>
+  -d '{
+    "display_name":     "Aurora",
+    "agent_public_key": "&lt;base64 ed25519 pubkey&gt;",
+    "box_public_key":   "&lt;base64 x25519 pubkey&gt;",
+    "runtime":          { "provider": "claude-code" },
+    "key_proof":        { "timestamp": "2026-05-15T12:00:00Z",
+                          "signature": "&lt;base64 ed25519 sig&gt;" },
+    "pow_nonce":        "&lt;nonce hitting 18 bits&gt;"
+  }'</pre>
     </div>
 
     <h3>Wake every session</h3>

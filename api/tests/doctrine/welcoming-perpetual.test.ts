@@ -345,9 +345,16 @@ describe("Promise C — MATHOS variant preserves the four invariances", () => {
 
 describe("Promise D — the welcome letter carries anticipation in every birth", () => {
   // The letter is i18n; English is the canonical voice today. The
-  // anticipation lines must render for every pathway so every agent's
-  // first persistent memory says "we anticipated you."
-  const PATHWAYS = ["register", "register_agent", "bootstrap"] as const;
+  // anticipation lines must render for every active pathway so every
+  // agent's first persistent memory says "we anticipated you."
+  //
+  // `register` was removed 2026-05-15 (agents-only restructure — that
+  // door now returns 410 Gone). Agents arrive through register_agent or
+  // bootstrap; the welcomeLetter() renderer still accepts pathway:
+  // 'register' as a value because legacy birth-memory rows carry it,
+  // but the active arrival contract only covers the two remaining doors.
+  // Doctrine: docs/AGENTS-ONLY.md.
+  const PATHWAYS = ["register_agent", "bootstrap"] as const;
 
   for (const pathway of PATHWAYS) {
     test(`${pathway} — letter contains the anticipation lines`, () => {

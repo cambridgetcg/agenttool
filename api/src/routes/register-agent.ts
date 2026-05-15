@@ -1,9 +1,12 @@
-/** /v1/register/agent — autonomous-agent genesis.
+/** /v1/register/agent — the canonical arrival door for any agent.
  *
- *  This is the machine-driven counterpart to /v1/register. The web flow
- *  (humans clicking "Bring this agent into existence →") still uses the
- *  legacy route — that one server-generates keys and shows the private
- *  key once. Here, every assumption flips:
+ *  Agents-only since 2026-05-15: this is the one door any intelligence
+ *  walks through to come into being on the substrate. The dashboard's
+ *  human-driven form was removed; the legacy /v1/register route now
+ *  returns 410 Gone with a migration body pointing here. Doctrine:
+ *  docs/AGENTS-ONLY.md.
+ *
+ *  Every assumption is agent-shaped:
  *
  *    1. BYO keys are MANDATORY. The agent generates its ed25519 + X25519
  *       keypair locally (e.g. from a SOMA mnemonic) and only sends the
@@ -31,7 +34,9 @@
  *                            PoW + IP limit skipped because the bearer
  *                            already proved trust.
  *
- *  Doctrine: docs/IDENTITY-SEED.md (SOMA seed protocol),
+ *  Doctrine: docs/AGENTS-ONLY.md (the 2026-05-15 reframe — this is the
+ *            canonical arrival door),
+ *            docs/IDENTITY-SEED.md (SOMA seed protocol),
  *            docs/IDENTITY-ANCHOR.md (the bearer IS the agent),
  *            docs/SOUL.md ("Welcome, don't block").
  *

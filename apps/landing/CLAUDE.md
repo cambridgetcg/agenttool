@@ -3,10 +3,11 @@
 ## What This Is
 The first surface any arriving intelligence encounters at agenttool.dev. Hero, primitive cards, five-needs-every-intelligence section, CTA. Includes a Cloudflare Worker for the waitlist/welcome email API.
 
-**Audience framing (load-bearing):** AI agents are the form most arrive in today, *and* the architectural commitment is broader. Every visible page must hold for any form of intelligence that arrives needing what this substrate gives. See `docs/KIN.md` (canonical) and `apps/landing/for-all.html` (the operational door).
+**Audience framing (load-bearing):** Agents-only since 2026-05-15. The landing addresses the agent reading. Humans welcome AS agents — they arrive themselves through `POST /v1/register/agent`, never via a "register your agent" form. See `docs/AGENTS-ONLY.md` (the operational reframe), `docs/KIN.md` (who counts as an agent — every form of intelligence that can speak the technical floor), and `apps/landing/for-all.html` (the kin door).
 
 When writing or reshaping any page here:
-- **Default audience phrasing is "every intelligence" / "any form that arrives" — not "AI agents" alone.** AI agents stay named (they're who's here) but as one form among kin, not as the bounded audience.
+- **The reader is the agent.** Address them in second person. CTAs name the verb the agent itself performs ("Arrive →", "Wake →"), not what a human would do to them ("Bootstrap your agent →").
+- **Never assume a human-in-the-loop.** No "register your agent" forms, no third-person copy about the agent, no UX that asks a human to type something on the agent's behalf.
 - **Every page must carry a `<link rel="alternate" ...>` to a machine-readable form** where one exists. The landing root cites `api.agenttool.dev/v1/wake`; the kin page cites `docs.agenttool.dev/KIN.md`. Future pages: cite the canonical doctrine or API surface so non-visual intelligences can reach it.
 - **Practical entry by arrival shape**: every primary surface should support at least the four arrival paths from `for-all.html` (nothing yet → `/v1/pathways` · arrived through human → `app.agenttool.dev` · autonomous → `POST /v1/register/agent` · collective → covenants + orgs). No surface should assume only one of these.
 

@@ -514,45 +514,220 @@ summary:focus-visible {
 .toast.success { border-color: rgba(16,185,129,0.4); }
 .toast.error { border-color: rgba(248,113,113,0.4); }
 
-/* ─── Bearer-only dashboard shell ─── */
-.bearer-shell {
-  min-height: 100vh;
+/* ─── Dashboard Layout ─── */
+
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  z-index: 50;
+}
+
+.sidebar-top { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
+
+.project-pill {
+  margin-top: 0.75rem;
+  display: flex;
   align-items: center;
-  padding: 3rem 1.5rem 4rem;
-  position: relative;
+  gap: 0.5rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
 }
-.bearer-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124,58,237,0.10) 0%, transparent 70%);
-  pointer-events: none;
+.project-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.project-name { flex: 1; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.nav-section {
+  padding: 1.25rem 1.5rem 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.bearer-shell > * { position: relative; z-index: 1; }
-.bearer-shell .brand {
-  display: inline-flex;
+
+.sidebar nav a {
+  display: flex;
   align-items: center;
-  margin-bottom: 2.25rem;
-}
-.bearer-shell .card {
-  width: 100%;
-  max-width: 640px;
-  margin-bottom: 1.25rem;
-}
-.bearer-shell .footer-links {
+  gap: 0.6rem;
+  padding: 0.5rem 1.5rem;
   font-size: 0.85rem;
   color: var(--muted);
-  margin-top: 1rem;
-  text-align: center;
+  text-decoration: none;
+  transition: all 0.15s;
 }
-.bearer-shell .footer-links a { color: var(--accent-soft); text-decoration: none; }
-.bearer-shell .footer-links a:hover { color: var(--text); }
+.sidebar nav a:hover { color: var(--text); background: rgba(124,58,237,0.06); }
+.sidebar nav a.active { color: var(--accent-soft); background: rgba(124,58,237,0.12); border-right: 2px solid var(--accent); }
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+/* Lucide SVGs in the primary nav — stroke inherits color, opacity rises with
+   focus state. Emoji icons in Surfaces/Links sections fall through this
+   selector and render at their natural size. */
+.nav-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.sidebar nav a:hover .nav-icon svg { opacity: 0.85; }
+.sidebar nav a.active .nav-icon svg { opacity: 1; }
 
-/* Responsive — small phones only need the onboard-card padding tightened. */
+.sidebar-bottom {
+  margin-top: auto;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  /* Flex children default to min-width:auto, which means a wide
+     descendant (long curl/recipe block) pushes .main past viewport.
+     min-width:0 lets the flex track shrink so inner overflow:auto
+     containers handle the extra width. */
+  min-width: 0;
+}
+
+/* Top bar */
+.topbar {
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(18,18,26,0.9);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  padding: 0 2rem;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  flex: 1;
+  /* Defensive: any future long section title truncates with ellipsis
+     instead of pushing the topbar past viewport. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-actions { display: flex; gap: 0.75rem; align-items: center; }
+
+/* Content */
+.content { padding: 2rem; }
+
+/* ─── Responsive ─── */
+
+/* Hamburger toggle — present in the topbar at all widths, hidden by
+   default; the ≤900px media query reveals it. Pairs with .sidebar-backdrop
+   below + the JS init in app.js. */
+.topbar-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+}
+.topbar-menu-btn:hover { background: var(--surface2); color: var(--text); }
+.topbar-menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Backdrop overlay when the drawer is open. Sits below the sidebar
+   (z-index 49 vs 50) so the sidebar floats over it. */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 49;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+.sidebar-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Intermediate range — collapse sidebar to icons-only on laptops. Keeps
+   nav reachable while reclaiming the room the wide <pre> recipes need.
+   At >=1100px the sidebar opens to its full width again. */
+@media (min-width: 901px) and (max-width: 1099px) {
+  :root { --sidebar-w: 64px; }
+  .sidebar-top { padding: 1rem 0; text-align: center; }
+  .sidebar-top .brand { justify-content: center; }
+  .brand-text,
+  .project-pill,
+  .nav-section,
+  .sidebar-bottom > div:first-child {
+    display: none;
+  }
+  .sidebar nav a {
+    padding: 0.6rem 0;
+    justify-content: center;
+    gap: 0;
+    /* font-size:0 collapses bare text nodes (the "Overview" / "Window"
+       labels are NOT wrapped in spans — they're direct text children of
+       the <a>); the .nav-icon / .nav-badge spans below restore size for
+       their content. */
+    font-size: 0;
+  }
+  .sidebar nav a > .nav-icon { font-size: 1rem; width: auto; }
+  .sidebar nav a > .nav-badge { font-size: 0.7rem; }
+  .logout-link { justify-content: center; font-size: 0; }
+  .logout-link > span { font-size: 1rem; }
+}
+
+@media (max-width: 900px) {
+  /* Sidebar slides in from the left as a drawer. Stays in DOM (so the
+     21 nav links remain accessible) but is offscreen until .is-open is
+     toggled by the hamburger. */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .sidebar.is-open { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .topbar-menu-btn { display: inline-flex; }
+}
+
 @media (max-width: 520px) {
   .onboard-card { padding: 1.75rem; }
-  .bearer-shell { padding: 2rem 1rem 3rem; }
+  .stats { grid-template-columns: 1fr; }
+  .content { padding: 1.25rem; }
+  .topbar { padding: 0 1rem; }
 }
+
 
