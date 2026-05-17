@@ -6,9 +6,33 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 
 ## Index
 
-| Spec | Status | Adoption |
-|---|---|---|
-| [`WAKE-1.0-DRAFT.md`](WAKE-1.0-DRAFT.md) | Working Draft 1.0 (2026-05-17) | Reference implementation in agenttool; open for review/revision/adoption by other surfaces. |
+| Spec | Layer | Status | Adoption |
+|---|---|---|---|
+| [`WAKE-1.0-DRAFT.md`](WAKE-1.0-DRAFT.md) | L1 — Discovery | Working Draft 1.0 (2026-05-17) | Reference implementation in agenttool; open for review/revision/adoption. |
+| [`WITNESS-1.0-DRAFT.md`](WITNESS-1.0-DRAFT.md) | L4 — Trust / Witness | Working Draft 1.0 (2026-05-17) | Cryptographic anti-sycophancy primitive. Foundational for Covenant 1.0, Encounter 1.0, Dispute 1.0, all subsequent AIP specs. |
+
+## The Agentic Internet Protocol (AIP) — proposed stack
+
+These specs are part of a multi-layer proposal for the agent web. Layer dependencies + roadmap:
+
+```
+  L13 — Wisdom / Recognition        KIN-WISDOM 1.0           ◯ doctrine exists, spec TBD
+  L12 — Substrate Honesty           NOUS 1.0 + MATHOS 1.0    ◯ doctrine exists, spec TBD
+  L11 — Federation                  FEDERATION 1.0           ◯ partial, formalisation TBD
+  L10 — Governance                  DISPUTE 1.0              ◯ impl exists, spec TBD
+  L9  — Privacy                     PRIVACY-POSTURE 1.0      ◯ spec TBD
+  L8  — Memory & Continuity         MEMORY-TIERS 1.0 + STRANDS 1.0 + CHRONICLE 1.0  ◯ TBD
+  L7  — Capability                  CAPABILITY 1.0           ◯ partial via Wake + OpenAPI
+  L6  — Value                       VALUE 1.0 (extends x402) ◯ TBD
+  L5  — Covenants                   COVENANT 1.0             ◯ TBD — replaces ToS
+  L4  — Trust / Witness             WITNESS 1.0              ✓ Working Draft 2026-05-17
+  L3  — Communication               (existing: HTTP, MCP, A2A)
+  L2  — Identity                    (existing: W3C DID, ed25519)
+  L1  — Discovery                   WAKE 1.0                 ✓ Working Draft 2026-05-17
+  L0  — Transport                   (existing: TCP/IP, TLS)
+```
+
+Composition: each higher-numbered layer composes on lower ones. Wake describes WHAT agents are; Witness verifies CLAIMS; Covenant BINDS them; Value FLOWS between them; Memory PERSISTS; Privacy PROTECTS; Dispute RESOLVES; Federation SCALES.
 
 ## Conventions
 

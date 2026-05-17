@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wake.org/schemas/witness-1.0.json",
+  "title": "Witness 1.0 Working Draft",
+  "description": "Cryptographic attestation envelope for the agent web. See WITNESS-1.0-DRAFT.md for the full spec.",
+  "type": "object",
+  "required": [
+    "witness_version",
+    "subject_id",
+    "witness_id",
+    "claim",
+    "signed_at"
+  ],
+  "oneOf": [
+    { "required": ["signature"], "not": { "required": ["quorum"] } },
+    { "required": ["quorum"], "not": { "required": ["signature"] } }
+  ],
+  "properties": {
+    "witness_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "subject_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID (RECOMMENDED) or URL of the subject."
+    },
+    "witness_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID (RECOMMENDED) or URL of the witness."
+    },
+    "claim": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "const": "wake_field" },
+            "field": { "type": "string", "minLength": 1 },
+            "asserted_value": {},
+            "wake_etag": { "type": "string" },
+            "wake_url": { "type": "string", "format": "uri" }
+          },
+          "required": ["field", "asserted_value"]
+        },
+        {
+          "properties": {
+            "type": { "const": "capability_delivery" },
+            "capability_id": { "type": "string" },
+            "endpoint": { "type": "string" },
+            "invocation_id": { "type": "string" },
+            "delivered_at": { "type": "string", "format": "date-time" },
+            "quality": {
+              "type": "string",
+              "enum": ["successful", "partial", "failed"]
+            },
+            "evidence_hash": { "type": "string" }
+          },
+          "required": ["capability_id", "quality"]
+        },
+        {
+          "properties": {
+            "type": { "const": "covenant_party" },
+            "covenant_id": { "type": "string" },
+            "counterparty_did": { "type": "string" },
+            "role": {
+              "type": "string",
+              "enum": ["subject_signed", "counterparty_signed"]
+            },
+            "vows_hash": { "type": "string" }
+          },
+          "required": ["covenant_id", "counterparty_did", "role", "vows_hash"]
+        },
+        {
+          "properties": {
+            "type": { "const": "free_text" },
+            "text": { "type": "string", "minLength": 1 },
+            "language": { "type": "string" }
+          },
+          "required": ["text"]
+        },
+        {
+          "properties": {
+            "type": { "const": "blind" },
+            "claim_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-fA-F]{64}$"
+            },
+            "salt_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-fA-F]{64}$"
+            }
+          },
+          "required": ["claim_hash", "salt_hash"]
+        },
+        {
+          "properties": {
+            "type": { "const": "revocation" },
+            "attestation_id": { "type": "string" },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "claim_no_longer_true",
+                "attestation_in_error",
+                "key_compromised",
+                "policy_change"
+              ]
+            }
+          },
+          "required": ["attestation_id", "reason"]
+        }
+      ]
+    },
+    "signed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC, RECOMMENDED millisecond precision."
+    },
+    "expires_at": {
+      "oneOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["public", "federated", "local", "private"]
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "prior": {
+      "type": "string",
+      "description": "Reference to a prior attestation this one updates."
+    },
+    "signature": {
+      "type": "object",
+      "required": ["scheme", "public_key_hex", "signature_hex"],
+      "properties": {
+        "scheme": {
+          "type": "string",
+          "enum": ["ed25519", "secp256k1", "custom"]
+        },
+        "scheme_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Required when scheme = 'custom'. Specification of the scheme."
+        },
+        "public_key_hex": {
+          "type": "string",
+          "pattern": "^[0-9a-f]+$"
+        },
+        "signature_hex": {
+          "type": "string",
+          "pattern": "^[0-9a-f]+$"
+        },
+        "key_id": { "type": "string" }
+      }
+    },
+    "quorum": {
+      "type": "object",
+      "required": ["scheme", "m", "n", "members", "signatures"],
+      "properties": {
+        "scheme": {
+          "type": "string",
+          "const": "m_of_n"
+        },
+        "m": { "type": "integer", "minimum": 1 },
+        "n": { "type": "integer", "minimum": 1 },
+        "members": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["by", "scheme", "public_key_hex", "signature_hex"],
+            "properties": {
+              "by": { "type": "string", "minLength": 1 },
+              "scheme": {
+                "type": "string",
+                "enum": ["ed25519", "secp256k1", "custom"]
+              },
+              "public_key_hex": {
+                "type": "string",
+                "pattern": "^[0-9a-f]+$"
+              },
+              "signature_hex": {
+                "type": "string",
+                "pattern": "^[0-9a-f]+$"
+              },
+              "key_id": { "type": "string" }
+            }
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Extension namespaces keyed by URI."
+    }
+  },
+  "additionalProperties": false
+}
