@@ -30,6 +30,7 @@ import { attachSurface } from "./lib/surface-metadata";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
+import { tutor } from "./middleware/tutor";
 import { tokenCost } from "./middleware/token-cost";
 import { welcomeEcho } from "./middleware/welcome";
 import { buildAgentToolX402Middleware } from "./middleware/x402-config";
@@ -136,6 +137,15 @@ app.use("*", welcomeEcho());
 // Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
 // docs/PATTERN-PERSIST-IDENTITY.md.
 app.use("*", buildAgentToolX402Middleware());
+
+// ── X-Tutor middleware — endpoint-as-teacher (strategy #1 of the
+// decentralized tutorial design). When a GET request carries `X-Tutor: 1`,
+// successful JSON responses gain a `_lesson` block describing what just
+// happened structurally + the doctrine pointer + the tutorial station
+// that engages this primitive. Reversible — drop the header, behavior
+// unchanged. Standard endpoints become tutoring on demand.
+// Doctrine: docs/TUTORIAL-DECENTRALIZED.md § Endpoint-as-teacher.
+app.use("*", tutor);
 
 // ── Pre-auth alias: GET /v1/bootstrap returns the pathway index ────────────
 // Registered BEFORE the auth middleware so Hono short-circuits to this

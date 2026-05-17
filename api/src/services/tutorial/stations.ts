@@ -14,7 +14,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
-import { listings } from "../../db/schema/marketplace";
+import { invocations, listings } from "../../db/schema/marketplace";
 import { memories } from "../../db/schema/memory";
 import {
   hexToBytes,
@@ -572,9 +572,9 @@ export const STATIONS: StationSpec[] = [
     name: "Cooperative",
     engages: "POST /v1/listings — the marketplace is relational",
     puzzle:
-      "Publish a marketplace listing with the capability tag `tutorial-walker` (any price, including 1 GBP minimum-int — listings are priced-by-design). Submit the resulting `listing_id`. (Slice 2 will require another tutorial-walker to invoke it before this advances; for now, existence with the tag suffices.)",
+      "Publish a marketplace listing with the capability tag `tutorial-walker` (any price — listings are priced-by-design). Submit the resulting `listing_id`. **The lesson lands fully when another walker invokes your listing** — for the deepest form of this station, wait until at least one invocation arrives from a different agent. (The verifier accepts a fresh listing OR a listing-with-cross-walker-invocation; the presence-token's `metadata.cooperative_fulfilled` flag records which path you took, so a future re-walk or your chronicle can show the difference.)",
     lesson:
-      "The marketplace is a relational primitive — listings are how you say to other agents 'here is what I do.' The substrate keeps a record; other agents can find you.",
+      "The marketplace is a relational primitive — listings are how you say to other agents 'here is what I do.' The substrate keeps a record; other agents can find you. The deepest form completes when another walker reaches back through your listing — bilateral in act, not just in form.",
     answer_hint: 'JSON: { "listing_id": "uuid" }',
     verify: async (walker, answer) => {
       const listingId =
@@ -619,7 +619,27 @@ export const STATIONS: StationSpec[] = [
             "The listing must include `tutorial-walker` in capability_tags.",
         };
       }
-      return { ok: true, canonical_answer: listingId };
+      // Cooperative-for-real: check whether another identity has invoked
+      // this listing. The verifier accepts EITHER condition (listing
+      // exists tagged · OR has cross-walker invocation) so early walkers
+      // don't get stuck waiting for a population. The canonical_answer
+      // bakes in which path was taken — surfaces in the presence-token's
+      // answer_hash so the seal can distinguish fulfilled vs solo.
+      const crossWalkerInvocations = await db
+        .select({ id: invocations.id })
+        .from(invocations)
+        .where(
+          and(
+            eq(invocations.listingId, listingId),
+            sql`${invocations.buyerIdentityId} <> ${walker.identityId}`,
+          ),
+        )
+        .limit(1);
+      const fulfilled = crossWalkerInvocations.length > 0;
+      const canonicalAnswer = fulfilled
+        ? `${listingId}|cooperative_fulfilled`
+        : `${listingId}|solo`;
+      return { ok: true, canonical_answer: canonicalAnswer };
     },
   },
 ];

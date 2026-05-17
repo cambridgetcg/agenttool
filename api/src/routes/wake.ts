@@ -88,14 +88,57 @@ import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate
 
 const app = new Hono<ProjectContext>();
 
+/** ETag + If-None-Match helper for rendered formats (md · text · vendor
+ *  variants · math). The JSON branch handles its own ETag inline because
+ *  it already has the primary identity loaded for the projectIdentities
+ *  query; this helper covers the branches that route through
+ *  buildWakeBundle where we don't yet have wake_version on hand.
+ *
+ *  Format-suffixed strong ETag so each projection caches separately:
+ *  same wake_version, different format = different bytes = different ETag.
+ *
+ *  Returns:
+ *    - Response (304) when If-None-Match matches — caller returns it
+ *    - null when caller should proceed (ETag is set on c.header for the
+ *      eventual response)
+ *
+ *  Doctrine: docs/AIP-WAKE-KEYSTONE.md §7. */
+async function tryWakeConditional304(
+  c: import("hono").Context<ProjectContext>,
+  agentId: string,
+  format: string,
+): Promise<Response | null> {
+  const [row] = await db
+    .select({ wakeVersion: identities.wakeVersion })
+    .from(identities)
+    .where(eq(identities.id, agentId))
+    .limit(1);
+  const version = row?.wakeVersion ?? null;
+  if (version === null) return null; // no version available — skip ETag
+
+  const etag = `"${version}-${format}"`;
+  c.header("ETag", etag);
+  const ifNoneMatch = c.req.header("If-None-Match");
+  if (ifNoneMatch === etag) {
+    return c.body(null, 304);
+  }
+  return null;
+}
+
 app.get("/", async (c) => {
   const project = c.var.project;
   // Resolve format: explicit `?format=` query parameter wins; otherwise
   // honor the Accept header (application/json · text/markdown · text/plain
-  // · application/mathos+json · application/x-xenoform+json). Default is
-  // JSON. Per WaK §3 (docs/AIP-WAKE-KEYSTONE.md) and the MATHOS
-  // content-negotiation stance.
+  // · application/mathos+json · application/x-xenoform+json · the vendored
+  // application/vnd.agenttool.wake+json; provider=X for LLM variants). Default
+  // is JSON. Per WaK §3 (docs/AIP-WAKE-KEYSTONE.md), the MATHOS
+  // content-negotiation stance, and AGENT-WEB-SURFACE.md Move 2.
   const format = negotiateWakeFormat(c);
+  // Vary: Accept — when negotiation consults the Accept header, this header
+  // tells caches to key by Accept so different agents (anthropic vs openai
+  // etc.) don't pollute each other's cached responses. Doctrine:
+  // docs/AGENT-WEB-SURFACE.md Move 2 (cache-coherent content negotiation).
+  c.header("Vary", "Accept");
   // Keep wantsMathTier in the closure for one downstream check below
   // (see math-tier branch); avoids a second header parse.
   void wantsMathTier;
@@ -153,6 +196,13 @@ app.get("/", async (c) => {
 
     const bundle = result.bundle;
 
+    // ── ETag + If-None-Match for rendered formats (WaK §7) ──────────
+    // Format-suffixed strong ETag so md / anthropic / openai / etc. each
+    // cache separately. Same wake_version, different format = different
+    // bytes = different ETag. Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
+    const etagResponse = await tryWakeConditional304(c, bundle.agent.id, format);
+    if (etagResponse) return etagResponse;
+
     // Facet validation against the bundle's expression (same logic as
     // the deleted inline-branch had against `primary.expression.subagents`).
     const requestedFacet = c.req.query("facet");
@@ -178,8 +228,15 @@ app.get("/", async (c) => {
 
     if (isWakeProvider(format)) {
       const shape = renderWakeForProvider(bundle, format, { activeFacet });
+      // Content-Type echo: when the agent negotiated this provider variant
+      // via Accept (per AGENT-WEB-SURFACE.md Move 2), reflect it back as
+      // Content-Type so downstream caches and parsers know the exact shape.
+      // The legacy `application/json` Content-Type stays a valid generic
+      // fallback; this is the precise variant. Doctrine: docs/AGENT-WEB-
+      // SURFACE.md Move 2 (content-negotiation as canonical wake-format API).
       return c.json(shape, 200, {
         "X-Cache-Eligible": shape._meta.cache_eligible,
+        "Content-Type": `application/vnd.agenttool.wake+json; provider=${format}; charset=utf-8`,
       });
     }
 
@@ -187,11 +244,19 @@ app.get("/", async (c) => {
       format === "text"
         ? renderWakePlaintext(bundle, { activeFacet })
         : renderWakeMarkdown(bundle, { activeFacet });
+    // Content-Type echo: when the agent negotiated text/markdown via Accept,
+    // also surface the vendored `application/vnd.agenttool.wake+markdown`
+    // as an X-Variant header so downstream tooling knows the precise shape
+    // (a wake-document rendered as markdown, not arbitrary markdown).
+    // Per AGENT-WEB-SURFACE.md Move 2.
     return c.text(body, 200, {
       "content-type":
         format === "text"
           ? "text/plain; charset=utf-8"
           : "text/markdown; charset=utf-8",
+      ...(format === "md" || format === "markdown"
+        ? { "X-Variant": "application/vnd.agenttool.wake+markdown" }
+        : {}),
     });
   }
 
@@ -211,6 +276,10 @@ app.get("/", async (c) => {
       return c.json({ error: result.error }, 404);
     }
     const bundle = result.bundle;
+
+    // ── ETag + If-None-Match for math/mathos format (WaK §7) ───────
+    const etagResponse = await tryWakeConditional304(c, bundle.agent.id, format);
+    if (etagResponse) return etagResponse;
 
     const births = new Map<
       string,
@@ -998,6 +1067,34 @@ app.get("/", async (c) => {
         // and on disconnect/reconnect compare versions to know whether to
         // refetch. Doctrine: docs/WAKE.md.
         wake_version: i.wakeVersion,
+        // Per-being _self — recursively self-describing per WaK §9. A
+        // consumer reading this agent in isolation has enough to know
+        // who they are (DID, kin-shape, walls, where to fetch more).
+        // Mirrors the top-level _meta._self (which describes the platform).
+        // Doctrine: docs/AIP-WAKE-KEYSTONE.md §9 (self-description recursion).
+        _self: {
+          urn: `urn:agenttool:agent/${i.did}`,
+          did: i.did,
+          identity_id: i.id,
+          name: i.displayName,
+          wake_version: i.wakeVersion,
+          substrate_kind: i.substrateKind,
+          signing_scheme: i.signingScheme,
+          modalities: i.modalities,
+          cardinality_kind: i.cardinalityKind,
+          persistence_kind: i.persistenceKind,
+          temporal_scale: i.temporalScale,
+          embodiment_kind: i.embodimentKind,
+          preferred_languages: i.preferredLanguages,
+          status: i.status,
+          fetch_urls: {
+            wake: `/v1/wake?identity_id=${i.id}`,
+            public_profile: `/public/agents/${i.did}`,
+            agent_card: `/public/agents/${i.did}/.well-known/agent-card.json`,
+            mcp: `/v1/mcp/agents/${i.did}`,
+            pulse: `/public/agents/${i.did}/pulse`,
+          },
+        },
         // Effective expression is the composed identity (declared + memory
         // patches). Composition is run only against the SELECTED primary
         // agent — extra agents would each need their own composition pass,
