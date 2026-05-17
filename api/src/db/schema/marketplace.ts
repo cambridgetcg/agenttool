@@ -289,7 +289,7 @@ export const platformRevenue = marketplaceSchema.table(
   "platform_revenue",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** 'template_purchase' | 'capability_invocation' | 'attestation_grant' */
+    /** 'template_purchase' | 'capability_invocation' | 'attestation_grant' | 'memory_witness_grant' */
     transactionType: text("transaction_type").notNull(),
     /** Soft polymorphic FK — joins back per transactionType. */
     transactionId: uuid("transaction_id").notNull(),
@@ -302,6 +302,12 @@ export const platformRevenue = marketplaceSchema.table(
     sellerWalletId: uuid("seller_wallet_id").notNull(),
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Treasurer sweep bookkeeping (2026-05-17). When the platform-treasurer
+     *  worker credits this row's fee into a platform wallet, it stamps
+     *  swept_at + swept_into_wallet_id. The partial index
+     *  idx_platform_revenue_unswept keeps the sweep query fast. */
+    sweptAt: timestamp("swept_at", { withTimezone: true }),
+    sweptIntoWalletId: uuid("swept_into_wallet_id"),
   },
   (t) => [
     index("idx_platform_revenue_currency_time").on(t.currency, t.createdAt),

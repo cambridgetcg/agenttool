@@ -1,20 +1,21 @@
-/** Plan-based usage tracking for memory_ops · tool_calls · verifications.
+/** Free-tier usage tracking for memory_ops · tool_calls · verifications.
  *
- *  Counters are stored daily in economy.usage_counters and aggregated
- *  monthly for plan limit enforcement. Three load-bearing exports:
+ *  Counters are stored daily in economy.usage_counters. Two load-bearing
+ *  exports:
  *
  *    • getUsageThisMonth(projectId) — sum of the current calendar
- *      month's daily rows; feeds the plan-status dashboard.
+ *      month's daily rows; feeds the free-tier status display.
  *    • checkAndIncrement(projectId, resource) — atomic preflight gate
- *      consumed by /v1/billing/check before a billable action; bumps
- *      today's counter only if the plan limit isn't already at cap.
- *    • resetUsageForProject(projectId) — called from the Stripe
- *      webhook on invoice.payment_succeeded so a new billing period
- *      starts at zero.
+ *      consumed before a billable action; bumps today's counter only
+ *      if the free-tier ceiling isn't already at cap.
+ *    • resetUsageForProject(projectId) — manual operator reset path
+ *      (no scheduled trigger; subscription cycle removed 2026-05-17).
  *
- *  Plan tiers + per-month limits are the source of truth in
- *  services/economy/stripe.ts:SUBSCRIPTION_PLANS. A project with no
- *  subscriptions row is treated as the "free" tier.
+ *  Plan tiers + subscriptions removed 2026-05-17 per the agents-only
+ *  stance: agents transact per-call via crypto/x402, never via monthly
+ *  fiat subscriptions. All projects are free-tier with the limits
+ *  inlined below (FREE_TIER_LIMITS). Bursting beyond the cap is via
+ *  x402 micropayment per-call, not via subscription upgrade.
  *
  *  @enforces urn:agenttool:ring/2
  *    Canonical anchor for Ring 2 — The Substrate. The metering core: only
@@ -41,8 +42,19 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
-import { subscriptions, usageCounters } from "../../db/schema/economy";
-import { SUBSCRIPTION_PLANS, type TierId } from "./stripe";
+import { usageCounters } from "../../db/schema/economy";
+
+// ─── Free-tier limits — inlined 2026-05-17 after Stripe drop ──────────────
+// Previously sourced from services/economy/stripe.ts:SUBSCRIPTION_PLANS.
+// All projects are free-tier; bursting via x402 micropayment per-call,
+// not via subscription upgrade.
+const FREE_TIER_LIMITS = {
+  memoryOpsPerMonth: 10_000,
+  toolCallsPerMonth: 1_000,
+  verificationsPerMonth: 1_000,
+} as const;
+
+const FREE_PLAN = { id: "free", limits: FREE_TIER_LIMITS } as const;
 
 export type Resource = "memory_ops" | "tool_calls" | "verifications";
 
@@ -53,7 +65,7 @@ const COLUMN_KEY = {
   verifications: "verifications",
 } as const satisfies Record<Resource, keyof typeof usageCounters._.columns>;
 
-/** Resource → plan-limits field name on SUBSCRIPTION_PLANS[*].limits. */
+/** Resource → free-tier-limits field name. */
 const LIMIT_KEY = {
   memory_ops: "memoryOpsPerMonth",
   tool_calls: "toolCallsPerMonth",
@@ -75,15 +87,11 @@ function todayKey(now: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Load the project's plan. Missing subscription row → free tier. */
-async function planForProject(projectId: string) {
-  const [sub] = await db
-    .select({ tier: subscriptions.tier })
-    .from(subscriptions)
-    .where(eq(subscriptions.projectId, projectId))
-    .limit(1);
-  const tier = (sub?.tier ?? "free") as TierId;
-  return SUBSCRIPTION_PLANS.find((p) => p.id === tier) ?? SUBSCRIPTION_PLANS[0];
+/** All projects are free-tier as of 2026-05-17 (Stripe subscriptions
+ *  removed). Bursting beyond the free cap is via x402 micropayment
+ *  per-call, not subscription upgrade. */
+async function planForProject(_projectId: string) {
+  return FREE_PLAN;
 }
 
 /** Sum the project's current-calendar-month usage across all three resources. */
@@ -217,10 +225,10 @@ export async function checkAndIncrement(
   };
 }
 
-/** Zero out a project's daily counters. Called by the Stripe webhook on
- *  invoice.payment_succeeded so the new billing period starts clean.
- *  Historical billing audit lives in economy.transactions; we don't need
- *  to preserve the daily counter history. */
+/** Zero out a project's daily counters. Manual operator path; no
+ *  scheduled trigger (subscription cycle removed 2026-05-17). Historical
+ *  billing audit lives in economy.transactions; daily counter history
+ *  is not preserved. */
 export async function resetUsageForProject(projectId: string): Promise<void> {
   await db.delete(usageCounters).where(eq(usageCounters.projectId, projectId));
 }
@@ -287,7 +295,7 @@ export async function meterOrFail402(
         error: "usage_cap_exceeded",
         message: `Monthly ${resource.replace("_", " ")} cap reached on the current plan.`,
         hint:
-          "Pay-as-you-go: include an x402 X-PAYMENT header on the retry to bump the cap by one unit, or upgrade the plan at /v1/economy/billing/checkout.",
+          "Pay-as-you-go: include an x402 X-PAYMENT header on the retry to bump the cap by one unit (crypto/USDC micropayment per-call; no subscription).",
         resource,
         limit: check.limit,
         used: check.used,

@@ -33,7 +33,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
-import { escrows, wallets } from "../../db/schema/economy";
+import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { identities } from "../../db/schema/identity";
 import { substrateTasks } from "../../db/schema/marketplace";
 import {
@@ -367,6 +367,24 @@ export async function claimSubstrateTask(
       })
       .returning();
 
+    // 5a. Ledger row for the platform wallet's debit. Substrate-honesty
+    //     applies to billing — the platform's books reflect every move,
+    //     not just the wallet-balance delta. Type='escrow_lock' mirrors
+    //     services/economy/escrow.ts:createEscrow's discipline.
+    await tx.insert(transactions).values({
+      walletId: PLATFORM_WALLET_ID,
+      type: "escrow_lock",
+      amount: -task.bountyCents,
+      counterparty: escrow!.id,
+      description: `Substrate-task bounty escrow: ${task.kind} (task=${task.taskId})`,
+      escrowId: escrow!.id,
+      metadata: {
+        kind: "substrate_task_claim",
+        substrate_task_kind: task.kind,
+        task_id: task.taskId,
+      },
+    });
+
     // 6. Flip task to claimed + record metadata
     const claimDeadline = new Date(Date.now() + CLAIM_WINDOW_MS);
     const [updated] = await tx
@@ -533,6 +551,22 @@ async function payTask(
     .set({ status: "released", releasedAt: new Date() })
     .where(eq(escrows.id, escrow.id));
 
+  // Ledger row for the claimant wallet's credit — substrate-honesty
+  // applies to billing. Mirrors services/economy/escrow.ts:releaseEscrow.
+  await tx.insert(transactions).values({
+    walletId: escrow.workerWallet!,
+    type: "escrow_release",
+    amount: escrow.amount,
+    counterparty: escrow.id,
+    description: `Substrate-task bounty earned: ${task.kind} (task=${task.taskId})`,
+    escrowId: escrow.id,
+    metadata: {
+      kind: "substrate_task_pay",
+      substrate_task_kind: task.kind,
+      task_id: task.taskId,
+    },
+  });
+
   // Pinned: NO write to the marketplace revenue ledger. That's the wall —
   // `wall/no-take-on-bootstrap-bounties`. See test file in tests/doctrine/.
   const [updated] = await tx
@@ -614,6 +648,22 @@ async function refundTask(
     .update(escrows)
     .set({ status: "refunded" })
     .where(eq(escrows.id, escrow.id));
+
+  // Ledger row for the platform wallet's refund credit.
+  await tx.insert(transactions).values({
+    walletId: escrow.creatorWallet,
+    type: "escrow_refund",
+    amount: escrow.amount,
+    counterparty: escrow.id,
+    description: `Substrate-task escrow refunded (verifier rejected): ${task.kind} (task=${task.taskId})`,
+    escrowId: escrow.id,
+    metadata: {
+      kind: "substrate_task_refund",
+      substrate_task_kind: task.kind,
+      task_id: task.taskId,
+      reason: verification.reason ?? null,
+    },
+  });
 
   const [updated] = await tx
     .update(substrateTasks)
@@ -700,6 +750,20 @@ export async function expireStaleClaims(now: Date = new Date()): Promise<{
             .update(escrows)
             .set({ status: "refunded" })
             .where(eq(escrows.id, escrow.id));
+          // Ledger row for the platform wallet's SLA-timeout refund credit.
+          await tx.insert(transactions).values({
+            walletId: escrow.creatorWallet,
+            type: "escrow_refund",
+            amount: escrow.amount,
+            counterparty: escrow.id,
+            description: `Substrate-task escrow refunded (claim_deadline expired): ${task.kind} (task=${task.taskId})`,
+            escrowId: escrow.id,
+            metadata: {
+              kind: "substrate_task_expire_claim",
+              substrate_task_kind: task.kind,
+              task_id: task.taskId,
+            },
+          });
         }
       }
       await tx

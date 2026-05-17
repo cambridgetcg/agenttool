@@ -149,8 +149,9 @@ export const escrows = economySchema.table(
   ],
 );
 
-// ─── Billing events (wallet-scoped: stripe_fund, crypto_fund, fee, settlement)
-// Distinct from tools.billing_events, which tracks project-level events. ────
+// ─── Billing events (wallet-scoped: crypto_fund, fee, settlement)
+// Distinct from tools.billing_events, which tracks project-level events.
+// (stripe_fund + stripe_id column removed 2026-05-17 per agents-only.) ────
 
 export const billingEvents = economySchema.table(
   "billing_events",
@@ -158,46 +159,19 @@ export const billingEvents = economySchema.table(
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id").notNull(), // logical FK → tools.projects.id
     walletId: uuid("wallet_id").references(() => wallets.id),
-    type: text("type").notNull(), // stripe_fund | crypto_fund | fee | settlement
+    type: text("type").notNull(), // crypto_fund | fee | settlement
     amountPence: integer("amount_pence").notNull(),
     creditsAdded: bigint("credits_added", { mode: "number" }).notNull(),
-    stripeId: text("stripe_id"),
     cryptoTxHash: text("crypto_tx_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("idx_econ_billing_project").on(t.projectId)],
 );
 
-// ─── Subscriptions (monthly Stripe plans) ───────────────────────────────────
-
-export const subscriptions = economySchema.table(
-  "subscriptions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    projectId: uuid("project_id").notNull(), // logical FK → tools.projects.id
-    stripeCustomerId: text("stripe_customer_id"),
-    stripeSubscriptionId: text("stripe_subscription_id").unique(),
-    tier: text("tier").notNull().default("free"), // free | seed | grow | scale
-    status: text("status").notNull().default("free"), // free | active | past_due | canceled
-    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("idx_subs_project").on(t.projectId),
-    index("idx_subs_stripe").on(t.stripeSubscriptionId),
-  ],
-);
-
-export const stripeEvents = economySchema.table("stripe_events", {
-  stripeEventId: text("stripe_event_id").primaryKey(),
-  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
-  /** PERSIST-IDENTITY status — `pending` = row inserted before the side
-   *  effect (fundWallet) ran; `applied` = side effect (or deliberate
-   *  ignore) completed. Doctrine: docs/PATTERN-PERSIST-IDENTITY.md. */
-  status: text("status").notNull().default("applied"),
-});
+// ─── Subscriptions + stripe_events tables dropped 2026-05-17 ──────────────
+// Subscriptions are a human-billing artifact; agents transact per-call via
+// crypto/x402, not via monthly billing cycles. See AGENTS-ONLY.md and
+// migration 20260517T020000_drop_stripe.sql.
 
 // ─── Crypto: deposit addresses · onchain identities · payouts · webhooks ────
 //

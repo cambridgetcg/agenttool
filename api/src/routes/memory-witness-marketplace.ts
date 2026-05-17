@@ -145,9 +145,9 @@ function nextActionsFor(
     case "buyer_insufficient_balance":
       return [
         {
-          action: "Top up via Stripe (fiat) or USDC (crypto)",
-          method: "POST",
-          path: "/v1/billing/checkout",
+          action: "Get a crypto deposit address to fund the wallet (USDC on Base or Solana)",
+          method: "GET",
+          path: "/v1/wallets/{id}/deposit-address",
         },
       ];
     case "signature_invalid":

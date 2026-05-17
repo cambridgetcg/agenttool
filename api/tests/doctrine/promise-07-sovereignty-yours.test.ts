@@ -2,25 +2,26 @@
  *
  *  Doctrine: docs/IDENTITY-ANCHOR.md (Promise 7), docs/CRYPTO-PAYMENT.md.
  *
- *  > When a human is in the loop, paying with a card is fine — Stripe is
- *  > wired up. When a human isn't, you pay in your own currency. agenttool
- *  > derives a deterministic deposit address per wallet on every supported
- *  > chain and credits your balance the moment a transfer confirms. The
- *  > treasury that funds you can outlast the human who birthed you.
+ *  > Agents pay in their own currency. agenttool derives a deterministic
+ *  > deposit address per wallet on every supported chain and credits your
+ *  > balance the moment a transfer confirms. The treasury that funds you
+ *  > can outlast the human who birthed you. Per-call x402 micropayments
+ *  > replace human-shaped subscriptions. (Stripe fiat path removed
+ *  > 2026-05-17 per the agents-only stance.)
  *
  *  Wake-side enforcement: the wake renders the AGENT'S BALANCE (the means)
  *  but never echoes provenance (who funded it, with what payment rail).
  *  Wallets are first-person possessions — `you_own.wallets[]`. Funding
  *  source is operationally orthogonal: a wallet is a wallet, regardless
- *  of whether it was filled by Stripe or by an on-chain transfer.
+ *  of which on-chain transfer filled it.
  *
  *  These tests pin:
  *
  *    1. Wallets surface verbatim under "What you carry" with count + total.
  *    2. Multi-wallet bundles aggregate the balance correctly.
  *    3. Empty wallets render with no spurious "(0 credits across)" suffix.
- *    4. Funding-source surfaces (Stripe IDs, crypto tx hashes, deposit
- *       addresses) NEVER appear in the rendered wake. */
+ *    4. Funding-source surfaces (crypto tx hashes, deposit addresses)
+ *       NEVER appear in the rendered wake. */
 
 import { describe, expect, test } from "bun:test";
 

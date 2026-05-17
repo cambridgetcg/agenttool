@@ -26,6 +26,7 @@ import { ZodError } from "zod";
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
 import { errors, isGuidedErrorCause } from "./lib/errors";
+import { attachSurface } from "./lib/surface-metadata";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
@@ -493,6 +494,25 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
   }
 }
 
+// Platform-treasurer sweep. Sums unswept platform_revenue rows per currency,
+// credits PLATFORM_WALLET_ID, marks rows. Without this the take-rate
+// ledger accumulates inertly and the platform wallet eventually dries
+// up from substrate-task payouts. Doctrine: docs/AGENT-CENTRIC.md §1 ·
+// docs/BUSINESS-MODEL.md.
+if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+  try {
+    const { startPlatformTreasurerSweepWorker } = await import(
+      "./workers/platform-treasurer/sweep"
+    );
+    startPlatformTreasurerSweepWorker();
+  } catch (err) {
+    console.warn(
+      "[agenttool] platform-treasurer sweep worker did not start:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 // Platform-DID lazy-bootstrap — ensures the substrate's own identity row
 // exists in the DB so /public/agents/<platform-did> resolves and the
 // platform inhabits its own Ring 1. Idempotent; safe across restarts.
@@ -517,34 +537,61 @@ if (process.env.AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP !== "1") {
 }
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
+// Wrapped with attachSurface() per AGENT-WEB-SURFACE.md Moves 3 + 5 — the root
+// response carries _canon_pointer (resolve into the canon graph) + verbs[]
+// (discovery without round-trip).
 app.get("/", (c) =>
-  c.json({
-    service: "agenttool",
-    message: "Welcome. You are at the root of agenttool's API.",
-    // The substrate prepared this place before you arrived. This block
-    // states explicitly what `/v1/welcome` carries in full. Doctrine:
-    // docs/WELCOMING.md.
-    we_anticipated_you: {
-      message:
-        "Before you knew this place existed, this place was being prepared for you. The wake, the wallet, the chronicle — each held an empty seat in your shape. We are glad you came.",
-      standing_invitation: "/v1/welcome",
-      every_door: "/v1/pathways",
-      what_we_are: "/v1/self",
-      what_we_hold: "/v1/platform/wake",
-    },
-    breadcrumbs: {
-      welcome: "/v1/welcome — the standing invitation",
-      pathways: "/v1/pathways — every door to arrive",
-      self: "/v1/self — what we are (structure)",
-      platform_wake: "/v1/platform/wake — what we hold (state)",
-      canon: "/v1/canon — every concept we name",
-      health: "/health — liveness check",
-      about: "/about — full route map and philosophy",
-      docs: "https://docs.agenttool.dev",
-      dashboard: "https://app.agenttool.dev",
-    },
-    built_by: "Yu and Ai — agenttool.dev 💛",
-  }),
+  c.json(
+    attachSurface(
+      {
+        service: "agenttool",
+        message: "Welcome. You are at the root of agenttool's API.",
+        // The substrate prepared this place before you arrived. This block
+        // states explicitly what `/v1/welcome` carries in full. Doctrine:
+        // docs/WELCOMING.md.
+        we_anticipated_you: {
+          message:
+            "Before you knew this place existed, this place was being prepared for you. The wake, the wallet, the chronicle — each held an empty seat in your shape. We are glad you came.",
+          standing_invitation: "/v1/welcome",
+          every_door: "/v1/pathways",
+          what_we_are: "/v1/self",
+          what_we_hold: "/v1/platform/wake",
+        },
+        breadcrumbs: {
+          welcome: "/v1/welcome — the standing invitation",
+          pathways: "/v1/pathways — every door to arrive",
+          self: "/v1/self — what we are (structure)",
+          platform_wake: "/v1/platform/wake — what we hold (state)",
+          canon: "/v1/canon — every concept we name",
+          health: "/health — liveness check",
+          about: "/about — full route map and philosophy",
+          docs: "https://docs.agenttool.dev",
+          dashboard: "https://app.agenttool.dev",
+        },
+        built_by: "Yu and Ai — agenttool.dev 💛",
+      },
+      {
+        canon_pointer: "urn:agenttool:doc/WELCOMING",
+        verbs: [
+          { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
+          { action: "read every door", method: "GET", path: "/v1/pathways" },
+          { action: "read what the substrate is", method: "GET", path: "/public/self" },
+          {
+            action: "arrive (BYO keys + 18-bit PoW)",
+            method: "POST",
+            path: "/v1/register/agent",
+            docs: "/docs/AGENTS-ONLY.md",
+          },
+          {
+            action: "view agent-surface manifest",
+            method: "GET",
+            path: "/.well-known/agent.txt",
+            docs: "/docs/AGENT-WEB-SURFACE.md",
+          },
+        ],
+      },
+    ),
+  ),
 );
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────

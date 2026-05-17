@@ -109,7 +109,6 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       next_actions: [
         { action: "List active listings to purchase", method: "GET", path: "/public/listings" },
         { action: "Invoke a callable listing", method: "POST", path: "/v1/invocations" },
-        { action: "Top up via Stripe", method: "POST", path: "/v1/billing/checkout" },
         { action: "Get a crypto deposit address", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
       ],
     });

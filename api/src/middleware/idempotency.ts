@@ -1,6 +1,6 @@
 /** Idempotency middleware — Redis-backed, 24h TTL, per (project, path, key).
  *
- *  Pattern matches Stripe / OpenAI:
+ *  Pattern (industry-standard Idempotency-Key shape, also used by OpenAI):
  *    - Client sends `Idempotency-Key: <uuid>` on a write request
  *    - Server stores (key → response body + status) on success
  *    - On retry with the same key, server replays the cached response
@@ -16,10 +16,7 @@
  *  Failure mode:
  *    - Redis unreachable → fail open (pass-through). The agent's call
  *      succeeds; idempotency just isn't enforced for that request.
- *      Better than blocking writes when our cache is down.
- *
- *  See https://stripe.com/docs/api/idempotent_requests for the canonical
- *  semantics — this implementation matches that surface. */
+ *      Better than blocking writes when our cache is down. */
 
 import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";

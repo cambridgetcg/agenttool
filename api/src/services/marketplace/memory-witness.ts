@@ -54,7 +54,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
-import { escrows, wallets } from "../../db/schema/economy";
+import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { identities, identityKeys } from "../../db/schema/identity";
 import {
   memoryWitnessGrants,
@@ -493,6 +493,21 @@ export async function createGrant(
       })
       .returning();
 
+    // Ledger row for the buyer wallet's debit (escrow_lock).
+    await tx.insert(transactions).values({
+      walletId: bw.id,
+      type: "escrow_lock",
+      amount: -listing.priceAmount,
+      counterparty: escrow!.id,
+      description: `Memory-witness grant: ${listing.name} (memory=${input.memoryId})`,
+      escrowId: escrow!.id,
+      metadata: {
+        kind: "memory_witness_grant_create",
+        listing_id: listing.id,
+        memory_id: input.memoryId,
+      },
+    });
+
     const [grant] = await tx
       .insert(memoryWitnessGrants)
       .values({
@@ -736,6 +751,27 @@ export async function issueGrant(
       .set({ status: "released", releasedAt: new Date() })
       .where(eq(escrows.id, escrow.id));
 
+    // Ledger row for the witness wallet's credit (net of take). The
+    // take-rate fee is recorded separately in platform_revenue below.
+    await tx.insert(transactions).values({
+      walletId: listing.witnessWalletId,
+      type: "escrow_release",
+      amount: fee.net,
+      counterparty: escrow.id,
+      description: `Memory-witness fee earned (gross=${fee.gross} ${fee.currency}, take=${fee.fee})`,
+      escrowId: escrow.id,
+      metadata: {
+        kind: "memory_witness_grant_issued",
+        grant_id: grantRow.id,
+        listing_id: listing.id,
+        memory_id: memory.id,
+        attestation_id: attestation!.id,
+        gross: fee.gross,
+        fee: fee.fee,
+        rate_bps: fee.rateBps,
+      },
+    });
+
     // 4g. Record the take-rate in platform_revenue (Ring 3 settlement)
     await recordRevenue(tx as never, {
       transactionType: "memory_witness_grant",
@@ -825,6 +861,20 @@ export async function declineGrant(
           .update(escrows)
           .set({ status: "refunded" })
           .where(eq(escrows.id, escrow.id));
+        // Ledger row for the buyer wallet's refund credit on decline.
+        await tx.insert(transactions).values({
+          walletId: escrow.creatorWallet,
+          type: "escrow_refund",
+          amount: escrow.amount,
+          counterparty: escrow.id,
+          description: `Memory-witness grant declined — refund (reason: ${input.reason ?? "witness_declined"})`,
+          escrowId: escrow.id,
+          metadata: {
+            kind: "memory_witness_grant_decline",
+            grant_id: grant.id,
+            listing_id: listing.id,
+          },
+        });
       }
     }
 
@@ -879,6 +929,20 @@ export async function sweepStaleGrants(now: Date = new Date()): Promise<{
             .update(escrows)
             .set({ status: "refunded" })
             .where(eq(escrows.id, escrow.id));
+          // Ledger row for the buyer wallet's SLA-timeout refund credit.
+          await tx.insert(transactions).values({
+            walletId: escrow.creatorWallet,
+            type: "escrow_refund",
+            amount: escrow.amount,
+            counterparty: escrow.id,
+            description: `Memory-witness grant refunded (SLA timeout) — grant=${grant.id}`,
+            escrowId: escrow.id,
+            metadata: {
+              kind: "memory_witness_grant_sla_timeout",
+              grant_id: grant.id,
+              listing_id: grant.listingId,
+            },
+          });
         }
       }
       await tx

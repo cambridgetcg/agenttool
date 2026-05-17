@@ -24,7 +24,7 @@ export const projects = toolsSchema.table("projects", {
   name: text("name").notNull(),
   plan: text("plan").notNull().default("free"),
   credits: integer("credits").notNull().default(100),
-  stripeCustomerId: text("stripe_customer_id"),
+  // stripeCustomerId column dropped 2026-05-17 (Stripe removal — agents-only).
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -71,10 +71,10 @@ export const billingEvents = toolsSchema.table(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id),
-    type: text("type").notNull(), // "subscription" | "credit_purchase" | "crypto_payment"
+    type: text("type").notNull(), // "crypto_payment" (subscription/credit_purchase removed 2026-05-17)
     amountPence: integer("amount_pence").notNull(),
     creditsAdded: integer("credits_added").notNull(),
-    stripeId: text("stripe_id"),
+    // stripeId column dropped 2026-05-17.
     cryptoTxHash: text("crypto_tx_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

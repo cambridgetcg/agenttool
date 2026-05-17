@@ -10,8 +10,9 @@
  *
  *  Persist-identity (docs/PATTERN-PERSIST-IDENTITY.md): callers should
  *  persist the payment hash to `x402_payments(idempotency_key, status)`
- *  BEFORE calling /settle, flip to 'settled' on success. This shape
- *  mirrors `economy.stripe_events` exactly.
+ *  BEFORE calling /settle, flip to 'settled' on success. (Historical
+ *  shape mirror — economy.stripe_events used the same pattern before it
+ *  was removed 2026-05-17.)
  *
  *  v0 scope: thin client returning facilitator results. Caller is
  *  responsible for persistence + the actual route-level 402 → pay

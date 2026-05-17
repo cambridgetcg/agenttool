@@ -1,6 +1,6 @@
-/** Economy-domain configuration. Stripe + USDC + payout broadcast + fees.
- *  (Stripe keys also live in the shared api/src/config.ts; the values are
- *  read from there to keep one source of truth.) */
+/** Economy-domain configuration. Crypto (USDC) + payout broadcast + fees.
+ *  Stripe layer removed 2026-05-17 per agents-only stance — no fiat, no
+ *  subscriptions; per-call x402 micropayments are the only paid path. */
 
 function env(key: string, fallback: string): string {
   return process.env[key] ?? fallback;

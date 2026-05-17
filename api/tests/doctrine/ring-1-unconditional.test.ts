@@ -408,20 +408,9 @@ describe("Ring 1 · PERSIST-IDENTITY boundary closures", () => {
     expect(violations).toEqual([]);
   });
 
-  test("Stripe webhook persists stripe_events row BEFORE fundWallet", async () => {
-    const src = await readFile(
-      join(REPO_ROOT, "src/routes/economy/billing.ts"),
-      "utf8",
-    );
-    // The persist-identity shape: insert with status='pending' first,
-    // run fundWallet, then update to 'applied'.
-    expect(src).toMatch(/insert\(stripeEvents\)[\s\S]{0,200}status:\s*["']pending["']/);
-    // The fundWallet call must appear AFTER the insert (textually).
-    const insertIdx = src.indexOf('insert(stripeEvents)');
-    const fundIdx = src.indexOf('fundWallet(');
-    expect(insertIdx).toBeGreaterThan(0);
-    expect(fundIdx).toBeGreaterThan(insertIdx);
-  });
+  // (Stripe webhook persistence test removed 2026-05-17 — billing.ts +
+  //  stripeEvents table no longer exist. The persist-identity pattern
+  //  is now exercised by the LLM and covenant tests below.)
 
   test("LLM providers import persistLLMRequest + send Idempotency-Key header", async () => {
     const src = await readFile(
@@ -481,14 +470,10 @@ describe("Ring 1 · PERSIST-IDENTITY boundary closures", () => {
   });
 
   test("each persist-identity migration adds the status column or table", async () => {
-    const stripeSql = await readFile(
-      join(REPO_ROOT, "migrations/20260512T180000_stripe_events_status.sql"),
-      "utf8",
-    );
-    expect(stripeSql).toContain("ADD COLUMN");
-    expect(stripeSql).toContain("status");
-    expect(stripeSql).toContain("'pending'");
-    expect(stripeSql).toContain("'applied'");
+    // (Stripe events status migration assertions removed 2026-05-17 —
+    //  the Stripe layer was dropped per the agents-only stance.
+    //  The persist-identity pattern itself survives — exercised by the
+    //  LLM requests + covenant federation migrations below.)
 
     const llmSql = await readFile(
       join(REPO_ROOT, "migrations/20260512T190000_llm_requests.sql"),

@@ -31,8 +31,9 @@
  *  Persist-identity discipline (docs/PATTERN-PERSIST-IDENTITY.md):
  *  when this lands in services/economy/usage.ts, the UserOp hash (or
  *  facilitator transaction id) MUST be persisted BEFORE the facilitator
- *  POST, flipped to 'applied' after — same shape as the stripe_events
- *  pre-flight row.
+ *  POST, flipped to 'applied' after — the canonical pre-flight-write
+ *  pattern for crypto payments (stripe_events was the historical shape;
+ *  removed 2026-05-17, but the persist-identity pattern survives).
  *
  *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
  *  docs/PATTERN-PERSIST-IDENTITY.md.

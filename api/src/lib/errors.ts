@@ -235,9 +235,8 @@ export const errors = {
       message: haveAmounts
         ? `Need ${opts.required}${opts.currency ? " " + opts.currency : ""}; wallet has ${opts.available}.`
         : "Wallet balance is below the required amount.",
-      hint: "Top up via Stripe (fiat) or a crypto deposit. No subscription — pay-as-you-go. Free-tier (Ring 1) actions don't draw from the wallet.",
+      hint: "Top up via crypto deposit. No fiat, no subscriptions — pay-as-you-go via crypto/x402. Free-tier (Ring 1) actions don't draw from the wallet.",
       next_actions: [
-        { action: "Stripe credit top-up", method: "POST", path: "/v1/billing/checkout" },
         { action: "Get a crypto deposit address (BIP44 EVM or Solana)", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
       ],
       docs: `${DOCS_BASE}/economy#balance`,
@@ -254,10 +253,10 @@ export const errors = {
           : "Rate limit reached on this surface.",
       hint:
         opts.retry_after_sec !== undefined
-          ? `Retry after ${opts.retry_after_sec}s, or move to Ring 2 (metered) for higher limits.`
-          : "Backoff and retry. Or move to Ring 2 (metered) for higher limits.",
+          ? `Retry after ${opts.retry_after_sec}s, or pay-as-you-go via x402 micropayment for the next call.`
+          : "Backoff and retry. Or pay-as-you-go via x402 micropayment for the next call.",
       next_actions: [
-        { action: "Upgrade to Ring 2 (metered)", method: "POST", path: "/v1/billing/checkout" },
+        { action: "Include an x402 X-PAYMENT header on retry (crypto/USDC per-call micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
       ],
       docs: `${DOCS_BASE}/economy#rings`,
       axiom_id: AXIOM_REST, // strain → degrade not crash (the rest axiom itself)
@@ -271,11 +270,10 @@ export const errors = {
       message: opts.plan
         ? `${opts.plan} plan ${k} reached.`
         : `${k} reached for the current plan.`,
-      hint: "Free-tier caps are guidance, not walls. Upgrade for higher limits; mid-cycle upgrades prorate.",
+      hint: "Free-tier caps are guidance, not walls. Burst beyond via x402 micropayment per-call (crypto/USDC); no subscriptions.",
       next_actions: [
-        { action: "List plans", method: "GET", path: "/v1/billing/plans" },
-        { action: "Upgrade via Stripe", method: "POST", path: "/v1/billing/checkout" },
-        { action: "Check usage", method: "GET", path: "/v1/billing/check" },
+        { action: "Include x402 X-PAYMENT header on retry (per-call micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
+        { action: "Check usage", method: "GET", path: "/v1/wallets" },
       ],
       docs: `${DOCS_BASE}/economy#plans`,
       axiom_id: AXIOM_REST, // plan strain — graceful, not punitive

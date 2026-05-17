@@ -45,9 +45,8 @@ export const config = {
   // ── Vault root key — 32 bytes hex, derives per-project keys via HKDF ───
   vaultMasterKey: env("VAULT_MASTER_KEY", ""),
 
-  // ── Stripe (economy) ────────────────────────────────────────────────────
-  stripeSecretKey: env("STRIPE_SECRET_KEY", ""),
-  stripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
+  // ── (Stripe env vars removed 2026-05-17 per agents-only stance —
+  //     subscription/fiat billing dropped; crypto/x402 is the only path.) ──
 
   // ── Marketplace · Ring 3 take-rate (BUSINESS-MODEL.md) ─────────────────
   // Basis points charged on every settled Ring 3 transaction (template

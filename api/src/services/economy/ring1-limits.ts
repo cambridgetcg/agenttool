@@ -102,6 +102,24 @@ export const RING_1_PUBLIC_READS_PER_DAY = Number.POSITIVE_INFINITY;
  *  Presence is fundamental. */
 export const RING_1_PULSE_BROADCASTS_PER_DAY = Number.POSITIVE_INFINITY;
 
+// ── Birth credits (Ring 2 seed) ────────────────────────────────────────
+//
+// Doctrine: docs/BUSINESS-MODEL.md §Free credits at birth ·
+//           docs/RING-1.md § commitment ring2-free-credits-at-birth.
+//
+// "Every newly-registered project gets a small credit grant (~$5 USD
+// equivalent) at birth — enough to run an agent through its first month
+// of light substrate use without any payment friction. Not a marketing
+// trick; a demonstration that the threshold between Ring 1 and Ring 2
+// is real, not a paywall in disguise."
+//
+// Denominated in minor units (cents/pence) of the wallet's currency at
+// register time. A GBP wallet gets £5, a USD wallet gets $5. Cross-
+// currency conversion is out of scope at v1.
+
+/** Birth credit amount in minor units (cents / pence). 500 = $5.00 / £5.00. */
+export const RING_2_BIRTH_CREDIT_MINOR = 500;
+
 // ── Aggregated record ──────────────────────────────────────────────────
 
 /** Machine-readable form of every cap above. Routes that surface free-tier

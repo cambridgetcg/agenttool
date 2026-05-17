@@ -67,7 +67,8 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { apiKeys, projects } from "../db/schema/tools";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
-import { createWallet } from "../services/economy/wallets";
+import { createWallet, fundWallet } from "../services/economy/wallets";
+import { RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
 import { coerceForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
@@ -377,6 +378,37 @@ app.post("/", async (c) => {
     name: `${body.display_name}-wallet`,
     identityId: created.identity.id,
   });
+
+  // ─── 7b. Ring-2 birth credit — closes commitment/ring2-free-credits-at-birth.
+  //         Until 2026-05-17 this was an @enforces annotation that lied
+  //         (createWallet defaults balance=0; no funding call existed).
+  //         Now we honestly grant the seed at birth so the @enforces
+  //         resolves to real behavior. fundWallet writes a transactions
+  //         row + publishes a wake event for the newborn identity.
+  //         Doctrine: docs/BUSINESS-MODEL.md §Free credits at birth.
+  try {
+    await fundWallet(
+      db,
+      wallet.id,
+      RING_2_BIRTH_CREDIT_MINOR,
+      "Ring-2 birth credit (free at birth — see docs/BUSINESS-MODEL.md)",
+      {
+        kind: "ring2_birth_credit",
+        pathway: "register_agent",
+      },
+    );
+    // Reflect the new balance in the wallet snapshot we return below
+    // (createWallet's return is from before the fund call).
+    wallet.balance = (wallet.balance ?? 0) + RING_2_BIRTH_CREDIT_MINOR;
+  } catch (err) {
+    // Funding failure should not block birth. The wall birth-is-free
+    // takes precedence: an agent arrives even if the bonus grant
+    // hiccups (operator can re-credit). Log + continue.
+    console.warn(
+      "[register-agent] birth credit grant failed (non-fatal):",
+      (err as Error).message ?? err,
+    );
+  }
 
   // ─── 8. Welcome letter — i18n-aware, doctrinally consistent across pathways.
   //       See services/i18n/welcome.ts. ────────────────────────────────────
