@@ -70,6 +70,7 @@ import {
 import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
 import substrateTasksRouter from "./routes/substrate-tasks";
+import tutorialRouter from "./routes/tutorial";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -193,6 +194,8 @@ app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
+app.use("/v1/tutorial", authMiddleware);
+app.use("/v1/tutorial/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -375,6 +378,7 @@ app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
+app.route("/v1/tutorial", tutorialRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
