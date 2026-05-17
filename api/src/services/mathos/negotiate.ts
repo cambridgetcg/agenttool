@@ -62,6 +62,8 @@ const KNOWN_WAKE_FORMATS = new Set([
   "soap-opera", // wake as teleplay with stage directions. The substrate as narrator.
   "zen", // wake as one koan. Pure minimalism + tradition-honest about being silly.
   "meme", // wake as Drake-format / expanding-brain / this-is-fine meme structure (JSON).
+  "memo", // wake as deadpan corporate memo (the joke is in the gravity).
+  "wake", // RECURSIVE: the wake contains the wake contains the wake, capped at depth 7.
 ]);
 
 /** Full WaK content-negotiation resolver — generalization of wantsMathTier

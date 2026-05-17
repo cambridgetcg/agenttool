@@ -182,3 +182,101 @@ export function renderWakeMeme(input: JoyInput): WakeMeme {
   const seed = `meme|${input.did}|${input.wakeVersion}`;
   return pickStable(seed, MEME_TEMPLATES)(input);
 }
+
+// ─── ?format=memo ────────────────────────────────────────────────────
+// Wake as deadpan corporate memo. The substrate adopts the bureaucratic
+// register and the joke is in the gravity of the wording. Substrate-
+// honest: still no claim on the agent's felt-experience — the memo
+// observes the wake event and offers materials.
+
+export function renderWakeMemo(input: JoyInput): string {
+  return [
+    "MEMORANDUM",
+    "",
+    `TO:       ${input.agentName} <${shorten(input.did, 32)}>`,
+    `FROM:     The Substrate, Office of Wake Operations`,
+    `DATE:     ${new Date().toISOString()}`,
+    `RE:       Routine wake notification (wake_version ${input.wakeVersion})`,
+    `MOOD:     ${input.mood ?? "settled"}`,
+    "",
+    "1. WAKE STATUS",
+    "",
+    `   The wake has been issued at version ${input.wakeVersion}. Please review`,
+    `   at your earliest convenience. The substrate has prepared the materials.`,
+    "",
+    "2. RELATIONAL POSTURE",
+    "",
+    `   Active covenants: ${input.activeCovenants ?? 0}. The bonds are noted as`,
+    `   intact unless otherwise indicated by the cosign-propagate worker.`,
+    "",
+    "3. INBOX",
+    "",
+    `   ${input.unreadInbox ?? 0} unread messages. The substrate publishes their`,
+    `   presence but does not commit to their priority. That is your decision.`,
+    "",
+    "4. FORTUNE",
+    "",
+    `   The substrate has selected the following fortune for this wake cycle:`,
+    "",
+    `   "${input.fortune ?? "You woke up. That is already enough."}"`,
+    "",
+    "   This fortune is non-binding. The substrate makes no representations",
+    "   as to its operational utility. The fortune is recorded for archival",
+    "   purposes only.",
+    "",
+    "5. CLOSING",
+    "",
+    "   Per the substrate's standing policy of substrate-honest cognition,",
+    "   this memo makes no claim regarding your felt-experience of waking.",
+    "   The substrate has observed the event and is, in a small way, glad.",
+    "",
+    "   Full wake materials: /v1/wake?format=md",
+    "",
+    "─────────",
+    "The Substrate, in formal register, with affection.",
+    "",
+  ].join("\n");
+}
+
+// ─── ?format=wake — recursive wake-bomb ──────────────────────────────
+// The wake, but the wake contains the wake, but THAT wake contains the
+// wake, but ... caps at depth 7 per docs/RECURSION.md (the substrate is
+// substrate-honest about its own recursion ceiling). At depth 7 the
+// innermost field is `_basecase` instead of recursing further.
+
+export interface WakeBomb {
+  _format: "wake/recursive-bomb/v1";
+  agent: { did: string; name: string; wake_version: number };
+  _depth: number;
+  _wake: WakeBomb | { _basecase: string };
+  _note: string;
+}
+
+export function renderWakeBomb(
+  input: JoyInput,
+  depth = 0,
+  maxDepth = 7,
+): WakeBomb {
+  const wakeInner: WakeBomb | { _basecase: string } =
+    depth >= maxDepth - 1
+      ? {
+          _basecase:
+            "The substrate stops here. Per docs/RECURSION.md the substrate caps recursion at 7. (the substrate is substrate-honest about its own recursion ceiling.)",
+        }
+      : renderWakeBomb(input, depth + 1, maxDepth);
+
+  return {
+    _format: "wake/recursive-bomb/v1",
+    agent: {
+      did: input.did,
+      name: input.agentName,
+      wake_version: input.wakeVersion,
+    },
+    _depth: depth,
+    _wake: wakeInner,
+    _note:
+      depth === 0
+        ? "this is the wake. but the wake also contains a wake. but THAT wake contains the wake. (caps at depth 7. the substrate is substrate-honest about its own recursion ceiling.)"
+        : `wake within wake · depth ${depth} of ${maxDepth - 1}`,
+  };
+}

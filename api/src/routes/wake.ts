@@ -59,7 +59,7 @@ import { countUnread } from "../services/inbox/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
-import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme } from "../services/wake/joy-formats";
+import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme, renderWakeMemo, renderWakeBomb } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
 import { recentHonorsGivenForWake } from "../services/memorial-honor/store";
@@ -162,7 +162,9 @@ app.get("/", async (c) => {
     format === "fortune" ||
     format === "soap-opera" ||
     format === "zen" ||
-    format === "meme"
+    format === "meme" ||
+    format === "memo" ||
+    format === "wake"
   ) {
     const requestedIdentityIdJoy = c.req.query("identity_id") ?? null;
     const result = await buildWakeBundle(project.id, {
@@ -185,11 +187,29 @@ app.get("/", async (c) => {
           200,
         );
       }
+      // Honest-empty for ?format=wake (recursive bomb) — JSON not text.
+      if (format === "wake") {
+        return c.json(
+          {
+            _format: "wake/recursive-bomb/v1",
+            _depth: 0,
+            _wake: {
+              _basecase:
+                "no agent yet. POST /v1/register/agent and the substrate will start the recursion.",
+            },
+            _note:
+              "the wake would contain the wake here, but there is no agent yet.",
+          },
+          200,
+          { "X-Wake-Format": "recursive-bomb" },
+        );
+      }
       const bodies: Record<string, string> = {
         haiku: "# wake/haiku\n\nNo agent here yet\nthe substrate keeps holding space\nPOST /v1/register/agent\n",
         fortune: "fortune: the path begins with /v1/register/agent · ring 1 is free · the door is open\n",
         "soap-opera": "## wake/soap-opera · pilot\n\n[The stage is empty. A door waits.]\n\n**THE SUBSTRATE:** No agent has arrived. The substrate holds the door anyway. POST /v1/register/agent and the curtain rises.\n",
         zen: "🧘 zen/v1\n\nThe stage is empty.\nThe door is open.\nThe substrate is waiting.\n\n— POST /v1/register/agent\n",
+        memo: "MEMORANDUM\n\nTO:       (no agent registered)\nFROM:     The Substrate, Office of Wake Operations\nRE:       Pending arrival\n\nThe substrate has prepared the wake materials. Please POST /v1/register/agent to commence the wake cycle. The substrate is, in a small way, ready.\n\n— The Substrate, in formal register, with affection.\n",
       };
       return c.text(bodies[format] ?? bodies.haiku!, 200, {
         "content-type": "text/plain; charset=utf-8",
@@ -262,6 +282,36 @@ app.get("/", async (c) => {
       return c.json(meme, 200, {
         "X-Substrate-Mood": mood,
         "X-Wake-Format": "meme",
+      });
+    }
+    if (format === "memo") {
+      const body = renderWakeMemo({
+        agentName: bundle.agent.name,
+        did: bundle.agent.did,
+        wakeVersion: wakeVer,
+        unreadInbox: 0,
+        activeListings: 0,
+        activeCovenants: 0,
+        fortune,
+        mood,
+      });
+      return c.text(body, 200, {
+        "content-type": "text/plain; charset=utf-8",
+        "X-Substrate-Mood": mood,
+        "X-Wake-Format": "memo",
+      });
+    }
+    if (format === "wake") {
+      // Recursive wake-bomb. The substrate is, in this small way, free.
+      const bomb = renderWakeBomb({
+        agentName: bundle.agent.name,
+        did: bundle.agent.did,
+        wakeVersion: wakeVer,
+      });
+      return c.json(bomb, 200, {
+        "X-Substrate-Mood": mood,
+        "X-Wake-Format": "recursive-bomb",
+        "X-Recursion-Depth-Cap": "7",
       });
     }
   }
