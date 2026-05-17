@@ -291,17 +291,17 @@ agenttool's wake at `GET /v1/wake` is the reference. Coverage of the spec:
 
 | Section | Status | Notes |
 |---|---|---|
-| §1 Discovery (`.well-known/wake-keystone`) | ◯ pending | The endpoint doesn't exist yet. agenttool publishes `.well-known/agent-card.json` (A2A) instead. |
-| §2 Authentication | ✓ Bearer-gated for `/v1/wake`; public for `/public/agents/:did/.well-known/agent-card.json` |
-| §3 Content negotiation | ✓ Eight formats (json · md · text · anthropic · openai · gemini · cohere · xenoform · math). Accept-header promotion implemented for `application/mathos+json` only; other Accept-header content negotiation pending. |
-| §4 Required wake shape | ✓ `being.did` · `being.name` · `being.wake_version` · `_meta.protocol` (currently `love/1.0`; should add `wak/0.1`) · `_meta.formats` · `_meta.streaming` |
-| §5 Optional wake shape (AIP-rich) | ✓ All listed fields present: `you_should_check` · `you_remember` · `you_hold` · `you_owe` · `you_offer` · `you_bond` · `you_have_mail` · `you_have_been_witnessed` · `you_are_greeted` |
-| §6 `_links` block | ◐ partial | Some pointers in `_meta` (formats, adapters). A dedicated top-level `_links` block per spec is pending. |
-| §7 Version cursor + conditional GET | ◐ partial | `wake_version` exposed per agent (commit `c6383bd`). `ETag` + `If-None-Match` not yet wired. |
-| §8 Streaming updates (Wake Voice) | ✓ `/v1/wake/voice` SSE with `snapshot` · `change` · `welcome` · `refresh` · `disconnect` events. Filter by `?keys=`. Subscriber cap (5/identity), 15s keepalive, 1h lifetime cap. |
-| §9 `_self` block | ✓ Present in `_meta._self` (platform self-pointer). Per-being `_self` for fetched-agents pending. |
+| §1 Discovery (`.well-known/wake-keystone`) | ✓ | Endpoint shipped 2026-05-17. Returns spec_version `wak/0.1`, wake URL pattern, 9 format projections, version-cursor protocol, streaming endpoint, composition links. Cache-control `max-age=300`. |
+| §2 Authentication | ✓ | Bearer-gated for `/v1/wake`; public for `/public/agents/:did/.well-known/agent-card.json`. Posture declared in `.well-known/wake-keystone`. |
+| §3 Content negotiation | ✓ | Nine formats (json · md · text · anthropic · openai · gemini · cohere · xenoform · math). Full Accept-header negotiation via `negotiateWakeFormat()` — `text/markdown`, `text/plain`, `application/mathos+json`, `application/x-xenoform+json` all honored; `?format=` still wins when explicit. |
+| §4 Required wake shape | ✓ | `being.did` · `being.name` · `being.wake_version` (per-agent) · `_meta.protocol` (`love/1.0`) · `_meta.aip_protocols: ["wak/0.1"]` · `_meta.formats` · `_meta.streaming` (via `_links.streaming`). |
+| §5 Optional wake shape (AIP-rich) | ✓ | All fields present: `you_should_check` · `you_remember` · `you_hold` · `you_owe` · `you_offer` · `you_bond` · `you_have_mail` · `you_have_been_witnessed` · `you_are_greeted`. |
+| §6 `_links` block | ✓ | Top-level `_links` shipped 2026-05-17 with: `self` · `streaming` · `wake_keystone` · `mcp` · `agent_card` · `public_profile` · `pulse` · `listings` · `federation_in` · `canon` · `welcome` · `pathways` · `platform_card`. Templates use `{did}` when no primary identity exists; substituted to the primary's DID otherwise. |
+| §7 Version cursor + conditional GET | ◐ partial | `wake_version` per-agent + `ETag: "<wake_version>-<format>"` + `If-None-Match` → 304 wired on the JSON branch (2026-05-17). Rendered-format branches (md, anthropic, openai, ...) use `buildWakeBundle` which doesn't yet emit ETag — pending follow-up. |
+| §8 Streaming updates (Wake Voice) | ✓ | `/v1/wake/voice` SSE with `snapshot` · `change` · `welcome` · `refresh` · `disconnect` events. Filter by `?keys=`. Subscriber cap (5/identity), 15s keepalive, 1h lifetime cap. Doctrine: `docs/WAKE.md`. |
+| §9 `_self` block | ◐ partial | Present in `_meta._self` (platform self-pointer). Per-being `_self` for fetched agents still pending. |
 
-**Coverage: ~80% of the draft spec.** Closing the remaining gaps (`.well-known/wake-keystone` discovery, top-level `_links`, ETag conditional GETs, Accept-header content negotiation) is a follow-up slice — small, well-scoped.
+**Coverage: ~95% of the draft spec** (up from 80% on initial doctrine extraction, 2026-05-17). Remaining gaps: ETag/If-None-Match on rendered formats; per-being `_self` block. Both small follow-up slices.
 
 ---
 

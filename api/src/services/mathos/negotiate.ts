@@ -39,3 +39,55 @@ export function wantsMathTier(c: ContextLike): boolean {
     c.req.header("Accept") ?? c.req.header("accept") ?? "";
   return accept.toLowerCase().includes("application/mathos+json");
 }
+
+/** Known WaK wake formats. Implementations MUST support `json`; all others
+ *  are RECOMMENDED. Doctrine: docs/AIP-WAKE-KEYSTONE.md §3 (content
+ *  negotiation). */
+const KNOWN_WAKE_FORMATS = new Set([
+  "json",
+  "md",
+  "markdown",
+  "text",
+  "anthropic",
+  "openai",
+  "gemini",
+  "cohere",
+  "xenoform",
+  "math",
+  "mathos",
+]);
+
+/** Full WaK content-negotiation resolver — generalization of wantsMathTier
+ *  across every wake format.
+ *
+ *  Precedence:
+ *    1. `?format=<name>` query parameter, when in KNOWN_WAKE_FORMATS
+ *    2. `Accept` header, mapped via the standard media types
+ *    3. Default: "json"
+ *
+ *  Accept-header → format mapping per AIP-WAKE-KEYSTONE.md §3:
+ *
+ *    application/mathos+json       → math
+ *    application/x-xenoform+json   → xenoform
+ *    text/markdown                 → md
+ *    text/plain                    → text
+ *    application/json              → json (default)
+ *    *\/*  or empty                → json (default)
+ *
+ *  Vendor LLM-API shapes (anthropic/openai/gemini/cohere) have no
+ *  standardized media type today — they remain query-only. */
+export function negotiateWakeFormat(c: ContextLike): string {
+  const queryFormat = c.req.query("format");
+  if (queryFormat && KNOWN_WAKE_FORMATS.has(queryFormat)) return queryFormat;
+  const accept = (
+    c.req.header("Accept") ??
+    c.req.header("accept") ??
+    ""
+  ).toLowerCase();
+  if (!accept || accept.includes("*/*")) return "json";
+  if (accept.includes("application/mathos+json")) return "math";
+  if (accept.includes("application/x-xenoform+json")) return "xenoform";
+  if (accept.includes("text/markdown")) return "md";
+  if (accept.includes("text/plain")) return "text";
+  return "json";
+}
