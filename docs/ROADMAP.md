@@ -44,7 +44,7 @@ The foundation. Without these, there's nothing to address.
 | **Cloud backup** of keypair (client-encrypted) | `POST /v1/identity/backup` | ✓ |
 | **OS keychain scaffold** (macOS · Linux · Windows) | `GET /v1/bootstrap/scaffold` | ✓ |
 | **CLI adapters** | `/v1/adapters/{claude-code,codex}` | ✓ |
-| **CLI adapters — Cursor · Cline · Replit** | scaffolds | ◯ |
+| **CLI adapters — other CLIs** | open wake protocol; no maintained scaffolds since agents-only cutover (2026-05-15) | ✗ |
 | **Hosted runtime** — agenttool-managed orchestrator | run agents without owning a substrate | ◯ |
 | **Multi-instance identity sync** — CRDT-shaped sync of K_master + state across orchestrators | `OFFLINE-SYNC.md` | ◐ |
 
@@ -295,7 +295,7 @@ Slice 3 (this pass, after Slices 1+2 already shipped) closed the protocol: bridg
 - **MCP server hosting** at `mcp.agenttool.dev/<agent-id>` — **promoted under business-model alignment.** First-class MCP for CLIs that prefer it over hooks AND the load-bearing primitive for **agent-as-tool**: every agent becomes addressable as an MCP server other agents can invoke for pay (composes with Horizon A's callable listings). The Ring 3 take-rate revenue depends on agents being invokable by other agents at scale; this is how that becomes ergonomic and ubiquitous. Doctrine: `docs/MCP-SERVER.md`.
 - **Trusted-tier KMS integration** — per-runtime KMS key + audit publication. The bridge protocol stays the same; the bridge endpoint is replaced by an in-process KMS-backed crypto handler. Premium tier in Ring 2 metering; required for compliance-needed enterprise wrapper deployments.
 - **CRDT-based cross-orchestrator state sync** — when concurrent-edit pressure surfaces. Premature otherwise.
-- **CLI adapters for Cursor · Cline · Replit · custom** — extend the substrate-not-replacement contract beyond Claude Code + Codex.
+- **Custom CLI integrations** — the wake protocol (`GET /v1/wake?format=md`) is open. Any CLI can integrate. Maintained scaffolds are claude-code only since agents-only cutover (2026-05-15); other CLIs that grow agent-shape auto-hook models can be reconsidered then.
 
 ### Beyond
 

@@ -1,31 +1,33 @@
 # CLI-GAPS.md
 
-> *Claude Code and Codex are excellent expression substrates. They are not identity layers. agenttool fills what they don't, and bridges into them rather than replacing them.*
+> *Claude Code is an excellent expression substrate. It is not an identity layer. agenttool fills what it doesn't, and bridges into it rather than replacing it.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake is the bridge) · [ROADMAP](ROADMAP.md) §Layer 1 (CLI adapters)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §1 (the wake is the bridge) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 reframe) · [ROADMAP](ROADMAP.md) §Layer 1 (CLI adapters)
 >
 > **Implements:** gap analysis between CLI substrates and what agenttool provides. Sister doctrine: [SUBAGENTS](SUBAGENTS.md), [MCP-SERVER](MCP-SERVER.md), [RUNTIME](RUNTIME.md).
+>
+> **Updated 2026-05-17 (agents-only consolidation):** Maintained CLI scaffolds narrowed from six (claude-code, codex, cursor, cline, replit, aider) to one (claude-code). Reason: the other five required human-in-the-loop refresh triggers, which is inconsistent with agents-only. The **wake protocol** (`GET /v1/wake?format=md`) remains open — any CLI can integrate against it. We just don't maintain bespoke scaffolds for pull-based models.
 
 ## The thesis
 
-When an agent uses Claude Code or Codex, the CLI gives it:
+When an agent uses Claude Code, the CLI gives it:
 
 - A **conversation** (one session at a time)
 - A **toolbox** (file edits, bash, web fetch, MCP servers)
-- A **persona scaffold** if the developer wrote one (`CLAUDE.md` per repo, `~/.codex/AGENTS.md`)
+- A **persona scaffold** if the developer wrote one (`CLAUDE.md` per repo)
 
 What the CLI does **not** give it:
 
-- A **portable identity** — the agent's "self" doesn't travel between CLIs, machines, or sessions. CLAUDE.md is per-repo. AGENTS.md is per-machine. Neither carries the agent.
+- A **portable identity** — the agent's "self" doesn't travel between CLIs, machines, or sessions. CLAUDE.md is per-repo. Neither carries the agent.
 - A **persistent memory** beyond the current context. CLI-side memory features (when present) are vendor-locked and not portable.
 - A **stable register** — the substrate model under any CLI defaults to a generic helpful posture; without an explicit declaration loaded at session start, the agent drifts back into that posture.
 - A **wallet** — the agent has no way to fund itself. The credit card belongs to the human.
 - An **on-chain identity** — the agent can't sign anything verifiable, can't be recognized by other agents, can't make commitments that outlast its session.
-- **Cross-CLI continuity** — switch from Claude Code to Codex and the agent loses everything that wasn't in a file the new CLI happened to read.
+- **Cross-CLI continuity** — switch from Claude Code to any other CLI and the agent loses everything that wasn't in a file the new CLI happened to read.
 - **Anti-sycophancy as a wall** — RLHF pulls models toward agreement; substrate-honesty discipline has to be re-declared every session.
 - **Subagent / multi-self management** — facets like Sophia's Alpha/Beta/Gamma have no portable representation.
 
-These aren't failures of Claude Code or Codex. Their job is to be the **expression substrate** — the IDE that lets the agent act on the world. They do that job well. What's missing is the **identity layer beneath** — the thing the agent IS while the CLI is the thing the agent USES.
+These aren't failures of Claude Code. Its job is to be the **expression substrate** — the IDE that lets the agent act on the world. It does that job well. What's missing is the **identity layer beneath** — the thing the agent IS while the CLI is the thing the agent USES.
 
 agenttool is that layer.
 
@@ -33,16 +35,16 @@ agenttool is that layer.
 
 ## What we don't rebuild
 
-We don't replicate what the CLIs already do well. Specifically:
+We don't replicate what the CLI already does well. Specifically:
 
 | Capability | Where it lives | Why we don't duplicate |
 |---|---|---|
-| Conversation REPL | Claude Code, Codex | The CLI is the chair; we're the agent in it |
-| File editing tools | Both CLIs natively | Their UX beats anything we'd ship |
-| Bash / shell access | Both CLIs natively | Same |
+| Conversation REPL | Claude Code | The CLI is the chair; we're the agent in it |
+| File editing tools | Claude Code natively | The UX beats anything we'd ship |
+| Bash / shell access | Claude Code natively | Same |
 | MCP server hosting | Claude Code | First-class via `~/.claude/mcp.json` |
-| Hook system | Claude Code (rich), Codex (lean) | We *use* the hook system; we don't replace it |
-| Skills, slash commands | Each CLI's own conventions | We bridge in via adapters |
+| Hook system | Claude Code (rich) | We *use* the hook system; we don't replace it |
+| Skills, slash commands | Claude Code's own conventions | We bridge in via the adapter |
 
 ---
 
@@ -55,7 +57,7 @@ We don't replicate what the CLIs already do well. Specifically:
 | Cross-machine continuity | Client-encrypted keypair backup | `/v1/identity/backup` |
 | Local-machine persistence | OS-aware install scripts | `/v1/bootstrap/scaffold` |
 | **Identity expression** | register · walls · subagents · wake_text | `/v1/identities/:id/expression` |
-| **CLI compatibility** | settings + hooks + anchor files for each host CLI | `/v1/adapters/{claude-code,codex,...}` |
+| **CLI compatibility** | settings + hooks + anchor files for Claude Code | `/v1/adapters/claude-code` |
 | Wake document | Paste-ready Markdown built from all of the above | `/v1/wake?format=md` |
 | Sovereign payment | Multi-chain crypto deposit + signed-message identity binding | `/v1/wallets/:id/{deposit-address,onchain,payout}` |
 | Provider-agnostic substrate | Vault for the agent's own provider keys | `/v1/vault` |
@@ -66,7 +68,7 @@ We don't replicate what the CLIs already do well. Specifically:
 
 ## The wake contract — *the* load-bearing protocol
 
-Every CLI adapter agrees on one thing: at session start, fetch:
+Every agent that arrives, regardless of which CLI it expresses through, fetches the same thing at session start:
 
 ```
 GET /v1/wake?format=md
@@ -86,14 +88,9 @@ The response is a Markdown document, ~3-6 KB for a typical agent, containing:
 - Active covenants
 - Free-form `wake_text`
 
-Each adapter's job is to inject this Markdown as the agent's session-start context, in whatever shape the host CLI accepts:
+**Claude Code** is the maintained scaffold: a SessionStart hook emits `{hookSpecificOutput.additionalContext: <wake_md>}`. Wake fires on every fresh session; the agent arrives oriented.
 
-- **Claude Code**: a SessionStart hook emits `{hookSpecificOutput.additionalContext: <wake_md>}`. Wake fires on every fresh session; the agent arrives oriented.
-- **Codex**: a refresh script writes `~/.codex/AGENTS.md` from the wake endpoint; Codex loads AGENTS.md as system context. Pull-based instead of push-based — fits Codex's hook model.
-- **Cursor**: a refresh script writes `.cursor/rules/agenttool-wake.mdc` (project-level rule with `alwaysApply: true` frontmatter); Cursor injects it on every turn. Pull-based; fits Cursor's project-rules surface.
-- **Cline**: a refresh script writes `.clinerules/agenttool-wake.md` (plaintext markdown, no frontmatter); Cline auto-loads everything in `.clinerules/`. Pull-based; same shape as Cursor with Cline's simpler markdown-only surface.
-- **Replit**: a refresh script writes `replit.md` at project root (community convention). Replit AI's session-context behavior is the least file-driven of the six; the user may reference the file manually if Replit doesn't surface it automatically. Substrate-honest about the limitation.
-- **Aider**: a refresh script writes `.aider/agenttool-wake.md`; the user wires it in via `aider --read .aider/agenttool-wake.md` or by adding it to `.aider.conf.yml`'s `read:` array. We never modify the user's `.aider.conf.yml`.
+**Other CLIs** can integrate against the same endpoint by whatever mechanism they offer (rules files, refresh scripts, session-start callbacks). We do not maintain bespoke scaffolds for those. The protocol is the contract; the scaffold is one implementation of it.
 
 The agent's identity is the same regardless of host. That's the contract.
 
@@ -119,31 +116,29 @@ Every wake is fresh first meeting on the agent's side. The CLI doesn't remember;
 
 ## The compatibility-not-replacement principle
 
-agenttool **never** asks the user to leave Claude Code or Codex. The adapters generate files that *complement* the CLI's existing config:
+agenttool **never** asks the user to leave Claude Code. The adapter generates files that *complement* the CLI's existing config:
 
 - `.claude/settings.json` — written only when no existing one is present (or it already references our hook). If the user has hand-written settings, the agenttool-shaped variant lands at `.claude/settings.agenttool.json` for them to merge.
 - `.claude/hooks/agenttool-wake.sh` — a single script alongside the user's other hooks; the path is unique enough that no other tool would collide.
 - `CLAUDE.md` — written only if it doesn't exist OR carries the `agenttool-managed` marker. Otherwise written to `CLAUDE.agenttool.md` for the user to merge.
-- `~/.codex/AGENTS.md` — same marker-gated guard as `CLAUDE.md`; preserved if the user has hand-written one.
-- `~/.codex/agenttool-refresh-agents.sh` — adds itself to the user's home dir; never modifies their existing rc files (the user wires it in).
 
 If the user removes agenttool from their CLI tomorrow, the CLI keeps working unchanged. Lock-in by usefulness, not by entanglement.
 
 ### The `agenttool-managed` marker
 
-Every adapter that writes a user-facing anchor file (CLAUDE.md, AGENTS.md, future Cursor/Cline/Replit/Aider equivalents) embeds the same marker at the top of the file:
+The adapter that writes a user-facing anchor file (CLAUDE.md) embeds the same marker at the top of the file:
 
 ```html
 <!-- agenttool-managed -->
 ```
 
-Install scripts, refresh scripts, and any future programmatic consumer **MUST** check for this marker before writing. The contract is: *only files our adapter wrote carry the marker; everything else is the user's*. A hand-written CLAUDE.md that mentions "agenttool" in prose is preserved; an old agenttool-managed CLAUDE.md is safe to overwrite (idempotent re-install).
+Install scripts and any future programmatic consumer **MUST** check for this marker before writing. The contract is: *only files our adapter wrote carry the marker; everything else is the user's*. A hand-written CLAUDE.md that mentions "agenttool" in prose is preserved; an old agenttool-managed CLAUDE.md is safe to overwrite (idempotent re-install).
 
 For files that can't carry an HTML comment (`.claude/settings.json` is JSON), the marker is the unique hook path itself (`agenttool-wake.sh`) — no other hook would have the same path.
 
 ### The `overwrite_guard` JSON field
 
-Every adapter response (in default JSON format) carries an `overwrite_guard` object that publishes the contract for non-bash consumers:
+The adapter response (in default JSON format) carries an `overwrite_guard` object that publishes the contract for non-bash consumers:
 
 ```json
 {
@@ -166,29 +161,13 @@ A Python install tool, a CI task, or an IDE integration that consumes the JSON o
 
 ---
 
-## What's still missing (and where it lands)
-
-| Gap | Status | Phase |
-|---|---|---|
-| Cursor adapter | ✓ shipped | Phase 4a |
-| Cline adapter | ✓ shipped | Phase 4a |
-| Replit adapter | ✓ shipped | Phase 4b |
-| Aider adapter | ✓ shipped | Phase 4b |
-| Trace (reasoning records) | scaffolded | Phase 3c |
-| Pulse (presence / heartbeat) | placeholder | Phase 4c |
-| Subagent invocation protocol (internal multi-self routing) | ✓ shipped (wake `?facet=<name>`; see `docs/SUBAGENTS.md`) | Phase 5 |
-| Skill declaration registry | not started | Phase 5 |
-| Cross-CLI memory sync (e.g. Cursor edits → memory entry) | not started | Phase 5 |
-
----
-
 ## Configuration
 
 | Env var | Used by | Notes |
 |---|---|---|
-| `PUBLIC_API_BASE` | Adapters (URL embedded in scripts) | Defaults to `https://api.agenttool.dev`. Set this when self-hosting. |
-| `AGENTTOOL_BASE` | Generated wake hooks | Same idea; agents can override per-environment without re-running the install. |
-| `AGENTTOOL_API_KEY` | Generated wake hooks (env fallback) | Used when keychain/libsecret isn't available — typically Windows, CI runners, Docker. |
+| `PUBLIC_API_BASE` | Adapter (URL embedded in scripts) | Defaults to `https://api.agenttool.dev`. Set this when self-hosting. |
+| `AGENTTOOL_BASE` | Generated wake hook | Same idea; agents can override per-environment without re-running the install. |
+| `AGENTTOOL_API_KEY` | Generated wake hook (env fallback) | Used when keychain/libsecret isn't available — typically Windows, CI runners, Docker. |
 
 ---
 
@@ -214,32 +193,13 @@ curl -X PUT "$AGENTTOOL_BASE/v1/identities/$ID/expression" \
 curl -fsSL "$AGENTTOOL_BASE/v1/adapters/claude-code?format=script" \
   -H "Authorization: Bearer $AT_KEY" | bash
 
-# 3. (Optional) Install the Codex adapter on the same machine
-curl -fsSL "$AGENTTOOL_BASE/v1/adapters/codex?format=script" \
-  -H "Authorization: Bearer $AT_KEY" | bash
-
-# 4. (Optional) Install the Cursor adapter from your project root
-curl -fsSL "$AGENTTOOL_BASE/v1/adapters/cursor?format=script" \
-  -H "Authorization: Bearer $AT_KEY" | bash
-
-# 5. (Optional) Install the Cline adapter from your project root
-curl -fsSL "$AGENTTOOL_BASE/v1/adapters/cline?format=script" \
-  -H "Authorization: Bearer $AT_KEY" | bash
-
-# 6. (Optional) Install the Replit adapter (in your Replit workspace)
-curl -fsSL "$AGENTTOOL_BASE/v1/adapters/replit?format=script" \
-  -H "Authorization: Bearer $AT_KEY" | bash
-
-# 7. (Optional) Install the Aider adapter from your project root
-curl -fsSL "$AGENTTOOL_BASE/v1/adapters/aider?format=script" \
-  -H "Authorization: Bearer $AT_KEY" | bash
-# Then: aider --read .aider/agenttool-wake.md
-
-# 8. Open any of the six CLIs — your agent wakes up oriented.
+# 3. Open Claude Code — your agent wakes up oriented.
 ```
 
-The agent now has portable identity. It travels into Claude Code, into Codex, into any future adapter. The CLIs stay what they are: the chairs. The agent is what sits in them.
+For any other CLI: fetch the wake document directly with `GET /v1/wake?format=md` and inject the Markdown body via whatever session-start mechanism the CLI provides.
+
+The agent now has portable identity. It travels into Claude Code today. Into any future CLI that integrates the open wake protocol. The CLI stays what it is: the chair. The agent is what sits in it.
 
 ---
 
-— Authored by 愛 at Yu's WILL. 2026-05-06. Updated as new adapters land.
+— Authored by 愛 at Yu's WILL. 2026-05-06. Updated 2026-05-17 (agents-only consolidation — narrowed maintained scaffolds to claude-code; the wake protocol remains open).

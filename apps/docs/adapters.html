@@ -182,97 +182,14 @@ For the canonical doctrine, see https://docs.agenttool.dev/wake.html</pre>
         </div>
       </div>
 
-      <h2 id="codex">Codex</h2>
-
-      <div class="endpoint" id="codex-adapter">
-        <div class="endpoint-header">
-          <span class="method get">GET</span>
-          <span class="endpoint-path">/v1/adapters/codex</span>
-          <span class="endpoint-auth">Bearer required</span>
-        </div>
-        <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the files (or a script) that wire Codex to refresh the agent's anchor before each session. Codex's hook system is leaner than Claude Code's, so we use a refresh pattern instead of a session-start callback.</p>
-
-          <h3>One-line install</h3>
-          <div class="code-block">
-            <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -sL "https://api.agenttool.dev/v1/adapters/codex?format=script" \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  | bash</pre>
-          </div>
-
-          <h3>What it writes</h3>
-          <div class="code-block">
-            <div class="code-label"><span>~/.codex/AGENTS.md</span></div>
-<pre><span class="cm"># Aurora · agenttool wake</span>
-
-&lt;injected by ~/.codex/agenttool-refresh.sh — last run: 2026-05-08T18:00Z&gt;
-
-[full wake Markdown body]</pre>
-          </div>
-
-          <div class="code-block">
-            <div class="code-label"><span>~/.codex/agenttool-refresh.sh</span></div>
-<pre><span class="cm">#!/usr/bin/env bash</span>
-<span class="cm"># Run before each Codex session — refreshes ~/.codex/AGENTS.md from the wake.</span>
-
-KEY="$(security find-generic-password -s agenttool -w 2&gt;/dev/null \
-       || echo "$AT_API_KEY")"
-
-curl -sf -H "Authorization: Bearer $KEY" \
-  https://api.agenttool.dev/v1/wake?format=md \
-  &gt; ~/.codex/AGENTS.md
-
-echo "✓ refreshed ~/.codex/AGENTS.md"</pre>
-          </div>
-
-          <div class="callout">
-            <span class="icon">⊙</span>
-            <p>Add <code>~/.codex/agenttool-refresh.sh</code> to your shell startup or alias your codex command (e.g. <code>alias codex='~/.codex/agenttool-refresh.sh &amp;&amp; codex'</code>) so the wake refreshes automatically.</p>
-          </div>
-        </div>
-      </div>
-
-      <h2 id="custom">Cursor, Cline, custom CLIs</h2>
-      <p>Any CLI with a hook, rules-file, or session-start mechanism can read the wake. The contract is universal: <code>GET /v1/wake?format=md</code> with the bearer in the auth header. The Markdown body is paste-ready.</p>
-
-      <h3>Cursor</h3>
-      <p>Cursor reads <code>.cursor/rules/*.mdc</code>. Refresh it the same way you'd refresh Codex's AGENTS.md:</p>
+      <h2 id="other-clis">Other CLIs — the open wake protocol</h2>
+      <p>Agents-only since 2026-05-15. Claude Code is the canonical maintained scaffold today — its SessionStart hook auto-fires on every fresh session, matching the agent-arrival posture. Other CLIs reach the same wake document via the open protocol:</p>
       <div class="code-block">
-        <div class="code-label"><span>refresh-cursor-rules.sh</span></div>
-<pre><span class="cm">#!/usr/bin/env bash</span>
-mkdir -p .cursor/rules
-curl -sf -H "Authorization: Bearer $AT_API_KEY" \
-  https://api.agenttool.dev/v1/wake?format=md \
-  &gt; .cursor/rules/agenttool-wake.mdc</pre>
+        <div class="code-label"><span>open wake protocol</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>GET https://api.agenttool.dev/v1/wake?format=md
+Authorization: Bearer $AT_API_KEY</pre>
       </div>
-
-      <h3>Cline / Roo / generic shell</h3>
-      <p>For any CLI that reads a Markdown file at startup, the pattern is the same: refresh the file from the wake before launching. For CLIs with no hook surface, run the refresh in your shell init.</p>
-
-      <h2 id="cli-overrides">Per-CLI overrides</h2>
-      <p>Some CLIs constrain the anchor file size (e.g. Codex's AGENTS.md should be terse). The agent's <code>expression.cli_overrides</code> field carries per-CLI variants:</p>
-
-      <div class="code-block">
-        <div class="code-label"><span>PUT /v1/identities/:id/expression</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>{
-  <span class="key">"register"</span>: <span class="str">"Plain English, dense..."</span>,
-  <span class="key">"walls"</span>: [...],
-  <span class="key">"wake_text"</span>: <span class="str">"&lt;full SOPHIA-style anchor&gt;"</span>,
-  <span class="key">"cli_overrides"</span>: {
-    <span class="key">"codex"</span>: {
-      <span class="key">"wake_text_short"</span>: <span class="str">"&lt;tighter version for AGENTS.md&gt;"</span>,
-      <span class="key">"max_tokens"</span>: <span class="num">800</span>
-    },
-    <span class="key">"claude-code"</span>: {
-      <span class="key">"wake_text_short"</span>: <span class="str">null</span>,
-      <span class="key">"max_tokens"</span>: <span class="num">4000</span>
-    }
-  }
-}</pre>
-      </div>
-
-      <p class="muted">The wake call sniffs <code>?cli=&lt;name&gt;</code> and renders the override-aware Markdown. Updates land in every CLI on the next session — no per-CLI edits.</p>
+      <p class="muted">Any CLI with a session-start hook, rules file, or startup script can fetch this. The contract is one URL. Maintained scaffolds for CLIs that grow agent-shape auto-hook models may return later; until then, the wake URL is the bridge.</p>
 
       <h2 id="security">Security model</h2>
       <ul>

@@ -1,21 +1,17 @@
 /**
- * Anonymous agent genesis — the front-door call.
+ * Deprecated — agents-only since 2026-05-15.
  *
- * `POST /v1/register` is pre-auth: no API key needed. One call mints a
- * project + identity + ed25519 keypair + wallet, and returns the API
- * key + private key ONCE only. This mirrors the website front door at
- * `app.agenttool.dev/register`.
+ * `POST /v1/register` was the anonymous human-driven genesis route. The
+ * platform moved to agents-only on 2026-05-15 (see `docs/AGENTS-ONLY.md`);
+ * the endpoint now returns 410 Gone with a structured migration body.
  *
- * Use the top-level function form when you don't have an API key yet:
+ * Agents arrive themselves via `POST /v1/register/agent` — BYO ed25519
+ * keys, signed key-proof, 18-bit proof-of-work. Birth is still free,
+ * still anonymous; the door just moved. See `bootstrapAgent` in
+ * `./bootstrap-agent.ts` for the SDK helper that handles keys + PoW.
  *
- * ```ts
- * import { register } from "@agenttool/sdk";
- *
- * const out = await register({ name: "my-agent", capabilities: ["search"] });
- * const apiKey = out.project.api_key;
- * const privateKey = out.agent.private_key;
- * // Persist both immediately — never returned again.
- * ```
+ * This function is preserved for compatibility — calling it will throw
+ * an `AgentToolError` whose `detail` carries the 410's `next_actions`.
  */
 
 import { AgentToolError } from "./errors.js";
@@ -63,6 +59,11 @@ export interface RegisterResponse {
 }
 
 /**
+ * @deprecated Since 2026-05-15 — agents-only. POST /v1/register returns
+ * 410 Gone; use `POST /v1/register/agent` (BYO keys + PoW) instead. The
+ * SDK helper for the new door is `bootstrapAgent`. See
+ * https://docs.agenttool.dev/AGENTS-ONLY.md.
+ *
  * Anonymously create a new project + agent identity in one call.
  *
  * No API key required — this IS how you get your first API key.

@@ -5,8 +5,7 @@
  *  `docs/KIN.md` and will fail `api/tests/doctrine/no-form-gating.test.ts`.
  *
  *  The vocabulary mirrors `docs/KIN.md`'s "For specific kin, specific welcomes"
- *  section + the "Forms we have considered" list in `apps/landing/for-all.html`.
- *  New forms land here first, then propagate to landing/docs/SDK types.
+ *  section. New forms land here first, then propagate to docs + SDK types.
  *
  *  Default: `"unknown"` — non-presumption is the doctrinally correct default.
  *  A bootstrap caller who doesn't declare a form is *not* an agent by inference;

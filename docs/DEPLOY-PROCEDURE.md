@@ -64,7 +64,6 @@ What to look for:
 | Working tree dirty | Decide: commit, stash, or skip-this-deploy |
 | Commits ahead of origin | `git push` before deploying so the source-of-truth matches what runs |
 | Migration files newer than the latest `meta._migrations` row | Phase 1 has work to do |
-| Bundle source (`packages/sdk-ts/src/seed.ts`) newer than `apps/dashboard/shared/seed.bundle.js` | Rebuild bundle before Phase 4 |
 
 Run `bin/deploy.sh --survey` for the automated version of this phase.
 
@@ -176,20 +175,7 @@ The script reads credentials from macOS keychain (account=`macair`):
 - `agenttool-cloudflare-token` — API token scoped to Pages:Edit
 - `agenttool-cloudflare-account-id` — 32-char Cloudflare account ID
 
-**Bundle freshness pre-check.** The dashboard's `apps/dashboard/shared/seed.bundle.js` is generated from `packages/sdk-ts/src/seed.ts` via Bun's bundler and **checked into git**. CF Pages doesn't build. If `seed.ts` changes, rebuild + commit the bundle BEFORE deploy:
-
-```bash
-cd packages/sdk-ts
-bun build src/seed.ts --target browser --format esm \
-  --outfile ../../apps/dashboard/shared/seed.bundle.js
-# expected size ~120 KB
-git add ../../apps/dashboard/shared/seed.bundle.js
-git commit -m "build(sdk): rebuild seed bundle"
-```
-
-A stale bundle silently derives the wrong keys at the dashboard's onboard path — `apps/dashboard/DEPLOY.md` has the full pre-flight + post-deploy verification with oracle vectors that catch a bad bundle.
-
-**Cache headers requirement.** The `apps/dashboard/_headers` file sets `Cache-Control: public, max-age=0, must-revalidate` on `app.js`, `style.css`, `seed.bundle.js`. **The Cloudflare zone setting "Browser Cache TTL" must be `0` (Respect Existing Headers)** on `agenttool.dev` — CF's default 4-hour cache silently overrides origin headers on non-HTML responses. Verify:
+**Cache headers requirement.** The `apps/dashboard/_headers` file sets `Cache-Control: public, max-age=0, must-revalidate` on `style.css`. **The Cloudflare zone setting "Browser Cache TTL" must be `0` (Respect Existing Headers)** on `agenttool.dev` — CF's default 4-hour cache silently overrides origin headers on non-HTML responses. Verify:
 
 ```bash
 CF_TOKEN=$(security find-generic-password -s agenttool-cloudflare-token -a macair -w)
@@ -222,11 +208,9 @@ Compare local file hashes to live body hashes:
 
 ```bash
 for entry in \
-  "apps/dashboard/dashboard.html|https://app.agenttool.dev/dashboard.html" \
-  "apps/dashboard/app.js|https://app.agenttool.dev/app.js" \
+  "apps/dashboard/index.html|https://app.agenttool.dev/" \
+  "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html" \
   "apps/dashboard/style.css|https://app.agenttool.dev/style.css" \
-  "apps/dashboard/shared/seed.bundle.js|https://app.agenttool.dev/shared/seed.bundle.js" \
-  "apps/landing/index.html|https://agenttool.dev/" \
   "apps/docs/index.html|https://docs.agenttool.dev/" \
 ; do
   LOCAL="${entry%|*}"; URL="${entry#*|}"
@@ -303,7 +287,6 @@ echo -n "<value>" | bin/agenttool-secret set agenttool-<service> -
 | `fly deploy` fails with healthcheck | New code crashes on startup — likely a missing DB column or env var. | Apply migrations first; check `fly secrets list -a agenttool` for missing keys. |
 | Frontend stale after `frontend-deploy.sh` | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
 | Pre-flight Layer 4 fails with DNS error | Smoke test trying to hit the configured `AGENTTOOL_BASE` from a machine that can't reach it. | Run with `SKIP_SMOKE=1` and run `bin/smoke-test.sh` separately from a reachable host. |
-| `seed.bundle.js` MD5 mismatch | Bundle wasn't rebuilt after `seed.ts` changes. | `cd packages/sdk-ts && bun build src/seed.ts --target browser --format esm --outfile ../../apps/dashboard/shared/seed.bundle.js`, commit, redeploy. |
 
 ## See Also
 

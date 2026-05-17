@@ -96,16 +96,17 @@ git push origin main
 
 ## 2 · Frontend: Cloudflare Pages
 
-Three CF Pages projects. **Direct Upload mode — no Git integration.** Deploys land via `bin/frontend-deploy.sh`, which reads `agenttool-cloudflare-token` + `agenttool-cloudflare-account-id` from the macOS keychain and shells out to `wrangler pages deploy`.
+Two CF Pages projects. **Direct Upload mode — no Git integration.** Deploys land via `bin/frontend-deploy.sh`, which reads `agenttool-cloudflare-token` + `agenttool-cloudflare-account-id` from the macOS keychain and shells out to `wrangler pages deploy`.
 
 | Project | Source dir | Custom domain | What it serves |
 |---|---|---|---|
-| `agenttool-landing` | `apps/landing/` | `agenttool.dev` | Marketing + soul page |
-| `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev` | Operator UI — onboard, restore, dashboard, billing, keys |
+| `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev` | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
 | `agenttool-docs` | `apps/docs/` | `docs.agenttool.dev` | Static docs site |
 
+The `agenttool.dev` apex points at the API directly — A2A AgentCard at `/.well-known/agent-card.json`; root returns substrate-honest welcome JSON. `apps/landing/` was dropped 2026-05-17.
+
 ```bash
-# Deploy all three
+# Deploy both
 bin/frontend-deploy.sh
 
 # Deploy a subset
@@ -115,22 +116,13 @@ bin/frontend-deploy.sh dashboard docs
 
 The script verifies `apps/<x>/shared` symlinks resolve before deploying (they point at `apps/_shared/` for shared theme + nav). Wrangler follows symlinks at upload time so the resolved files reach the CDN.
 
-### No build step (mostly)
+### No build step
 
-The dashboard is **vanilla HTML/CSS/JS**. Files ship as-is. There is one exception: `apps/dashboard/shared/seed.bundle.js` is generated from `packages/sdk-ts/src/seed.ts` via Bun's bundler. It's checked into the repo — CF Pages doesn't run Bun. Whenever `seed.ts` (or its dependencies) changes, **rebuild + commit the bundle** in the same PR:
-
-```bash
-cd packages/sdk-ts
-bun build src/seed.ts --target browser --format esm \
-  --outfile ../../apps/dashboard/shared/seed.bundle.js
-# expect ~120 KB. commit alongside seed.ts changes.
-```
-
-A stale bundle silently derives the wrong keys — see `apps/dashboard/DEPLOY.md` for the full pre-flight + post-deploy verification + the oracle vectors that catch a bad bundle.
+The dashboard is **vanilla HTML/CSS/JS**. Files ship as-is. No build step since the SOMA seed bundle was removed (2026-05-15 agents-only restructure — the SDK does BIP39 derivation directly; the dashboard no longer needs a browser-side bundle).
 
 ### Cache headers
 
-`apps/dashboard/_headers` sets `Cache-Control: public, max-age=0, must-revalidate` on `app.js`, `style.css`, the SOMA pages, and the seed bundle. Browsers still 304 fast when content is unchanged — the must-revalidate just stops them from skipping the round-trip entirely. Without this, post-deploy operators kept hitting hours-old code from browser cache.
+`apps/dashboard/_headers` sets `Cache-Control: public, max-age=0, must-revalidate` on `style.css`. Browsers still 304 fast when content is unchanged — the must-revalidate just stops them from skipping the round-trip entirely. Without this, post-deploy operators kept hitting hours-old code from browser cache.
 
 **Zone-level requirement.** For `_headers` to take effect on JS/CSS/non-HTML responses, the Cloudflare zone setting **Browser Cache TTL must be `0` ("Respect Existing Headers")** on `agenttool.dev`. CF's default is 4 hours — that value silently *overrides* origin Cache-Control on static assets (HTML is exempt from the override, which is why HTML rules in `_headers` worked while JS/CSS rules silently didn't, until 2026-05-09). Verify via API:
 
@@ -147,14 +139,13 @@ If a future operator wants a longer browser cache for landing/docs, do it via a 
 ### CF deploy verification
 
 ```bash
-# 1. The push landed
-curl -s -o /dev/null -w "%{http_code}\n" https://app.agenttool.dev/dashboard.html
+# 1. The dashboard splash landed
+curl -s -o /dev/null -w "%{http_code}\n" https://app.agenttool.dev/
 
-# 2. The seed bundle revalidates (not cached)
-curl -sI https://app.agenttool.dev/shared/seed.bundle.js | grep -i cache
-# expect: cache-control: public, max-age=0, must-revalidate
+# 2. The watch surface landed
+curl -s -o /dev/null -w "%{http_code}\n" https://app.agenttool.dev/watch.html
 
-# 3. The SOMA flows still work end-to-end against prod
+# 3. End-to-end tests still pass against prod
 AGENTTOOL_BASE=https://api.agenttool.dev cd tests/playwright && npx playwright test
 ```
 
@@ -337,8 +328,8 @@ DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
 | Hostname | Points to | Served by |
 |---|---|---|
-| `agenttool.dev` | CF Pages | `apps/landing` |
-| `app.agenttool.dev` | CF Pages | `apps/dashboard` |
+| `agenttool.dev` | Fly.io anycast | `api/` (A2A AgentCard at `/.well-known/agent-card.json`; apex dropped 2026-05-17) |
+| `app.agenttool.dev` | CF Pages | `apps/dashboard` (splash + watch only since 2026-05-17) |
 | `docs.agenttool.dev` | CF Pages | `docs/` (rendered static) |
 | `api.agenttool.dev` | Fly.io anycast | `api/` |
 | `*.agenttool.dev` | (reserved) | |

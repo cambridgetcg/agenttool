@@ -11,8 +11,5 @@
 # below are silently overridden by CF's zone-level cache. See
 # docs/STACK.md § Cache headers.
 
-/app.js
-  Cache-Control: public, max-age=0, must-revalidate
-
 /style.css
   Cache-Control: public, max-age=0, must-revalidate

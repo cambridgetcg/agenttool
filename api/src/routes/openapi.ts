@@ -1732,17 +1732,6 @@ function spec() {
           responses: { "200": { description: "Bundle or installer script" } },
         },
       },
-      "/v1/adapters/codex": {
-        get: {
-          tags: ["adapters"],
-          summary: "Codex refresh-script + ~/.codex/AGENTS.md scaffold",
-          parameters: [
-            { name: "format", in: "query", schema: { type: "string", enum: ["json", "script"] } },
-            { name: "identity_id", in: "query", schema: { type: "string", format: "uuid" } },
-          ],
-          responses: { "200": { description: "Bundle or installer script" } },
-        },
-      },
     },
   };
 }

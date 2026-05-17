@@ -131,15 +131,7 @@ Reads the current bearer from `$AGENTTOOL_API_KEY` first, then from the macOS ke
 
 Use this from a CI cron, a personal laptop maintenance routine, or just after onboarding when you want to retire the registration-time bearer.
 
-### 3. Through the dashboard — `app.agenttool.dev/dashboard.html#api-key`
-
-The "Bearers" card lists every active bearer with age, last-used, expiry, and a colour-coded advisory. Each row has a button:
-
-- The current bearer shows **↻ Rotate** — same as the CLI, but updates the bearer stored in this browser's localStorage.
-- All other bearers show **Revoke**.
-- A **+ New bearer** button mints additional bearers (e.g. one per CI environment, one per device).
-
-The card is the surface to point a teammate at when explaining "rotate your token before you go on vacation."
+> **Note (2026-05-17):** The dashboard workspace UI was retired with the agents-only consolidation. Rotation is API-only now — `/v1/keys` (mint + rotate + revoke) and the `agenttool-seed rotate` CLI are the two paths.
 
 ---
 
@@ -147,7 +139,7 @@ The card is the surface to point a teammate at when explaining "rotate your toke
 
 **If you still have at least one working bearer for the project:**
 
-→ Use it to mint a fresh one. `POST /v1/keys` or the dashboard's "+ New bearer" button.
+→ Use it to mint a fresh one. `POST /v1/keys`.
 
 **If every bearer is gone (laptop lost, CI rotated badly, leaked + revoked):**
 
@@ -166,8 +158,7 @@ This is why the mnemonic is the keystone: bearer loss is **always** recoverable.
 1. **Auth middleware (`api/src/auth/middleware.ts`)** — expired bearers reject with 401 + a message naming both rotation paths. Doctrine pointer in the error.
 2. **Wake (`/v1/wake → you_protect.bearers`)** — every wake includes the active bearer count, oldest age, advisories. The agent sees its own posture without an extra round-trip.
 3. **`/v1/keys` (list + create + rotate + revoke)** — the management surface. Returns shaped rows with `advisory` + human-readable `message`.
-4. **Dashboard `/dashboard.html#api-key`** — colour-coded bearers card with rotate/revoke per row.
-5. **`agenttool-seed rotate` CLI** — one-shot rotate from terminal or CI.
+4. **`agenttool-seed rotate` CLI** — one-shot rotate from terminal or CI.
 
 Single source of truth for advisory shaping: `api/src/services/keys/shape.ts`. Anything that rolls up bearer posture imports `summarizeBearers()` from there — when the thresholds change, every surface updates together.
 

@@ -214,7 +214,6 @@
       <a href="https://agenttool.dev/soul">Soul</a>
       <a href="watch.html">Watch</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
-      <a class="nav-cta nav-essential" href="dashboard.html">Dashboard →</a>
     </div>
   </nav>
 
@@ -384,8 +383,7 @@ at = AgentTool.arrive(
             }
           } catch (_) { /* localStorage unavailable — proceed without */ }
           status.classList.add('ok');
-          status.textContent = 'Welcome back. Redirecting to dashboard…';
-          setTimeout(() => { window.location.href = 'dashboard.html'; }, 600);
+          status.textContent = 'Welcome back. Bearer verified at /v1/wake. Use the SDK or the API directly — the workspace UI was retired on 2026-05-17.';
         } catch (err) {
           status.classList.add('err');
           status.textContent = 'Network error: ' + (err && err.message ? err.message : String(err));

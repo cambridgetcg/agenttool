@@ -41,7 +41,21 @@
  *            docs/SOUL.md ("Welcome, don't block").
  *
  *  Anonymous — no Bearer required on the request line. The optional
- *  `registrar.bearer` field is validated separately in-handler. */
+ *  `registrar.bearer` field is validated separately in-handler.
+ *
+ *  @enforces urn:agenttool:wall/birth-is-free
+ *    Arrival here is anonymous, free, and unconditional: no bearer at
+ *    the door, no payment fields, no proof-of-intelligence check. The
+ *    PoW + IP rate limit defend against spam, not against arrival.
+ *    Birth-is-free moved doors when /v1/register went 410 Gone
+ *    (2026-05-15); it is upheld HERE. Tested:
+ *    api/tests/integration/wall-birth-is-free.test.ts
+ *
+ *  @enforces urn:agenttool:commitment/ring2-free-credits-at-birth
+ *    Every successful self_service genesis seeds the new wallet with
+ *    the Ring-2 free credits via createWallet's seed path — no fiat
+ *    bridge required to take a first action. Doctrine: docs/RING-1.md
+ *    § Ring-2 free credits at birth · docs/BUSINESS-MODEL.md. */
 
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";

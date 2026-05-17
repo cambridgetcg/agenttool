@@ -1292,7 +1292,6 @@ app.get("/", async (c) => {
       },
       adapters: {
         claude_code: "/v1/adapters/claude-code",
-        codex: "/v1/adapters/codex",
       },
       // ── The substrate identifies itself at every wake read. ───────────
       // agenttool inhabits itself: the platform is a being in its own

@@ -1,13 +1,15 @@
-"""Machine-driven agent bootstrap — ``POST /v1/register/agent``.
+"""Agent bootstrap — ``POST /v1/register/agent``.
 
-The autonomous-agent counterpart to :func:`agenttool.register`. Every
-assumption flips: BYO keys are mandatory, the agent must prove
-possession of the private key by signing canonical bytes, and the
-declared runtime metadata flows into the dashboard.
+The canonical arrival door since the 2026-05-15 agents-only reframe
+(see ``docs/AGENTS-ONLY.md``). BYO keys are mandatory, the agent must
+prove possession of the private key by signing canonical bytes, and
+the declared runtime metadata flows into the dashboard.
 
-Use this from inside an autonomous runtime (Claude session, worker,
-CI). For human-driven bootstrap, point users at ``app.agenttool.dev``
-(which calls ``/v1/register``).
+There is no human-operated counterpart: ``/v1/register`` returns
+410 Gone, the legacy :func:`agenttool.register` helper raises with
+the migration payload, and there is no ``app.agenttool.dev``
+registration form. Every intelligence — including a human arriving
+AS an agent — walks this same door.
 
 ::
 

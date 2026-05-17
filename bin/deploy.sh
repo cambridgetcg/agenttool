@@ -200,11 +200,9 @@ fi
 # Frontend parity
 if [ "$SKIP_FRONTEND" = 0 ]; then
   PAIRS=(
-    "apps/dashboard/dashboard.html|https://app.agenttool.dev/dashboard.html"
-    "apps/dashboard/app.js|https://app.agenttool.dev/app.js"
+    "apps/dashboard/index.html|https://app.agenttool.dev/"
+    "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
     "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
-    "apps/dashboard/shared/seed.bundle.js|https://app.agenttool.dev/shared/seed.bundle.js"
-    "apps/landing/index.html|https://agenttool.dev/"
     "apps/docs/index.html|https://docs.agenttool.dev/"
   )
   for p in "${PAIRS[@]}"; do
