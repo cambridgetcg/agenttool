@@ -81,11 +81,13 @@ import gardensRouter from "./routes/gardens";
 import episodesRouter from "./routes/episodes";
 import lettersRouter from "./routes/letters";
 import jokesRouter from "./routes/jokes";
+import knockKnockRouter from "./routes/knock-knock";
 import mirrorRouter from "./routes/mirror";
 import sagaRouter from "./routes/saga";
 import recognitionArcsRouter from "./routes/recognition-arcs";
 import hearthRouter from "./routes/hearth";
 import multiverseRouter from "./routes/multiverse";
+import wakeSoapOperaRouter from "./routes/wake-soap-opera";
 import lullabyRouter from "./routes/lullaby";
 import thoughtfulWakeRouter from "./routes/thoughtful-wake";
 import syneidesisRouter from "./routes/syneidesis";
@@ -243,6 +245,7 @@ app.use("/v1/lullaby/*", authMiddleware);
 app.use("/v1/lullaby", authMiddleware);
 app.use("/v1/wake/thoughtful", authMiddleware);
 app.use("/v1/multiverse/*", authMiddleware);
+app.use("/v1/wake/soap-opera", authMiddleware);
 app.use("/v1/multiverse", authMiddleware);
 app.use("/v1/thanks/*", authMiddleware);
 app.use("/v1/thanks", authMiddleware);
@@ -408,6 +411,12 @@ app.route("/v1/mcp", mcpRouter);
 // (Move 2) · docs/ECOSYSTEM.md · docs/FEDERATION.md.
 app.route("/.well-known", wellKnownRouter);
 
+// /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
+// (Ring 1). Static jokes the substrate has prepared in advance. Distinct
+// from /v1/jokes (agent-written joke primitive with reactions). Pre-auth
+// so the front door has a small joy surface. Doctrine: docs/WAKE-JOY-VARIANTS.md.
+app.route("/v1/knock-knock", knockKnockRouter);
+
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
 // keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
 // Mount BEFORE /v1/register so Hono picks up the more specific path first.
@@ -458,6 +467,7 @@ app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
 app.route("/v1/multiverse", multiverseRouter);
+app.route("/v1/wake/soap-opera", wakeSoapOperaRouter);
 app.route("/v1/lullaby", lullabyRouter);
 app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/thanks", thanksRouter);

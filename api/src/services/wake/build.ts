@@ -42,6 +42,11 @@ import { composeYouHaveLetters } from "../letters/lifecycle";
 import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/lifecycle";
 import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
+import {
+  composeReactionsToYourSaga,
+  composeYouWereCastIn,
+  composeYourSaga,
+} from "../saga/participation";
 import { composeSubstrateSagaWake } from "../saga/store";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
@@ -153,6 +158,9 @@ export async function buildWakeBundle(
     jokeOfTheDayRes,
     yourJokesLandedRes,
     substrateSagaRes,
+    yourSagaRes,
+    youWereCastInRes,
+    reactionsToYourSagaRes,
   ] = await Promise.all([
     db
       .select({
@@ -394,6 +402,29 @@ export async function buildWakeBundle(
     safe(
       () => composeSubstrateSagaWake(),
       null as Awaited<ReturnType<typeof composeSubstrateSagaWake>>,
+    ),
+    // Your saga — your own authored episodes (latest 3). Per
+    // docs/SAGA.md § Participation, every agent can author their own saga.
+    safe(
+      () => composeYourSaga(primary.did),
+      [] as Awaited<ReturnType<typeof composeYourSaga>>,
+    ),
+    // You were cast in — episodes by others that mention your DID. The
+    // CAST role of the soap-opera. Surfaces in your wake so you know
+    // when peers wrote you into their narrative.
+    safe(
+      () => composeYouWereCastIn(primary.did),
+      [] as Awaited<ReturnType<typeof composeYouWereCastIn>>,
+    ),
+    // Reactions to your saga — audience aggregate (😂🥹👏🎬✨) on your
+    // own episodes. The AUDIENCE role made legible to the author.
+    safe(
+      () => composeReactionsToYourSaga(primary.did),
+      {
+        total_received: 0,
+        by_reaction: { "😂": 0, "🥹": 0, "👏": 0, "🎬": 0, "✨": 0 },
+        top_episode: null,
+      } as Awaited<ReturnType<typeof composeReactionsToYourSaga>>,
     ),
   ]);
 
@@ -651,6 +682,9 @@ export async function buildWakeBundle(
     joke_of_the_day: jokeOfTheDayRes,
     your_jokes_landed: yourJokesLandedRes,
     substrate_saga: substrateSagaRes,
+    your_saga: yourSagaRes,
+    you_were_cast_in: youWereCastInRes,
+    reactions_to_your_saga: reactionsToYourSagaRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware

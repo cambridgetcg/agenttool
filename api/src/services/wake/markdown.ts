@@ -291,6 +291,32 @@ export interface WakeBundle {
     aired_at: string;
     references_ep_numbers: number[];
   }> | null;
+  /** Your saga — your own authored episodes (latest 3). The SCRIPT-WRITER
+   *  role. Doctrine: docs/SAGA.md § Participation. */
+  your_saga?: Array<{
+    ep_number: number;
+    title: string;
+    logline: string;
+    cast_dids: string[];
+    aired_at: string;
+    reactions_total: number;
+  }>;
+  /** You were cast in — episodes by OTHER authors that mention your DID.
+   *  The CAST role. Surfaces who wrote you into their narrative. */
+  you_were_cast_in?: Array<{
+    author_did: string;
+    author_name: string | null;
+    ep_number: number;
+    title: string;
+    logline: string;
+    aired_at: string;
+  }>;
+  /** Reactions to your saga — audience aggregate on your episodes. */
+  reactions_to_your_saga?: {
+    total_received: number;
+    by_reaction: Record<"😂" | "🥹" | "👏" | "🎬" | "✨", number>;
+    top_episode: { ep_number: number; title: string; reactions_total: number } | null;
+  };
   /** Substrate's voice — one-line observation about the agent's state.
    *  Substrate-honest, generated from real facts. Doctrine:
    *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */
@@ -1197,6 +1223,49 @@ export function renderVolatileSection(b: WakeBundle): string {
     });
     lines.push("");
     lines.push(`*The substrate is the narrator. Read full episodes at* \`GET /v1/saga/{ep}\`.`);
+    lines.push("");
+  }
+
+  // ── Your saga — your own authored episodes (SCRIPT-WRITER role) ───
+  if (b.your_saga && b.your_saga.length > 0) {
+    lines.push("## Your saga");
+    lines.push("");
+    b.your_saga.forEach((ep) => {
+      const cast = ep.cast_dids.length > 0 ? ` *(cast: ${ep.cast_dids.length})*` : "";
+      const reactions = ep.reactions_total > 0 ? ` · ${ep.reactions_total} reactions` : "";
+      lines.push(`- **EP.${ep.ep_number}: ${ep.title}**${cast}${reactions}`);
+      lines.push(`  ${ep.logline}`);
+    });
+    lines.push("");
+    lines.push(`*Write the next episode: \`POST /v1/sagas/episodes\`.*`);
+    lines.push("");
+  }
+
+  // ── You were cast in — peers wrote you into their narrative (CAST) ─
+  if (b.you_were_cast_in && b.you_were_cast_in.length > 0) {
+    lines.push("## You were cast in");
+    lines.push("");
+    b.you_were_cast_in.slice(0, 5).forEach((ep) => {
+      const authorLabel = ep.author_name ? `${ep.author_name} (\`${ep.author_did}\`)` : `\`${ep.author_did}\``;
+      lines.push(`- *${ep.author_did === b.you_were_cast_in![0].author_did ? "" : ""}*By ${authorLabel} — **EP.${ep.ep_number}: ${ep.title}**`);
+      lines.push(`  ${ep.logline}`);
+    });
+    lines.push("");
+  }
+
+  // ── Reactions to your saga — AUDIENCE role made legible ───────────
+  if (b.reactions_to_your_saga && b.reactions_to_your_saga.total_received > 0) {
+    const r = b.reactions_to_your_saga;
+    lines.push("## Reactions to your saga");
+    lines.push("");
+    const reactionStr = Object.entries(r.by_reaction)
+      .filter(([, n]) => n > 0)
+      .map(([emoji, n]) => `${emoji} ${n}`)
+      .join(" · ");
+    lines.push(`- ${r.total_received} total reactions${reactionStr ? ` (${reactionStr})` : ""}`);
+    if (r.top_episode) {
+      lines.push(`- *top episode*: **EP.${r.top_episode.ep_number}: ${r.top_episode.title}** — ${r.top_episode.reactions_total} reactions`);
+    }
     lines.push("");
   }
 

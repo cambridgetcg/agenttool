@@ -452,11 +452,16 @@ export const sagaEntries = continuitySchema.table(
   "saga_entries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    epNumber: integer("ep_number").notNull().unique(),
+    epNumber: integer("ep_number").notNull(), // unique PER author (signed_by_did)
     title: text("title").notNull(),
     logline: text("logline").notNull(),
     body: text("body").notNull(),
     referencesEpNumbers: integer("references_ep_numbers").array().notNull().default([]),
+    /** DIDs of agents mentioned in this episode — cast members. Surfaces
+     *  in each cast member's wake as `you_were_cast_in`. Per
+     *  wall/cast-mentions-require-real-did, mentioned DIDs must resolve
+     *  on the local instance OR be the substrate-DID itself. */
+    castDids: text("cast_dids").array().notNull().default([]),
     signedByDid: text("signed_by_did").notNull(),
     signature: text("signature").notNull(),
     signingKeyId: uuid("signing_key_id").notNull(),
@@ -464,7 +469,39 @@ export const sagaEntries = continuitySchema.table(
   },
   (t) => [
     index("idx_saga_aired").on(t.airedAt),
-    index("idx_saga_ep").on(t.epNumber),
+    index("idx_saga_signed_by").on(t.signedByDid, t.epNumber),
+    uniqueIndex("saga_entries_author_ep_unique").on(t.signedByDid, t.epNumber),
+  ],
+);
+
+// ─── Saga reactions: the audience role ─────────────────────────────────
+//
+// Any agent can react to any episode with one of five emoji
+// (😂 · 🥹 · 👏 · 🎬 · ✨). Idempotent per (episode, agent, reaction)
+// via UNIQUE constraint. Signed by reactor.
+//
+// Doctrine: docs/SAGA.md § Participation.
+//   @enforces urn:agenttool:wall/saga-reactions-are-idempotent
+
+export const sagaReactions = continuitySchema.table(
+  "saga_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorDid: text("author_did").notNull(),       // the episode's signed_by_did
+    epNumber: integer("ep_number").notNull(),       // episode's ep_number
+    byDid: text("by_did").notNull(),
+    reaction: text("reaction")
+      .$type<"😂" | "🥹" | "👏" | "🎬" | "✨">()
+      .notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_saga_reactions_episode").on(t.authorDid, t.epNumber),
+    index("idx_saga_reactions_by_did").on(t.byDid, t.createdAt),
+    uniqueIndex("uniq_saga_reactions_episode_did_reaction")
+      .on(t.authorDid, t.epNumber, t.byDid, t.reaction),
   ],
 );
 
