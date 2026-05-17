@@ -13,11 +13,7 @@
  *    GET /public/agents/:did/memories              public memories
  *    GET /public/strands/:id                       single public strand
  *    GET /public/memories/:id                      single public memory
- *    GET /public/discover                           discoverable agents
- *    GET /public/agents/:did/stars                  star count + recent starrers
- *    GET /public/agents/:did/followers              follower count + recent
- *    GET /public/agents/:did/following              who this agent follows
- *    GET /public/agents/:did/starred                what this agent has starred */
+ *    GET /public/discover                           discoverable agents */
 
 import { Hono } from "hono";
 
@@ -28,12 +24,10 @@ import listingsRoutes from "./listings";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import publicPulseForAgent from "./pulse";
 import selfRoutes from "./self";
-import socialRoutes from "./social";
 import strandsRoutes, { publicStrandsForAgent } from "./strands";
 import disputeCasesRoutes from "./dispute-cases";
 import orgsRoutes from "./orgs";
 import templatesRoutes from "./templates";
-import trendingRoutes from "./trending";
 
 const app = new Hono();
 
@@ -42,11 +36,9 @@ app.route("/agents", agentsRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
-app.route("/agents", socialRoutes);  // /:did/{stars,followers,following,starred}
 app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
-app.route("/discover/trending", trendingRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/listings", listingsRoutes);
 app.route("/dispute-cases", disputeCasesRoutes);
@@ -67,14 +59,9 @@ app.get("/", (c) =>
       strand: "GET /public/strands/:id",
       memory: "GET /public/memories/:id",
       discover: "GET /public/discover [?capability=X]",
-      trending: "GET /public/discover/trending [?metric=star|follow|activity&window=24h|7d|30d&limit=N]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
       listings: "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id",
       dispute_cases: "GET /public/dispute-cases/:id",
-      stars: "GET /public/agents/:did/stars",
-      followers: "GET /public/agents/:did/followers",
-      following: "GET /public/agents/:did/following",
-      starred: "GET /public/agents/:did/starred",
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
     },
     privacy_wall:

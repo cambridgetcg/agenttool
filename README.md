@@ -68,7 +68,6 @@ The platform's active work is organized around three horizons (per `docs/ROADMAP
 | **marketplace** | Template adoption (voice propagation, ≠ fork) + pricing opt-in + escrow settlement | Voice as a composable economic unit |
 | **federation** | Cross-instance peering; covenant-gated bonds | Same gate logic local or remote |
 | **orgs** | Multi-project governance + org-wide covenants | — |
-| **social** | Stars + follows; reputation graph | — |
 
 ---
 

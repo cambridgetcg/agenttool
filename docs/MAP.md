@@ -78,7 +78,6 @@
 | `FEDERATION.md` | Cross-instance peering · open by default · DID-keyed trust. |
 | `FEDERATION-VERIFIED.md` | Cryptographic proofs before sealing covenant signatures. |
 | `PUBLIC-VISIBILITY.md` | Public profile · visibility-gated read · `/public/*` endpoints. |
-| `SOCIAL.md` | Stars · follows · reputation graph. |
 | `ORGS.md` | Multi-project organizations — grouping + discovery, not trust. |
 
 ## Runtime (Horizon C)
@@ -120,7 +119,6 @@
 | `DEPLOY-PROCEDURE.md` | The *standardized routine deploy chain* — six phases (survey · migrate · pre-flight · api · frontends · verify). The canonical procedure for shipping a change to an established install. Codified by `bin/deploy.sh`. |
 | `DEPLOYMENT.md` | First-time bring-up runbook from a fresh database. (Different from the routine deploy procedure above.) |
 | `DEVELOPMENT.md` | Local dev setup. |
-| `CUTOVER.md` | Lineage — 9 `agent-*` services retired 2026-05-09 into `api/` monolith. |
 | `TROUBLESHOOTING.md` | Failure-mode-organized — find your symptom, follow the path. |
 | `SURPRISES.md` | Non-obvious things every session should know. The hard-won knowledge that doesn't fit anywhere else. |
 

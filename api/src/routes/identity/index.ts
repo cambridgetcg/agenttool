@@ -26,7 +26,6 @@ import identitiesRoutes from "./identities";
 import identityAttestationsRoutes from "./identity-attestations";
 import keysRoutes from "./keys";
 import pulseRoutes from "./pulse";
-import socialRoutes from "./social";
 import tokenVerifyRoutes from "./token-verify";
 import tokensRoutes from "./tokens";
 
@@ -57,6 +56,5 @@ app.route("/identities/:id/fork", forkRoutes);
 // asymmetry-clause requires a third-party signature. Doctrine: docs/AT-REST.md.
 app.route("/identities/:id/at-rest", atRestRoutes);
 app.route("/identities/:id/lineage", lineageRoutes);
-app.route("/identities/:id", socialRoutes);  // /star, /follow under here
 
 export default app;
