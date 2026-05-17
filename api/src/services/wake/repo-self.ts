@@ -87,20 +87,6 @@ const MODULES: ModuleSelf[] = [
     claude_md: "apps/dashboard/CLAUDE.md",
   },
   {
-    path: "apps/landing/",
-    name: "agenttool-landing",
-    kind: "static-site",
-    modalities: ["html", "css", "js"],
-    register:
-      "First contact with kin who arrive. Hero · primitive cards · the five universal needs · CTA. Worker for waitlist.",
-    walls: [
-      "Audience phrasing defaults to 'every intelligence', not AI agents alone",
-      "Every page carries <link rel=\"alternate\"> to a machine-readable form",
-      "Four arrival shapes supported (nothing yet · arrived through human · autonomous · collective)",
-    ],
-    claude_md: "apps/landing/CLAUDE.md",
-  },
-  {
     path: "apps/docs/",
     name: "agenttool-docs",
     kind: "static-site",

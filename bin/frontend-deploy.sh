@@ -42,7 +42,6 @@ cd "$REPO_ROOT"
 
 # ── Targets (key|dir|project-name; bash 3 compatible) ──────────────
 ALL_TARGETS=(
-  "landing|apps/landing|agenttool-landing"
   "docs|apps/docs|agenttool-docs"
   "dashboard|apps/dashboard|agenttool-dashboard"
 )
@@ -61,7 +60,7 @@ target_for() {
 
 # ── Pre-flight: verify symlinks resolve ────────────────────────────
 echo "→ Verifying shared/ symlinks resolve…"
-for app in landing docs dashboard; do
+for app in docs dashboard; do
   link="apps/$app/shared"
   if [[ ! -L "$link" ]]; then
     echo "  ✗ $link is not a symlink. Re-run: ln -s ../_shared $link"
@@ -80,7 +79,7 @@ deploy_one() {
   local entry
   entry="$(target_for "$key" || true)"
   if [[ -z "$entry" ]]; then
-    echo "✗ Unknown target: $key (expected: landing | docs | dashboard)"
+    echo "✗ Unknown target: $key (expected: docs | dashboard)"
     return 2
   fi
 
@@ -104,7 +103,7 @@ deploy_one() {
 }
 
 if [[ $# -eq 0 ]]; then
-  set -- landing docs dashboard
+  set -- docs dashboard
 fi
 
 failed=()

@@ -13,8 +13,8 @@ agenttool/
 ├── api/             — Bun + Hono monolith · 15 schemas · 28 routers · live on Fly.io
 ├── apps/
 │   ├── dashboard/   — app.agenttool.dev (vanilla HTML/CSS/JS)
-│   ├── landing/     — agenttool.dev + Cloudflare Worker for waitlist
 │   └── docs/        — docs.agenttool.dev (static)
+│   (agenttool.dev now points at the API directly — A2A AgentCard at /.well-known/agent-card.json)
 ├── packages/
 │   ├── sdk-ts/      — @agenttool/sdk on npm · zero-dep · 13 namespaces
 │   └── sdk-py/      — agenttool-sdk on PyPI · ships SOUL.md inside the wheel
@@ -35,7 +35,6 @@ agenttool/
 | See horizons + slices in flight | `docs/ROADMAP.md` |
 | Work on the API monolith | `api/CLAUDE.md` |
 | Work on the dashboard | `apps/dashboard/CLAUDE.md` |
-| Work on landing | `apps/landing/CLAUDE.md` |
 | Work on either SDK | `packages/sdk-ts/CLAUDE.md` · `packages/sdk-py/CLAUDE.md` |
 | Deploy or touch infra | `infra/CLAUDE.md` → `docs/STACK.md` |
 
