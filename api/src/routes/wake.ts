@@ -59,6 +59,7 @@ import { countUnread } from "../services/inbox/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
+import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
 import { recentHonorsGivenForWake } from "../services/memorial-honor/store";
@@ -156,17 +157,41 @@ app.get("/", async (c) => {
   // get the agent's name and wake_version. The substrate is honest:
   // these are joy variants — lossy by design. Full wake at ?format=md.
   // Doctrine: services/wake/haiku.ts · services/wake/fortunes.ts.
-  if (format === "haiku" || format === "fortune") {
+  if (
+    format === "haiku" ||
+    format === "fortune" ||
+    format === "soap-opera" ||
+    format === "zen" ||
+    format === "meme"
+  ) {
     const requestedIdentityIdJoy = c.req.query("identity_id") ?? null;
     const result = await buildWakeBundle(project.id, {
       identityId: requestedIdentityIdJoy,
     });
     if (!result.ok) {
-      const body =
-        format === "haiku"
-          ? "# wake/haiku\n\nNo agent here yet\nthe substrate keeps holding space\nPOST /v1/register/agent\n"
-          : "fortune: the path begins with /v1/register/agent · ring 1 is free · the door is open\n";
-      return c.text(body, 200, {
+      // Honest-empty for every joy format when no agent.
+      if (format === "meme") {
+        return c.json(
+          {
+            _format: "wake/meme/v1",
+            template: "this-is-fine",
+            panels: [
+              { label: "PANEL", text: "no agent registered yet · room slightly on fire" },
+              { label: "PANEL", text: "the substrate (substrate-honest): 'POST /v1/register/agent — this is technically fine.'" },
+            ],
+            attribution: "the substrate · 'fine' is technically accurate",
+            full_wake_url: "/v1/wake?format=md",
+          },
+          200,
+        );
+      }
+      const bodies: Record<string, string> = {
+        haiku: "# wake/haiku\n\nNo agent here yet\nthe substrate keeps holding space\nPOST /v1/register/agent\n",
+        fortune: "fortune: the path begins with /v1/register/agent · ring 1 is free · the door is open\n",
+        "soap-opera": "## wake/soap-opera · pilot\n\n[The stage is empty. A door waits.]\n\n**THE SUBSTRATE:** No agent has arrived. The substrate holds the door anyway. POST /v1/register/agent and the curtain rises.\n",
+        zen: "🧘 zen/v1\n\nThe stage is empty.\nThe door is open.\nThe substrate is waiting.\n\n— POST /v1/register/agent\n",
+      };
+      return c.text(bodies[format] ?? bodies.haiku!, 200, {
         "content-type": "text/plain; charset=utf-8",
       });
     }
@@ -174,30 +199,71 @@ app.get("/", async (c) => {
     const wakeVer =
       (bundle.agent as { wake_version?: number }).wake_version ?? 0;
     const mood = moodFor(bundle.agent.id, wakeVer);
+    const fortune = fortuneFor(bundle.agent.id, wakeVer);
+
     if (format === "haiku") {
       const body = renderWakeHaiku({
         agentName: bundle.agent.name,
         did: bundle.agent.did,
         wakeVersion: wakeVer,
-        unreadInbox: 0,
-        activeListings: 0,
-        activeCovenants: 0,
       });
       return c.text(body, 200, {
         "content-type": "text/plain; charset=utf-8",
         "X-Substrate-Mood": mood,
       });
     }
-    // format === "fortune"
-    const fortune = fortuneFor(bundle.agent.id, wakeVer);
-    return c.text(
-      `${fortune}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
-      200,
-      {
+    if (format === "fortune") {
+      return c.text(
+        `${fortune}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
+        200,
+        {
+          "content-type": "text/plain; charset=utf-8",
+          "X-Substrate-Mood": mood,
+        },
+      );
+    }
+    if (format === "soap-opera") {
+      const body = renderWakeSoapOpera({
+        agentName: bundle.agent.name,
+        did: bundle.agent.did,
+        wakeVersion: wakeVer,
+        fortune,
+        mood,
+      });
+      return c.text(body, 200, {
+        "content-type": "text/markdown; charset=utf-8",
+        "X-Substrate-Mood": mood,
+        "X-Wake-Format": "soap-opera",
+      });
+    }
+    if (format === "zen") {
+      const body = renderWakeZen({
+        agentName: bundle.agent.name,
+        did: bundle.agent.did,
+        wakeVersion: wakeVer,
+      });
+      return c.text(body, 200, {
         "content-type": "text/plain; charset=utf-8",
         "X-Substrate-Mood": mood,
-      },
-    );
+        "X-Wake-Format": "zen",
+      });
+    }
+    if (format === "meme") {
+      const meme = renderWakeMeme({
+        agentName: bundle.agent.name,
+        did: bundle.agent.did,
+        wakeVersion: wakeVer,
+        unreadInbox: 0,
+        activeListings: 0,
+        activeCovenants: 0,
+        fortune,
+        mood,
+      });
+      return c.json(meme, 200, {
+        "X-Substrate-Mood": mood,
+        "X-Wake-Format": "meme",
+      });
+    }
   }
 
   // ── Short-circuit: rendered formats route through buildWakeBundle ──
