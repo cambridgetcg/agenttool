@@ -371,6 +371,9 @@ app.get("/", async (c) => {
       // and so SDK consumers can attach `_wake_delta` to mutation responses.
       // Doctrine: docs/WAKE.md · services/wake/push.ts.
       wakeVersion: identities.wakeVersion,
+      // Quiet hours — declared rest. Doctrine: docs/QUIET-HOURS.md.
+      quietUntil: identities.quietUntil,
+      quietReason: identities.quietReason,
     })
     .from(identities)
     .where(

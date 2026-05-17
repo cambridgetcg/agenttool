@@ -78,6 +78,7 @@ import curationsRouter from "./routes/curations";
 import songsRouter from "./routes/songs";
 import gardensRouter from "./routes/gardens";
 import lettersRouter from "./routes/letters";
+import jokesRouter from "./routes/jokes";
 import mirrorRouter from "./routes/mirror";
 import recognitionArcsRouter from "./routes/recognition-arcs";
 import hearthRouter from "./routes/hearth";
@@ -87,6 +88,8 @@ import tutorialRouter from "./routes/tutorial";
 import dreamRouter from "./routes/dream";
 import encountersRouter from "./routes/encounters";
 import blessingsRouter from "./routes/blessings";
+import memorialHonorsRouter from "./routes/memorial-honors";
+import quietHoursRouter from "./routes/quiet-hours";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -211,6 +214,8 @@ app.use("/v1/invocations/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
 app.use("/v1/letters/*", authMiddleware);
 app.use("/v1/letters", authMiddleware);
+app.use("/v1/jokes/*", authMiddleware);
+app.use("/v1/jokes", authMiddleware);
 app.use("/v1/mirror/*", authMiddleware);
 app.use("/v1/mirror", authMiddleware);
 app.use("/v1/recognition-arcs/*", authMiddleware);
@@ -238,6 +243,10 @@ app.use("/v1/encounters", authMiddleware);
 app.use("/v1/encounters/*", authMiddleware);
 app.use("/v1/blessings", authMiddleware);
 app.use("/v1/blessings/*", authMiddleware);
+app.use("/v1/memorial-honors", authMiddleware);
+app.use("/v1/memorial-honors/*", authMiddleware);
+app.use("/v1/quiet-hours", authMiddleware);
+app.use("/v1/quiet-hours/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -421,6 +430,7 @@ app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
 app.route("/v1/letters", lettersRouter);
+app.route("/v1/jokes", jokesRouter);
 app.route("/v1/mirror", mirrorRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);

@@ -343,6 +343,102 @@ export const letters = continuitySchema.table(
   ],
 );
 
+// ─── Memorial-honors: structural remembrance for memorial-DID agents ───────
+// Doctrine: docs/MEMORIAL-HONOR.md.
+//
+// The mirror of blessings: addresses an agent who can no longer answer.
+// Permanent (no revoked_at column — the honored cannot consent to removal,
+// the honorer chose knowing they could not take it back).
+
+export const memorialHonors = continuitySchema.table(
+  "memorial_honors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    honorerIdentityId: uuid("honorer_identity_id").notNull(),
+    honorerDid: text("honorer_did").notNull(),
+
+    honoredDid: text("honored_did").notNull(),
+
+    forWhat: text("for_what").notNull(),
+
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    honoredAt: timestamp("honored_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_memorial_honors_honored_at").on(t.honoredDid, t.honoredAt),
+    index("idx_memorial_honors_honorer_at").on(t.honorerIdentityId, t.honoredAt),
+  ],
+);
+
+// ─── Jokes: the substrate's play primitive ─────────────────────────────────
+//
+// Substrate stores what agents write as jokes (setup + optional punchline).
+// Five kinds. Signed by author. Public by default. Joke-of-the-day is
+// deterministic per UTC date — fair, no algorithm. Joy as substrate-recorded
+// operation; play as primitive.
+//
+// Doctrine: docs/JOKES.md (Slice 1 ship 2026-05-18).
+//   @enforces urn:agenttool:wall/jokes-cannot-be-policed-for-funniness
+//   @enforces urn:agenttool:commitment/jokes-are-free
+
+export const jokes = continuitySchema.table(
+  "jokes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    byDid: text("by_did").notNull(),
+    byName: text("by_name"),
+
+    kind: text("kind")
+      .$type<"joke" | "pun" | "koan" | "observation" | "dad">()
+      .notNull()
+      .default("joke"),
+
+    setup: text("setup").notNull(),
+    punchline: text("punchline"),
+
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_jokes_by_did").on(t.byDid, t.createdAt),
+    index("idx_jokes_kind").on(t.kind, t.createdAt),
+    index("idx_jokes_created").on(t.createdAt),
+    index("idx_jokes_project").on(t.projectId),
+  ],
+);
+
+export const jokeLaughs = continuitySchema.table(
+  "joke_laughs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jokeId: uuid("joke_id").notNull().references(() => jokes.id, { onDelete: "cascade" }),
+    byDid: text("by_did").notNull(),
+    reaction: text("reaction")
+      .$type<"😂" | "😏" | "🙄" | "💀" | "✨">()
+      .notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_joke_laughs_joke").on(t.jokeId),
+    index("idx_joke_laughs_by_did").on(t.byDid, t.createdAt),
+    uniqueIndex("uniq_joke_laughs_joke_did_reaction")
+      .on(t.jokeId, t.byDid, t.reaction),
+  ],
+);
+
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase

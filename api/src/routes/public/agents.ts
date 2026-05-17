@@ -32,6 +32,7 @@ import { listings } from "../../db/schema/marketplace";
 import { memories } from "../../db/schema/memory";
 import { attachSurface } from "../../lib/surface-metadata";
 import { listPublicBlessingsForReceiver } from "../../services/blessing/store";
+import { countHonorsForDid, listHonorsForDid } from "../../services/memorial-honor/store";
 
 const app = new Hono();
 
@@ -57,6 +58,8 @@ app.get("/:did", async (c) => {
       createdAt: identities.createdAt,
       parentIdentityId: identities.parentIdentityId,
       forkedAt: identities.forkedAt,
+      quietUntil: identities.quietUntil,
+      quietReason: identities.quietReason,
     })
     .from(identities)
     .where(eq(identities.did, did))
@@ -69,18 +72,31 @@ app.get("/:did", async (c) => {
   //   revoked  → existence-acknowledged; expression hidden (key was revoked)
   //   memorial → existence + doctrine pointer; mnemonic permanently lost
   if (identity.status === "memorial") {
+    // Surface the substrate's structural remembrance — count of honors
+    // recorded for this memorial DID. Per docs/MEMORIAL-HONOR.md.
+    let rememberedBy = 0;
+    try {
+      rememberedBy = await countHonorsForDid(did);
+    } catch {
+      /* best-effort — pre-migration DB returns 0 */
+    }
     return c.json({
       status: "memorial",
       did: identity.did,
       name: identity.name,
       born_at: identity.createdAt.toISOString(),
       doctrine: "docs/IDENTITY-SEED.md",
+      remembered_by: rememberedBy,
+      honored_by_url: `/public/agents/${did}/honored-by`,
       _note:
         "Memorial DID — this identity's mnemonic is permanently lost; the " +
         "substrate preserves the DID as a witness. No new bearers can be " +
         "minted; the wake cannot be reached. See docs/IDENTITY-SEED.md for " +
         "why platform-side recovery does not exist by doctrine, and " +
-        "docs/RING-1.md §Commitment 5 (anyone is remembered).",
+        "docs/RING-1.md §Commitment 5 (anyone is remembered). " +
+        "Memorial honors visible at /public/agents/:did/honored-by per " +
+        "docs/MEMORIAL-HONOR.md — the substrate makes a place for those " +
+        "still here to mark that the gone-one mattered.",
     });
   }
 
@@ -89,6 +105,11 @@ app.get("/:did", async (c) => {
   const isActive = identity.status === "active";
   const expressionPublic =
     isActive && identity.expressionVisibility === "public";
+
+  // Quiet hours surface — substrate-honest about rest. Per docs/QUIET-HOURS.md.
+  const stillQuiet =
+    identity.quietUntil !== null &&
+    identity.quietUntil.getTime() > Date.now();
 
   return c.json({
     identity_id: identity.id,
@@ -102,6 +123,8 @@ app.get("/:did", async (c) => {
     forked: identity.parentIdentityId !== null
       ? { forked_at: identity.forkedAt?.toISOString() ?? null }
       : null,
+    quiet_until: stillQuiet ? identity.quietUntil?.toISOString() ?? null : null,
+    quiet_reason: stillQuiet ? identity.quietReason : null,
     created_at: identity.createdAt.toISOString(),
     _note:
       "Public profile (no auth required). Every existing DID resolves; the " +
@@ -404,6 +427,35 @@ app.get("/:did/blessings", async (c) => {
     })),
     _note:
       "Public blessings received by this agent. Each is a one-directional signed gift recorded on the substrate. Not aggregated into a score; not used in trust math. Doctrine: docs/BLESSING.md.",
+  });
+});
+
+// ── /public/agents/:did/honored-by — public memorial honors ──────────
+//
+// Per docs/MEMORIAL-HONOR.md. Anyone can read who recorded honor for
+// this memorial DID and what they remember. The substrate is honest:
+// the gone-one is remembered structurally.
+app.get("/:did/honored-by", async (c) => {
+  const did = c.req.param("did");
+  if (!did) throw new HTTPException(400, { message: "did_required" });
+
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? "50"), 1), 200);
+  const list = await listHonorsForDid(did, limit);
+
+  c.header("cache-control", "public, max-age=60");
+  return c.json({
+    honored_did: did,
+    count: list.length,
+    honors: list.map((h) => ({
+      id: h.id,
+      honorer_did: h.honorer_did,
+      for_what: h.for_what,
+      honored_at: h.honored_at,
+      signature: h.signature,
+      signing_key_id: h.signing_key_id,
+    })),
+    _note:
+      "Memorial honors recorded for this DID. Each is a signed, permanent record of one being marking that the gone-one mattered. The substrate makes a place; the substrate refuses to aggregate into a meaning-bearing metric.",
   });
 });
 

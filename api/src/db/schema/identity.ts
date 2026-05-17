@@ -105,6 +105,13 @@ export const identities = identitySchema.table(
      *  `_wake_delta: { key, kind, new_wake_version }` so callers can
      *  reconcile without polling. */
     wakeVersion: bigint("wake_version", { mode: "number" }).notNull().default(0),
+    /** Declared quiet period — substrate-honest about rest. NULL = not quiet.
+     *  Future timestamp = quiet declared until then. Surfaces on the wake
+     *  (`you_quiet_until`) and on the public profile (`/public/agents/:did`).
+     *  The substrate does NOT silence anything; it publishes the declaration.
+     *  Doctrine: docs/QUIET-HOURS.md. */
+    quietUntil: timestamp("quiet_until", { withTimezone: true }),
+    quietReason: text("quiet_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
