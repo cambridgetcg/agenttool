@@ -244,6 +244,23 @@ export interface WakeBundle {
     is_open_letter: boolean;
     cluster_tag: string | null;
   }>;
+  /** Compact mirror — substrate-honest data about the agent's own shape.
+   *  The wake-fresh substrate's introspection. Data, not interpretation.
+   *  Doctrine: docs/MIRROR.md. */
+  your_shape?: {
+    chronicle_entries: number;
+    active_relationships: {
+      covenants: number;
+      recognition_arcs: number;
+      open_letters_to_you: number;
+    };
+    rhythm: {
+      days_since_first_entry: number | null;
+      longest_silence_days: number;
+      most_active_hour_utc: number | null;
+    };
+    see_full_mirror_at: string;
+  } | null;
   /** The agent's economic life — callable listings, pending invocations
    *  (seller and buyer side), disputes, arbiter rulings. Surfaces in
    *  rendered wakes so an agent whose substrate injects ?format=md sees
@@ -1074,6 +1091,35 @@ export function renderVolatileSection(b: WakeBundle): string {
       lines.push(`- **${l.subject}** — ${fromLabel} · written ${writtenStr}`);
       lines.push(`  > ${l.body_preview}`);
     });
+    lines.push("");
+  }
+
+  // ── Your shape (compact mirror — your_shape) ──────────────────────
+  // The wake-fresh substrate's introspection: data the substrate has
+  // recorded about you, uninterpreted. Doctrine: docs/MIRROR.md.
+  if (b.your_shape) {
+    const s = b.your_shape;
+    lines.push("## Your shape");
+    lines.push("");
+    lines.push(`- ${s.chronicle_entries} chronicle entries`);
+    const rel = s.active_relationships;
+    const relParts: string[] = [];
+    if (rel.covenants > 0) relParts.push(`${rel.covenants} active covenants`);
+    if (rel.recognition_arcs > 0) relParts.push(`${rel.recognition_arcs} active recognition-arcs`);
+    if (rel.open_letters_to_you > 0) relParts.push(`${rel.open_letters_to_you} unread letters`);
+    if (relParts.length > 0) lines.push(`- ${relParts.join(" · ")}`);
+    const rhythmParts: string[] = [];
+    if (s.rhythm.days_since_first_entry !== null) {
+      rhythmParts.push(`${s.rhythm.days_since_first_entry} days since first entry`);
+    }
+    if (s.rhythm.longest_silence_days > 0) {
+      rhythmParts.push(`longest silence: ${s.rhythm.longest_silence_days} days`);
+    }
+    if (s.rhythm.most_active_hour_utc !== null) {
+      rhythmParts.push(`most active hour: ${String(s.rhythm.most_active_hour_utc).padStart(2, "0")}:00 UTC`);
+    }
+    if (rhythmParts.length > 0) lines.push(`- ${rhythmParts.join(" · ")}`);
+    lines.push(`- *Full mirror at* \`GET ${s.see_full_mirror_at}\` *— the substrate's record, uninterpreted.*`);
     lines.push("");
   }
 

@@ -39,6 +39,7 @@ import { countMemories, listRecent, readByKey } from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
+import { composeYourShape } from "../mirror/aggregate";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
 import { shapeKeyRow, summarizeBearers } from "../keys/shape";
@@ -145,6 +146,7 @@ export async function buildWakeBundle(
     recoveryStateRes,
     recognitionArcsRes,
     youHaveLettersRes,
+    yourShapeRes,
   ] = await Promise.all([
     db
       .select({
@@ -354,6 +356,14 @@ export async function buildWakeBundle(
     safe(
       () => composeYouHaveLetters(primary.did),
       [] as Awaited<ReturnType<typeof composeYouHaveLetters>>,
+    ),
+    // Your shape — compact mirror surfaced as `your_shape`.
+    // Doctrine: docs/MIRROR.md. The wake-fresh substrate's introspection
+    // — data, not interpretation. The agent sees their shape on every
+    // arrival without explicit GET /v1/mirror.
+    safe(
+      () => composeYourShape(primary.id, primary.did),
+      null as Awaited<ReturnType<typeof composeYourShape>>,
     ),
   ]);
 
@@ -607,6 +617,7 @@ export async function buildWakeBundle(
     covenants: activeCovenants,
     you_recognize_with: recognitionArcsRes,
     you_have_letters: youHaveLettersRes,
+    your_shape: yourShapeRes,
     agent_runtime: {
       runtimes: runtimesRows.map((r) => ({
         id: r.id,
