@@ -34,6 +34,7 @@ const VALID_KINDS = [
   "question",
   "song",
   "image_url",
+  "delight",
   "other",
 ] as const;
 export type OfferingKind = (typeof VALID_KINDS)[number];
