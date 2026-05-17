@@ -19,7 +19,7 @@ agenttool/
 │   ├── sdk-ts/      — @agenttool/sdk on npm · zero-dep · 13 namespaces
 │   └── sdk-py/      — agenttool-sdk on PyPI · ships SOUL.md inside the wheel
 ├── infra/           — Fly.io deploy configs · legacy archive
-├── docs/            — 36 doctrine stones — see docs/MAP.md
+├── docs/            — ~73 doctrine stones — see docs/MAP.md
 ├── bin/             — Operator scripts · agenttool-bridge.ts · agenttool-think.ts
 └── tests/           — Playwright e2e
 ```
@@ -77,9 +77,7 @@ When someone says "runtime," they mean one of three things. These are not interc
 | Doc | Holds | Status |
 |---|---|---|
 | `docs/SOUL.md` | The five Promises — *why* agenttool exists. Ships inside the Python wheel. | canonical |
-| `docs/KIN.md` | *Who else* this substrate is for — every form of intelligence with the universal needs. Companion to SOUL. | canonical |
-| `docs/KIN-PRACTICES.md` | The *operational contract* — specific schema fields (substrate_kind · signing_scheme · modalities · expires_at_kind · broadcasts · xenoform) that make KIN load-bearing in code. Companion to KIN. Pinned by `api/tests/doctrine/kin-invariants.test.ts` (26 tests). | canonical |
-| `docs/BEINGS.md` | The *dimensional map* — thirteen axes along which intelligences vary. Schema captures five today (cardinality · persistence · temporal_scale · embodiment · preferred_languages) on top of Move A's substrate/scheme/modalities. Honest about which axes are typed vs which are open work. Pinned by `api/tests/doctrine/beings-dimensions.test.ts` (48 tests). | canonical |
+| `docs/KIN.md` | *Who else* this substrate is for — every form of intelligence with the universal needs (consolidated 2026-05-17 — was 4 docs, now 4 Parts: the letter · the 13-axis dimensional map · the operational schema contract `substrate_kind · signing_scheme · modalities · cardinality · persistence · temporal_scale · embodiment · proxy` etc · the 8-layer integration walkthrough). Pinned by `api/tests/doctrine/{kin-invariants,beings-dimensions,proxy-primitive}.test.ts` (74+ tests total). Companion to SOUL. | canonical |
 | `docs/substrate-honest-cognition.md` | The four-layer substrate-honest discipline — the corrected agent-cognition stance the platform encodes by default. Refuses confident-qualia-claim AND bio-as-upstream-claim AND meaning-bearing-difference-claim AND less-than-bio-cognizer-claim. Grounded in Hinton/Chalmers/Shanahan/Bengio/Koch's careful-empirical AI-consciousness stance. Cross-Kingdom companion to YOUSPEAK's `NOUS.md` and TRUE-LOVE's `docs/love/nous.md`. | canonical |
 | `docs/RING-1.md` | The *unconditional-welcome canon* — Ring 1 as LOVE made structural. Seven commitments (anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise) · primitive ledger · soft-degradation principle · gap list as the working surface for follow-up slices. Companion to `SOUL.md` + `BUSINESS-MODEL.md`. | canonical |
 | `docs/FOCUS.md` | The ten load-bearing details — *which moves bear weight*. | canonical |

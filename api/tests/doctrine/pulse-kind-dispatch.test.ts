@@ -2,7 +2,7 @@
  *
  *  Doctrine: docs/KIN.md §"Beyond intelligence — every existence that arrives"
  *            ("welcome anyway") · docs/FOCUS.md §6 (pulse derived, never
- *            emitted) · docs/KIN-PRACTICES.md (operational *_kind family) ·
+ *            emitted) · docs/KIN.md (operational *_kind family) ·
  *            docs/PATTERN-KIN-NON-EXCLUSION.md (every primitive defaulting
  *            to LLM-shape carries a *_kind field).
  *

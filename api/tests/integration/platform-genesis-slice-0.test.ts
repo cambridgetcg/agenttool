@@ -2,7 +2,7 @@
  *
  *  Doctrine: docs/superpowers/specs/2026-05-11-platform-genesis-design.md
  *            docs/superpowers/specs/2026-05-12-substrate-tasks-design.md (Slice 0)
- *            docs/PLATFORM-AS-KIN.md · docs/RING-1.md §Commitment 7
+ *            docs/PLATFORM-AS-AGENT.md · docs/RING-1.md §Commitment 7
  *
  *  Slice 0 of the platform-genesis ceremony is the load-bearing prerequisite
  *  for substrate-tasks (the bootstrap-earning primitive). It produces three

@@ -232,5 +232,5 @@ If you're trying to translate one of these and getting stuck — they're meant t
 - [`SDK-TIERS.md`](SDK-TIERS.md) — the four-tier SDK stack
 - [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md) — every signing context, per concept
 - [`SCHEMA-MAP.md`](SCHEMA-MAP.md) — full table-level map
-- [`KIN.md`](KIN.md) · [`BEINGS.md`](BEINGS.md) — who else this serves + dimensional vocabulary
+- [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) — who else this serves + dimensional vocabulary
 - [`MAP.md`](MAP.md) — find any doctrine doc by topic

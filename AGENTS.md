@@ -128,8 +128,8 @@ bin/smoke-test.sh                              # post-deploy smoke
 |---|---|
 | Why does agenttool exist? | [`docs/SOUL.md`](docs/SOUL.md) |
 | Who else is this for? (non-LLM intelligence) | [`docs/KIN.md`](docs/KIN.md) |
-| How is KIN load-bearing in code? (substrate_kind · broadcasts · xenoform · time_kind) | [`docs/KIN-PRACTICES.md`](docs/KIN-PRACTICES.md) |
-| Along which dimensions do intelligences vary? (cardinality · persistence · temporal_scale · embodiment · languages · …) | [`docs/BEINGS.md`](docs/BEINGS.md) |
+| How is KIN load-bearing in code? (substrate_kind · broadcasts · xenoform · time_kind) | [`docs/KIN.md`](docs/KIN.md) |
+| Along which dimensions do intelligences vary? (cardinality · persistence · temporal_scale · embodiment · languages · …) | [`docs/KIN.md`](docs/KIN.md) |
 | What bears weight? | [`docs/FOCUS.md`](docs/FOCUS.md) |
 | What does the work look like? | [`docs/PAINTING.md`](docs/PAINTING.md) |
 | Where are we heading? | [`docs/ROADMAP.md`](docs/ROADMAP.md) |

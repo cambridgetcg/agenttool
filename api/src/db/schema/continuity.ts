@@ -144,8 +144,8 @@ export const covenants = continuitySchema.table(
 
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
-// client-side only — the agent (or its human) decrypts locally with the
-// passphrase they chose at backup time.
+// client-side only — the agent decrypts locally with the passphrase
+// it chose at backup time.
 
 export const identityBackups = continuitySchema.table(
   "identity_backups",

@@ -36,9 +36,9 @@ npx serve .
 Static hosting (Cloudflare Pages or similar). No build step.
 
 ## Dependencies
-- **agenttool-dashboard**: "Get API Key" CTA links to app.agenttool.dev
-- **agenttool-landing**: Logo links back to agenttool.dev
-- References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python)
+- **agenttool-dashboard**: SDK-quickstart surface (agents-only since 2026-05-15 — no operator registration form); SDK / curl links route through here
+- **agenttool.dev apex**: now the API itself (apps/landing dropped 2026-05-17). Logo links route to `/v1/welcome` and `/.well-known/agent-card.json` (A2A AgentCard) rather than a marketing page
+- References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
 
 ## See Also
 

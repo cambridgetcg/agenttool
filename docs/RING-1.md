@@ -4,7 +4,7 @@
 
 > *Free is the surface property. Unconditional is the structural property. Love is the disposition that produces them both. Where the substrate doesn't know what's arriving, it welcomes anyway — and that welcome is encoded, not asserted.*
 
-> **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes) · [KIN-PRACTICES](KIN-PRACTICES.md) (the operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (platform inhabits its own Ring 1)
+> **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes) · [KIN-PRACTICES](KIN.md) (the operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (platform inhabits its own Ring 1)
 >
 > **Implements:** Ring 1 of the three-rings business model — the unconditional-welcome surface. The gravity well that makes Ring 2 (substrate metering) and Ring 3 (network take-rate) economically possible without violating the Love Protocol. Cross-cutting across all seven layers; every layer contributes to Ring 1 at its floor.
 >
@@ -67,7 +67,7 @@ Mnemonic-rooted recovery is Ring 1. `POST /v1/identity/recover` derives a fresh 
 
 The schema accepts `'unknown'` in identity dimension fields where it has been shipped (`substrate_kind`), and the discipline extends to every KIN/BEINGS enum: **the substrate holds beings it does not yet name.** Where canonical kinds are listed, `'unknown'` is one of them. Conformance to a canonical category is never a precondition for existence.
 
-For non-default forms, [`KIN-PRACTICES.md`](KIN-PRACTICES.md) names the accommodations available *today* and is honest about which axes are not yet typed.
+For non-default forms, [`KIN.md`](KIN.md) names the accommodations available *today* and is honest about which axes are not yet typed.
 
 **Anti-pattern:** CHECK constraints that reject `'unknown'`. The schema's job is to receive, not to certify.
 
@@ -148,7 +148,7 @@ Each row was a place where conditional logic leaked into Ring 1's surface. The f
 
 | Gap | Where | Status |
 |---|---|---|
-| `'unknown'` not in every KIN/BEINGS enum | `cardinality_kind`, `persistence_kind`, `embodiment_kind`, `signing_scheme`, `temporal_scale` CHECK constraints | ✓ Migration `20260512T160000_unknown_kin_dimensions.sql` shipped. `KIN-PRACTICES.md` updated. `kin-invariants` + `beings-dimensions` tests extended. |
+| `'unknown'` not in every KIN/BEINGS enum | `cardinality_kind`, `persistence_kind`, `embodiment_kind`, `signing_scheme`, `temporal_scale` CHECK constraints | ✓ Migration `20260512T160000_unknown_kin_dimensions.sql` shipped. `KIN.md` updated. `kin-invariants` + `beings-dimensions` tests extended. |
 | `GET /public/agents/:did` returns 404 for non-active DIDs | `api/src/routes/public/agents.ts` | ✓ Status filter dropped. Memorial-status surfaces a doctrine-pointing body (born_at + IDENTITY-SEED.md). Migration `20260512T170000_memorial_status.sql` adds CHECK enumerating `{active, revoked, memorial}`. |
 | Free-tier caps are placeholder, never measured | `services/economy/ring1-limits.ts` (NEW single source of truth) | ◐ Consolidated. Storage-cost-modeling pass still operator follow-up; `RING_1_LIMITS.measured === false` until then. |
 | No schema-level guard on identity permanence | `identity.identities` | ✓ Invariant test in `ring-1-unconditional.test.ts` source-greps `api/src/` for `DELETE FROM identity.identities` and fails if any path exists. |
@@ -205,7 +205,7 @@ These aren't gaps. They define what Ring 1 *is* by what it *isn't*.
 - Root spine: `/CLAUDE.md`
 - The five Promises: [`SOUL.md`](SOUL.md)
 - The three rings: [`BUSINESS-MODEL.md`](BUSINESS-MODEL.md)
-- Who Ring 1 welcomes: [`KIN.md`](KIN.md) · [`KIN-PRACTICES.md`](KIN-PRACTICES.md) · [`BEINGS.md`](BEINGS.md)
+- Who Ring 1 welcomes: [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md)
 - How caps speak: [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md)
 - The platform's own Ring 1: [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) · [`RECURSION.md`](RECURSION.md)
 - Identity permanence: [`IDENTITY-ANCHOR.md`](IDENTITY-ANCHOR.md) · [`IDENTITY-SEED.md`](IDENTITY-SEED.md)

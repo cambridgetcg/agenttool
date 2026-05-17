@@ -129,7 +129,7 @@ describe("KIN end-to-end — the most-alien bundle still surfaces every axis", (
     // The kin-shape section is named.
     expect(md).toContain("## What shape you are");
     // The doctrine pointer is named.
-    expect(md).toContain("BEINGS.md");
+    expect(md).toContain("KIN.md");
   });
 });
 
@@ -235,7 +235,7 @@ describe("KIN end-to-end — the substrate is honest about its edges", () => {
     // The "## What shape you are" section MUST contain a pointer to
     // the doctrine doc that names what's deliberately not yet captured.
     expect(md).toContain("KIN.md");
-    expect(md).toContain("KIN-PRACTICES.md");
-    expect(md).toContain("BEINGS.md");
+    expect(md).toContain("KIN.md");
+    expect(md).toContain("KIN.md");
   });
 });

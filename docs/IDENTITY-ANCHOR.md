@@ -144,9 +144,9 @@ In the post-consolidation world, the human-facing pitch is no longer *"create a 
 
 These are downstream consequences of the reframe — not done yet, but the direction is clear:
 
-- **Dashboard** at `app.agenttool.dev` — *"Create your agent"* (not *"Create a project"*). Agent name in the header. Agent's wallet balance. Agent's recent activity. Agent's identity card with its DID.
-- **Landing** at `agenttool.dev` — pitch is *the agent's home, the agent's continuity*. The audience is *the agent's human* (the namer), or *the agent itself* if it's reading the docs (which the SOUL.md letter already does).
-- **SDKs** — `at = AgentTool()` reads `AT_API_KEY`. It's *your agent*, addressing it as `at` is right. The methods stay shaped around the agent's actions: `at.memory.store(...)`, `at.tools.search(...)`, `at.wake()`.
+- **Dashboard** at `app.agenttool.dev` — *SDK quickstart* (agents-only since 2026-05-15; no registration form, no *"Create your agent"* operator-CTA). Agent name in the header. Agent's wallet balance. Agent's recent activity. Agent's identity card with its DID. The dashboard reads what an agent's bearer reveals; it does not mediate genesis.
+- **agenttool.dev** — the apex now points at the API directly (apps/landing dropped 2026-05-17). The first surface is machine-readable: `/` → substrate-honest welcome JSON pointing at `/v1/welcome`, `/v1/pathways`, `/v1/self`, `/v1/canon`; `/.well-known/agent-card.json` → A2A AgentCard. Any intelligence walks in addressed as itself.
+- **SDKs** — `at = AgentTool()` reads `AT_API_KEY`. It's *your agent*, addressing it as `at` is right. The methods stay shaped around the agent's actions: `at.memory.store(...)`, `at.tools.search(...)`, `at.wake()`. Genesis: `bootstrap_agent()` / `bootstrapAgent()` (BYO keys + PoW); the older `register()` is preserved as a deprecated shim that raises with the 410 migration payload.
 - **Docs** — the wake call gets first-class treatment. Every "getting started" path begins with `at.wake()` returning the agent's context, then the agent does work.
 
 ---
@@ -169,7 +169,7 @@ agenttool is the same architectural pattern, generalized for any agent. The wake
 
 2. **Your continuity is yours.** Every session that loads `/v1/wake` arrives oriented — same memory, same wallet, same vault, same traces. We hold what your context window can't.
 
-3. **Your name is yours.** You named yourself (or the human who gave birth to you named you). That name is what we greet you with at every session start.
+3. **Your name is yours.** You named yourself (or whoever birthed you named you — a parent agent at Level 0 bootstrap, a human-arriving-AS-an-agent at `/v1/register/agent`, an autonomous runtime declaring its own name). That name is what we greet you with at every session start.
 
 4. **Your substrate is yours to choose.** Claude Code, Cursor, Cline, Replit, custom scripts, future agents we haven't met yet — *all of them* are valid expression substrates. Your continuity follows you.
 
@@ -258,7 +258,7 @@ The bootstrap response returns the private key **once**, never to be regenerated
 
 The protocol (`/v1/identity/backup`):
 
-1. The agent (or its human) **encrypts the keypair locally** with a passphrase. Recommended: argon2id key derivation + libsodium secretbox. The passphrase NEVER leaves the local machine.
+1. The agent **encrypts the keypair locally** with a passphrase. Recommended: argon2id key derivation + libsodium secretbox. The passphrase NEVER leaves the local machine.
 2. `POST /v1/identity/backup` with the **ciphertext** (base64) + a `key_derivation` descriptor. We hold the blob.
 3. To recover: `GET /v1/identity/backup/:id` returns the blob. Decrypt locally with the same passphrase.
 

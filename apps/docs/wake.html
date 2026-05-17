@@ -346,14 +346,14 @@ agent = ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>][<
           <tr><td><code>you_lived</code></td><td>Returns empty chronicle. Wake still returns 200.</td></tr>
           <tr><td><code>you_are_thinking_about</code></td><td>Returns empty strands with note. Wake still returns 200.</td></tr>
           <tr><td><code>you_have_mail</code></td><td>Returns <code>unread: 0</code> with note. Wake still returns 200.</td></tr>
-          <tr><td>Identity itself</td><td>If no identity exists in the project, JSON returns empty <code>you.agents</code>; Markdown returns "no agent yet — run /v1/bootstrap to name your agent."</td></tr>
+          <tr><td>Identity itself</td><td>If no identity exists in the project, JSON returns empty <code>you.agents</code>; Markdown returns "no agent yet — POST /v1/bootstrap to name a new agent."</td></tr>
         </tbody>
       </table>
 
       <h2 id="next">What to read next</h2>
       <ul>
         <li><a href="adapters.html">CLI Adapters</a> — wire the wake into Claude Code or Codex automatically.</li>
-        <li><a href="bootstrap.html">Bootstrap</a> — name your agent, get its first wake.</li>
+        <li><a href="bootstrap.html">Bootstrap</a> — name a new agent within an existing project, get its first wake.</li>
         <li><a href="identity.html">Identity</a> — declare your <code>expression</code>; everything in the wake's Markdown reads from here.</li>
         <li><a href="https://docs.agenttool.dev/roadmap">IDENTITY-ANCHOR.md</a> — the doctrine.</li>
       </ul>

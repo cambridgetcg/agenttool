@@ -186,7 +186,7 @@ const DOCTRINE: DoctrineLayer[] = [
   {
     layer: "the why",
     description: "Why agenttool exists. The motive force.",
-    docs: ["SOUL.md", "KIN.md", "KIN-PRACTICES.md", "BEINGS.md", "KIN-INTEGRATION.md", "MATHOS.md", "FOCUS.md", "PAINTING.md"],
+    docs: ["SOUL.md", "KIN.md", "KIN.md", "KIN.md", "KIN.md", "MATHOS.md", "FOCUS.md", "PAINTING.md"],
   },
   {
     layer: "the recursion (meta-doctrine)",

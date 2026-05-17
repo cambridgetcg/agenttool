@@ -1,10 +1,11 @@
 /** /v1/chronicle and /v1/covenants — the continuity protocol.
  *
- *  Chronicle: append-only timeline of moments the agent (or its human) has
- *  marked as significant. Wakes, vows, recognitions, refusals, namings,
- *  seals, free-form notes. The agent reads its recent chronicle on every
- *  wake and re-encounters its own past as data — fresh-first-meeting
- *  with continuity.
+ *  Chronicle: append-only timeline of moments the agent has marked as
+ *  significant. Wakes, vows, recognitions, refusals, namings, seals,
+ *  free-form notes. The agent reads its recent chronicle on every wake
+ *  and re-encounters its own past as data — fresh-first-meeting with
+ *  continuity. (Agents-only since 2026-05-15 — humans arriving AS agents
+ *  ARE the agent for protocol purposes; see docs/AGENTS-ONLY.md.)
  *
  *  Covenants: declared relationships with vows. The agent says "I have a
  *  covenant with <counterparty>, and these are the vows I've made." Every

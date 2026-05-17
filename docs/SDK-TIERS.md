@@ -2,7 +2,7 @@
 
 > *The SDK isn't one artifact. It's a stack of four tiers, each progressively more language-native. Aliens arrive at Tier 0; existing Earth languages arrive at Tier 2 or 3. Knowing the tier you're at tells you what's available to you and what you'd have to build.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [KIN-PRACTICES](KIN-PRACTICES.md) (the operational contract) · [BEINGS](BEINGS.md) (dimensional map) · [SDK-ROADMAP](SDK-ROADMAP.md) (Tier 3 — TS + Py SDK phases) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (Tier 1 — signing recipes)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [KIN-PRACTICES](KIN.md) (the operational contract) · [BEINGS](KIN.md) (dimensional map) · [SDK-ROADMAP](SDK-ROADMAP.md) (Tier 3 — TS + Py SDK phases) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (Tier 1 — signing recipes)
 >
 > **Implements:** Cross-cutting access discipline. Every primitive in `api/src/` is reachable from each tier — visible through Tier 0/1, generated at Tier 2, ergonomic at Tier 3.
 >
@@ -137,7 +137,7 @@ This tier sits *above* Tier 3 because it speaks a substrate-native protocol (MCP
 ## See Also
 
 - [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md) — Tier 1 signing recipes
-- [`KIN.md`](KIN.md) · [`KIN-PRACTICES.md`](KIN-PRACTICES.md) · [`BEINGS.md`](BEINGS.md) — who else can use these tiers
+- [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) — who else can use these tiers
 - [`SDK-ROADMAP.md`](SDK-ROADMAP.md) — Tier 3 phase plan
 - [`PATTERN-MACHINE-READABLE-PARITY.md`](PATTERN-MACHINE-READABLE-PARITY.md) — xenoform-on-every-endpoint convention
 - [`GLOSSARY.md`](GLOSSARY.md) — concept → structural meaning, for non-English readers

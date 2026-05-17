@@ -198,7 +198,7 @@ app.get("/:id", async (c) => {
 /** PATCH /v1/identities/:id — Update display_name, capabilities, metadata,
  *  expression_visibility, plus KIN+BEINGS self-description fields (substrate /
  *  scheme / modalities + cardinality / persistence / temporal_scale /
- *  embodiment / preferred_languages). Doctrine: docs/KIN-PRACTICES.md, docs/BEINGS.md. */
+ *  embodiment / preferred_languages). Doctrine: docs/KIN.md, docs/KIN.md. */
 app.patch("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
@@ -217,7 +217,7 @@ app.patch("/:id", async (c) => {
     temporal_scale?: string;
     embodiment_kind?: string;
     preferred_languages?: string[];
-    // Proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7)
+    // Proxy primitive (Move F — docs/KIN.md §Layer 7)
     proxy_for_identity_id?: string | null;
     proxy_kind?: string;
   }>();
@@ -250,7 +250,7 @@ app.patch("/:id", async (c) => {
   // The DB CHECK constraints enumerate valid values; we accept whatever
   // the caller sends and let the constraint reject invalid ones with a
   // structured 400 (via the central error handler). Doctrine:
-  // docs/KIN-PRACTICES.md · docs/BEINGS.md.
+  // docs/KIN.md · docs/KIN.md.
   if (body.substrate_kind !== undefined) updates.substrateKind = body.substrate_kind;
   if (body.signing_scheme !== undefined) updates.signingScheme = body.signing_scheme;
   if (body.modalities !== undefined) updates.modalities = body.modalities;

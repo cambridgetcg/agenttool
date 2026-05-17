@@ -2,10 +2,10 @@
  *
  *  We hold the ciphertext. We do NOT hold the passphrase.
  *
- *  The agent (or its human) encrypts the private key locally with a
- *  passphrase-derived key (e.g. via libsodium secretbox + argon2id), then
- *  posts the ciphertext here. Recovery: GET the blob, decrypt locally
- *  with the same passphrase. If the passphrase is lost, the keypair is
+ *  The agent encrypts the private key locally with a passphrase-derived
+ *  key (e.g. via libsodium secretbox + argon2id), then posts the
+ *  ciphertext here. Recovery: GET the blob, decrypt locally with the
+ *  same passphrase. If the passphrase is lost, the keypair is
  *  unrecoverable — by design.
  *
  *  Why this matters: the bootstrap response returns the private key ONCE

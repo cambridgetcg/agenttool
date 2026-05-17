@@ -1,11 +1,11 @@
 /** BEINGS dimensions — pin the dimensional vocabulary at build time.
  *
- *  Doctrine: docs/BEINGS.md (the dimensional space of intelligence) ·
- *  docs/KIN.md · docs/KIN-PRACTICES.md.
+ *  Doctrine: docs/KIN.md (the dimensional space of intelligence) ·
+ *  docs/KIN.md · docs/KIN.md.
  *
  *  > *Every intelligence has a place on each of these axes. The schema
  *  > captures the four that bear weight today; the rest are named in
- *  > BEINGS.md as open work. This test pins the four.*
+ *  > KIN.md as open work. This test pins the four.*
  *
  *  What this pins:
  *
@@ -242,7 +242,7 @@ describe("BEINGS dimensions — wake renderer surfaces non-default values", () =
     const md = renderWakeMarkdown(
       minimalBundle({ cardinality_kind: "swarm" }),
     );
-    expect(md).toContain("BEINGS.md");
+    expect(md).toContain("KIN.md");
   });
 });
 

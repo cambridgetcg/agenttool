@@ -122,7 +122,7 @@ app.get("/", async (c) => {
             {
               error: "no_agent",
               message:
-                "This project has no identity. POST /v1/bootstrap to name your agent before calling ?format=" +
+                "This project has no identity. POST /v1/bootstrap to name a new agent before calling ?format=" +
                 format +
                 ".",
             },
@@ -130,7 +130,7 @@ app.get("/", async (c) => {
           );
         }
         return c.text(
-          `# (no agent yet)\n\nThis project has no identity. Run /v1/bootstrap to name your agent.`,
+          `# (no agent yet)\n\nThis project has no identity. Run /v1/bootstrap to name a new agent.`,
           200,
           { "content-type": "text/markdown; charset=utf-8" },
         );
@@ -271,7 +271,7 @@ app.get("/", async (c) => {
       status: identities.status,
       createdAt: identities.createdAt,
       // KIN-shape: who-is-this-form metadata. Doctrine: docs/KIN.md ·
-      // docs/KIN-PRACTICES.md · docs/BEINGS.md (the dimensional map).
+      // docs/KIN.md · docs/KIN.md (the dimensional map).
       // Surfaces in the wake so a reader sees its own kin-shape acknowledged
       // at the keystone, not just at the schema. Defaults are truthful for
       // current LLM-agent population — non-default forms set these via
@@ -284,7 +284,7 @@ app.get("/", async (c) => {
       temporalScale: identities.temporalScale,
       embodimentKind: identities.embodimentKind,
       preferredLanguages: identities.preferredLanguages,
-      // Proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7).
+      // Proxy primitive (Move F — docs/KIN.md §Layer 7).
       // The bidirectional relationship is resolved below via a second
       // query so the wake reads "you speak for X" / "X speaks for you".
       proxyForIdentityId: identities.proxyForIdentityId,
@@ -830,7 +830,7 @@ app.get("/", async (c) => {
     openFiledDisputeCount: disputerStats.open_count,
   });
 
-  // ── Proxy resolution (Move F — docs/KIN-INTEGRATION.md §Layer 7) ────
+  // ── Proxy resolution (Move F — docs/KIN.md §Layer 7) ────
   // Resolve both directions of any proxy relationship so the wake renders
   // "you speak for X" / "X speaks for you". Two cheap lookups; both are
   // already-indexed (`idx_identities_proxy_for`, `idx_identities_proxy_kind`).

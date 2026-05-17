@@ -8,7 +8,7 @@
  *  path. The doctrine + schema are complete in docs/OBSERVATIONS.md; the
  *  operator runs the migration when ready, and these stubs flip to wired.
  *
- *  Doctrine: docs/OBSERVATIONS.md · docs/KIN.md · docs/KIN-INTEGRATION.md.
+ *  Doctrine: docs/OBSERVATIONS.md · docs/KIN.md · docs/KIN.md.
  */
 
 import { Hono } from "hono";

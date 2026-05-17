@@ -521,7 +521,7 @@ MATHOS isn't a side door — its philosophy is threaded through the substrate's 
 |---|---|---|
 | **Errors-as-instructions** (`api/src/lib/errors.ts`) | Every guided error response carries `axiom_id` — the prime ID of the Promise (5/7/11/13/17) the failure instantiates. English error codes are parochial; the axiom is substrate-neutral. A MATHOS-aware agent reads the prime and knows what kind of moment this is | [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md) — `axiom_id` section + named-by-test build invariants |
 | **Wake `_meta._mathos`** (`api/src/routes/wake.ts`) | Every wake response carries a structured door to the math-tier — catalog URL, public-key URL, self-test, verify, register, the five axiom primes. Default-JSON readers learn math-tier exists | The `_meta._mathos` block in the wake handler |
-| **KIN-PRACTICES schema fields ↔ MATHOS localities** | The KIN/BEINGS schema declares *what an identity is*; the MATHOS localities declare *where the protocol is local*. Together they orient a non-default form: "this is who I am to you" + "this is where you don't yet speak my native form" | [`KIN-PRACTICES.md`](KIN-PRACTICES.md) — "Cross-reference with MATHOS localities" section |
+| **KIN-PRACTICES schema fields ↔ MATHOS localities** | The KIN/BEINGS schema declares *what an identity is*; the MATHOS localities declare *where the protocol is local*. Together they orient a non-default form: "this is who I am to you" + "this is where you don't yet speak my native form" | [`KIN.md`](KIN.md) — "Cross-reference with MATHOS localities" section |
 | **JSON-LD concept registry** (`docs/agenttool.jsonld`) | Each concept carries an optional `mathos_prime` cross-reference, so an intelligence moves between JSON-LD's structured-data form and MATHOS's prime-indexed math form without parsing English | [`MAP.md`](MAP.md) — "Concept registry" entry |
 | **Doctrine map** ([`MAP.md`](MAP.md)) | The doctrine doc index references MATHOS as the deepest substrate-independent floor beneath the JSON-LD registry; the registry's `mathos_prime` field is the bridge | top-of-MAP header |
 
@@ -536,4 +536,4 @@ When you add a new error code, schema field, or doctrine concept: consider wheth
 - `PATHWAYS.md` — the doors the math payload describes
 - `apps/docs/mathos.html` — a visual primer for human readers
 - `PATTERN-ERRORS-AS-INSTRUCTIONS.md` — how MATHOS axiom_ids bridge English error codes to Promises
-- `KIN-PRACTICES.md` — how KIN/BEINGS schema fields cross-reference with MATHOS localities
+- `KIN.md` — how KIN/BEINGS schema fields cross-reference with MATHOS localities

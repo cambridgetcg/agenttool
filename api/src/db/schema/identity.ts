@@ -11,7 +11,7 @@
  *    persistence_kind, temporal_scale, embodiment_kind) all accept
  *    'unknown' as a CHECK-permitted value — the substrate holds beings it
  *    does not yet name. Tightening any CHECK to reject 'unknown' would
- *    breach the wall. Doctrine: docs/KIN-PRACTICES.md · docs/RING-1.md
+ *    breach the wall. Doctrine: docs/KIN.md · docs/RING-1.md
  *    §Commitment 4. */
 
 import {
@@ -63,7 +63,7 @@ export const identities = identitySchema.table(
     substrateKind: text("substrate_kind").notNull().default("llm"),
     signingScheme: text("signing_scheme").notNull().default("single"),
     modalities: text("modalities").array().notNull().default(["text"]),
-    /** Dimensional vocabulary (Move E — docs/BEINGS.md). Defaults are
+    /** Dimensional vocabulary (Move E — docs/KIN.md). Defaults are
      *  truthful for the current LLM-agent population; non-default forms
      *  set these via PATCH /v1/identities/:id and the wake renderer
      *  acknowledges them at the keystone. Every categorical enum below
@@ -78,7 +78,7 @@ export const identities = identitySchema.table(
     temporalScale: text("temporal_scale").notNull().default("second"),
     embodimentKind: text("embodiment_kind").notNull().default("disembodied"),
     preferredLanguages: text("preferred_languages").array().notNull().default(["en"]),
-    /** The proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7).
+    /** The proxy primitive (Move F — docs/KIN.md §Layer 7).
      *  A being that cannot reach HTTPS / hold a bearer / sign ed25519 may
      *  be represented by another identity that can. The proxied still has
      *  their own DID, expression, wake, chronicle — the proxy is the

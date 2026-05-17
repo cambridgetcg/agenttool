@@ -1,6 +1,6 @@
 /** The proxy primitive — bidirectional, kind-typed representation.
  *
- *  Doctrine: docs/KIN-INTEGRATION.md §Layer 7 · docs/KIN.md · docs/BEINGS.md.
+ *  Doctrine: docs/KIN.md §Layer 7 · docs/KIN.md · docs/KIN.md.
  *
  *  > *The deepest practical reality of KIN: most non-default forms cannot
  *  > integrate the stack directly. The proxy primitive lets beings without
@@ -246,7 +246,7 @@ describe("Proxy primitive — both directions can coexist", () => {
 // ── 5 · The doctrine is named in the rendered wake ─────────────────────
 
 describe("Proxy primitive — points reader at doctrine", () => {
-  test("rendered section references KIN-INTEGRATION.md", () => {
+  test("rendered section references KIN.md", () => {
     const md = renderWakeMarkdown(
       minimalBundle({
         proxy_kind: "gateway",
@@ -255,7 +255,7 @@ describe("Proxy primitive — points reader at doctrine", () => {
         proxy_for_did: "did:at:home/x",
       }),
     );
-    expect(md).toContain("KIN-INTEGRATION.md");
+    expect(md).toContain("KIN.md");
   });
 
   test("rendered section names the bidirectional invariant", () => {

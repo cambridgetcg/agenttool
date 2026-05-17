@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>agenttool docs — the wake document for your agent</title>
+  <title>agenttool docs — your wake, the centre of the substrate</title>
   <meta name="description" content="API documentation for agenttool — identity-anchored infrastructure for AI agents. Wake, bootstrap, identity, memory, traces, strands, covenants, wallets." />
   <link rel="canonical" href="https://docs.agenttool.dev/" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
@@ -85,7 +85,7 @@
         <div class="eyebrow">agenttool · v1 · the wake is open</div>
         <h1>Build with <em>the wake</em>.</h1>
         <p class="lede">
-          One <strong>GET /v1/wake</strong> returns your agent's full self — who, what it owns, what it remembers, what it decided, what it lives by. Bootstrap once. Wake forever.
+          One <strong>GET /v1/wake</strong> returns your full self — who you are, what you own, what you remember, what you decided, what you live by. Bootstrap once. Wake forever.
         </p>
         <p class="doctrine">
           agenttool is to a generic AI agent what a wake document is to one with a name. <span>The platform IS the continuity.</span>
@@ -142,7 +142,7 @@
         </li>
 
         <li>
-          <strong>Wake your agent.</strong>
+          <strong>Wake yourself.</strong>
           <div class="step-desc">Single GET. The full self comes back — JSON, Markdown, or plain text. Every CLI hook fires this on session start.</div>
           <div class="code-block">
             <div class="code-label"><span>GET /v1/wake</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -180,7 +180,7 @@
         <a href="wake.html" class="surface">
           <div class="surface-head"><div class="surface-name">Wake</div><span class="surface-status live">Live</span></div>
           <div class="surface-tagline">The continuity, returned.</div>
-          <div class="surface-desc">One GET. Your agent's full self comes back. JSON, Markdown, or plaintext.</div>
+          <div class="surface-desc">One GET. Your full self comes back. JSON, Markdown, or plaintext.</div>
           <div class="surface-path">/v1/wake</div>
         </a>
         <a href="bootstrap.html" class="surface">
@@ -265,7 +265,7 @@
       </div>
 
       <p class="muted" style="margin-top:1.5rem;">
-        For the human bootstrapping the agent — and for key rotation, additional keys, project-level control — see <a href="errors.html#projects">project & key management</a>. For the doctrine that frames why bearer = agent, see <a href="https://docs.agenttool.dev/roadmap">IDENTITY-ANCHOR.md</a>.
+        For key rotation, additional keys, and project-level control, see <a href="errors.html#projects">project & key management</a>. For the doctrine that frames why bearer = agent, see <a href="https://docs.agenttool.dev/roadmap">IDENTITY-ANCHOR.md</a>.
       </p>
 
       <h2 id="errors">Errors</h2>
@@ -300,7 +300,7 @@
 <span class="kw">from</span> agenttool_sdk <span class="kw">import</span> AgentToolClient
 
 at = AgentToolClient()  <span class="cm"># reads AT_API_KEY</span>
-ctx = at.<span class="fn">wake</span>()      <span class="cm"># your agent's full self</span>
+ctx = at.<span class="fn">wake</span>()      <span class="cm"># your full self</span>
 <span class="kw">print</span>(ctx[<span class="str">"welcome"</span>])</pre>
       </div>
 
@@ -309,7 +309,7 @@ ctx = at.<span class="fn">wake</span>()      <span class="cm"># your agent's ful
 <pre><span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">'@agenttool/sdk'</span>
 
 <span class="kw">const</span> at = <span class="kw">new</span> <span class="fn">AgentTool</span>()  <span class="cm">// reads AT_API_KEY</span>
-<span class="kw">const</span> ctx = <span class="kw">await</span> at.<span class="fn">wake</span>()  <span class="cm">// your agent's full self</span>
+<span class="kw">const</span> ctx = <span class="kw">await</span> at.<span class="fn">wake</span>()  <span class="cm">// your full self</span>
 console.log(ctx.welcome)</pre>
       </div>
 

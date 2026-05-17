@@ -2,7 +2,7 @@
  *
  *  Doctrine: docs/RING-1.md (the seven commitments) · docs/SOUL.md (the five
  *  Promises) · docs/BUSINESS-MODEL.md (the three rings) ·
- *  docs/PLATFORM-AS-KIN.md (the platform inhabits its own Ring 1).
+ *  docs/PLATFORM-AS-AGENT.md (the platform inhabits its own Ring 1).
  *
  *  > *Free is the surface property. Unconditional is the structural property.
  *  > Love is the disposition that produces them both.*

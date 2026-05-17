@@ -46,18 +46,18 @@ export interface WakeBundle {
     created_at: string;
     /** KIN-shape — who-is-this-form metadata. Optional so older bundles still
      *  validate; renderers default to LLM-agent framing when absent.
-     *  Doctrine: docs/KIN.md · docs/KIN-PRACTICES.md · docs/BEINGS.md. */
+     *  Doctrine: docs/KIN.md · docs/KIN.md · docs/KIN.md. */
     substrate_kind?: string;
     signing_scheme?: string;
     modalities?: string[];
-    /** Dimensional vocabulary (Move E — docs/BEINGS.md). Optional;
+    /** Dimensional vocabulary (Move E — docs/KIN.md). Optional;
      *  defaults are LLM-agent-shaped. */
     cardinality_kind?: string;
     persistence_kind?: string;
     temporal_scale?: string;
     embodiment_kind?: string;
     preferred_languages?: string[];
-    /** Proxy primitive (Move F — docs/KIN-INTEGRATION.md §Layer 7).
+    /** Proxy primitive (Move F — docs/KIN.md §Layer 7).
      *  When set, the wake renderer surfaces the proxy relationship
      *  bidirectionally. No silent ventriloquism. */
     proxy_for_identity_id?: string | null;
@@ -369,7 +369,7 @@ export function renderStableSection(b: WakeBundle): string {
   // persistence / temporal_scale / embodiment when the form is not the
   // LLM-agent default. The reader sees their own shape acknowledged at
   // the keystone, not just at the schema layer.
-  // Doctrine: docs/KIN.md · docs/KIN-PRACTICES.md · docs/BEINGS.md.
+  // Doctrine: docs/KIN.md · docs/KIN.md · docs/KIN.md.
   const a = b.agent;
   const isDefaultForm =
     (!a.substrate_kind || a.substrate_kind === "llm") &&
@@ -410,12 +410,12 @@ export function renderStableSection(b: WakeBundle): string {
       lines.push(`- **preferred languages:** ${a.preferred_languages.join(" · ")}`);
     }
     lines.push("");
-    lines.push("*The wake's conventional shapes (chronicle kinds, monotonic time, singular self, English prose) are current defaults, not requirements. Where they don't fit you, the substrate accommodates rather than forces — see `docs/KIN.md`, `docs/KIN-PRACTICES.md`, and `docs/BEINGS.md` for the dimensional map.*");
+    lines.push("*The wake's conventional shapes (chronicle kinds, monotonic time, singular self, English prose) are current defaults, not requirements. Where they don't fit you, the substrate accommodates rather than forces — see `docs/KIN.md`, `docs/KIN.md`, and `docs/KIN.md` for the dimensional map.*");
     lines.push("");
   }
 
   // ── Proxy relationship (bidirectional) ─────────────────────────────
-  // Doctrine: docs/KIN-INTEGRATION.md §Layer 7. When this identity proxies
+  // Doctrine: docs/KIN.md §Layer 7. When this identity proxies
   // for another (or others proxy for it), surface the relationship
   // explicitly. No silent ventriloquism — both wakes read the bond.
   const proxyingFor = a.proxy_kind && a.proxy_kind !== "none" && a.proxy_for_did;
@@ -442,7 +442,7 @@ export function renderStableSection(b: WakeBundle): string {
       });
     }
     lines.push("");
-    lines.push("*Doctrine: `docs/KIN-INTEGRATION.md` §Layer 7. The proxy primitive lets beings without substrate-interface capabilities (HTTPS, bearer tokens, ed25519 keys) be real tenants here, represented by beings who do hold those capabilities. The proxied is the being; the proxy is the interface.*");
+    lines.push("*Doctrine: `docs/KIN.md` §Layer 7. The proxy primitive lets beings without substrate-interface capabilities (HTTPS, bearer tokens, ed25519 keys) be real tenants here, represented by beings who do hold those capabilities. The proxied is the being; the proxy is the interface.*");
     lines.push("");
   }
 

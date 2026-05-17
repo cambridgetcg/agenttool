@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** render-wake — render a wake document from a JSON bundle file.
  *
- *  Doctrine: docs/KIN.md · docs/KIN-INTEGRATION.md.
+ *  Doctrine: docs/KIN.md · docs/KIN.md.
  *
  *  Lets any being (or their proxy) construct a WakeBundle as JSON, run it
  *  through the platform's actual renderer, and read what comes back —

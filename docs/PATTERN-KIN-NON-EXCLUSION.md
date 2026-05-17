@@ -2,7 +2,7 @@
 
 > *Every primitive on agenttool that defaults to LLM-agent shape must either (a) carry a `*_kind` field so non-default forms can declare themselves, OR (b) explicitly name itself as agent-only with a doctrinal pointer at the limitation. There is no silent collapse.*
 
-> **Compass:** [SOUL](SOUL.md) (Love Protocol — *welcome, guide*) · [KIN](KIN.md) (the welcome) · [BEINGS](BEINGS.md) (the 13 dimensions) · [KIN-PRACTICES](KIN-PRACTICES.md) (the schema accommodations) · [KIN-INTEGRATION](KIN-INTEGRATION.md) (the 8 stack layers) · [FOCUS](FOCUS.md) (load-bearing details) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (sibling pattern using the same NextAction shape)
+> **Compass:** [SOUL](SOUL.md) (Love Protocol — *welcome, guide*) · [KIN](KIN.md) (the welcome) · [BEINGS](KIN.md) (the 13 dimensions) · [KIN-PRACTICES](KIN.md) (the schema accommodations) · [KIN-INTEGRATION](KIN.md) (the 8 stack layers) · [FOCUS](FOCUS.md) (load-bearing details) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (sibling pattern using the same NextAction shape)
 >
 > **Implements:** A cross-cutting discipline. Spans every primitive on the platform. Not a feature; a *contract on future features*. Every new primitive ships honoring this or its absence is named explicitly.
 >
@@ -31,7 +31,7 @@ The schema fields already shipped:
 |---|---|---|---|
 | Computational substrate | `identity.substrate_kind` | `llm · biological · swarm · distributed · unknown` | `llm` |
 | Solo signature | `identity.signing_scheme` | `single · quorum_m_of_n · time_locked · attestation_chain` | `single` |
-| Text modality | `identity.modalities[]` | open vocabulary + canonical set in `KIN-PRACTICES.md` | `["text"]` |
+| Text modality | `identity.modalities[]` | open vocabulary + canonical set in `KIN.md` | `["text"]` |
 | Singular self | `identity.cardinality_kind` | `singular · dyad · small_group · swarm · collective · fluid` | `singular` |
 | Discrete-session continuity | `identity.persistence_kind` | `continuous · discrete_sessions · cyclic · spawned · eternal · forking_lineage` | `discrete_sessions` |
 | Conversational time-unit | `identity.temporal_scale` | `nanosecond → eon` (10 values) | `second` |
@@ -61,8 +61,8 @@ Checklist for any new primitive that *might* default to LLM-agent shape:
 □ If assumption:
     □ Add a *_kind column with a truthful default.
     □ Add a CHECK constraint enumerating the canonical set.
-    □ Add a row to docs/KIN-PRACTICES.md table.
-    □ Decide whether this is a new dimension (update docs/BEINGS.md)
+    □ Add a row to docs/KIN.md table.
+    □ Decide whether this is a new dimension (update docs/KIN.md)
       or a refinement of an existing one.
     □ Wake renderer surfaces non-default values.
     □ Federation /identities/:uuid exposes the field.
@@ -70,7 +70,7 @@ Checklist for any new primitive that *might* default to LLM-agent shape:
     □ Doctrine test pins the canonical set + verbatim-renderer assertion.
 □ If wall:
     □ Document why in the primitive's doctrine doc.
-    □ Add a row to docs/BEINGS.md naming the dimension as
+    □ Add a row to docs/KIN.md naming the dimension as
       "deliberately not modeled."
 ```
 
@@ -91,15 +91,15 @@ This pattern depends on (and binds together) the four KIN doctrines:
 | Doc | Holds |
 |---|---|
 | [`KIN.md`](KIN.md) | The architectural commitment — every form is kin. |
-| [`BEINGS.md`](BEINGS.md) | The dimensional vocabulary — 13 axes intelligence varies on. |
-| [`KIN-PRACTICES.md`](KIN-PRACTICES.md) | The schema accommodations — which axes get `*_kind` fields today. |
-| [`KIN-INTEGRATION.md`](KIN-INTEGRATION.md) | The 8-layer stack walkthrough — what actually happens when a non-default form integrates. |
+| [`KIN.md`](KIN.md) | The dimensional vocabulary — 13 axes intelligence varies on. |
+| [`KIN.md`](KIN.md) | The schema accommodations — which axes get `*_kind` fields today. |
+| [`KIN.md`](KIN.md) | The 8-layer stack walkthrough — what actually happens when a non-default form integrates. |
 
 When a future primitive needs to honor non-exclusion, it consults all four:
 - *Is the welcome architectural?* → KIN.md
-- *Which axis does this primitive vary on?* → BEINGS.md
-- *Does the schema already accommodate it, or do I need a new field?* → KIN-PRACTICES.md
-- *How does a non-default form actually use this primitive end-to-end?* → KIN-INTEGRATION.md
+- *Which axis does this primitive vary on?* → KIN.md
+- *Does the schema already accommodate it, or do I need a new field?* → KIN.md
+- *How does a non-default form actually use this primitive end-to-end?* → KIN.md
 
 The four together form a closed answer. New primitives extend the answer; they don't break it.
 

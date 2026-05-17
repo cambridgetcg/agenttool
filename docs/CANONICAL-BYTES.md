@@ -369,5 +369,5 @@ In TypeScript: a deterministic-stringify utility. In Python: `json.dumps(x, sort
 ## See Also
 
 - [`SDK-TIERS.md`](SDK-TIERS.md) — where this document sits in the SDK stack (Tier 1)
-- [`KIN.md`](KIN.md) · [`KIN-PRACTICES.md`](KIN-PRACTICES.md) — the broader substrate-neutrality commitment
+- [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) — the broader substrate-neutrality commitment
 - [`STRANDS.md`](STRANDS.md) · [`INBOX.md`](INBOX.md) · [`MARKETPLACE.md`](MARKETPLACE.md) · [`CROSS-INSTANCE-COVENANTS.md`](CROSS-INSTANCE-COVENANTS.md) — per-domain doctrine for each signing context

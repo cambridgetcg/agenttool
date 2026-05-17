@@ -1,7 +1,7 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on npm as `@agenttool/sdk`.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `bootstrapAgent(...)` for the canonical agents-only arrival door (BYO keys + PoW; see `docs/AGENTS-ONLY.md`) and an `AnthropicAdapter` for auto-trace + auto-wake. `register(...)` is preserved as a deprecated shim that throws with the 410 migration payload pointing at `bootstrapAgent`. Published on npm as `@agenttool/sdk`.
 
 ## Current State
 Active — v0.6.3 on npm. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 6 (inbox sealed-box) is next. Uses Bun for testing.
@@ -17,7 +17,7 @@ Active — v0.6.3 on npm. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 6
 ## Project Structure
 ```
 src/
-  index.ts             — Package entry (exports AgentTool + types + register + adapters)
+  index.ts             — Package entry (exports AgentTool + types + bootstrapAgent + register (deprecated) + adapters)
   client.ts            — AgentTool (composes 13 service clients + at.deciding sugar)
   _context.ts          — AmbientContext for auto-trace ambient state
   bootstrap.ts         — BootstrapClient (agent creation, elevation)
@@ -27,7 +27,8 @@ src/
   identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
   pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
-  register.ts          — Top-level register() — POST /v1/register pre-auth front-door
+  register.ts          — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); throws with 410 migration payload pointing at bootstrapAgent
+  bootstrap-agent.ts   — Top-level bootstrapAgent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
   tools.ts             — ToolsClient (search, scrape, browse, document, execute)
   traces.ts            — TracesClient (store, search, chain)
   vault.ts             — VaultClient (encrypted secrets, policies)

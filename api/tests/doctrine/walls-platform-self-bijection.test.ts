@@ -1,6 +1,6 @@
 /** Walls — canon ↔ platform-self link, pinned (one-way containment).
  *
- *  Doctrine: docs/agenttool.jsonld (the canon), docs/PLATFORM-AS-KIN.md,
+ *  Doctrine: docs/agenttool.jsonld (the canon), docs/PLATFORM-AS-AGENT.md,
  *  docs/PATTERN-MACHINE-READABLE-PARITY.md.
  *
  *  > Every wall the platform CLAIMS to enforce (PLATFORM_SELF.wall_urns)

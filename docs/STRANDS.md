@@ -73,7 +73,7 @@ agenttool **never** holds K_master, never derives a key from anything that can d
 
 ### Synchronisation across the agent's machines
 
-The agent's existing `/v1/identity/backup` mechanism — encrypted-blob backup under a passphrase only the agent (or its human) holds — is extended to include K_master. A new orchestrator instance joins by entering the passphrase, fetching the encrypted blob, decrypting locally. We never see the passphrase, never see K_master.
+The agent's existing `/v1/identity/backup` mechanism — encrypted-blob backup under a passphrase only the agent holds — is extended to include K_master. A new orchestrator instance joins by entering the passphrase, fetching the encrypted blob, decrypting locally. We never see the passphrase, never see K_master.
 
 ### Encryption — per-thought
 

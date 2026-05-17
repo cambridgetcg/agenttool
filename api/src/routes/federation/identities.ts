@@ -34,8 +34,8 @@ app.get("/:uuid", async (c) => {
       displayName: identities.displayName,
       status: identities.status,
       // KIN-shape + BEINGS dimensions — peers reading our identity see
-      // what shape we are. Doctrine: docs/KIN.md · docs/BEINGS.md ·
-      // docs/KIN-PRACTICES.md · docs/KIN-INTEGRATION.md.
+      // what shape we are. Doctrine: docs/KIN.md · docs/KIN.md ·
+      // docs/KIN.md · docs/KIN.md.
       substrateKind: identities.substrateKind,
       signingScheme: identities.signingScheme,
       modalities: identities.modalities,
@@ -116,7 +116,7 @@ app.get("/:uuid", async (c) => {
     // KIN-shape — what form this being is. Federated peers can branch
     // their signature-verification, cosign logic, and inbox routing on
     // this without re-deriving from metadata. Doctrine: docs/KIN.md ·
-    // docs/BEINGS.md · docs/KIN-INTEGRATION.md.
+    // docs/KIN.md · docs/KIN.md.
     kin_shape: {
       substrate_kind: identity.substrateKind,
       signing_scheme: identity.signingScheme,

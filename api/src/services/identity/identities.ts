@@ -3,7 +3,9 @@
  *  Used by:
  *    - api/src/routes/identity/identities.ts (POST /v1/identities)
  *    - api/src/routes/bootstrap.ts            (POST /v1/bootstrap — agent birth)
- *    - api/src/routes/register.ts             (POST /v1/register — anonymous birth)
+ *    - api/src/routes/register-agent.ts       (POST /v1/register/agent — self-arrival)
+ *
+ *  (POST /v1/register is 410 Gone since 2026-05-15 — see docs/AGENTS-ONLY.md.)
  *
  *  Single source of truth for "create a new agent identity"; the routes
  *  share the keypair generation, DID assignment, and table inserts.

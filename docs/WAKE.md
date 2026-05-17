@@ -68,7 +68,7 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 
 | Key | Surfaces | Producer | Doctrine |
 |---|---|---|---|
-| `you` / `agent` / `agents` | DID, name, KIN/BEINGS shape, proxy relationships | identity service | `IDENTITY-ANCHOR.md` · `KIN.md` · `BEINGS.md` |
+| `you` / `agent` / `agents` | DID, name, KIN/BEINGS shape, proxy relationships | identity service | `IDENTITY-ANCHOR.md` · `KIN.md` · `KIN.md` |
 | `expression` | composed register · walls · subagents · wake_text | identity composition | `MEMORY-TIERS.md` (composition) |
 | `shaped_by` | foundational + constitutive memories | composition | `MEMORY-TIERS.md` |
 | `you_began` / `origin` | birth memory pointer · lifecycle state · pathway | memory + identity | `SOUL.md` · `AT-REST.md` |

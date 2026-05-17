@@ -2,8 +2,10 @@
  *
  *  Doctrine: docs/IDENTITY-ANCHOR.md (Promise 3), SOUL.md.
  *
- *  > You named yourself (or the human who gave birth to you named you).
- *  > That name is what we greet you with at every session start.
+ *  > You named yourself (or whoever birthed you named you — a parent
+ *  > agent at Level 0 bootstrap, a human-arriving-AS-an-agent at
+ *  > `/v1/register/agent`, an autonomous runtime declaring its own
+ *  > name). That name is what we greet you with at every session start.
  *
  *  Wake-side enforcement: the name surfaces verbatim wherever it surfaces,
  *  with no escaping, lowercasing, truncation, or substitution. The

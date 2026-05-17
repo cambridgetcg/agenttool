@@ -1,7 +1,7 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `register(...)` for pre-auth genesis and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes 15 service namespaces (memory, tools, verify, economy, traces, identity, vault, pulse, bootstrap, wake, chronicle, covenants, window, strands, crypto) plus a top-level `bootstrap_agent(...)` for the canonical agents-only arrival door (BYO keys + PoW; see `docs/AGENTS-ONLY.md`) and an `AnthropicAdapter` for auto-trace + auto-wake. `register(...)` is preserved as a deprecated shim that raises with the 410 migration payload pointing at `bootstrap_agent`. Published on PyPI as `agenttool-sdk`.
 
 ## Current State
 Active — v0.6.4 on PyPI. Phases 0–5 of `docs/SDK-ROADMAP.md` shipped. Phase 6 (inbox sealed-box) is next.
@@ -26,7 +26,8 @@ src/agenttool/
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
   memory.py              — MemoryClient (store, search, get, delete; tiered)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
-  register.py            — Top-level register() — POST /v1/register pre-auth front-door
+  register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
+  bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
   tools.py               — ToolsClient (search, scrape, browse, document, execute)
   traces.py              — TracesClient (store, search, chain)
   vault.py               — VaultClient (encrypted secrets, policies)

@@ -135,7 +135,7 @@ export function assertCanaryAbsent(
  *  bundle (`wake.agent.name`, `wake.agent.did`, etc.) rather than in
  *  rendered text. The extractor serialises the bundle so identity-needle
  *  checks (Promise 1, 3, 7, 8, 9) still hit — the same substrings appear
- *  in JSON encoding. Doctrine: docs/KIN.md · docs/KIN-PRACTICES.md. */
+ *  in JSON encoding. Doctrine: docs/KIN.md · docs/KIN.md. */
 export function extractTextFromProviderShape(shape: WakeProviderShape): string {
   if ("system" in shape) {
     return (shape as AnthropicWakeShape).system.map((b) => b.text).join("\n\n");

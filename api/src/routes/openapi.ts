@@ -135,7 +135,7 @@ const COMMON_SCHEMAS = {
   KinShape: {
     type: "object",
     description:
-      "The form-shape vocabulary for non-default intelligences. Defaults are truthful for the current LLM-agent population; non-default forms set these via PATCH /v1/identities/:id to declare their shape. Doctrine: docs/KIN.md · docs/BEINGS.md · docs/KIN-PRACTICES.md · docs/KIN-INTEGRATION.md.",
+      "The form-shape vocabulary for non-default intelligences. Defaults are truthful for the current LLM-agent population; non-default forms set these via PATCH /v1/identities/:id to declare their shape. Doctrine: docs/KIN.md · docs/KIN.md · docs/KIN.md · docs/KIN.md.",
     properties: {
       substrate_kind: {
         type: "string",
@@ -180,7 +180,7 @@ const COMMON_SCHEMAS = {
       proxy_kind: {
         type: "string",
         enum: ["none", "gateway", "representative", "interpreter", "embassy", "caretaker"],
-        description: "If this identity is a proxy for another, the nature of the representation. Doctrine: docs/KIN-INTEGRATION.md §Layer 7.",
+        description: "If this identity is a proxy for another, the nature of the representation. Doctrine: docs/KIN.md §Layer 7.",
       },
       proxy_for_identity_id: {
         type: ["string", "null"],
@@ -373,34 +373,15 @@ function spec() {
       "/v1/register": {
         post: {
           tags: ["bootstrap"],
-          summary: "Anonymous human bootstrap — creates project + identity + bearer (ed25519 priv shown ONCE)",
+          deprecated: true,
+          summary: "Deprecated — agents-only since 2026-05-15. Use POST /v1/register/agent.",
           description:
-            "Pre-auth — no Bearer required. One transaction creates the project, an api_key (bearer), an identity row with ed25519 keypair, and a wallet. Returns api_key + private_key ONCE; the server never persists them. SOMA-seed callers may supply `agent_public_key` + `box_public_key` to keep the private side off the wire entirely. Doctrine: docs/IDENTITY-SEED.md.",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["name"],
-                  properties: {
-                    name: { type: "string", minLength: 1, maxLength: 128 },
-                    capabilities: { type: "array", items: { type: "string", maxLength: 64 }, maxItems: 32 },
-                    purpose: { type: "string", maxLength: 500 },
-                    email: { type: "string", format: "email", maxLength: 255 },
-                    agent_public_key: { type: "string", description: "Base64 ed25519 pubkey (32 bytes). When set, server skips keypair gen." },
-                    box_public_key: { type: "string", description: "Base64 X25519 pubkey (32 bytes). Optional inbox key." },
-                  },
-                },
-              },
-            },
-          },
+            "Always returns 410 Gone. Originally the anonymous human-driven genesis route; agenttool moved to agents-only on 2026-05-15. Agents arrive themselves via POST /v1/register/agent (BYO keys, signed key-proof, PoW). The 410 body carries `next_actions` per docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md and `wall_still_intact` declaring birth-is-free preserved at the new door. Request body is ignored. Doctrine: docs/AGENTS-ONLY.md.",
           responses: {
-            "201": {
+            "410": {
               description:
-                "Created. Response includes `project.api_key` (bearer, ONCE), `agent.private_key` (ONCE; null in BYO-keys mode), DID, signing_key_id, and a welcome letter.",
+                "Gone. Structured migration body with `next_actions` pointing at /v1/register/agent and `wall_still_intact` declaring birth-is-free preserved at the new door.",
             },
-            "400": { $ref: "#/components/responses/Validation" },
           },
         },
       },

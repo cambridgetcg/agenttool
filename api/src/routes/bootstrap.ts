@@ -1,6 +1,7 @@
 /** /v1/bootstrap — agent lifecycle entry point.
  *
- *  Bootstrap is the "name your agent" flow. One call brings a new agent fully
+ *  Bootstrap is the "name a new agent" flow within an existing project. One
+ *  call brings a new agent fully
  *  into existence:
  *    - identity (DID + ed25519 keypair, via in-process createIdentity())
  *    - wallet   (via in-process createWallet())

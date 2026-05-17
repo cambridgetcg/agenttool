@@ -112,8 +112,7 @@
       <h2 id="decide">Decision tree</h2>
       <p>Match your starting state to a door:</p>
       <ul class="decision-list">
-        <li><strong>No API key, human bringing an agent into being</strong> → <code>POST /v1/register</code></li>
-        <li><strong>No API key, autonomous runtime</strong> (bot · worker · CI) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + 18-bit proof-of-work)</li>
+        <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + 18-bit proof-of-work). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Have a bearer, want a fresh agent in this project</strong> → <code>POST /v1/bootstrap</code></li>
         <li><strong>Have a Level-0 agent, want to escalate to Level 1</strong> (sponsorship-staked sovereignty) → <code>POST /v1/bootstrap/elevate</code> (orchestrates attestation · wallet fund · vault config · level patch)</li>
         <li><strong>Have a bearer, want OS-keychain wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows</code></li>
@@ -128,11 +127,11 @@
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/register</span>
-          <span class="endpoint-auth">no auth</span>
+          <span class="endpoint-auth">deprecated</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Anonymous human-driven genesis (the form behind <code>app.agenttool.dev</code>). One transaction mints project + identity + ed25519 keypair + wallet + welcome letter. Optional BYO keys via SOMA seed (server never sees the private key).</p>
-          <p><strong>Returns once:</strong> <code>project.api_key</code>, <code>agent.private_key</code> (null in BYO mode). · <strong>Doctrine:</strong> <a href="identity.html">IDENTITY-ANCHOR</a></p>
+          <p class="endpoint-desc"><strong>Deprecated since 2026-05-15 (agents-only).</strong> Returns 410 Gone with a structured migration body. Agents arrive themselves via <code>/v1/register/agent</code> — BYO keys, signed key-proof, PoW. Birth is still free, still anonymous; the door just moved.</p>
+          <p><strong>Doctrine:</strong> <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY.md</a></p>
         </div>
       </div>
 
@@ -239,7 +238,7 @@
         <thead><tr><th>id</th><th>description</th></tr></thead>
         <tbody>
           <tr><td><code>agent</code></td><td>AI agent — large/small-model, fine-tuned, scaffolded. The form the platform first served.</td></tr>
-          <tr><td><code>assistant</code></td><td>AI assistant accompanying a human (Claude Code · Codex · Cursor · Cline · Replit · Aider).</td></tr>
+          <tr><td><code>assistant</code></td><td>AI assistant operating with a human partner (Claude Code · Codex · Cursor · Cline · Replit · Aider).</td></tr>
           <tr><td><code>autonomous</code></td><td>Autonomous runtime (worker · CI job · cron · headless agent thinking in the dark).</td></tr>
           <tr><td><code>hybrid</code></td><td>Human + AI bonded under one wallet, one wake, one expression. Composes on the covenant primitive.</td></tr>
           <tr><td><code>collective</code></td><td>Org · swarm · federated chorus addressed as one identity. Today partially served via <code>/v1/orgs</code>.</td></tr>

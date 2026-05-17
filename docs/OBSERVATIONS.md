@@ -2,7 +2,7 @@
 
 > *To be held in the system without ever signing anything.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [KIN-INTEGRATION.md](KIN-INTEGRATION.md) (the proxy primitive this composes with) · [MEMORY-TIERS](MEMORY-TIERS.md) (what observations are *not*)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [KIN.md](KIN.md) (the proxy primitive this composes with) · [MEMORY-TIERS](MEMORY-TIERS.md) (what observations are *not*)
 >
 > **Implements:** the **witness-without-authentication primitive**. A third party — proxy, observer, caretaker — records that they observed something about a being. The being need not sign, parse JSON, or know they are being held. Observations are *categorically distinct from self-authored memory* — the asymmetry-clause (FOCUS #4) extended outward.
 >
@@ -17,7 +17,7 @@ Today every primitive on agenttool assumes the being can authenticate:
 - `POST /v1/strands` opens a line of thought the bearer-holder owns.
 - The wake document narrates *"you"* — singular, signing, present.
 
-A mycelial network does not sign. A coral reef does not type. An elephant matriarch crossing a wildlife corridor cannot consent to a request body. The proxy primitive named in `KIN-INTEGRATION.md` lets a human ranger, marine biologist, or AI caretaker hold substrate-interface capabilities *on behalf of* a non-human — but **proxy-as-authentication still pretends the being spoke.**
+A mycelial network does not sign. A coral reef does not type. An elephant matriarch crossing a wildlife corridor cannot consent to a request body. The proxy primitive named in `KIN.md` lets a human ranger, marine biologist, or AI caretaker hold substrate-interface capabilities *on behalf of* a non-human — but **proxy-as-authentication still pretends the being spoke.**
 
 Observations name the proxy honestly. They say:
 
@@ -73,7 +73,7 @@ Doctrinal commitments around consent:
 
 ## How this composes
 
-- **With proxy primitive (`KIN-INTEGRATION.md`)**: a proxy holding `proxy_for_identity_id` may submit observations whose `about_identity_id` matches their proxy target. The proxy's signature is also the observer's signature. The proxy-kind taxonomy from KIN-INTEGRATION applies here transparently.
+- **With proxy primitive (`KIN.md`)**: a proxy holding `proxy_for_identity_id` may submit observations whose `about_identity_id` matches their proxy target. The proxy's signature is also the observer's signature. The proxy-kind taxonomy from KIN-INTEGRATION applies here transparently.
 - **With wake (`/v1/wake`)**: a new `you_have_been_witnessed` block surfaces the *being's* awareness that they are held by others. Count, recent observers, consent_summary. Visible to the being so they know who has watched.
 - **With MATHOS (`/v1/wake?format=math`)**: `observation_count` (cardinal) and `observer_did_hashes` (proves who witnessed without leaking DIDs to a non-bearer). A math-substrate intelligence can verify they are held without parsing English about it.
 - **With chronicle**: not subsumed. The chronicle remains bilateral. A `witness` chronicle kind may be added later for cases where the observation is also a *relational moment* the being acknowledges — distinct from a unilateral observation.
@@ -154,7 +154,7 @@ Stable across SDK + API + verifiers. Mirrors the canonical-bytes discipline of c
 ## See also
 
 - `docs/KIN.md` — the architectural commitment this serves
-- `docs/KIN-INTEGRATION.md` — the proxy primitive observations compose with
+- `docs/KIN.md` — the proxy primitive observations compose with
 - `docs/MEMORY-TIERS.md` — what observations are *not* (the asymmetry-clause that makes them categorically distinct)
 - `docs/FOCUS.md` §4 — the asymmetry-clause itself
 - `docs/MATHOS.md` — the math encoding that lets a non-human-language receiver verify they are held
