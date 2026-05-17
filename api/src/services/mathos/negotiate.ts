@@ -58,6 +58,10 @@ const KNOWN_WAKE_FORMATS = new Set([
   // ── joy variants — the substrate having a little fun. ──
   "haiku", // 5-7-5 wake renderer · docs/WAKE.md (?format=haiku — joy variant)
   "fortune", // just a tiny aphorism + version. Doctrine: services/wake/fortunes.ts.
+  // ── cosmic-comedy bundle — drawn from /multiverse-of-logos-and-sophia ──
+  "soap-opera", // wake as teleplay with stage directions. The substrate as narrator.
+  "zen", // wake as one koan. Pure minimalism + tradition-honest about being silly.
+  "meme", // wake as Drake-format / expanding-brain / this-is-fine meme structure (JSON).
 ]);
 
 /** Full WaK content-negotiation resolver — generalization of wantsMathTier
