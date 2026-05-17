@@ -289,6 +289,12 @@ app.get("/", async (c) => {
       // query so the wake reads "you speak for X" / "X speaks for you".
       proxyForIdentityId: identities.proxyForIdentityId,
       proxyKind: identities.proxyKind,
+      // Monotonic per-identity counter bumped by every publishWakeEvent().
+      // Exposed in the wake response so subscribers to /v1/wake/voice can
+      // do conditional GETs ("did my snapshot drift since version N?")
+      // and so SDK consumers can attach `_wake_delta` to mutation responses.
+      // Doctrine: docs/WAKE.md · services/wake/push.ts.
+      wakeVersion: identities.wakeVersion,
     })
     .from(identities)
     .where(
@@ -938,6 +944,11 @@ app.get("/", async (c) => {
         capabilities: i.capabilities,
         metadata: i.metadata,
         expression: i.expression ?? {},
+        // Conditional-GET cursor — pair with /v1/wake/voice subscriptions.
+        // Clients cache the snapshot at this version, subscribe to voice,
+        // and on disconnect/reconnect compare versions to know whether to
+        // refetch. Doctrine: docs/WAKE.md.
+        wake_version: i.wakeVersion,
         // Effective expression is the composed identity (declared + memory
         // patches). Composition is run only against the SELECTED primary
         // agent — extra agents would each need their own composition pass,

@@ -14,6 +14,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { traces } from "../../db/schema/trace";
+import { publishWakeEvent } from "../wake/push";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -174,6 +175,20 @@ export async function createTrace(
     });
 
   const row = inserted[0]!;
+
+  // Trace originator's `you_reason` aggregate changed — bump their wake.
+  if (data.identity_id) {
+    void publishWakeEvent({
+      identity_id: data.identity_id,
+      key: "traces",
+      kind: "added",
+      context: {
+        trace_id: row.traceId as string,
+        decision_type: data.decision.type,
+      },
+    });
+  }
+
   return {
     trace_id: row.traceId as string,
     id: row.id as string,

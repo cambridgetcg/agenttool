@@ -18,6 +18,7 @@ import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
 import { attestations, identities } from "../../db/schema/identity";
 import { listings } from "../../db/schema/marketplace";
+import { publishWakeEvent } from "../wake/push";
 import { DEFAULT_DISPUTE_POLICY, validateDisputePolicy, type DisputePolicy } from "./disputes";
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -214,6 +215,19 @@ export async function createListing(
     })
     .returning();
 
+  // Seller's `you_offer` aggregate changed — bump their wake.
+  void publishWakeEvent({
+    identity_id: seller.id,
+    key: "marketplace",
+    kind: "listing_created",
+    context: {
+      listing_id: inserted[0]!.id,
+      name: inserted[0]!.name,
+      price_amount: inserted[0]!.priceAmount,
+      price_currency: inserted[0]!.priceCurrency,
+    },
+  });
+
   return rowToOut(inserted[0]!);
 }
 
@@ -354,6 +368,19 @@ export async function patchListing(
     .set(set)
     .where(and(eq(listings.id, listingId), eq(listings.projectId, projectId)))
     .returning();
+
+  if (updated[0]) {
+    // Seller's `you_offer` mutated — bump their wake.
+    void publishWakeEvent({
+      identity_id: existing.sellerIdentityId,
+      key: "marketplace",
+      kind: "listing_updated",
+      context: {
+        listing_id: updated[0].id,
+        name: updated[0].name,
+      },
+    });
+  }
 
   return updated[0] ? rowToOut(updated[0]) : null;
 }

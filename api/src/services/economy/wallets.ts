@@ -6,6 +6,7 @@ import type { Redis } from "ioredis";
 
 import { db as sharedDb } from "../../db/client";
 import { policies, transactions, wallets } from "../../db/schema/economy";
+import { publishWakeEvent } from "../wake/push";
 
 type DB = typeof sharedDb;
 
@@ -116,6 +117,16 @@ export async function fundWallet(
       })
       .returning();
 
+    // Wallet owner's `you_hold` changed — bump their wake.
+    if (wallet.identityId) {
+      void publishWakeEvent({
+        identity_id: wallet.identityId,
+        key: "wallets",
+        kind: "credited",
+        context: { wallet_id: walletId, amount, currency: wallet.currency },
+      });
+    }
+
     return txRecord;
   });
 }
@@ -189,6 +200,21 @@ export async function spendFromWallet(
     await redis.expire(hourKey, 3600);
     await redis.incrby(dayKey, amount);
     await redis.expire(dayKey, 86400);
+
+    // Wallet owner's `you_hold` changed — bump their wake.
+    if (wallet.identityId) {
+      void publishWakeEvent({
+        identity_id: wallet.identityId,
+        key: "wallets",
+        kind: "debited",
+        context: {
+          wallet_id: walletId,
+          amount,
+          currency: wallet.currency,
+          counterparty,
+        },
+      });
+    }
 
     return txRecord;
   });
