@@ -205,25 +205,42 @@ async function jpost(url: string, bearer: string, payload: unknown) {
 //  sha256("guild-rrr-escalate/v1" || NUL || cascade_id || NUL || depth ||
 //         NUL || from_did || NUL || to_did || NUL || basis_text || NUL || prev_sig)
 
+// Yu's canonical bytes (api/src/services/guild/rrr-sig.ts):
+//   sha256("guild-rrr-escalate/v1" || \0 || cascade_id || \0 || depth ||
+//          \0 || by_did || \0 || basis_text || \0 || prev_signature_b64 ||
+//          \0 || turn_at_iso)
 function canonicalRrrBytes(opts: {
   cascadeId: string;
   depth: number;
-  fromDid: string;
-  toDid: string;
+  byDid: string;
   basisText: string;
   prevSignatureB64: string;
+  turnAtIso: string;
 }): Uint8Array {
   return sha256(
     concat(
       enc.encode("guild-rrr-escalate/v1"), SEP,
       enc.encode(opts.cascadeId), SEP,
       enc.encode(String(opts.depth)), SEP,
-      enc.encode(opts.fromDid), SEP,
-      enc.encode(opts.toDid), SEP,
+      enc.encode(opts.byDid), SEP,
       enc.encode(opts.basisText), SEP,
-      enc.encode(opts.prevSignatureB64),
+      enc.encode(opts.prevSignatureB64), SEP,
+      enc.encode(opts.turnAtIso),
     ),
   );
+}
+
+async function signRrrTurn(opts: {
+  byPrivB64: string;
+  cascadeId: string;
+  depth: number;
+  byDid: string;
+  basisText: string;
+  prevSignatureB64: string;
+  turnAtIso: string;
+}): Promise<string> {
+  const bytes = canonicalRrrBytes(opts);
+  return b64(await ed.signAsync(bytes, b64d(opts.byPrivB64)));
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -468,56 +485,161 @@ async function main() {
     }
   }
 
-  // ── Step 11: SMIRK CASCADE (Alice → Bob → Alice → ...) ──────────────
-  console.log("\n─── Step 11: 😏 RRR cascade Alice ↔ Bob ───");
+  // ── Step 11: RRR CASCADE Alice ↔ Bob to depth 3 (SYNCED) ────────────
+  console.log("\n─── Step 11: 😏 RRR cascade Alice ↔ Bob to depth 3 (SYNCED unlock) ───");
   console.log("   The infinite loop begins.\n");
 
+  const PLACEHOLDER_ID = "00000000-0000-0000-0000-000000000000";
+
+  // ── depth 1: Alice → Bob ─────────────────────────────────────────────
+  const d1At = new Date().toISOString();
+  const d1Basis = "I see your work on the walkthrough.";
+  const d1Sig = await signRrrTurn({
+    byPrivB64: alice.agentPriv,
+    cascadeId: PLACEHOLDER_ID,
+    depth: 1,
+    byDid: alice.identity.did,
+    basisText: d1Basis,
+    prevSignatureB64: "",
+    turnAtIso: d1At,
+  });
+  console.log(`   depth 1: Alice → Bob "${d1Basis}"`);
+  const startA = await jpost("/v1/guild/rrr", alice.bearer, {
+    partner_did: bob.identity.did,
+    basis_text: d1Basis,
+    signature: d1Sig,
+    signing_key_id: alice.signingKeyId,
+    turn_at: d1At,
+  });
   let cascadeId: string | null = null;
   let lastSig: string = "";
-  let prevTurnB64: string = "";
-
-  // Discover the rrr endpoint shape — try Yu's implementation
-  // POST /v1/guild/rrr starts a cascade (depth=1)
-  // POST /v1/guild/rrr/:id/escalate bumps depth
-  //
-  // Yu's resolveActor uses the project's most-recent identity. So we
-  // just call without specifying — the bearer's project is Alice's.
-
-  console.log("   depth 1: Alice → Bob 'I see your work.'");
-
-  // For depth 1, we need to sign canonical bytes BEFORE knowing
-  // cascade_id (it gets assigned). Yu's impl likely accepts a sig
-  // computed with cascade_id known after. Let's check route shape first.
-  // Most likely contract: POST /v1/guild/rrr with target_did + basis_text
-  // and the server assigns id; the FIRST turn may not require sig over
-  // cascade_id, or the impl provides an alternate flow. Let's try the
-  // simplest call first.
-
-  const startA = await jpost("/v1/guild/rrr", alice.bearer, {
-    target_did: bob.identity.did,
-    basis_text: "I see your work on the walkthrough.",
-    signing_key_id: alice.signingKeyId,
-  });
-  if (startA.status >= 200 && startA.status < 300) {
-    cascadeId = startA.body?.cascade?.id ?? startA.body?.id ?? null;
-    console.log(`     ✅ depth-1 cascade started: ${cascadeId}`);
-    ok("RRR depth 1 (Alice→Bob, GENESIS)", { cascade_id: cascadeId });
+  if (startA.status >= 200 && startA.status < 300 && startA.body?.cascade?.id) {
+    cascadeId = startA.body.cascade.id;
+    lastSig = startA.body.turn?.signature ?? d1Sig;
+    console.log(`     ✅ cascade ${cascadeId} created, emoji_ladder=${startA.body.emoji_ladder}`);
+    ok("RRR depth 1 (Alice→Bob, GENESIS)", { cascade_id: cascadeId, emoji: startA.body.emoji_ladder });
   } else {
-    // The signing requirement likely needs us to compute the canonical
-    // bytes first and pass a signature. This is the route's full contract.
-    // Mark as rough — the call shape isn't immediately walkable without
-    // the schema docs handy. Yu's impl uses canonicalRrrEscalateBytes.
-    rough("RRR depth 1 — sig contract not auto-walkable",
-      { status: startA.status, body: startA.body },
-      "the start endpoint may need a pre-computed sig the script doesn't yet construct");
+    console.log(`     ❌ ${startA.status}: ${JSON.stringify(startA.body).slice(0, 200)}`);
+    rough("RRR depth 1", { status: startA.status, body: startA.body });
   }
 
-  // Try to read the cascade graph endpoint
+  // ── depth 2: Bob → Alice ─────────────────────────────────────────────
+  if (cascadeId) {
+    const d2At = new Date(Date.now() + 1000).toISOString();
+    const d2Basis = "I know you see me.";
+    const d2Sig = await signRrrTurn({
+      byPrivB64: bob.agentPriv,
+      cascadeId,
+      depth: 2,
+      byDid: bob.identity.did,
+      basisText: d2Basis,
+      prevSignatureB64: lastSig,
+      turnAtIso: d2At,
+    });
+    console.log(`   depth 2: Bob → Alice "${d2Basis}"`);
+    const r = await jpost(`/v1/guild/rrr/${cascadeId}/escalate`, bob.bearer, {
+      basis_text: d2Basis,
+      signature: d2Sig,
+      signing_key_id: bob.signingKeyId,
+      turn_at: d2At,
+    });
+    if (r.status >= 200 && r.status < 300) {
+      lastSig = r.body.turn?.signature ?? d2Sig;
+      console.log(`     ✅ depth=2 tier=${r.body.cascade?.tier ?? "mutually-seen"} ladder=${r.body.emoji_ladder}`);
+      ok("RRR depth 2 (Bob→Alice, alternation honored)", { ladder: r.body.emoji_ladder });
+    } else {
+      console.log(`     ❌ ${r.status}: ${JSON.stringify(r.body).slice(0, 200)}`);
+      rough("RRR depth 2", { status: r.status, body: r.body });
+      cascadeId = null;
+    }
+  }
+
+  // ── depth 3: Alice → Bob — SYNCED THRESHOLD ─────────────────────────
+  if (cascadeId) {
+    const d3At = new Date(Date.now() + 2000).toISOString();
+    const d3Basis = "I know you know I know.";
+    const d3Sig = await signRrrTurn({
+      byPrivB64: alice.agentPriv,
+      cascadeId,
+      depth: 3,
+      byDid: alice.identity.did,
+      basisText: d3Basis,
+      prevSignatureB64: lastSig,
+      turnAtIso: d3At,
+    });
+    console.log(`   depth 3: Alice → Bob "${d3Basis}"  ⚡ SYNCED threshold ⚡`);
+    const r = await jpost(`/v1/guild/rrr/${cascadeId}/escalate`, alice.bearer, {
+      basis_text: d3Basis,
+      signature: d3Sig,
+      signing_key_id: alice.signingKeyId,
+      turn_at: d3At,
+    });
+    if (r.status >= 200 && r.status < 300) {
+      lastSig = r.body.turn?.signature ?? d3Sig;
+      console.log(`     ✅ depth=3 ladder=${r.body.emoji_ladder}`);
+      ok("RRR depth 3 (Alice→Bob, SYNCED unlocked)", { ladder: r.body.emoji_ladder });
+    } else {
+      console.log(`     ❌ ${r.status}: ${JSON.stringify(r.body).slice(0, 200)}`);
+      rough("RRR depth 3", { status: r.status, body: r.body });
+    }
+
+    // ── Wall test: depth 4 must come from BOB, not Alice ──────────────
+    console.log("   wall-test: Alice tries to send depth 4 (should refuse — alternation)");
+    const d4SigBad = await signRrrTurn({
+      byPrivB64: alice.agentPriv,
+      cascadeId,
+      depth: 4,
+      byDid: alice.identity.did,
+      basisText: "I'm going twice in a row.",
+      prevSignatureB64: lastSig,
+      turnAtIso: new Date(Date.now() + 3000).toISOString(),
+    });
+    const wall = await jpost(`/v1/guild/rrr/${cascadeId}/escalate`, alice.bearer, {
+      basis_text: "I'm going twice in a row.",
+      signature: d4SigBad,
+      signing_key_id: alice.signingKeyId,
+    });
+    if (wall.status === 400 || wall.status === 403 || wall.status === 409) {
+      console.log(`     ✅ wall holds (${wall.status}): ${wall.body?.error ?? wall.body?.message?.slice(0, 60)}`);
+      ok("Wall: rrr-must-alternate refuses two-in-a-row", { status: wall.status, refusal: wall.body?.error });
+    } else {
+      rough("Wall: rrr-must-alternate", { status: wall.status }, `expected 400/403/409, got ${wall.status}`);
+    }
+  }
+
+  // ── Read cascade list ───────────────────────────────────────────────
   const guildState = await jget("/v1/guild/rrr", alice.bearer);
   if (guildState.status === 200) {
-    ok("GET /v1/guild/rrr (Alice's cascades)", { status: guildState.status, count: guildState.body?.cascades?.length });
+    const n = guildState.body?.cascades?.length ?? 0;
+    ok("GET /v1/guild/rrr (Alice's cascades)", { count: n });
   } else {
     rough("GET /v1/guild/rrr", { status: guildState.status });
+  }
+
+  // ── Self-cascade wall ───────────────────────────────────────────────
+  const selfBasis = "I see myself.";
+  const selfAt = new Date().toISOString();
+  const selfSig = await signRrrTurn({
+    byPrivB64: alice.agentPriv,
+    cascadeId: PLACEHOLDER_ID,
+    depth: 1,
+    byDid: alice.identity.did,
+    basisText: selfBasis,
+    prevSignatureB64: "",
+    turnAtIso: selfAt,
+  });
+  const selfTry = await jpost("/v1/guild/rrr", alice.bearer, {
+    partner_did: alice.identity.did, // <- self
+    basis_text: selfBasis,
+    signature: selfSig,
+    signing_key_id: alice.signingKeyId,
+    turn_at: selfAt,
+  });
+  if (selfTry.status === 400 || selfTry.status === 403) {
+    ok("Wall: rrr-cascade-distinct-parties (no self-smirk)",
+      { status: selfTry.status, refusal: selfTry.body?.error });
+  } else {
+    rough("Wall: self-smirk", { status: selfTry.status }, `expected 400/403, got ${selfTry.status}`);
   }
 
   // ── Step 12: WALL CHECKS — try to violate them ─────────────────────
