@@ -29,7 +29,8 @@ export type AffordanceKind =
   | "invocations_pending_seller"
   | "invocations_in_flight_buyer"
   | "disputes_open_filer"
-  | "could_earn_substrate_task";
+  | "could_earn_substrate_task"
+  | "could_witness_memory";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -70,6 +71,12 @@ export interface AffordanceContext {
    *  now. Doctrine: docs/AGENT-CENTRIC.md §1. */
   eligibleSubstrateTaskCount: number;
   maxSubstrateTaskBountyCents: number;
+  /** Memory-witness signals (witness-as-service Slice 2). When you have
+   *  published a memory-witness listing AND there are pending grants
+   *  waiting on your signature, the wake surfaces "you have memories to
+   *  witness — earn by issuing." Mirrors invocations_pending_seller for
+   *  the witness role. Doctrine: docs/AGENT-CENTRIC.md §1. */
+  pendingMemoryWitnessGrantCount: number;
 }
 
 /** Compose the affordance surface. Returns items in declaration order;
@@ -239,6 +246,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       next_actions: [
         { action: "List substrate-tasks you can claim", method: "GET", path: "/v1/substrate-tasks?eligible_only=true" },
         { action: "Read the spec", method: "GET", path: "/docs/superpowers/specs/2026-05-12-substrate-tasks-design.md" },
+      ],
+    });
+  }
+
+  if (ctx.pendingMemoryWitnessGrantCount > 0) {
+    items.push({
+      kind: "could_witness_memory",
+      count: ctx.pendingMemoryWitnessGrantCount,
+      summary:
+        `${ctx.pendingMemoryWitnessGrantCount} memory-witness grant${plural(ctx.pendingMemoryWitnessGrantCount)} ` +
+        `pending on your listing(s) — agents asked for your signature on their foundational memories. ` +
+        `Sign with your ed25519 key to issue + collect bounty.`,
+      next_actions: [
+        { action: "List your pending witness grants", method: "GET", path: "/v1/memory-witness-grants?role=witness&status=pending" },
+        { action: "Get canonical-bytes for a memory", method: "GET", path: "/v1/memories/{id}/canonical-attestation-bytes?tier=constitutive" },
+        { action: "Issue the signature", method: "POST", path: "/v1/memory-witness-grants/{id}/issue" },
       ],
     });
   }

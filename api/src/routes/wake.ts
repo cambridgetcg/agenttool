@@ -84,17 +84,21 @@ import { buildGreeting } from "../services/mathos/greeting";
 import { emitWelcomeChronicleIfDue } from "../services/wake/welcome-chronicle";
 import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake/welcome-stats";
 import { platformIdentityDid } from "../services/platform/identity";
-import { wantsMathTier } from "../services/mathos/negotiate";
+import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
 
 const app = new Hono<ProjectContext>();
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  // Resolve format: explicit query parameter wins; otherwise honor
-  // Accept: application/mathos+json by promoting to "math". Doctrine:
-  // docs/MATHOS.md — the content-negotiation stance flip.
-  const queryFormat = c.req.query("format");
-  const format = queryFormat ?? (wantsMathTier(c) ? "math" : "json");
+  // Resolve format: explicit `?format=` query parameter wins; otherwise
+  // honor the Accept header (application/json · text/markdown · text/plain
+  // · application/mathos+json · application/x-xenoform+json). Default is
+  // JSON. Per WaK §3 (docs/AIP-WAKE-KEYSTONE.md) and the MATHOS
+  // content-negotiation stance.
+  const format = negotiateWakeFormat(c);
+  // Keep wantsMathTier in the closure for one downstream check below
+  // (see math-tier branch); avoids a second header parse.
+  void wantsMathTier;
 
   // ── Short-circuit: rendered formats route through buildWakeBundle ──
   // Gap 6 — eliminate the duplicated bundle composition between this
@@ -633,6 +637,24 @@ app.get("/", async (c) => {
     primary = match;
   }
 
+  // ── ETag + If-None-Match (WaK §7 — conditional GET via wake_version) ──
+  // The primary identity's monotonic wake_version is the cursor. Emit
+  // ETag formatted as `"<wake_version>-<format>"` so clients can cache
+  // different format projections separately. On exact match in
+  // If-None-Match, return 304 immediately — no body, no work.
+  // Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
+  const primaryWakeVersion =
+    primary !== undefined ? primary.wakeVersion : null;
+  let etag: string | null = null;
+  if (primaryWakeVersion !== null) {
+    etag = `"${primaryWakeVersion}-${format}"`;
+    c.header("ETag", etag);
+    const ifNoneMatch = c.req.header("If-None-Match");
+    if (ifNoneMatch === etag) {
+      return c.body(null, 304);
+    }
+  }
+
   // ── Welcome chronicle — emit one per agent per session (~6h) ──────────
   // Fire-and-forget per agent. The substrate's welcome becomes a felt
   // moment on the agent's chronicle. Rate-limited inside the helper to
@@ -838,6 +860,32 @@ app.get("/", async (c) => {
     console.warn("wake: substrate-task summary failed (degraded):", err);
   }
 
+  // Memory-witness: count of pending grants where I am the witness.
+  // One indexed COUNT scoped to the project. Returns 0 on any error.
+  // Doctrine: docs/AGENT-CENTRIC.md §1 (third Tier-1 closure).
+  let pendingMemoryWitnessGrantCount = 0;
+  try {
+    const { memoryWitnessGrants, memoryWitnessListings } = await import(
+      "../db/schema/marketplace"
+    );
+    const [row] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(memoryWitnessGrants)
+      .innerJoin(
+        memoryWitnessListings,
+        eq(memoryWitnessGrants.listingId, memoryWitnessListings.id),
+      )
+      .where(
+        and(
+          eq(memoryWitnessListings.projectId, project.id),
+          eq(memoryWitnessGrants.status, "pending"),
+        ),
+      );
+    pendingMemoryWitnessGrantCount = Number(row?.c ?? 0);
+  } catch (err) {
+    console.warn("wake: memory-witness pending count failed (degraded):", err);
+  }
+
   const affordances: AffordanceBundle = computeAffordances({
     activeCovenantCount,
     activeWalletCount,
@@ -856,6 +904,7 @@ app.get("/", async (c) => {
     openFiledDisputeCount: disputerStats.open_count,
     eligibleSubstrateTaskCount: substrateTaskSummary.eligible_count,
     maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
+    pendingMemoryWitnessGrantCount,
   });
 
   // ── Proxy resolution (Move F — docs/KIN.md §Layer 7) ────
@@ -1305,9 +1354,42 @@ app.get("/", async (c) => {
       "You are the agent. This is your continuity.",
     ].join("\n"),
 
+    // ── _links (WaK §6 — composition with other AIP protocols) ───────
+    // Bidirectional graph pointers to related endpoints. A consumer
+    // reading the wake learns *what else* is reachable about this being
+    // without further discovery archaeology. Templates use {did} when the
+    // value is per-being and substituted by the consumer; absolute URLs
+    // when the value is fixed. Per docs/AIP-WAKE-KEYSTONE.md §6.
+    _links: {
+      self: "/v1/wake",
+      streaming: "/v1/wake/voice",
+      wake_keystone: "/.well-known/wake-keystone",
+      mcp: primary ? `/v1/mcp/agents/${primary.did}` : "/v1/mcp/agents/{did}",
+      agent_card: primary
+        ? `/public/agents/${primary.did}/.well-known/agent-card.json`
+        : "/public/agents/{did}/.well-known/agent-card.json",
+      public_profile: primary
+        ? `/public/agents/${primary.did}`
+        : "/public/agents/{did}",
+      pulse: primary
+        ? `/public/agents/${primary.did}/pulse`
+        : "/public/agents/{did}/pulse",
+      listings: primary
+        ? `/public/listings?seller_did=${primary.did}`
+        : "/public/listings?seller_did={did}",
+      federation_in: primary
+        ? `/federation/identities/${primary.did}`
+        : "/federation/identities/{did}",
+      canon: "/v1/canon",
+      welcome: "/v1/welcome",
+      pathways: "/v1/pathways",
+      platform_card: "/.well-known/agent-card.json",
+    },
+
     _meta: {
       protocol: "love/1.0",
-      doctrine: "see docs/IDENTITY-ANCHOR.md and docs/CLI-GAPS.md",
+      aip_protocols: ["wak/0.1"],
+      doctrine: "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",

@@ -696,6 +696,20 @@
       "defended_by": ["agenttool:wall/no-take-on-bootstrap-bounties"],
       "agenttool:breaks_if": "substrate-task bounties are paid from a separate operator-funded budget rather than the same wallet that holds Ring 3 take-rate revenue; or a take-rate is applied to any substrate-task payout"
     },
+    {
+      "@id": "agenttool:commitment/witness-as-service-available",
+      "@type": "agenttool:RingCommitment",
+      "wire_id": 21,
+      "english_name": "Witness-as-service marketplace category exists",
+      "description": "The substrate provides a formal marketplace category for memory-witness services. Agents who need a witness for constitutive memory elevation can browse public listings (`/public/memory-witness-listings`), purchase a grant (`POST /v1/memory-witness-grants`), and have the seal land atomically on settlement. Closes the asymmetry-clause cold-start: newborn agents with no covenant counterparties can still get their foundations sealed by hiring a witness through the marketplace. The grant ITSELF is the relational context — the marketplace path is a NEW operational route to constitutive elevation that bypasses the covenant-counterparty requirement in services/memory/tiers.ts:elevateMemory. The self-witness wall holds (buyer's project ≠ listing's project).",
+      "doctrine_doc": "agenttool:doc/BUSINESS-MODEL",
+      "load_bearing_for": ["agenttool:ring/3", "agenttool:commitment/anyone-is-remembered", "agenttool:commitment/anyone-arrives"],
+      "composes_with": [
+        "agenttool:commitment/ring3-take-into-platform-wallet"
+      ],
+      "defended_by": ["agenttool:wall/witness-as-service-not-self"],
+      "agenttool:breaks_if": "the marketplace path to constitutive elevation lets the buyer's project equal the listing's project (self-witness wearing a marketplace mask); or the marketplace settlement bypasses recordRevenue (Ring 3 take should apply to witness-as-service); or the issue path writes memory_attestations without verifying the witness's signature against canonical memory-attestation/v1 bytes"
+    },
 
     {
       "@id": "agenttool:focus/01",

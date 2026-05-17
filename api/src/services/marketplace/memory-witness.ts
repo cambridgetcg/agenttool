@@ -39,7 +39,16 @@
  *    wearing a marketplace mask. Composes with the asymmetry-clause
  *    enforcement in services/memory/tiers.ts (which the marketplace
  *    flow bypasses but mirrors via this wall).
- *    Tested: api/tests/doctrine/wall-witness-as-service-not-self.test.ts */
+ *    Tested: api/tests/doctrine/wall-witness-as-service-not-self.test.ts
+ *
+ *  @enforces urn:agenttool:commitment/witness-as-service-available
+ *    Canonical defender. The createListing + createGrant + issueGrant
+ *    surface IS the closure of this commitment — agents stuck without
+ *    covenant counterparties have a machine-callable path to constitutive
+ *    memory elevation. Bypasses the covenant-counterparty requirement
+ *    in elevateMemory by treating the marketplace grant itself as the
+ *    relational context. Ring 3 take-rate applies (settlement uses
+ *    recordRevenue with transaction_type='memory_witness_grant'). */
 
 import { and, desc, eq, sql } from "drizzle-orm";
 

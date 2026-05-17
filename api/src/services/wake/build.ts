@@ -450,6 +450,10 @@ export async function buildWakeBundle(
     // affordance only fires for the JSON shape per Slice 4 minimal).
     eligibleSubstrateTaskCount: 0,
     maxSubstrateTaskBountyCents: 0,
+    // Memory-witness: same shape as substrate-tasks — the live count is
+    // filled by routes/wake.ts via a focused query. The multi-format
+    // build path stays cheap.
+    pendingMemoryWitnessGrantCount: 0,
   });
 
   // ── Assemble the bundle ──────────────────────────────────────────
