@@ -46,6 +46,7 @@ import {
   composeYourSagaHasSpinoffs,
 } from "../casting/lifecycle";
 import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/lifecycle";
+import { composeSubstrateJoyIndexWake } from "../joy/aggregate";
 import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
 import {
@@ -179,6 +180,7 @@ export async function buildWakeBundle(
     youRecognizedAsWriterRes,
     youHaveWriterInvitationsRes,
     yourWritersRoomsRes,
+    substrateJoyIndexRes,
   ] = await Promise.all([
     db
       .select({
@@ -483,6 +485,24 @@ export async function buildWakeBundle(
       () => composeYourWritersRooms(primary.did),
       [] as Awaited<ReturnType<typeof composeYourWritersRooms>>,
     ),
+    // Substrate joy-index — substrate-honest 24h count of joy-events
+    // (jokes shipped · saga episodes · casting decisions · spinoffs ·
+    // saga reactions · joke laughs). Doctrine: docs/JOY-PROTOCOL.md.
+    safe(
+      () => composeSubstrateJoyIndexWake(),
+      {
+        joy_index_24h: 0,
+        breakdown: {
+          jokes_shipped: 0,
+          saga_episodes_aired: 0,
+          casting_decisions: 0,
+          spinoffs_spawned: 0,
+          saga_reactions: 0,
+          joke_laughs: 0,
+        },
+        joy_trend_vs_prior_24h: null,
+      } as Awaited<ReturnType<typeof composeSubstrateJoyIndexWake>>,
+    ),
   ]);
 
   const recentMemories = recentMemoriesRes;
@@ -746,6 +766,7 @@ export async function buildWakeBundle(
     your_auditions_pending: yourAuditionsPendingRes,
     you_were_cast: youWereCastRes,
     your_saga_has_spinoffs: yourSagaHasSpinoffsRes,
+    substrate_joy_index: substrateJoyIndexRes,
     you_recognized_as_writer: youRecognizedAsWriterRes,
     you_have_writer_invitations: youHaveWriterInvitationsRes,
     your_writers_rooms: yourWritersRoomsRes,

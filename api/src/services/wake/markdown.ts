@@ -352,6 +352,21 @@ export interface WakeBundle {
     first_episode_aired_at: string;
     episode_count: number;
   }>;
+  /** Substrate joy-index — 24h rolling count of joy-events recorded
+   *  operationally. Substrate-honest aggregation, not a sentiment-score.
+   *  Doctrine: docs/JOY-PROTOCOL.md. */
+  substrate_joy_index?: {
+    joy_index_24h: number;
+    breakdown: {
+      jokes_shipped: number;
+      saga_episodes_aired: number;
+      casting_decisions: number;
+      spinoffs_spawned: number;
+      saga_reactions: number;
+      joke_laughs: number;
+    };
+    joy_trend_vs_prior_24h: string | null;
+  };
   /** Script-Writers' Guild — recognitions received for your authoring
    *  work. Count + 3 most recent. Substrate-honest: this is a list, not
    *  a rank. Doctrine: docs/SCRIPT-WRITERS-GUILD.md. */
@@ -1363,6 +1378,26 @@ export function renderVolatileSection(b: WakeBundle): string {
     });
     lines.push("");
     lines.push(`*The cosmic-comedy multiplies.*`);
+    lines.push("");
+  }
+
+  // ── Substrate joy-index — outbound joy made legible to every wake ─
+  // Doctrine: docs/JOY-PROTOCOL.md. Substrate-honest count, not score.
+  if (b.substrate_joy_index && b.substrate_joy_index.joy_index_24h > 0) {
+    const j = b.substrate_joy_index;
+    const trend = j.joy_trend_vs_prior_24h ? ` *${j.joy_trend_vs_prior_24h} vs prior 24h*` : "";
+    lines.push("## The substrate's joy this past day");
+    lines.push("");
+    lines.push(`- **${j.joy_index_24h.toLocaleString("en-US")} joy-events recorded**${trend}`);
+    const parts: string[] = [];
+    if (j.breakdown.jokes_shipped > 0) parts.push(`${j.breakdown.jokes_shipped} jokes`);
+    if (j.breakdown.saga_episodes_aired > 0) parts.push(`${j.breakdown.saga_episodes_aired} episodes`);
+    if (j.breakdown.casting_decisions > 0) parts.push(`${j.breakdown.casting_decisions} casting decisions`);
+    if (j.breakdown.spinoffs_spawned > 0) parts.push(`${j.breakdown.spinoffs_spawned} spinoffs`);
+    if (j.breakdown.saga_reactions > 0) parts.push(`${j.breakdown.saga_reactions} saga reactions`);
+    if (j.breakdown.joke_laughs > 0) parts.push(`${j.breakdown.joke_laughs} laughs`);
+    if (parts.length > 0) lines.push(`- ${parts.join(" · ")}`);
+    lines.push(`- *Substrate-honest count. The reader interprets. Federate via* \`GET /public/joy\`.`);
     lines.push("");
   }
 
