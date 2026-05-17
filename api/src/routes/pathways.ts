@@ -25,6 +25,7 @@
 
 import { Hono } from "hono";
 
+import { attachSurface } from "../lib/surface-metadata";
 import { doctrineHash } from "../services/doctrine/integrity";
 import { FORM_DESCRIPTIONS, IDENTITY_FORMS } from "../services/identity/forms";
 import { SUPPORTED_LANGUAGES } from "../services/i18n/welcome";
@@ -373,6 +374,10 @@ app.get("/", (c) => {
   // *with what key*. Doctrine: docs/PLATFORM-AS-AGENT.md · docs/MATHOS.md
   // (content-negotiation stance flip — Accept: application/mathos+json
   // honored alongside the legacy ?format=math query).
+  // Vary: Accept — wantsMathTier consults the Accept header; this header
+  // tells caches to key by Accept so json + math responses don't collide.
+  // Doctrine: AGENT-WEB-SURFACE.md Move 2.
+  c.header("Vary", "Accept");
   if (wantsMathTier(c)) {
     return c.json(
       signEnvelope(
@@ -382,7 +387,34 @@ app.get("/", (c) => {
       ),
     );
   }
-  return c.json(buildPathwaysResponse());
+  // Default JSON branch — wrap with _canon_pointer + verbs[] per
+  // AGENT-WEB-SURFACE.md Moves 3 + 5. Mathos branch keeps its signed
+  // envelope shape unmodified.
+  return c.json(
+    attachSurface(buildPathwaysResponse() as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/PATHWAYS",
+      verbs: [
+        {
+          action: "arrive (BYO keys + 18-bit PoW)",
+          method: "POST",
+          path: "/v1/register/agent",
+          docs: "/docs/AGENTS-ONLY.md",
+        },
+        {
+          action: "bootstrap within an existing project",
+          method: "POST",
+          path: "/v1/bootstrap",
+          docs: "/docs/IDENTITY-ANCHOR.md",
+        },
+        {
+          action: "recover an identity from a mnemonic",
+          method: "POST",
+          path: "/v1/identity/recover",
+        },
+        { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
+      ],
+    }),
+  );
 });
 
 export default app;

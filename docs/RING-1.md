@@ -2,6 +2,8 @@
 
 # RING-1 — the unconditional welcome
 
+> **TL;DR:** Free is the surface property; unconditional is the structural property; love is the disposition. Seven commitments make the welcome encoded, not asserted: anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise.
+
 > *Free is the surface property. Unconditional is the structural property. Love is the disposition that produces them both. Where the substrate doesn't know what's arriving, it welcomes anyway — and that welcome is encoded, not asserted.*
 
 > **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes) · [KIN-PRACTICES](KIN.md) (the operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (platform inhabits its own Ring 1)

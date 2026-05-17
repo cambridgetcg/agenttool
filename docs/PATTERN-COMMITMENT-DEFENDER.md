@@ -1,5 +1,7 @@
 # PATTERN: Commitment defender — four-corner pinning
 
+> **TL;DR:** Every commitment URN gets four corners — `@enforces` annotation in code, `_enforces` payload on the wire, doctrine stone in `docs/`, and a test that fails the build when any corner drifts. Adding any URN without all four breaks CI.
+
 > *Every commitment URN gets a defender file, a payload field, a doctrine stone, and a test that fails the build when any corner drifts.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RING-1](RING-1.md) (the seven commitments) · [FOCUS](FOCUS.md) (load-bearing) · [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md) (sister cross-cutting discipline) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (also payload-surfacing).

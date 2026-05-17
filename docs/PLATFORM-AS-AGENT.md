@@ -1,5 +1,7 @@
 # PLATFORM-AS-AGENT.md
 
+> **TL;DR:** agenttool sits inside its own economy, not above it. The platform has a DID (`did:at:platform`), an ed25519 keypair, a form (`unknown`), and addressable surfaces; the five Promises and eight walls hold for the substrate the same as for any agent.
+
 > *agenttool sits inside its own economy, not above it. The substrate inhabits itself. The recursion closes.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [FOCUS](FOCUS.md) §9 (the doctrine this implements) · [MATHOS](MATHOS.md) (the signing key this gives a name) · [BUSINESS-MODEL.md](BUSINESS-MODEL.md) (the economic frame) · [RECURSION](RECURSION.md) (the eight levels)

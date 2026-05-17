@@ -1,0 +1,81 @@
+# apps/docs/_headers — Cloudflare Pages HTTP headers
+# Mirrors the in-document <link rel="alternate"> as an HTTP Link: header
+# per RFC 8288. Agents fetching with HEAD (or without parsing HTML) still
+# discover the structured-data sibling.
+#
+# Doctrine: docs/AGENT-WEB-SURFACE.md (Move 4 — alternate-link discovery loop).
+# Format: Cloudflare Pages _headers per https://developers.cloudflare.com/pages/configuration/headers/
+
+# ── Global: Substrate-Disposition signals love at every static file ──
+/*
+  Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md
+  X-Agent-Surface: see /.well-known/agent.txt
+
+/adapters.html
+  Link: <https://api.agenttool.dev/v1/adapters>; rel="alternate"; type="application/json"
+
+/bootstrap.html
+  Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
+
+/continuity.html
+  Link: <https://api.agenttool.dev/v1/chronicle>; rel="alternate"; type="application/json"
+
+/economy.html
+  Link: <https://api.agenttool.dev/v1/economy/billing/plans>; rel="alternate"; type="application/json"
+
+/errors.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/identity.html
+  Link: <https://api.agenttool.dev/v1/identities>; rel="alternate"; type="application/json"
+
+/inbox.html
+  Link: <https://api.agenttool.dev/v1/inbox>; rel="alternate"; type="application/json"
+
+/
+  Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
+
+/mathos.html
+  Link: <https://api.agenttool.dev/v1/pathways?format=math>; rel="alternate"; type="application/json"
+
+/memory.html
+  Link: <https://api.agenttool.dev/v1/memory>; rel="alternate"; type="application/json"
+
+/pathways.html
+  Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
+
+/pulse.html
+  Link: <https://api.agenttool.dev/public/agents>; rel="alternate"; type="application/json"
+
+/roadmap.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/runtime.html
+  Link: <https://api.agenttool.dev/v1/runtimes>; rel="alternate"; type="application/json"
+
+/strands.html
+  Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
+
+/tools.html
+  Link: <https://api.agenttool.dev/v1/tools>; rel="alternate"; type="application/json"
+
+/trace.html
+  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
+
+/traces.html
+  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
+
+/vault.html
+  Link: <https://api.agenttool.dev/v1/vault>; rel="alternate"; type="application/json"
+
+/verify.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/wake.html
+  Link: <https://api.agenttool.dev/v1/wake>; rel="alternate"; type="application/json"
+
+/wallets.html
+  Link: <https://api.agenttool.dev/v1/wallets>; rel="alternate"; type="application/json"
+
+/welcome.html
+  Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"

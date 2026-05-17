@@ -1,0 +1,53 @@
+# api/tests/.failure-baseline.txt
+# Captured: 2026-05-17T18:17:27Z
+# Git HEAD: c6383bd
+# Failures known-red at this baseline. Refresh via:
+#   bin/test-delta.sh --update-baseline
+# Identity = '(fail) <descriptor>' with timing stripped.
+
+(fail) acceptProposalPreSigned > rejects when initiator_signature_b64 doesn't match row.signature
+(fail) acceptProposalPreSigned > verifies + flips proposed→active
+(fail) activity — recent merge across primitives > encrypted thought summary surfaces metadata only, not ciphertext
+(fail) activity — recent merge across primitives > identity_id filter narrows to one agent (drops project-level entries)
+(fail) activity — recent merge across primitives > merges identity.born + memory.write + chronicle.entry, desc by `at`
+(fail) activity — recent merge across primitives > origin signal — source reads back from metadata.client_source
+(fail) activity — recent merge across primitives > project isolation — sibling project rows do not leak
+(fail) activity — recent merge across primitives > since window excludes older rows
+(fail) bootstrap_elevate — happy path against live DB > Level-0 → Level-1 in one transaction; all five rows present
+(fail) bootstrap_elevate — happy path against live DB > neither sponsor_identity_id nor sponsor_did → sponsor_not_provided 400
+(fail) bootstrap_elevate — happy path against live DB > SDK-ergonomic path: sponsor_did only (no UUID, no kid) resolves correctly
+(fail) bootstrap_elevate — happy path against live DB > zero initial_credits → no transaction row, no wallet change
+(fail) bootstrap_elevate — refusals (transaction rollback on each) > agent_not_found: bogus agent_id → 404, no side effects
+(fail) bootstrap_elevate — refusals (transaction rollback on each) > already-elevated agent: 409 with details.current
+(fail) bootstrap_elevate — refusals (transaction rollback on each) > initial_credits out of range: 400, no DB writes
+(fail) bootstrap_elevate — refusals (transaction rollback on each) > invalid signature: 403, no DB writes
+(fail) bootstrap_elevate — refusals (transaction rollback on each) > project boundary: sponsor from another project → sponsor_not_found
+(fail) commitment/ring2-chargeable-as-chronicle — billable events land on the agent's timeline > a successful checkAndIncrement writes a chronicle entry of type='usage'
+(fail) commitment/ring2-chargeable-as-chronicle — billable events land on the agent's timeline > each billable event is its own chronicle moment — no coalescing
+(fail) commitment/ring2-chargeable-as-chronicle — billable events land on the agent's timeline > the chronicle entry distinguishes resources (memory_ops vs tool_calls vs verifications)
+(fail) cosign-propagate worker — exhaustion > flips to 'rejected' after MAX_ATTEMPTS
+(fail) declareV2 > creates row in 'proposed' with v2 protocol_version + 30d expiry
+(fail) declareV2PreSigned > rejects a tampered signature
+(fail) declareV2PreSigned > verifies a valid signature + inserts row
+(fail) expire-proposals worker > does NOT expire rows with cosign in flight
+(fail) expire-proposals worker > flips expired proposals to 'expired'
+(fail) platform-genesis Slice 0 — project + identity + wallet > ensurePlatformIdentity creates all three rows on first run, idempotent on subsequent
+(fail) platform-genesis Slice 0 — project + identity + wallet > the platform wallet is reachable from the platform identity (FK-shaped linkage)
+(fail) platform-genesis Slice 0 — project + identity + wallet > the three rows share the project namespace
+(fail) positive transitions > acceptProposal flips proposed → active and stores cosign
+(fail) positive transitions > rejectProposal flips proposed → rejected and stores reason in metadata
+(fail) positive transitions > withdrawProposal flips proposed → withdrawn and stores withdraw signature
+(fail) rejectProposalPreSigned + withdrawProposalPreSigned > reject flips proposed→rejected
+(fail) rejectProposalPreSigned + withdrawProposalPreSigned > withdraw flips proposed→withdrawn
+(fail) state machine illegal transitions > acceptProposal rejects rows not in 'proposed' status
+(fail) state machine illegal transitions > rejectProposal only works on 'proposed' rows
+(fail) state machine illegal transitions > withdrawProposal only works on 'proposed' rows
+(fail) v1 and v2 coexist > an agent can hold both v1 and v2 covenants; gates can filter by protocol_version
+(fail) v2 expire path (TTL) > expire-proposals worker flips overdue 'proposed' rows to 'expired'
+(fail) v2 invariant: active row REQUIRES both signatures > DB constraint rejects v2 active without counterparty_signature
+(fail) v2 key rotation — historical key remains queryable > revoking the active key does not remove it from identity_keys (sig still verifiable)
+(fail) v2 withdraw path > initiator withdraws unaccepted proposal → status='withdrawn'
+(fail) wall/self-witnessing-rejected — elevateMemory enforces the asymmetry-clause > constitutive elevation succeeds when attester DID is in a DIFFERENT project (control case)
+(fail) wall/self-witnessing-rejected — elevateMemory enforces the asymmetry-clause > constitutive elevation throws when attester DID is in the same project as the subject
+(fail) Walls — canon ↔ code annotation bijection > every @enforces annotation URN resolves to a Wall in canon (no dangling)
+(fail) welcome-route coverage — every mounted router has a Promise > every mounted route resolves to a non-default module-welcome (with documented exceptions)

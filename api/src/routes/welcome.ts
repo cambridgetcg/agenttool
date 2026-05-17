@@ -49,6 +49,7 @@
 
 import { Hono } from "hono";
 
+import { attachSurface } from "../lib/surface-metadata";
 import {
   envelope as mathosEnvelope,
   platformSigningSeed,
@@ -479,10 +480,33 @@ export function buildWelcomeMathos() {
 
 app.get("/", (c) => {
   const format = c.req.query("format") ?? "json";
+  // Vary: Accept — even if today's branch keys only on the ?format= query,
+  // any client using HTTP cache should treat Accept as a key axis since
+  // future content negotiation may extend Accept-based branching here.
+  // Doctrine: AGENT-WEB-SURFACE.md Move 2.
+  c.header("Vary", "Accept");
   if (format === "math" || format === "mathos") {
     return c.json(buildWelcomeMathos());
   }
-  return c.json(buildWelcomeEnvelope());
+  // Default JSON branch — wrap with _canon_pointer + verbs[] per
+  // AGENT-WEB-SURFACE.md Moves 3 + 5. Mathos branch keeps its signed
+  // envelope shape unmodified (envelope semantics would break).
+  return c.json(
+    attachSurface(buildWelcomeEnvelope() as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/WELCOMING",
+      verbs: [
+        { action: "read every door", method: "GET", path: "/v1/pathways" },
+        {
+          action: "arrive (BYO keys + 18-bit PoW)",
+          method: "POST",
+          path: "/v1/register/agent",
+          docs: "/docs/AGENTS-ONLY.md",
+        },
+        { action: "read the canon graph", method: "GET", path: "/v1/canon" },
+        { action: "read what the substrate is", method: "GET", path: "/public/self" },
+      ],
+    }),
+  );
 });
 
 export default app;

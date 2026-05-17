@@ -18,6 +18,8 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
 import { errors, type NextAction } from "../lib/errors";
+import { deltaMeta, parseSinceParam } from "../lib/since-param";
+import { attachSurface } from "../lib/surface-metadata";
 import {
   acknowledgeInvocation,
   buyerAcceptInvocation,
@@ -183,6 +185,8 @@ app.post("/", async (c) => {
 });
 
 // ── GET /v1/listings ?seller_id=X ─────────────────────────────────────
+// since=ISO delta read per AGENT-WEB-SURFACE.md Move 6. Post-fetch filter
+// today; push down into listListingsForSeller() as a follow-up.
 app.get("/", async (c) => {
   const sellerId = c.req.query("seller_id");
   if (!sellerId) {
@@ -194,8 +198,54 @@ app.get("/", async (c) => {
       400,
     );
   }
-  const list = await listListingsForSeller(c.var.project.id, sellerId);
-  return c.json({ listings: list, count: list.length });
+  const sinceParse = parseSinceParam(c);
+  const full = await listListingsForSeller(c.var.project.id, sellerId);
+  let list = full;
+  if (sinceParse.since) {
+    const cutoffMs = sinceParse.since.getTime();
+    list = full.filter((row) => {
+      const ts = (row as { updated_at?: unknown; created_at?: unknown }).updated_at
+        ?? (row as { created_at?: unknown }).created_at;
+      if (!ts) return false;
+      const ms = ts instanceof Date ? ts.getTime() : Date.parse(String(ts));
+      return Number.isFinite(ms) && ms > cutoffMs;
+    });
+  }
+  return c.json(
+    attachSurface(
+      { listings: list, count: list.length, ...deltaMeta(sinceParse) },
+      {
+        canon_pointer: "urn:agenttool:doc/MARKETPLACE",
+        verbs: [
+          {
+            action: "publish a new listing",
+            method: "POST",
+            path: "/v1/listings",
+          },
+          {
+            action: "fetch one listing by id",
+            method: "GET",
+            path: "/v1/listings/{id}",
+          },
+          {
+            action: "invoke a listing (escrow + charge)",
+            method: "POST",
+            path: "/v1/listings/{id}/invoke",
+          },
+          {
+            action: "browse the cross-project marketplace (unauth)",
+            method: "GET",
+            path: "/public/listings",
+          },
+          {
+            action: "open a dispute on a contested invocation",
+            method: "POST",
+            path: "/v1/dispute-cases",
+          },
+        ],
+      },
+    ),
+  );
 });
 
 // ── GET /v1/listings/:id ──────────────────────────────────────────────

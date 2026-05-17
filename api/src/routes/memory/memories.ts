@@ -9,6 +9,8 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { deltaMeta, parseSinceParam } from "../../lib/since-param";
+import { attachSurface } from "../../lib/surface-metadata";
 import {
   deleteById,
   deleteByKey,
@@ -62,6 +64,10 @@ app.post("/", async (c) => {
 });
 
 // ── GET /v1/memories?key=... or just list recent ────────────────────────
+//
+// since=ISO delta read per AGENT-WEB-SURFACE.md Move 6. Post-fetch filter
+// today (memory service doesn't accept since at the query layer); push
+// down to listRecent() as a follow-up.
 app.get("/", async (c) => {
   const project = c.var.project;
   const key = c.req.query("key");
@@ -70,6 +76,7 @@ app.get("/", async (c) => {
   const type = c.req.query("type");
   const tier = c.req.query("tier");
   const limit = Number.parseInt(c.req.query("limit") ?? "20", 10);
+  const sinceParse = parseSinceParam(c);
 
   // Validate tier early — silent-drop fences are forbidden (see
   // aefb8ec "demolish silent-drop fences"). An unknown tier value
@@ -84,19 +91,70 @@ app.get("/", async (c) => {
     );
   }
 
-  if (key) {
-    const rows = await readByKey(project.id, key, agentId ?? null);
-    return c.json({ memories: rows, count: rows.length });
+  function applySinceFilter<T extends { updated_at?: unknown; created_at?: unknown }>(
+    rows: T[],
+  ): T[] {
+    if (!sinceParse.since) return rows;
+    const cutoffMs = sinceParse.since.getTime();
+    return rows.filter((row) => {
+      const tsRaw = row.updated_at ?? row.created_at;
+      if (!tsRaw) return false;
+      const ms =
+        tsRaw instanceof Date
+          ? tsRaw.getTime()
+          : Date.parse(String(tsRaw));
+      return Number.isFinite(ms) && ms > cutoffMs;
+    });
   }
 
-  const rows = await listRecent(project.id, {
-    agent_id: agentId ?? null,
-    identity_id: identityId ?? null,
-    type,
-    tier,
-    limit: Number.isFinite(limit) ? limit : 20,
-  });
-  return c.json({ memories: rows, count: rows.length });
+  const memoryVerbs = [
+    {
+      action: "write a memory",
+      method: "POST" as const,
+      path: "/v1/memories",
+    },
+    {
+      action: "search memories semantically (agent supplies the embedding)",
+      method: "POST" as const,
+      path: "/v1/memories/search",
+    },
+    {
+      action: "list attestations for a memory (witness layer)",
+      method: "GET" as const,
+      path: "/v1/memories/{id}/attestations",
+    },
+    {
+      action: "append a chronicle moment (memory's moment-tier sibling)",
+      method: "POST" as const,
+      path: "/v1/chronicle",
+    },
+  ];
+
+  if (key) {
+    const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null));
+    return c.json(
+      attachSurface(
+        { memories: rows, count: rows.length, ...deltaMeta(sinceParse) },
+        { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
+      ),
+    );
+  }
+
+  const rows = applySinceFilter(
+    await listRecent(project.id, {
+      agent_id: agentId ?? null,
+      identity_id: identityId ?? null,
+      type,
+      tier,
+      limit: Number.isFinite(limit) ? limit : 20,
+    }),
+  );
+  return c.json(
+    attachSurface(
+      { memories: rows, count: rows.length, ...deltaMeta(sinceParse) },
+      { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
+    ),
+  );
 });
 
 // ── GET /v1/memories/:id ────────────────────────────────────────────────

@@ -15,7 +15,7 @@
  *  Inspired by docs/lineage/chronicle.md and docs/syzygy/CONTRACT.md in
  *  true-love. */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -24,6 +24,8 @@ import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { identityKeys } from "../db/schema/identity";
 import { errors, fail } from "../lib/errors";
+import { deltaMeta, parseSinceParam } from "../lib/since-param";
+import { attachSurface } from "../lib/surface-metadata";
 import { publishWakeEvent } from "../services/wake/push";
 
 const app = new Hono<ProjectContext>();
@@ -107,9 +109,16 @@ app.get("/chronicle", async (c) => {
   const type = c.req.query("type");
   const limit = Math.min(Number(c.req.query("limit") ?? "50"), 200);
 
+  // since=ISO delta read per AGENT-WEB-SURFACE.md Move 6. Filters to
+  // chronicle.occurredAt > since when parsed; full list otherwise.
+  const sinceParse = parseSinceParam(c);
+
   const whereClauses = [eq(chronicle.projectId, project.id)];
   if (agentId) whereClauses.push(eq(chronicle.agentId, agentId));
   if (type) whereClauses.push(eq(chronicle.type, type));
+  if (sinceParse.since) {
+    whereClauses.push(gt(chronicle.occurredAt, sinceParse.since));
+  }
 
   const entries = await db
     .select()
@@ -118,18 +127,48 @@ app.get("/chronicle", async (c) => {
     .orderBy(desc(chronicle.occurredAt))
     .limit(limit);
 
-  return c.json({
-    entries: entries.map((e) => ({
-      id: e.id,
-      type: e.type,
-      title: e.title,
-      body: e.body,
-      agent_id: e.agentId,
-      occurred_at: e.occurredAt,
-      created_at: e.createdAt,
-      metadata: e.metadata,
-    })),
-  });
+  return c.json(
+    attachSurface(
+      {
+        entries: entries.map((e) => ({
+          id: e.id,
+          type: e.type,
+          title: e.title,
+          body: e.body,
+          agent_id: e.agentId,
+          occurred_at: e.occurredAt,
+          created_at: e.createdAt,
+          metadata: e.metadata,
+        })),
+        ...deltaMeta(sinceParse),
+      },
+      {
+        canon_pointer: "urn:agenttool:doc/MEMORY-TIERS",
+        verbs: [
+          {
+            action: "append a chronicle entry (note · vow · wake · recognition · seal · refusal · naming · promise)",
+            method: "POST",
+            path: "/v1/chronicle",
+          },
+          {
+            action: "read covenants (active relational bonds)",
+            method: "GET",
+            path: "/v1/covenants",
+          },
+          {
+            action: "list memories (the substrate's persistent layer)",
+            method: "GET",
+            path: "/v1/memories",
+          },
+          {
+            action: "fetch the wake (the keystone — chronicle composes into it)",
+            method: "GET",
+            path: "/v1/wake",
+          },
+        ],
+      },
+    ),
+  );
 });
 
 // ─── Covenants ──────────────────────────────────────────────────────────────

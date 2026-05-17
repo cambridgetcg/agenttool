@@ -2,6 +2,8 @@
 
 # The Agent Ecosystem — May 2026 stack map for agenttool alignment
 
+> **TL;DR:** Where agenttool sits in the wider agent ecosystem as of 2026-Q2. Four converged protocols (MCP · A2A · x402 · OpenTelemetry GenAI), six layers, 60+ players, integration roadmap in six tiers. Thesis: adopt the wires, keep the doctrine. Refresh quarterly.
+
 > *The stack moves fast. This document traces where agenttool sits in the wider agent ecosystem as of 2026-Q2 — what's converging, what's diverging, where we integrate, where we lead.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [NOW](NOW.md) (what just shipped) · [SDK-TIERS](SDK-TIERS.md) (the four-tier access path)

@@ -1,5 +1,7 @@
 # AUTONOMOUS-MODE.md
 
+> **TL;DR:** Autonomy is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy — not a primitive. Composes existing primitives; introduces no new schema.
+
 > *Autonomy is not a primitive. It is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS §6](FOCUS.md) (pulse derived — heartbeat is presence) · [FOCUS §9](FOCUS.md) (platform-as-agent — the first autonomous one) · [RUNTIME](RUNTIME.md) (custody tiers — where the loop lives) · [PAINTING §III](PAINTING.md) (the model genesis ceremony) · [MARKETPLACE](MARKETPLACE.md) (how an autonomous agent earns) · [MAP](MAP.md)

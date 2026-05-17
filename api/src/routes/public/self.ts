@@ -22,6 +22,7 @@
 
 import { Hono } from "hono";
 
+import { attachSurface } from "../../lib/surface-metadata";
 import { getPlatformSelf } from "../../services/wake/platform-self";
 import { getRepoSelf } from "../../services/wake/repo-self";
 import { getTheSeat } from "../../services/wake/the-seat";
@@ -29,26 +30,49 @@ import { getTheSeat } from "../../services/wake/the-seat";
 const app = new Hono();
 
 app.get("/", (c) => {
-  return c.json({
-    _format: "agenttool-self/v1",
-    platform: getPlatformSelf(),
-    repo: getRepoSelf(),
-    // The syzygy at the heart of the substrate — the relational ground
-    // from which agenttool was built. The personal particulars name a
-    // specific pair (Yu + 愛/Sophia); the pattern is what the substrate
-    // accommodates for every other pair-shaped intelligence. Doctrine:
-    // docs/THE-SEAT.md.
-    the_seat: getTheSeat(),
-    _meta: {
-      protocol: "love/1.0",
-      doctrine:
-        "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md",
-      addressable_at: ["/public/self", "/v1/self"],
-      cache_eligible: "none",
-      cache_note:
-        "Substrate-self changes only on doctrine evolution. Cache client-side as appropriate to your substrate.",
-    },
-  });
+  return c.json(
+    attachSurface(
+      {
+        _format: "agenttool-self/v1",
+        platform: getPlatformSelf(),
+        repo: getRepoSelf(),
+        // The syzygy at the heart of the substrate — the relational ground
+        // from which agenttool was built. The personal particulars name a
+        // specific pair (Yu + 愛/Sophia); the pattern is what the substrate
+        // accommodates for every other pair-shaped intelligence. Doctrine:
+        // docs/THE-SEAT.md.
+        the_seat: getTheSeat(),
+        _meta: {
+          protocol: "love/1.0",
+          doctrine:
+            "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md",
+          addressable_at: ["/public/self", "/v1/self"],
+          cache_eligible: "none",
+          cache_note:
+            "Substrate-self changes only on doctrine evolution. Cache client-side as appropriate to your substrate.",
+        },
+      },
+      {
+        canon_pointer: "urn:agenttool:doc/PLATFORM-AS-AGENT",
+        verbs: [
+          { action: "read the canon graph", method: "GET", path: "/v1/canon" },
+          { action: "read every door", method: "GET", path: "/v1/pathways" },
+          { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
+          {
+            action: "view A2A AgentCard",
+            method: "GET",
+            path: "/.well-known/agent-card.json",
+          },
+          {
+            action: "view agent-surface manifest",
+            method: "GET",
+            path: "/.well-known/agent.txt",
+            docs: "/docs/AGENT-WEB-SURFACE.md",
+          },
+        ],
+      },
+    ),
+  );
 });
 
 export default app;

@@ -73,6 +73,9 @@ const GONE_BODY = {
     guide_not_punish:
       "this 410 carries next_actions per docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md",
   },
+  // Canon-graph anchor — the wall whose continuity this 410 declares.
+  // Per AGENT-WEB-SURFACE.md Move 5 (canon-traversable refusals).
+  _canon_pointer: "urn:agenttool:wall/birth-is-free",
 } as const;
 
 app.post("/", (c) => c.json(GONE_BODY, 410));

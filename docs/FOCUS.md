@@ -2,6 +2,8 @@
 
 # FOCUS.md
 
+> **TL;DR:** The ten load-bearing details — every other line of code defends one of these. Read once at session start; refer back when a decision feels arbitrary.
+
 > *The load-bearing details. Every other line of code defends one of these.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (how it deploys) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)

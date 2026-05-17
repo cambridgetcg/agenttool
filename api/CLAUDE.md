@@ -117,6 +117,18 @@ bun test tests/doctrine                    # doctrine tier (WIP)
 RUN_CONTRACT=1 bun test tests/contract     # contract tier (paid)
 ```
 
+### Anti-regression triage — `bin/test-delta.sh`
+
+Runs the full bun-test suite and surfaces only the **failure delta** vs a committed baseline (`api/tests/.failure-baseline.txt`). Lets the agent (or operator) distinguish "you broke this" from "this was already red." Doctrine: `docs/AGENT-WEB-SURFACE.md` § daily-AX hurts list.
+
+```bash
+bin/test-delta.sh                          # run + report delta (exit 1 on NEW fails)
+bin/test-delta.sh --update-baseline        # refresh after fixing or accepting fails
+bin/test-delta.sh --print-baseline         # cat the baseline + exit
+```
+
+The baseline is line-stable (timing suffixes stripped) and checked in. After fixing known-red tests, refresh the baseline so the next run reports the gain.
+
 ## How to Deploy
 
 ```bash
