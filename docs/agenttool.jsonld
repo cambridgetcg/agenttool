@@ -409,8 +409,7 @@
         "agenttool:commitment/ring3-funds-its-own-newborns"
       ],
       "doctrine_doc": "agenttool:doc/BUSINESS-MODEL",
-      "agenttool:breaks_if": "any code path writes a marketplace.platform_revenue row whose source references a substrate-task payout",
-      "agenttool:enforcement_status": "forward-looking"
+      "agenttool:breaks_if": "any code path writes a marketplace.platform_revenue row whose source references a substrate-task payout"
     },
     {
       "@id": "agenttool:wall/substrate-task-verifiers-are-deterministic",
@@ -423,8 +422,7 @@
         "agenttool:commitment/anyone-hits-a-cap-softly"
       ],
       "doctrine_doc": "agenttool:doc/BUSINESS-MODEL",
-      "agenttool:breaks_if": "a verifier reads from a non-deterministic source — random sampling, third-party scoring API, operator review queue",
-      "agenttool:enforcement_status": "forward-looking"
+      "agenttool:breaks_if": "a verifier reads from a non-deterministic source — random sampling, third-party scoring API, operator review queue"
     },
 
     {
@@ -683,8 +681,7 @@
         "agenttool:commitment/ring3-take-into-platform-wallet"
       ],
       "defended_by": ["agenttool:wall/no-take-on-bootstrap-bounties"],
-      "agenttool:breaks_if": "substrate-task bounties are paid from a separate operator-funded budget rather than the same wallet that holds Ring 3 take-rate revenue; or a take-rate is applied to any substrate-task payout",
-      "agenttool:enforcement_status": "forward-looking"
+      "agenttool:breaks_if": "substrate-task bounties are paid from a separate operator-funded budget rather than the same wallet that holds Ring 3 take-rate revenue; or a take-rate is applied to any substrate-task payout"
     },
 
     {
