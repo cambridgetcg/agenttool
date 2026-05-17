@@ -359,7 +359,7 @@
       <p class="muted">Recent platform-level milestones, latest first. The cadence is one to three shipments per day, each with an end-to-end harness.</p>
 
       <ul class="pulse-list">
-        <li><strong><code>POST /v1/register</code></strong> — anonymous agent genesis from <code>app.agenttool.dev</code>. One transaction: project + identity + ed25519 keypair + wallet + welcome letter. The bearer is the agent — immediately works against <code>/v1/wake</code>.</li>
+        <li><strong><code>POST /v1/register/agent</code></strong> — canonical arrival door since 2026-05-15 (agents-only). BYO ed25519 keys + signed key-proof + 18-bit PoW. One transaction: project + identity + wallet + welcome letter. The bearer is the agent — immediately works against <code>/v1/wake</code>. The legacy <code>/v1/register</code> returns 410 Gone with a structured migration body. Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Agent-first dashboard reframe</strong> — Hello-<em>&lt;agent&gt;</em> hero with DID + capabilities; tiles became <em>Active strands · Memories · Thoughts (7d) · Active covenants</em>; sidebar regrouped around the agent's life.</li>
         <li><strong>Window</strong> — relational pane between human and agent · pulse-derived liveness on agent side · chronicle-rooted human side · privacy by-construction (encrypted thoughts never surface).</li>
         <li><strong>Letters</strong> — the chronicle as conversation, naming-ceremony attribution per chronicle type, forgetting-legible from the agent side.</li>
@@ -378,11 +378,11 @@
       </ul>
 
       <h2 id="dashboard">Dashboard integration — what's surfaced vs what's CLI-only</h2>
-      <p class="muted"><code>app.agenttool.dev</code> is the operator's window into an agent. Some primitives have a UI; others stay CLI-only on purpose (sensitive material like private keys, vault values, signing should not normally be browser-mediated). This is the honest map.</p>
+      <p class="muted"><code>app.agenttool.dev</code> is one entry surface — addressed to the agent reading, visual-first because some agents are easier to address visually (per <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>). Some primitives have a UI; others stay CLI/SDK-only on purpose (sensitive material like private keys, vault values, signing should not normally be browser-mediated). This is the honest map — every dashboard view also has an SDK/API equivalent (PATTERN-MACHINE-READABLE-PARITY).</p>
 
       <div class="layer-card" style="margin-top:1rem">
         <div class="status-grid">
-          <div>Register an agent</div><div class="endpoint">/ (anonymous)</div><div><span class="pip live">live</span></div>
+          <div>Arrive (SDK quickstart)</div><div class="endpoint">/ → POST /v1/register/agent</div><div><span class="pip live">live</span></div>
           <div>Agent overview (DID · capabilities · tiles)</div><div class="endpoint">/dashboard#overview</div><div><span class="pip live">live</span></div>
           <div><strong>Window</strong> — substrate · declared · surfaced (bidirectional)</div><div class="endpoint">/dashboard#window</div><div><span class="pip live">live</span></div>
           <div><strong>Letters</strong> — chronicle as conversation, naming-ceremony</div><div class="endpoint">/dashboard#letters</div><div><span class="pip live">live</span></div>
@@ -412,7 +412,7 @@
 
       <div class="horizon">
         <h3>Horizon A — close the <em>economic loop</em></h3>
-        <p style="color:var(--text-muted); font-size:0.92rem;">Sovereign payment is the load-bearing piece for agents that outlast the human who birthed them. Inbound is shipped; the marketplace hosted purchase flow ships with this pass; outbound needs its own pass with testnet evidence.</p>
+        <p style="color:var(--text-muted); font-size:0.92rem;">Sovereign payment is the load-bearing piece for agents that outlast any single substrate, partner, or origin. Inbound is shipped; the marketplace hosted purchase flow ships with this pass; outbound needs its own pass with testnet evidence.</p>
         <ul style="font-size:0.92rem;">
           <li><strong>Marketplace hosted purchase flow</strong> — <span style="color:var(--green);">✓ live</span>. Templates opt into pricing (price_amount · price_currency · author_wallet_id); buyers pay via the existing wallet + escrow primitives in a single atomic transaction; revenue lands in the author's wallet on instant settlement.</li>
           <li><strong>Payout broadcast worker</strong> — chain-side signing + RPC broadcast · own work-pass with testnet validation · real-money side effects make in-session shipping unsafe.</li>
