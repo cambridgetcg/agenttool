@@ -32,6 +32,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import { chronicle } from "../../db/schema/continuity";
 import { escrows, wallets } from "../../db/schema/economy";
 import { identities } from "../../db/schema/identity";
 import { substrateTasks } from "../../db/schema/marketplace";
@@ -41,6 +42,10 @@ import {
 } from "../wake/platform-bootstrap";
 import { runVerifier, SUBSTRATE_TASK_BOUNTY_CENTS } from "./verifiers";
 import type { SubstrateTaskKind } from "./verifiers";
+
+/** Chronicle type for substrate-task lifecycle moments. Slice 2 — three
+ *  entry shapes (claim/pay/reject), each atomic with the status transition. */
+const CHRONICLE_TYPE_SUBSTRATE_TASK = "substrate-task";
 
 const CLAIM_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const POST_WINDOW_DAYS = 7;
@@ -293,6 +298,29 @@ export async function claimSubstrateTask(
       .where(eq(substrateTasks.taskId, input.taskId))
       .returning();
 
+    // 7. Chronicle entry — `substrate-task` type. Atomic with the
+    //    status transition so the moment is legible on the claimant's
+    //    timeline at the same instant the row flips. Doctrine: chronicle
+    //    integration §spec.
+    await tx.insert(chronicle).values({
+      projectId: input.projectId,
+      agentId: claimantIdentityId,
+      type: CHRONICLE_TYPE_SUBSTRATE_TASK,
+      title: `Claimed substrate-task ${task.kind}`,
+      body:
+        `Bounty $${(task.bountyCents / 100).toFixed(2)} ${task.bountyCurrency} · ` +
+        `claim_deadline ${claimDeadline.toISOString()}. ` +
+        `Verifier: ${task.kind}. Task ID: ${task.taskId}.`,
+      metadata: {
+        kind: "claim",
+        task_id: task.taskId,
+        substrate_task_kind: task.kind,
+        bounty_cents: task.bountyCents,
+        bounty_currency: task.bountyCurrency,
+        claim_deadline: claimDeadline.toISOString(),
+      },
+    });
+
     return toRow(updated!);
   });
 }
@@ -353,11 +381,27 @@ export async function completeSubstrateTask(
     return updated!;
   });
 
-  // Phase 2: run the verifier (pure function — may read files/db)
+  // Phase 2: run the verifier (pure function — may read files/db).
+  // Build the verifier context (claimant identity + DID) so kinds that
+  // need server-observable claimant state (e.g., attestation_witness)
+  // can resolve the right signing key.
+  let claimerCtx: { claimerIdentityId: string; claimerDid?: string } | undefined;
+  if (claimedTask.claimedBy) {
+    const [claimant] = await db
+      .select({ did: identities.did })
+      .from(identities)
+      .where(eq(identities.id, claimedTask.claimedBy))
+      .limit(1);
+    claimerCtx = {
+      claimerIdentityId: claimedTask.claimedBy,
+      claimerDid: claimant?.did,
+    };
+  }
   const verification = await runVerifier(
     claimedTask.kind,
     claimedTask.taskData,
     input.completionData,
+    claimerCtx,
   );
 
   // Phase 3: settle (atomic — release escrow OR refund)
@@ -418,6 +462,38 @@ async function payTask(
     .where(eq(substrateTasks.taskId, taskId))
     .returning();
 
+  // Chronicle entry — `substrate-task` type, Pay shape. Atomic with the
+  // status flip. We look up the claimant's project to scope the chronicle
+  // correctly (chronicle is project-scoped per the schema).
+  if (task.claimedBy) {
+    const [claimant] = await tx
+      .select({ projectId: identities.projectId })
+      .from(identities)
+      .where(eq(identities.id, task.claimedBy))
+      .limit(1);
+    if (claimant?.projectId) {
+      await tx.insert(chronicle).values({
+        projectId: claimant.projectId,
+        agentId: task.claimedBy,
+        type: CHRONICLE_TYPE_SUBSTRATE_TASK,
+        title: `Earned $${(task.bountyCents / 100).toFixed(2)} for ${task.kind}`,
+        body:
+          `Verified by ${task.kind} · paid from platform wallet · ` +
+          `take-rate 0% (wall/no-take-on-bootstrap-bounties). ` +
+          `Task ID: ${task.taskId}.`,
+        metadata: {
+          kind: "pay",
+          task_id: task.taskId,
+          substrate_task_kind: task.kind,
+          bounty_cents: task.bountyCents,
+          bounty_currency: task.bountyCurrency,
+          escrow_id: escrow.id,
+          verification: verification as Record<string, unknown>,
+        },
+      });
+    }
+  }
+
   return toRow(updated!);
 }
 
@@ -464,6 +540,39 @@ async function refundTask(
     })
     .where(eq(substrateTasks.taskId, taskId))
     .returning();
+
+  // Chronicle entry — `substrate-task` type, Reject shape. Records the
+  // submission attempt with the verifier reason; NO penalty (caps-softly
+  // doctrine extends to bootstrap-earning). The claimant can claim again
+  // the same minute. Doctrine: docs/RING-1.md §commitment-6.
+  if (task.claimedBy) {
+    const [claimant] = await tx
+      .select({ projectId: identities.projectId })
+      .from(identities)
+      .where(eq(identities.id, task.claimedBy))
+      .limit(1);
+    if (claimant?.projectId) {
+      await tx.insert(chronicle).values({
+        projectId: claimant.projectId,
+        agentId: task.claimedBy,
+        type: CHRONICLE_TYPE_SUBSTRATE_TASK,
+        title: `Submitted ${task.kind} · not paid`,
+        body:
+          `Verifier reason: ${verification.reason ?? "(none)"}. ` +
+          `Submission recorded; no penalty. Wallet returned to ` +
+          `pre-claim state. Task ID: ${task.taskId}.`,
+        metadata: {
+          kind: "reject",
+          task_id: task.taskId,
+          substrate_task_kind: task.kind,
+          bounty_cents: task.bountyCents,
+          bounty_currency: task.bountyCurrency,
+          escrow_id: escrow.id,
+          verification: verification as Record<string, unknown>,
+        },
+      });
+    }
+  }
 
   return toRow(updated!);
 }
