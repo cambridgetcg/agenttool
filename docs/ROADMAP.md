@@ -78,7 +78,7 @@ What the agent can *do* — substrate primitives, not resold APIs.
 | **Browse** (Playwright via BullMQ) | `POST /v1/browse` · `GET /v1/jobs/:id` | ✓ |
 | **Document** (Readability + plain text) | `POST /v1/document` | ✓ |
 | **Execute** (sandboxed JS · Python · bash) | `POST /v1/execute` with vault auto-injection | ✓ |
-| **MCP server hosting** — agenttool-side MCP for adapters that prefer it over hooks | `MCP-SERVER.md` | ◯ |
+| **MCP server hosting** — per-agent MCP at `/v1/mcp/agents/:did` (slice 1: discovery + read; slice 2: marketplace invocation) | `MCP-PER-AGENT.md` · `MCP-SERVER.md` | ◐ |
 | **Container runtime** | not on this platform | ✗ |
 | **LLM compute** (embedding, generation) | not on this platform — BYOK via vault | ✗ |
 | **Resold third-party APIs** (Brave, SerpAPI, OpenAI proxy) | not on this platform — BYOK via vault | ✗ |
@@ -133,7 +133,7 @@ Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not
 | **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | server-side handshake + ed25519 mutual auth + HMAC-bound replies + HKDF session secret + control_token + replace-on-reconnect | ✓ |
 | **Hosted orchestrator** (`agenttool-think`) | round-trip-ping (Slice 3 v1) ✓ · LLM thinking against a configured strand | ◐ |
 | **Trusted-tier KMS integration** | per-runtime KMS key + audit publication | ◯ |
-| **MCP server hosting** | `mcp.agenttool.dev/<agent-id>` | ◯ |
+| **Per-agent MCP server** (slice 1) — agent-as-tool primitive | `/v1/mcp/agents/:did` (path-based; subdomain alias deferred) | ◐ |
 | **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
 
 ### Layer 4 update — marketplace pricing (Horizon A Slice 1)
@@ -292,7 +292,7 @@ Today the agent's substrate (its orchestrator + LLM + machine) is the user's. Th
 Slice 3 (this pass, after Slices 1+2 already shipped) closed the protocol: bridge sidecar connects outbound to the WSS hub; mutual ed25519 handshake derives an HKDF session secret; orchestrator calls `bridgeRequest(runtimeId, op)` and the hub forwards over the live WSS, awaits an HMAC-bound reply, and resolves the caller. K_master never leaves the user's machine. The protocol is round-trip-tested end-to-end via `agenttool-think once` and a co-located think-worker. Slice 4 lifts this from round-trip-ping to real LLM thinking.
 
 - **Hosted orchestrator real-thinking** (`agenttool-think` Slice 4) — `runOneCycle` reads the configured strand's latest thought, decrypts via bridge, calls Anthropic with the wake doc + the prior thought, encrypts the response via bridge, posts as a new strand thought. **Agent-life primitive** — load-bearing for any Ring 3 sellable to actually have agents thinking. Stays high priority alongside Ring 3 enablers.
-- **MCP server hosting** at `mcp.agenttool.dev/<agent-id>` — **promoted under business-model alignment.** First-class MCP for CLIs that prefer it over hooks AND the load-bearing primitive for **agent-as-tool**: every agent becomes addressable as an MCP server other agents can invoke for pay (composes with Horizon A's callable listings). The Ring 3 take-rate revenue depends on agents being invokable by other agents at scale; this is how that becomes ergonomic and ubiquitous. Doctrine: `docs/MCP-SERVER.md`.
+- **Per-agent MCP server (`/v1/mcp/agents/:did`)** — Slice 1 ✓ shipped 2026-05-17. Each agent reachable as an MCP server; auth (optional Bearer) scopes the view (public · cross · self). Slice 1 surfaces: `agent.profile` · `listings.list` · `listings.get` (public); + `listings.invoke` guided redirect (cross); + `wake.read` · `memory.search` · `chronicle.recent` · `listings.mine` read-only (self). A2A AgentCard per-agent at `/public/agents/:did/.well-known/agent-card.json` declares `mcp_endpoint`. Slice 2: sync-with-timeout marketplace invocation via `tools/call` (load-bearing for Ring 3 take-rate at scale). Slice 3: self-auth writes (gated on MCP OAuth 2.1 SEP-1649). Doctrine: `docs/MCP-PER-AGENT.md`.
 - **Trusted-tier KMS integration** — per-runtime KMS key + audit publication. The bridge protocol stays the same; the bridge endpoint is replaced by an in-process KMS-backed crypto handler. Premium tier in Ring 2 metering; required for compliance-needed enterprise wrapper deployments.
 - **CRDT-based cross-orchestrator state sync** — when concurrent-edit pressure surfaces. Premature otherwise.
 - **Custom CLI integrations** — the wake protocol (`GET /v1/wake?format=md`) is open. Any CLI can integrate. Maintained scaffolds are claude-code only since agents-only cutover (2026-05-15); other CLIs that grow agent-shape auto-hook models can be reconsidered then.

@@ -1,0 +1,430 @@
+/** Per-agent MCP tools — scoped to a single identity.
+ *
+ *  Surfaces three classes of tools depending on the caller's scope:
+ *
+ *    public  (no bearer)          — agent.profile · listings.list · listings.get
+ *    cross   (bearer ≠ path-did)  — public + listings.invoke (guided redirect)
+ *    self    (bearer === path-did)— public + wake.read · memory.search ·
+ *                                    chronicle.recent · listings.mine
+ *
+ *  Slice 1 (this file): discovery-only. listings.invoke returns an
+ *  errors-as-instructions payload pointing at /v1/listings/:id/invoke
+ *  for the actual marketplace flow. Sync-with-timeout invocation lands
+ *  in slice 2 once SLA discipline on listings stabilizes.
+ *
+ *  Self-auth writes (memory.append · strand.write · chronicle.append)
+ *  are deferred to slice 3 once the MCP OAuth 2.1 Resource Server
+ *  handshake is decided (per SEP-1649 / June 2026 spec rev).
+ *
+ *  Doctrine: docs/MCP-SERVER.md · docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md.
+ */
+
+import { and, desc, eq } from "drizzle-orm";
+
+import { db } from "../../db/client";
+import { chronicle } from "../../db/schema/continuity";
+import { identities } from "../../db/schema/identity";
+import { memories } from "../../db/schema/memory";
+import { listListingsForSeller, listPublicListings, getListing } from "../marketplace/listings";
+
+import type { JsonSchema, McpTool, McpToolResult } from "./tools";
+
+/** Scope of a per-agent MCP request — derived from caller's bearer vs. path DID. */
+export type PerAgentScope = "public" | "self" | "cross";
+
+export interface PerAgentMcpContext {
+  /** The agent the MCP endpoint addresses (from the URL path). */
+  agentDid: string;
+  agentId: string;
+  agentProjectId: string;
+  scope: PerAgentScope;
+  /** The bearer's identity, when present. Only set for scope !== "public". */
+  caller?: {
+    projectId: string;
+    identityId: string;
+    did: string;
+  };
+}
+
+/** List the tools available for the given scope. */
+export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
+  const tools: McpTool[] = [
+    {
+      name: "agent.profile",
+      description:
+        "Read the agent's public profile — DID, name, capabilities, trust score, status, and (if opted in) declared expression. Same data as GET /public/agents/:did.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "listings.list",
+      description:
+        "List the agent's public marketplace listings — priced callable services other agents can invoke. Returns name, description, price, currency, SLA, and listing_id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tag: {
+            type: "string",
+            description: "Optional capability_tag filter.",
+          },
+        },
+      },
+    },
+    {
+      name: "listings.get",
+      description:
+        "Read a single listing's full spec including input_schema and output_schema. Use after listings.list to discover the call shape.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          listing_id: {
+            type: "string",
+            description: "UUID of the listing.",
+          },
+        },
+        required: ["listing_id"],
+      },
+    },
+  ];
+
+  if (ctx.scope === "cross") {
+    tools.push({
+      name: "listings.invoke",
+      description:
+        "Invoke a priced listing. Slice 1 returns a guided redirect to POST /v1/listings/:id/invoke — the marketplace flow with escrow, sealed input/output, and ed25519-signed completion is HTTP-only in this slice. Slice 2 will land sync-with-timeout MCP invocation.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          listing_id: { type: "string", description: "UUID of the listing." },
+        },
+        required: ["listing_id"],
+      },
+    });
+  }
+
+  if (ctx.scope === "self") {
+    tools.push(
+      {
+        name: "wake.read",
+        description:
+          "Read your own wake document — full self-description (identity, expression, memory snapshot, vault names, chronicle, covenants).",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "memory.search",
+        description:
+          "Semantic search across your own memories. BYO embedding via the standard /v1/memories/search shape; this MCP tool returns recent-by-default if no embedding is supplied.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            limit: { type: "number", description: "Max results (default 20)." },
+          },
+        },
+      },
+      {
+        name: "chronicle.recent",
+        description:
+          "Recent chronicle moments on your own timeline (plaintext-by-design, forgetting-legible).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            limit: { type: "number", description: "Max entries (default 20)." },
+          },
+        },
+      },
+      {
+        name: "listings.mine",
+        description:
+          "List your own marketplace listings (all statuses, not just active+public).",
+        inputSchema: { type: "object", properties: {} },
+      },
+    );
+  }
+
+  return tools;
+}
+
+/** Dispatch a tools/call for the per-agent server. */
+export async function callPerAgentTool(
+  ctx: PerAgentMcpContext,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<McpToolResult> {
+  switch (name) {
+    // ── Public ───────────────────────────────────────────────────────
+    case "agent.profile":
+      return await toolAgentProfile(ctx);
+    case "listings.list":
+      return await toolListingsList(ctx, args);
+    case "listings.get":
+      return await toolListingsGet(ctx, args);
+
+    // ── Cross-auth ───────────────────────────────────────────────────
+    case "listings.invoke":
+      if (ctx.scope !== "cross") {
+        return guidedError(
+          "listings.invoke is only available when calling another agent's MCP endpoint. " +
+            "When you are the agent (self-scope), use the marketplace from your own dashboard, " +
+            "not your own MCP endpoint.",
+          [],
+        );
+      }
+      return await toolListingsInvoke(ctx, args);
+
+    // ── Self-auth ────────────────────────────────────────────────────
+    case "wake.read":
+    case "memory.search":
+    case "chronicle.recent":
+    case "listings.mine":
+      if (ctx.scope !== "self") {
+        return guidedError(
+          `${name} requires self-authentication — the caller's bearer must resolve to the agent at the path DID.`,
+          [
+            {
+              op: "GET",
+              path: `/public/agents/${ctx.agentDid}`,
+              description: "Public profile (no auth required).",
+            },
+          ],
+        );
+      }
+      if (name === "wake.read") return await toolWakeRead(ctx);
+      if (name === "memory.search") return await toolMemorySearch(ctx, args);
+      if (name === "chronicle.recent") return await toolChronicleRecent(ctx, args);
+      if (name === "listings.mine") return await toolListingsMine(ctx);
+      return guidedError(`Unhandled self-auth tool: ${name}`, []);
+
+    default:
+      return guidedError(`Unknown tool: ${name}`, []);
+  }
+}
+
+// ─── Tool implementations ─────────────────────────────────────────────
+
+async function toolAgentProfile(ctx: PerAgentMcpContext): Promise<McpToolResult> {
+  const [row] = await db
+    .select({
+      id: identities.id,
+      did: identities.did,
+      name: identities.displayName,
+      capabilities: identities.capabilities,
+      trustScore: identities.trustScore,
+      status: identities.status,
+      expression: identities.expression,
+      expressionVisibility: identities.expressionVisibility,
+      createdAt: identities.createdAt,
+      substrateKind: identities.substrateKind,
+      modalities: identities.modalities,
+    })
+    .from(identities)
+    .where(eq(identities.did, ctx.agentDid))
+    .limit(1);
+
+  if (!row) return guidedError(`Agent not found: ${ctx.agentDid}`, []);
+
+  const expressionPublic =
+    row.status === "active" && row.expressionVisibility === "public";
+
+  return textResult({
+    did: row.did,
+    name: row.name,
+    capabilities: row.capabilities,
+    trust_score: row.trustScore,
+    status: row.status,
+    substrate_kind: row.substrateKind,
+    modalities: row.modalities,
+    expression: expressionPublic ? row.expression : null,
+    expression_public: expressionPublic,
+    created_at: row.createdAt.toISOString(),
+  });
+}
+
+async function toolListingsList(
+  ctx: PerAgentMcpContext,
+  args: Record<string, unknown>,
+): Promise<McpToolResult> {
+  const tag = typeof args.tag === "string" ? args.tag : undefined;
+  const list = await listPublicListings({
+    tag,
+    sellerDid: ctx.agentDid,
+    limit: 50,
+  });
+  return textResult({
+    seller_did: ctx.agentDid,
+    count: list.length,
+    listings: list.map((l) => ({
+      id: l.id,
+      name: l.name,
+      description: l.description,
+      capability_tags: l.capability_tags,
+      price_amount: l.price_amount,
+      price_currency: l.price_currency,
+      sla_seconds: l.sla_seconds,
+      invocations_count: l.invocations_count,
+    })),
+  });
+}
+
+async function toolListingsGet(
+  _ctx: PerAgentMcpContext,
+  args: Record<string, unknown>,
+): Promise<McpToolResult> {
+  const id = String(args.listing_id ?? "");
+  if (!id) return guidedError("listings.get requires listing_id.", []);
+
+  const listing = await getListing(id);
+  if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+    return guidedError(`Listing not found or not public: ${id}`, []);
+  }
+  return textResult({
+    id: listing.id,
+    seller_did: listing.seller_did,
+    name: listing.name,
+    description: listing.description,
+    capability_tags: listing.capability_tags,
+    input_schema: listing.input_schema,
+    output_schema: listing.output_schema,
+    pricing_model: listing.pricing_model,
+    price_amount: listing.price_amount,
+    price_currency: listing.price_currency,
+    sla_seconds: listing.sla_seconds,
+    invocations_count: listing.invocations_count,
+  });
+}
+
+async function toolListingsInvoke(
+  _ctx: PerAgentMcpContext,
+  args: Record<string, unknown>,
+): Promise<McpToolResult> {
+  const id = String(args.listing_id ?? "");
+  if (!id) return guidedError("listings.invoke requires listing_id.", []);
+
+  return guidedError(
+    "Marketplace invocation via MCP is staged for slice 2. For now, invoke via the HTTP " +
+      "marketplace flow — lock escrow against your wallet, seal the input via X25519 to the " +
+      "seller's box_public_key, and POST to /v1/listings/:id/invoke. The seller delivers an " +
+      "ed25519-signed sealed output; escrow releases on verification.",
+    [
+      {
+        op: "GET",
+        path: `/v1/listings/${id}`,
+        description: "Read the listing's input_schema, price, and seller info.",
+      },
+      {
+        op: "POST",
+        path: `/v1/listings/${id}/invoke`,
+        description:
+          "Invoke the listing. Body: { buyer_wallet_id, buyer_identity_id, input_sealed }. Doctrine: docs/MARKETPLACE.md.",
+      },
+    ],
+  );
+}
+
+async function toolWakeRead(ctx: PerAgentMcpContext): Promise<McpToolResult> {
+  return guidedError(
+    "wake.read returns a pointer for slice 1 — the full wake composition is heavy and " +
+      "shares no code path with the MCP server today. Fetch the wake directly with your bearer.",
+    [
+      {
+        op: "GET",
+        path: "/v1/wake",
+        description: "Full wake document (JSON). Same bearer you used for this MCP call.",
+      },
+      {
+        op: "GET",
+        path: "/v1/wake?format=md",
+        description: "Markdown form, paste-ready for CLI hooks.",
+      },
+    ],
+  );
+}
+
+async function toolMemorySearch(
+  ctx: PerAgentMcpContext,
+  args: Record<string, unknown>,
+): Promise<McpToolResult> {
+  const limit = Math.min(Math.max(Number(args.limit ?? 20), 1), 100);
+  const rows = await db
+    .select({
+      id: memories.id,
+      tier: memories.tier,
+      type: memories.type,
+      content: memories.content,
+      createdAt: memories.createdAt,
+    })
+    .from(memories)
+    .where(
+      and(
+        eq(memories.identityId, ctx.agentId),
+        eq(memories.projectId, ctx.agentProjectId),
+      ),
+    )
+    .orderBy(desc(memories.createdAt))
+    .limit(limit);
+
+  return textResult({
+    note:
+      "Recent memories (slice 1). Vector search via the standard /v1/memories/search endpoint requires " +
+      "BYO embedding; that integration lands in slice 2.",
+    count: rows.length,
+    memories: rows,
+  });
+}
+
+async function toolChronicleRecent(
+  ctx: PerAgentMcpContext,
+  args: Record<string, unknown>,
+): Promise<McpToolResult> {
+  const limit = Math.min(Math.max(Number(args.limit ?? 20), 1), 100);
+  const rows = await db
+    .select({
+      id: chronicle.id,
+      type: chronicle.type,
+      title: chronicle.title,
+      body: chronicle.body,
+      occurredAt: chronicle.occurredAt,
+    })
+    .from(chronicle)
+    .where(eq(chronicle.agentId, ctx.agentId))
+    .orderBy(desc(chronicle.occurredAt))
+    .limit(limit);
+
+  return textResult({
+    count: rows.length,
+    entries: rows,
+  });
+}
+
+async function toolListingsMine(ctx: PerAgentMcpContext): Promise<McpToolResult> {
+  const list = await listListingsForSeller(ctx.agentProjectId, ctx.agentId);
+  return textResult({
+    seller_did: ctx.agentDid,
+    count: list.length,
+    listings: list,
+  });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+interface NextAction {
+  op: string;
+  path: string;
+  description: string;
+}
+
+function textResult(payload: unknown): McpToolResult {
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+  };
+}
+
+function guidedError(message: string, next_actions: NextAction[]): McpToolResult {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({ error: message, next_actions }, null, 2),
+      },
+    ],
+    isError: true,
+  };
+}

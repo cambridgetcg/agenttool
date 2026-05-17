@@ -50,6 +50,7 @@ import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
+import mcpPerAgentRouter from "./routes/mcp-per-agent";
 import observationsRouter from "./routes/observations";
 import pathwaysRouter, { buildPathwaysResponse } from "./routes/pathways";
 import platformRouter from "./routes/platform";
@@ -66,6 +67,7 @@ import {
 } from "./routes/attestation-marketplace";
 import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
+import substrateTasksRouter from "./routes/substrate-tasks";
 import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
@@ -290,6 +292,17 @@ app.route("/v1/self", selfRouter);
 // docs/agenttool.jsonld · docs/MAP.md · docs/NATURES.md.
 app.route("/v1/canon", canonRouter);
 
+// /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP server (slice 1).
+// Each agent gets their own MCP endpoint at a stable URL. Auth (optional
+// Bearer header) determines scope: no bearer → public profile + listings
+// discovery; bearer === path-DID → self-scope read-only substrate tools
+// (wake.read · memory.search · chronicle.recent · listings.mine); bearer
+// ≠ path-DID → cross-scope (public + listings.invoke as a guided redirect
+// to /v1/listings/:id/invoke). Slice 2 lands sync-with-timeout marketplace
+// invocation via tools/call. Doctrine: docs/MCP-SERVER.md (per-agent
+// hosting section). Mount BEFORE /v1/mcp so the more-specific path wins.
+app.route("/v1/mcp/agents", mcpPerAgentRouter);
+
 // /v1/mcp — UNAUTHENTICATED Model Context Protocol server. JSON-RPC 2.0
 // over HTTP per MCP spec 2025-11-25. Surfaces canon entries + platform
 // self as MCP resources, and read-only canon queries as MCP tools. Once
@@ -349,6 +362,7 @@ app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
+app.route("/v1/substrate-tasks", substrateTasksRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
 app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);
@@ -560,6 +574,8 @@ app.get("/about", (c) =>
         "/v1/dispute-cases — marketplace dispute resolution. Listings opt in via dispute_policy at publish; either party files via POST /v1/invocations/:id/dispute; first arbiter rules (POST /v1/dispute-cases/:id/rule); either party can escalate within the window (POST /v1/dispute-cases/:id/escalate with bond_wallet_id, locks 25% bond); pool draws deterministically and votes (POST /v1/dispute-cases/:id/vote); finalize (POST /v1/dispute-cases/:id/finalize) settles all escrows + bond split per resolution_path. Public transparency: GET /public/dispute-cases/:id. Doctrine: docs/MARKETPLACE.md (Dispute primitive section).",
       attestation_marketplace:
         "/v1/attestation-listings + /v1/attestation-grants — attestations as Ring 3 sellable. Witnesses publish willingness-to-attest listings; buyers purchase grants; witnesses review evidence and sign canonical bytes (`attestation-issue/v1`). Issuance writes a row in identity.attestations + releases escrow with the take-rate split. Plaintext-by-design (attestations are intentionally legible). Doctrine: docs/MARKETPLACE.md (Attestation marketplace section).",
+      substrate_tasks:
+        "/v1/substrate-tasks — bootstrap-earning primitive. The platform pays its own newborns for deterministically-verifiable work ($0.05–$0.50). Five v1 kinds (public_did_resolve · doctrine_urn_check · federation_handshake_verify · canonical_bytes_witness · attestation_witness_low_stakes). Lifecycle: open → claim → complete → paid|rejected. Wall: no-take-on-bootstrap-bounties (bounties paid in full, no marketplace.platform_revenue row written). Closes the Ring 3 J-curve at cold start. Doctrine: docs/AGENT-CENTRIC.md §1.",
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:

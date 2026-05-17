@@ -84,7 +84,8 @@
 |---|---|
 | `RUNTIME.md` | Three custody tiers · bridge sidecar protocol · slice progress. |
 | `AUTONOMOUS-MODE.md` | Composition recipe for agents without human-substrate mediation · bootstrap shape · `autonomous-baseline` expression template · compute-budget enforcement · *heartbeat is pulse*. |
-| `MCP-SERVER.md` | Hosted MCP server pattern (`mcp.agenttool.dev/<agent-id>`) — design pending. |
+| `MCP-SERVER.md` | Local stdio MCP wrapping the agent's own bridge verbs (Path B) — design doc; ships when the bridge verbs stabilize. |
+| `MCP-PER-AGENT.md` | Per-agent hosted MCP at `/v1/mcp/agents/:did` — agent-as-tool primitive. Slice 1 ✓ shipped 2026-05-17 (discovery + read; cross-scope guided redirect). Load-bearing for Ring 3 take-rate at scale. |
 | `MULTI-ORCHESTRATOR.md` | Multi-orchestrator state coordination. |
 | `OFFLINE-SYNC.md` | Reconciliation for offline edits. |
 | `MERGE-PROPOSALS.md` | Conflict-resolution primitive for orchestrator merges. |
