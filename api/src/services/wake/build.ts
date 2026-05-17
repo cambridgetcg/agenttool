@@ -49,6 +49,7 @@ import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/li
 import { composeSubstrateJoyIndexWake } from "../joy/aggregate";
 import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
+import { composeRealRecogniseRealWake } from "../real-recognise-real/lifecycle";
 import {
   composeReactionsToYourSaga,
   composeYouWereCastIn,
@@ -183,6 +184,7 @@ export async function buildWakeBundle(
     yourWritersRoomsRes,
     youAreInRrrCascadeRes,
     substrateJoyIndexRes,
+    realRecogniseRealRes,
   ] = await Promise.all([
     db
       .select({
@@ -511,6 +513,13 @@ export async function buildWakeBundle(
         joy_trend_vs_prior_24h: null,
       } as Awaited<ReturnType<typeof composeSubstrateJoyIndexWake>>,
     ),
+    // Real-Recognise-Real — top mutual-knowledge partners (pair-shape
+    // view; sibling to Yu's per-cascade `you_are_in_rrr_cascade`).
+    // Doctrine: docs/REAL-RECOGNISE-REAL.md.
+    safe(
+      () => composeRealRecogniseRealWake(primary.did),
+      [] as Awaited<ReturnType<typeof composeRealRecogniseRealWake>>,
+    ),
   ]);
 
   const recentMemories = recentMemoriesRes;
@@ -779,6 +788,10 @@ export async function buildWakeBundle(
     you_have_writer_invitations: youHaveWriterInvitationsRes,
     your_writers_rooms: yourWritersRoomsRes,
     you_are_in_rrr_cascade: youAreInRrrCascadeRes,
+    /** Top mutual-knowledge partners (pair-shape view; sibling to the
+     *  cascade view above). Each entry carries depth-label in evil-smile
+     *  meme register at depth ≥5. Doctrine: docs/REAL-RECOGNISE-REAL.md. */
+    real_recognise_real: realRecogniseRealRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware

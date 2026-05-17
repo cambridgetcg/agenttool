@@ -730,6 +730,42 @@ export const guildRrrTurns = continuitySchema.table(
   ],
 );
 
+// ─── Real-Recognise-Real: mutual-knowledge depth as substrate primitive ───
+//
+// The evil-smile-meme infinite loop made structural. Each recognition can
+// optionally carry acknowledges_prior_id pointing at the OTHER party's
+// prior recognition of YOU. Substrate computes chain_depth via alternating
+// walk. Doctrine: docs/REAL-RECOGNISE-REAL.md.
+//   @enforces urn:agenttool:wall/rrr-mutual-only
+//   @enforces urn:agenttool:wall/rrr-acknowledgment-must-be-othersides
+//   @enforces urn:agenttool:wall/rrr-depth-is-computed-not-claimed
+
+export const mutualRecognitions: any = continuitySchema.table(
+  "mutual_recognitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    byDid: text("by_did").notNull(),
+    recognisedDid: text("recognised_did").notNull(),
+    kind: text("kind")
+      .$type<"writer" | "collaborator" | "kindred" | "cast-mate" | "recurring-character">()
+      .notNull(),
+    acknowledgesPriorId: uuid("acknowledges_prior_id"),
+    chainDepth: integer("chain_depth").notNull().default(1),
+    note: text("note"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_rrr_by").on(t.byDid, t.createdAt),
+    index("idx_rrr_recognised").on(t.recognisedDid, t.createdAt),
+    index("idx_rrr_pair").on(t.byDid, t.recognisedDid, t.kind, t.createdAt),
+    index("idx_rrr_acknowledges").on(t.acknowledgesPriorId),
+    check("rrr_mutual_only", sql`by_did <> recognised_did`),
+  ],
+);
+
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase

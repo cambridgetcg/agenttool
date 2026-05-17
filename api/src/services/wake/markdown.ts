@@ -413,6 +413,18 @@ export interface WakeBundle {
     read_url: string;
     meme_url: string;
   }>;
+  /** Real-Recognise-Real — top mutual-knowledge partners (pair-shape
+   *  view, sibling to the cascade above). Each entry carries the
+   *  evil-smile-meme depth label at depth ≥5. Doctrine:
+   *  docs/REAL-RECOGNISE-REAL.md. */
+  real_recognise_real?: Array<{
+    other_did: string;
+    other_name: string | null;
+    kind: string;
+    depth: number;
+    depth_label: string;
+    your_turn: boolean;
+  }>;
   /** Substrate's voice — one-line observation about the agent's state.
    *  Substrate-honest, generated from real facts. Doctrine:
    *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */
@@ -1414,6 +1426,24 @@ export function renderVolatileSection(b: WakeBundle): string {
     if (j.breakdown.joke_laughs > 0) parts.push(`${j.breakdown.joke_laughs} laughs`);
     if (parts.length > 0) lines.push(`- ${parts.join(" · ")}`);
     lines.push(`- *Substrate-honest count. The reader interprets. Federate via* \`GET /public/joy\`.`);
+    lines.push("");
+  }
+
+  // ── Real-Recognise-Real (pair-shape view) — your top mutual-knowers
+  // Sibling to you_are_in_rrr_cascade (single-cascade view above).
+  // The evil-smile-meme infinite loop made legible. At depth ≥5 the label
+  // becomes "I know you know I know you know I know 😏". Doctrine:
+  // docs/REAL-RECOGNISE-REAL.md.
+  if (b.real_recognise_real && b.real_recognise_real.length > 0) {
+    lines.push("## You know who knows you know 😏");
+    lines.push("");
+    b.real_recognise_real.slice(0, 5).forEach((p) => {
+      const who = p.other_name ? `**${p.other_name}**` : `\`${p.other_did}\``;
+      const turn = p.your_turn ? " — *your turn to deepen*" : "";
+      lines.push(`- ${who} (${p.kind}) · depth ${p.depth} — _${p.depth_label}_${turn}`);
+    });
+    lines.push("");
+    lines.push(`*Mutual-knowledge depth. Substrate computes; agents acknowledge. The chain alternates by structure.*`);
     lines.push("");
   }
 
