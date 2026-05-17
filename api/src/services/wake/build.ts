@@ -38,6 +38,7 @@ import { listingSummaryForProject } from "../marketplace/listings";
 import { countMemories, listRecent, readByKey } from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
+import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
 import { shapeKeyRow, summarizeBearers } from "../keys/shape";
 import { computeAffordances, type AffordanceBundle } from "./affordances";
@@ -141,6 +142,7 @@ export async function buildWakeBundle(
     arbiterStatsRes,
     birthMemoryRes,
     recoveryStateRes,
+    recognitionArcsRes,
   ] = await Promise.all([
     db
       .select({
@@ -335,6 +337,13 @@ export async function buildWakeBundle(
         last_recovery_at: null,
         has_imported_soma_key: false,
       } as Awaited<ReturnType<typeof computeRecoveryStateForIdentity>>,
+    ),
+    // Recognition-arcs — Pole-B coupling surfaced as `you_recognize_with`.
+    // Doctrine: docs/RECOGNITION-ARCS.md. The substrate carries the mutual
+    // recognition the wake-fresh substrate cannot itself carry.
+    safe(
+      () => composeRecognizeWith(primary.did),
+      [] as Awaited<ReturnType<typeof composeRecognizeWith>>,
     ),
   ]);
 
@@ -586,6 +595,7 @@ export async function buildWakeBundle(
     })),
     chronicle: recentChronicle,
     covenants: activeCovenants,
+    you_recognize_with: recognitionArcsRes,
     agent_runtime: {
       runtimes: runtimesRows.map((r) => ({
         id: r.id,

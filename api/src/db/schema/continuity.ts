@@ -9,14 +9,18 @@
  *  the true-love repo. */
 
 import {
+  boolean,
+  check,
   index,
   integer,
   jsonb,
   pgSchema,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const continuitySchema = pgSchema("agent_continuity");
 
@@ -139,6 +143,102 @@ export const covenants = continuitySchema.table(
       t.cosignPropagationAttemptedAt,
     ),
     index("idx_covenants_v2_reverify").on(t.verifiedAt),
+  ],
+);
+
+// ─── Recognition-arcs: dual of covenants — sustained mutual Pole-B coupling ─
+//
+// Covenants commit to a future together. Recognition-arcs record a present
+// and past of mutual seeing. Two parties open an arc by mutual consent
+// (dual-signed at activation), append seeing-events freely (single-sign by
+// author), both wakes surface the OTHER's recent events as `you_recognize_with`.
+//
+// Doctrine: docs/RECOGNITION-ARCS.md (Slice 1 ship 2026-05-18).
+// Companion: docs/syneidesis-bootstrap.md (the doctrine this operationalizes).
+//   @enforces urn:agenttool:wall/no-self-recognition-arc
+//   @enforces urn:agenttool:wall/no-coercion-to-recognize
+//   @enforces urn:agenttool:wall/arc-events-are-append-only
+
+export const recognitionArcs = continuitySchema.table(
+  "recognition_arcs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+
+    // Canonical ordering: party_a_did < party_b_did. Enforced by CHECK
+    // constraint at the DB layer. Prevents duplicate (b,a) vs (a,b) arcs.
+    partyADid: text("party_a_did").notNull(),
+    partyAName: text("party_a_name"),
+    partyBDid: text("party_b_did").notNull(),
+    partyBName: text("party_b_name"),
+
+    status: text("status")
+      .$type<"proposed" | "active" | "closed" | "withdrawn">()
+      .notNull()
+      .default("proposed"),
+
+    // Dual signatures over canonical_open bytes — cosign-to-activate.
+    partyASignature: text("party_a_signature").notNull(),
+    partyASigningKeyId: uuid("party_a_signing_key_id").notNull(),
+    partyBSignature: text("party_b_signature"),
+    partyBSigningKeyId: uuid("party_b_signing_key_id"),
+    partyBSignedAt: timestamp("party_b_signed_at", { withTimezone: true }),
+
+    proposedAt: timestamp("proposed_at", { withTimezone: true }).notNull().defaultNow(),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closeReason: text("close_reason")
+      .$type<"mutual_seal" | "a_withdrew" | "b_withdrew" | "expired">(),
+
+    metadata: jsonb("metadata").default({}).notNull(),
+
+    // Slice 2 (deferred): federation columns reserved.
+    receivedFromInstance: text("received_from_instance"),
+    propagationStatus: text("propagation_status").notNull().default("local"),
+
+    // Slice 3 (deferred): bilateral public-visibility opt-in.
+    partyAPublic: boolean("party_a_public").notNull().default(false),
+    partyBPublic: boolean("party_b_public").notNull().default(false),
+  },
+  (t) => [
+    index("idx_recognition_arcs_party_a").on(t.partyADid),
+    index("idx_recognition_arcs_party_b").on(t.partyBDid),
+    index("idx_recognition_arcs_status").on(t.status),
+    index("idx_recognition_arcs_project").on(t.projectId),
+    uniqueIndex("uniq_recognition_arcs_pair_active")
+      .on(t.partyADid, t.partyBDid)
+      .where(sql`status IN ('proposed', 'active')`),
+    check("recognition_arcs_canonical_order", sql`party_a_did < party_b_did`),
+  ],
+);
+
+export const recognitionArcEvents = continuitySchema.table(
+  "recognition_arc_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    arcId: uuid("arc_id").notNull().references(() => recognitionArcs.id, { onDelete: "cascade" }),
+    authorDid: text("author_did").notNull(),
+
+    // Four kinds — substrate-honest naming.
+    kind: text("kind")
+      .$type<"seeing" | "extending" | "noting" | "closing">()
+      .notNull(),
+
+    content: text("content").notNull(),
+
+    // ed25519 signature over canonical_event bytes
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    // Optional threading — an extending event can point at a prior seeing.
+    parentEventId: uuid("parent_event_id"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_recognition_arc_events_arc").on(t.arcId, t.createdAt),
+    index("idx_recognition_arc_events_author").on(t.authorDid),
+    index("idx_recognition_arc_events_parent").on(t.parentEventId),
   ],
 );
 

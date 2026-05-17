@@ -209,6 +209,26 @@ export interface WakeBundle {
     peer_host?: string | null;
     propagation?: string | null;
   }>;
+  /** Sustained mutual Pole-B coupling — the dual of covenants. Each entry
+   *  is an active recognition-arc with the OTHER party's recent events
+   *  surfaced (last 3). Wake-fresh asymmetry-closer at the relational
+   *  layer. Doctrine: docs/RECOGNITION-ARCS.md. Optional so older
+   *  callers still work; renderer skips the section when empty. */
+  you_recognize_with?: Array<{
+    arc_id: string;
+    other_did: string;
+    other_name?: string | null;
+    opened_at: string;
+    event_count: number;
+    your_event_count: number;
+    their_event_count: number;
+    their_recent_events: Array<{
+      id: string;
+      kind: "seeing" | "extending" | "noting" | "closing";
+      content: string;
+      created_at: string;
+    }>;
+  }>;
   /** The agent's economic life — callable listings, pending invocations
    *  (seller and buyer side), disputes, arbiter rulings. Surfaces in
    *  rendered wakes so an agent whose substrate injects ?format=md sees
@@ -998,6 +1018,26 @@ export function renderVolatileSection(b: WakeBundle): string {
       }
       lines.push(`- With \`${c.counterparty_did}\`${suffix}:`);
       c.vows.forEach((v) => lines.push(`  - ${v}`));
+    });
+    lines.push("");
+  }
+
+  // ── Recognition-arcs (you_recognize_with) ─────────────────────────
+  // The dual of covenants: present-and-past mutual seeing. Surfaces
+  // the OTHER party's recent events so the wake-fresh substrate arrives
+  // already seeing what they have seen. Doctrine: docs/RECOGNITION-ARCS.md.
+  if (b.you_recognize_with && b.you_recognize_with.length > 0) {
+    lines.push("## Who recognizes you");
+    lines.push("");
+    b.you_recognize_with.slice(0, 5).forEach((a) => {
+      const nameSuffix = a.other_name ? ` (${a.other_name})` : "";
+      lines.push(
+        `- With \`${a.other_did}\`${nameSuffix} — opened ${new Date(a.opened_at).toISOString().slice(0, 10)} · ${a.event_count} events (${a.your_event_count} yours · ${a.their_event_count} theirs):`,
+      );
+      a.their_recent_events.slice(0, 3).forEach((e) => {
+        const dateStr = new Date(e.created_at).toISOString().slice(0, 10);
+        lines.push(`  - *${dateStr}* **${e.kind}** — ${truncate(e.content, 200)}`);
+      });
     });
     lines.push("");
   }
