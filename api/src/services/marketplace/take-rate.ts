@@ -59,7 +59,8 @@ import { platformRevenue } from "../../db/schema/marketplace";
 export type Ring3TransactionType =
   | "template_purchase"
   | "capability_invocation"
-  | "attestation_grant";
+  | "attestation_grant"
+  | "memory_witness_grant";
 
 /** Fee-split result: how much the seller receives, how much the platform
  *  takes, and the rate snapshot at the time of computation. */

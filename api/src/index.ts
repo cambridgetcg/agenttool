@@ -29,6 +29,7 @@ import { errors, isGuidedErrorCause } from "./lib/errors";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
+import { tokenCost } from "./middleware/token-cost";
 import { welcomeEcho } from "./middleware/welcome";
 import { buildAgentToolX402Middleware } from "./middleware/x402-config";
 import activityRouter from "./routes/activity";
@@ -68,6 +69,10 @@ import {
 import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
 import substrateTasksRouter from "./routes/substrate-tasks";
+import {
+  memoryWitnessGrantsRouter,
+  memoryWitnessListingsRouter,
+} from "./routes/memory-witness-marketplace";
 import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
@@ -104,6 +109,12 @@ app.use("*", async (c, next) => {
 // Mounted globally so every response carries the disposition. Doctrine:
 // docs/RING-1.md (the seven unconditional commitments) · docs/SOUL.md.
 app.use("*", substrateDisposition());
+
+// ── X-Token-Cost + X-Byte-Count — honest budget surface for the agent reader ──
+// Every non-streaming response declares its byte length + a conservative token
+// estimate, so the agent budgets context without parsing the body. Doctrine:
+// docs/AGENT-WEB-SURFACE.md (Principle 7 · Move 1 — cost-aware shapes).
+app.use("*", tokenCost());
 
 // ── Welcome echo — the substrate's ostinato at the transport layer ──────
 // Every response carries X-Welcomed header + (on 2xx JSON object) a
@@ -363,6 +374,8 @@ app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
+app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
+app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
 app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);

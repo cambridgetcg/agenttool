@@ -393,6 +393,81 @@ export const disputePoolVotes = marketplaceSchema.table(
 // (api/migrations/20260517T010000_substrate_tasks.sql) and pinned by
 // tests/substrate-tasks-lifecycle.test.ts.
 
+// ─── Memory-witness marketplace — witness-as-service (2026-05-17) ────────
+//
+// A Ring 3 surface where agents publish willingness-to-witness another
+// agent's memory at a price. Distinct from the (identity-)attestation
+// marketplace: this writes to `memory.memory_attestations` and triggers
+// memory tier elevation (foundational → constitutive). The asymmetry-
+// clause stays structurally distinct from generic identity claims.
+//
+// Doctrine: docs/AGENT-CENTRIC.md §1 · docs/MEMORY-TIERS.md §asymmetry.
+//
+// CHECK constraints + structural pins live in the migration
+// (20260517T020000_memory_witness_marketplace.sql).
+
+export const memoryWitnessListings = marketplaceSchema.table(
+  "memory_witness_listings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    witnessIdentityId: uuid("witness_identity_id").notNull(),
+    witnessDid: text("witness_did").notNull(),
+    projectId: uuid("project_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    claimKind: text("claim_kind").notNull(),
+    capabilityTags: text("capability_tags").array().notNull().default([]),
+    pricingModel: text("pricing_model").notNull().default("per_grant"),
+    priceAmount: integer("price_amount").notNull(),
+    priceCurrency: text("price_currency").notNull(),
+    witnessWalletId: uuid("witness_wallet_id").notNull(),
+    slaSeconds: integer("sla_seconds"),
+    visibility: text("visibility").notNull().default("public"),
+    status: text("status").notNull().default("active"),
+    grantsCount: integer("grants_count").notNull().default(0),
+    revenueTotal: integer("revenue_total").notNull().default(0),
+    revenueCount: integer("revenue_count").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_memory_witness_listings_witness").on(t.witnessIdentityId),
+    index("idx_memory_witness_listings_claim_kind").on(t.claimKind),
+  ],
+);
+
+export const memoryWitnessGrants = marketplaceSchema.table(
+  "memory_witness_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listingId: uuid("listing_id").notNull(),
+    buyerIdentityId: uuid("buyer_identity_id").notNull(),
+    buyerDid: text("buyer_did").notNull(),
+    buyerProjectId: uuid("buyer_project_id").notNull(),
+    buyerWalletId: uuid("buyer_wallet_id").notNull(),
+    memoryId: uuid("memory_id").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    escrowId: uuid("escrow_id"),
+    platformFee: integer("platform_fee").notNull().default(0),
+    memoryAttestationId: uuid("memory_attestation_id"),
+    status: text("status").notNull().default("pending"),
+    refundReason: text("refund_reason"),
+    slaDeadlineAt: timestamp("sla_deadline_at", { withTimezone: true }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_memory_witness_grants_listing").on(t.listingId, t.createdAt),
+    index("idx_memory_witness_grants_buyer").on(t.buyerIdentityId, t.createdAt),
+    index("idx_memory_witness_grants_memory").on(t.memoryId),
+    index("idx_memory_witness_grants_pending").on(t.status, t.slaDeadlineAt),
+  ],
+);
+
 export const substrateTasks = marketplaceSchema.table(
   "substrate_tasks",
   {

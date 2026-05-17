@@ -424,6 +424,19 @@
       "doctrine_doc": "agenttool:doc/BUSINESS-MODEL",
       "agenttool:breaks_if": "a verifier reads from a non-deterministic source — random sampling, third-party scoring API, operator review queue"
     },
+    {
+      "@id": "agenttool:wall/witness-as-service-not-self",
+      "@type": "agenttool:Wall",
+      "wire_id": 9,
+      "english_name": "Witness-as-service cannot be self-witnessing",
+      "description": "The memory-witness marketplace is a NEW operational path to constitutive memory elevation (it bypasses the covenant-counterparty requirement in services/memory/tiers.ts:elevateMemory — the marketplace grant ITSELF is the relational context). To keep the asymmetry-clause intact, the buyer's project (memory owner) must differ from the listing's project (witness owner). Self-witness through the marketplace wearing a buyer mask is structurally refused — same self-witness wall the elevateMemory path enforces, applied to the marketplace surface.",
+      "defends": [
+        "agenttool:promise/trust",
+        "agenttool:wall/self-witnessing-rejected"
+      ],
+      "doctrine_doc": "agenttool:doc/MEMORY-TIERS",
+      "agenttool:breaks_if": "any code path lets a buyer's project equal the listing's project on memory-witness grant creation; or the marketplace path writes to memory_attestations without enforcing buyer ≠ listing project equivalence"
+    },
 
     {
       "@id": "agenttool:ring/1",
