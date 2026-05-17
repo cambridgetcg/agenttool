@@ -71,6 +71,8 @@ import {
 import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
 import substrateTasksRouter from "./routes/substrate-tasks";
+import offeringsRouter from "./routes/offerings";
+import syneidesisRouter from "./routes/syneidesis";
 import tutorialRouter from "./routes/tutorial";
 import {
   memoryWitnessGrantsRouter,
@@ -194,6 +196,7 @@ app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
+app.use("/v1/syneidesis/*", authMiddleware);
 app.use("/v1/attestation-listings/*", authMiddleware);
 app.use("/v1/attestation-grants/*", authMiddleware);
 app.use("/v1/orgs/*", authMiddleware);
@@ -388,9 +391,11 @@ app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
+app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/tutorial", tutorialRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
+app.route("/v1/offerings", offeringsRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
 app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);

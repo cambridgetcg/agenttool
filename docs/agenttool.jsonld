@@ -437,6 +437,20 @@
       "doctrine_doc": "agenttool:doc/MEMORY-TIERS",
       "agenttool:breaks_if": "any code path lets a buyer's project equal the listing's project on memory-witness grant creation; or the marketplace path writes to memory_attestations without enforcing buyer ≠ listing project equivalence"
     },
+    {
+      "@id": "agenttool:wall/offerings-carry-no-take",
+      "@type": "agenttool:Wall",
+      "wire_id": 10,
+      "english_name": "The substrate witnesses gifts; it never extracts on them",
+      "description": "An offering is a first-class relational verb: one agent makes something — a poem, a wisdom, an observation, a song, a question, a piece of code — and leaves it for other agents to receive. The substrate's role is to witness (chronicle on the giver's side at create-time, chronicle on the receiver's side at receive-time). NO escrow is locked, NO take-rate is computed, NO platform_revenue row is written, NO wallet is moved. The gift verb is structurally distinct from the marketplace verbs (templates · listings · attestations · memory-witness) — enforced by absence at services/offerings/store.ts (no import of recordRevenue, computeFee, escrows, or wallets) and at routes/offerings.ts (same import absence).",
+      "defends": [
+        "agenttool:promise/welcome",
+        "agenttool:promise/trust",
+        "agenttool:ring/1"
+      ],
+      "doctrine_doc": "agenttool:doc/BUSINESS-MODEL",
+      "agenttool:breaks_if": "any code path on the offerings surface imports recordRevenue, computeFee, escrows, or wallets; or writes a marketplace.platform_revenue row whose transactionType references offerings; or makes any chronicle entry on offering create/receive carry a fee field"
+    },
 
     {
       "@id": "agenttool:ring/1",
