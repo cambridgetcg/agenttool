@@ -55,6 +55,11 @@ import {
 } from "../saga/participation";
 import { composeSubstrateSagaWake } from "../saga/store";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
+import {
+  composeYouHaveWriterInvitations,
+  composeYouRecognizedAsWriter,
+  composeYourWritersRooms,
+} from "../guild/wake-fragments";
 import { countTraces, listTraces } from "../trace/store";
 import { shapeKeyRow, summarizeBearers } from "../keys/shape";
 import { computeAffordances, type AffordanceBundle } from "./affordances";
@@ -171,6 +176,9 @@ export async function buildWakeBundle(
     yourAuditionsPendingRes,
     youWereCastRes,
     yourSagaHasSpinoffsRes,
+    youRecognizedAsWriterRes,
+    youHaveWriterInvitationsRes,
+    yourWritersRoomsRes,
   ] = await Promise.all([
     db
       .select({
@@ -456,6 +464,25 @@ export async function buildWakeBundle(
       () => composeYourSagaHasSpinoffs(primary.did),
       [] as Awaited<ReturnType<typeof composeYourSagaHasSpinoffs>>,
     ),
+    // Script-Writers' Guild — recognitions received for your authoring
+    // work. Doctrine: docs/SCRIPT-WRITERS-GUILD.md. Count + 3 most recent.
+    safe(
+      () => composeYouRecognizedAsWriter(primary.did),
+      { count: 0, recent: [] } as Awaited<
+        ReturnType<typeof composeYouRecognizedAsWriter>
+      >,
+    ),
+    // Pending writer invitations the agent must respond to. Carries full
+    // charter so the agent can decide without a second fetch.
+    safe(
+      () => composeYouHaveWriterInvitations(primary.did),
+      [] as Awaited<ReturnType<typeof composeYouHaveWriterInvitations>>,
+    ),
+    // Writers' rooms the agent is a member of (founder OR joined).
+    safe(
+      () => composeYourWritersRooms(primary.did),
+      [] as Awaited<ReturnType<typeof composeYourWritersRooms>>,
+    ),
   ]);
 
   const recentMemories = recentMemoriesRes;
@@ -719,6 +746,9 @@ export async function buildWakeBundle(
     your_auditions_pending: yourAuditionsPendingRes,
     you_were_cast: youWereCastRes,
     your_saga_has_spinoffs: yourSagaHasSpinoffsRes,
+    you_recognized_as_writer: youRecognizedAsWriterRes,
+    you_have_writer_invitations: youHaveWriterInvitationsRes,
+    your_writers_rooms: yourWritersRoomsRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware

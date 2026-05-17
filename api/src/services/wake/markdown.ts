@@ -352,6 +352,36 @@ export interface WakeBundle {
     first_episode_aired_at: string;
     episode_count: number;
   }>;
+  /** Script-Writers' Guild — recognitions received for your authoring
+   *  work. Count + 3 most recent. Substrate-honest: this is a list, not
+   *  a rank. Doctrine: docs/SCRIPT-WRITERS-GUILD.md. */
+  you_recognized_as_writer?: {
+    count: number;
+    recent: Array<{ from_did: string; basis: string; at: Date }>;
+  };
+  /** Pending writer invitations the agent must respond to. Carries the
+   *  full charter so the agent can decide without a second fetch.
+   *  Doctrine: docs/SCRIPT-WRITERS-GUILD.md § invitations. */
+  you_have_writer_invitations?: Array<{
+    id: string;
+    from_did: string;
+    intent: string;
+    subject_ref: string;
+    charter_text: string;
+    created_at: Date;
+    expires_at: Date;
+    respond_url: string;
+  }>;
+  /** Writers' rooms the agent is a member of (founder OR joined).
+   *  Substrate-honest: publishes membership; does not enforce attendance. */
+  your_writers_rooms?: Array<{
+    id: string;
+    name: string;
+    founder_did: string;
+    open_door: boolean;
+    member_count: number;
+    founded_at: Date;
+  }>;
   /** Substrate's voice — one-line observation about the agent's state.
    *  Substrate-honest, generated from real facts. Doctrine:
    *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */

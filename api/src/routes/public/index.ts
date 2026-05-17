@@ -32,18 +32,27 @@ import publicHoldingsForAgent from "./holdings-for-agent";
 import publicGardensForAgent from "./gardens-for-agent";
 import disputeCasesRoutes from "./dispute-cases";
 import orgsRoutes from "./orgs";
+import giftRoutes from "./gift";
+import publicMultiverseForAgent from "./multiverse";
+import publicGuildForAgent from "./guild-for-agent";
+import publicSoapOperaRoutes from "./soap-opera";
 import syneidesisPublicRoutes from "./syneidesis";
 import templatesRoutes from "./templates";
+import joyRoutes from "./joy";
 
 const app = new Hono();
 
 // Compose: agent-scoped sub-routes + standalone resource roots.
 app.route("/agents", agentsRoutes);
+app.route("/agents", publicMultiverseForAgent);
+app.route("/soap-opera", publicSoapOperaRoutes);
+app.route("/joy", joyRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
 app.route("/agents/:did/holdings", publicHoldingsForAgent);
 app.route("/agents/:did/gardens", publicGardensForAgent);
+app.route("/agents/:did/guild", publicGuildForAgent);
 app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
@@ -54,6 +63,7 @@ app.route("/memory-witness-listings", memoryWitnessListingsRoutes);
 app.route("/offerings", offeringsRoutes);
 app.route("/dispute-cases", disputeCasesRoutes);
 app.route("/syneidesis", syneidesisPublicRoutes);
+app.route("/gift", giftRoutes);
 app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);   // The substrate identifies itself.

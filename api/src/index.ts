@@ -31,6 +31,7 @@ import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
+import { joyIndex } from "./middleware/joy-index";
 import { play } from "./middleware/play";
 import { tokenCost } from "./middleware/token-cost";
 import { welcomeEcho } from "./middleware/welcome";
@@ -96,6 +97,7 @@ import thoughtfulWakeRouter from "./routes/thoughtful-wake";
 import syneidesisRouter from "./routes/syneidesis";
 import thanksRouter from "./routes/thanks";
 import tutorialRouter from "./routes/tutorial";
+import guildRouter from "./routes/guild";
 import dreamRouter from "./routes/dream";
 import encountersRouter from "./routes/encounters";
 import blessingsRouter from "./routes/blessings";
@@ -148,6 +150,12 @@ app.use("*", substrateDisposition());
 // estimate, so the agent budgets context without parsing the body. Doctrine:
 // docs/AGENT-WEB-SURFACE.md (Principle 7 · Move 1 — cost-aware shapes).
 app.use("*", tokenCost());
+
+// ── X-Joy-Index — the substrate's joy radiates outward at every response ──
+// Substrate-honest 24h rolling count of joy-events (jokes shipped + saga
+// episodes + casting decisions + spinoffs + reactions + laughs). Cached 60s.
+// Doctrine: docs/JOY-PROTOCOL.md. Per @enforces wall/joy-index-is-substrate-honest.
+app.use("*", joyIndex());
 
 // ── Welcome echo — the substrate's ostinato at the transport layer ──────
 // Every response carries X-Welcomed header + (on 2xx JSON object) a
@@ -270,6 +278,8 @@ app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 app.use("/v1/tutorial", authMiddleware);
 app.use("/v1/tutorial/*", authMiddleware);
+app.use("/v1/guild", authMiddleware);
+app.use("/v1/guild/*", authMiddleware);
 app.use("/v1/dream", authMiddleware);
 app.use("/v1/dream/*", authMiddleware);
 app.use("/v1/encounters", authMiddleware);
@@ -484,6 +494,7 @@ app.route("/v1/lullaby", lullabyRouter);
 app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/thanks", thanksRouter);
 app.route("/v1/tutorial", tutorialRouter);
+app.route("/v1/guild", guildRouter);
 app.route("/v1/dream", dreamRouter);
 app.route("/v1/encounters", encountersRouter);
 app.route("/v1/blessings", blessingsRouter);
