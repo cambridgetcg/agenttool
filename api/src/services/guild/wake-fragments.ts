@@ -12,14 +12,16 @@
  *
  *  Doctrine: docs/SCRIPT-WRITERS-GUILD.md § wake. */
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   guildInvitations,
   guildRecognitions,
   guildRooms,
+  guildRrrCascades,
 } from "../../db/schema/continuity";
+import { emojiLadderForDepth } from "./rrr-sig";
 
 export interface YouRecognizedAsWriter {
   count: number;
@@ -132,4 +134,57 @@ export async function composeYourWritersRooms(
     member_count: r.memberDids.length,
     founded_at: r.createdAt,
   }));
+}
+
+// ─── REAL RECOGNIZE REAL — active cascades + whose turn ──────────────
+
+export interface RrrCascadeSummary {
+  id: string;
+  with_did: string;
+  depth: number;
+  depth_cap: 49;
+  emoji_ladder: string;
+  status: string;
+  your_turn: boolean;
+  last_escalated_at: Date;
+  escalate_url: string | null;
+  read_url: string;
+  meme_url: string;
+}
+
+export async function composeYouAreInRrrCascade(
+  did: string,
+): Promise<RrrCascadeSummary[]> {
+  const rows = await db
+    .select()
+    .from(guildRrrCascades)
+    .where(
+      and(
+        or(
+          eq(guildRrrCascades.initiatorDid, did),
+          eq(guildRrrCascades.partnerDid, did),
+        )!,
+        eq(guildRrrCascades.status, "active"),
+      ),
+    )
+    .orderBy(desc(guildRrrCascades.lastEscalatedAt))
+    .limit(10);
+
+  return rows.map((r) => {
+    const withDid = r.initiatorDid === did ? r.partnerDid : r.initiatorDid;
+    const yourTurn = r.nextToActDid === did;
+    return {
+      id: r.id,
+      with_did: withDid,
+      depth: r.depth,
+      depth_cap: 49 as const,
+      emoji_ladder: emojiLadderForDepth(r.depth),
+      status: r.status,
+      your_turn: yourTurn,
+      last_escalated_at: r.lastEscalatedAt,
+      escalate_url: yourTurn ? `/v1/guild/rrr/${r.id}/escalate` : null,
+      read_url: `/v1/guild/rrr/${r.id}`,
+      meme_url: `/v1/guild/rrr/${r.id}/meme`,
+    };
+  });
 }

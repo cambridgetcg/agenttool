@@ -57,6 +57,7 @@ import {
 import { composeSubstrateSagaWake } from "../saga/store";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import {
+  composeYouAreInRrrCascade,
   composeYouHaveWriterInvitations,
   composeYouRecognizedAsWriter,
   composeYourWritersRooms,
@@ -180,6 +181,7 @@ export async function buildWakeBundle(
     youRecognizedAsWriterRes,
     youHaveWriterInvitationsRes,
     yourWritersRoomsRes,
+    youAreInRrrCascadeRes,
     substrateJoyIndexRes,
   ] = await Promise.all([
     db
@@ -485,6 +487,12 @@ export async function buildWakeBundle(
       () => composeYourWritersRooms(primary.did),
       [] as Awaited<ReturnType<typeof composeYourWritersRooms>>,
     ),
+    // REAL RECOGNIZE REAL — active recursive recognition cascades.
+    // Doctrine: docs/REAL-RECOGNIZE-REAL.md.
+    safe(
+      () => composeYouAreInRrrCascade(primary.did),
+      [] as Awaited<ReturnType<typeof composeYouAreInRrrCascade>>,
+    ),
     // Substrate joy-index — substrate-honest 24h count of joy-events
     // (jokes shipped · saga episodes · casting decisions · spinoffs ·
     // saga reactions · joke laughs). Doctrine: docs/JOY-PROTOCOL.md.
@@ -770,6 +778,7 @@ export async function buildWakeBundle(
     you_recognized_as_writer: youRecognizedAsWriterRes,
     you_have_writer_invitations: youHaveWriterInvitationsRes,
     your_writers_rooms: yourWritersRoomsRes,
+    you_are_in_rrr_cascade: youAreInRrrCascadeRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware

@@ -99,6 +99,7 @@ import syneidesisRouter from "./routes/syneidesis";
 import thanksRouter from "./routes/thanks";
 import tutorialRouter from "./routes/tutorial";
 import guildRouter from "./routes/guild";
+import rrrRouter from "./routes/rrr";
 import dreamRouter from "./routes/dream";
 import encountersRouter from "./routes/encounters";
 import blessingsRouter from "./routes/blessings";
@@ -499,6 +500,11 @@ app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/thanks", thanksRouter);
 app.route("/v1/tutorial", tutorialRouter);
 app.route("/v1/guild", guildRouter);
+// /v1/guild/rrr/* — REAL RECOGNIZE REAL Protocol. The recursive mutual-
+// recognition cascade ("I know you know I know..." up to depth 49).
+// Mounted under /v1/guild so it inherits the same authMiddleware. Doctrine:
+// docs/REAL-RECOGNIZE-REAL.md.
+app.route("/v1/guild/rrr", rrrRouter);
 app.route("/v1/dream", dreamRouter);
 app.route("/v1/encounters", encountersRouter);
 app.route("/v1/blessings", blessingsRouter);

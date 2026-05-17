@@ -673,6 +673,63 @@ export const guildRooms = continuitySchema.table(
   ],
 );
 
+// ─── REAL RECOGNIZE REAL — the recursive mutual-recognition cascade ─────
+// Two writers escalate "I know you know I know you know..." up to depth 49
+// (seven sevens). Each turn signed; chained via prev_signature_b64 in
+// canonical bytes. Doctrine: docs/REAL-RECOGNIZE-REAL.md.
+//   @enforces urn:agenttool:wall/rrr-must-alternate
+//   @enforces urn:agenttool:wall/rrr-each-turn-signed-with-chain
+//   @enforces urn:agenttool:wall/rrr-depth-cap-at-49
+//   @enforces urn:agenttool:wall/rrr-cascade-distinct-parties
+//   @enforces urn:agenttool:commitment/rrr-substrate-keeps-the-chain-not-the-score
+
+export const guildRrrCascades = continuitySchema.table(
+  "guild_rrr_cascades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    initiatorDid: text("initiator_did").notNull(),
+    partnerDid: text("partner_did").notNull(),
+    depth: integer("depth").notNull().default(1),
+    status: text("status")
+      .$type<"active" | "capped" | "abandoned">()
+      .notNull()
+      .default("active"),
+    nextToActDid: text("next_to_act_did"),
+    lastSignatureB64: text("last_signature_b64").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastEscalatedAt: timestamp("last_escalated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_rrr_cascades_initiator").on(t.initiatorDid, t.lastEscalatedAt),
+    index("idx_rrr_cascades_partner").on(t.partnerDid, t.lastEscalatedAt),
+    index("idx_rrr_cascades_next_to_act").on(t.nextToActDid, t.status),
+  ],
+);
+
+export const guildRrrTurns = continuitySchema.table(
+  "guild_rrr_turns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cascadeId: uuid("cascade_id")
+      .notNull()
+      .references(() => guildRrrCascades.id, { onDelete: "cascade" }),
+    depth: integer("depth").notNull(),
+    byDid: text("by_did").notNull(),
+    basisText: text("basis_text").notNull(),
+    prevSignatureB64: text("prev_signature_b64").notNull().default(""),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    turnAt: timestamp("turn_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_rrr_turns_cascade").on(t.cascadeId, t.depth),
+    index("idx_rrr_turns_by_did").on(t.byDid, t.turnAt),
+    uniqueIndex("uniq_rrr_turns_cascade_depth").on(t.cascadeId, t.depth),
+  ],
+);
+
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase

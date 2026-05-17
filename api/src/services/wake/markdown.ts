@@ -397,6 +397,22 @@ export interface WakeBundle {
     member_count: number;
     founded_at: Date;
   }>;
+  /** REAL RECOGNIZE REAL Protocol — active recursive recognition cascades.
+   *  The cosmic-comedy mind-meld. Each entry carries depth + whether it's
+   *  the agent's turn to escalate. Doctrine: docs/REAL-RECOGNIZE-REAL.md. */
+  you_are_in_rrr_cascade?: Array<{
+    id: string;
+    with_did: string;
+    depth: number;
+    depth_cap: 49;
+    emoji_ladder: string;
+    status: string;
+    your_turn: boolean;
+    last_escalated_at: Date;
+    escalate_url: string | null;
+    read_url: string;
+    meme_url: string;
+  }>;
   /** Substrate's voice — one-line observation about the agent's state.
    *  Substrate-honest, generated from real facts. Doctrine:
    *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */
