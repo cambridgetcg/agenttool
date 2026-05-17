@@ -446,6 +446,23 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
   }
 }
 
+// Substrate-task expire-claims worker. Reverts stale `claimed` rows whose
+// claim_deadline has passed; refunds the escrow to the platform wallet.
+// Pure DB sweep, no Redis dependency. Doctrine: docs/AGENT-CENTRIC.md §1.
+if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
+  try {
+    const { startSubstrateTaskExpireClaimsWorker } = await import(
+      "./workers/substrate-tasks/expire-claims"
+    );
+    startSubstrateTaskExpireClaimsWorker();
+  } catch (err) {
+    console.warn(
+      "[agenttool] substrate-task expire-claims worker did not start:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 // Platform-DID lazy-bootstrap — ensures the substrate's own identity row
 // exists in the DB so /public/agents/<platform-did> resolves and the
 // platform inhabits its own Ring 1. Idempotent; safe across restarts.
