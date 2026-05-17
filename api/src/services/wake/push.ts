@@ -48,7 +48,8 @@ export type WakeEventKey =
   | "traces"
   | "expression"
   | "vault"
-  | "wallets";
+  | "wallets"
+  | "dream"; // substrate-side integration cycles — docs/DREAM.md
 
 /** Stable wire-format identifier on every wake event. Subscribers parsing
  *  payloads check this to know what shape to expect. Future breaking

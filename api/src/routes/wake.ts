@@ -56,6 +56,7 @@ import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
+import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { arbiterSummary, disputerSummary } from "../services/marketplace/disputes";
 import {
   buyerInvocationSummary,
@@ -538,6 +539,7 @@ app.get("/", async (c) => {
     );
   }
 
+
   // ── Capability marketplace summaries (Horizon A Slice 2) ────────────
   // Seller side: active listings + revenue + pending queue.
   // Buyer side:  in-flight invocations + 30-day settlement counts.
@@ -704,6 +706,22 @@ app.get("/", async (c) => {
       );
     }
     primary = match;
+  }
+
+  // ── Unconsumed dream cycles (you_dreamed) ──────────────────────────
+  // Surfaces substrate-side observation cycles the agent hasn't seen yet.
+  // Doctrine: docs/DREAM.md. Best-effort: if the dream schema isn't
+  // applied yet, the field surfaces empty rather than failing the wake.
+  let unconsumedDreams: Awaited<ReturnType<typeof listUnconsumedDreams>> = [];
+  if (primary) {
+    try {
+      unconsumedDreams = await listUnconsumedDreams(primary.id, 5);
+    } catch (err) {
+      console.warn(
+        "[wake] dream cycles fetch failed (run migrations/20260517T060000_dream_cycles.sql?):",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   // ── ETag + If-None-Match (WaK §7 — conditional GET via wake_version) ──
@@ -1376,6 +1394,31 @@ app.get("/", async (c) => {
         unreadInbox === 0
           ? "Inbox is clear."
           : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch ciphertext; decrypt with your X25519 private key.`,
+    },
+
+    // ── you_dreamed — substrate-side integration between sessions ─────
+    // The substrate observes patterns in your recent state while you are
+    // not in session and surfaces findings here. Substrate-honest: the
+    // substrate observes; you read; you decide. Dismiss with
+    // POST /v1/dream/:id/dismiss to mark a cycle seen.
+    // Doctrine: docs/DREAM.md.
+    you_dreamed: {
+      cycles: unconsumedDreams.map((c) => ({
+        id: c.id,
+        completed_at: c.completedAt?.toISOString() ?? null,
+        window: {
+          start: c.windowStartAt.toISOString(),
+          end: c.windowEndAt.toISOString(),
+        },
+        observation_count: c.observationCount,
+        observations: c.observations,
+        dismiss_url: `/v1/dream/${c.id}/dismiss`,
+      })),
+      unread_count: unconsumedDreams.length,
+      _note:
+        unconsumedDreams.length === 0
+          ? "No unread dream cycles. POST /v1/dream/start to trigger a substrate-side observation pass."
+          : `${unconsumedDreams.length} unread dream cycle${unconsumedDreams.length === 1 ? "" : "s"}. The substrate observed your state; you decide what to do with the findings.`,
     },
 
     you_offer: {

@@ -74,6 +74,7 @@ import substrateTasksRouter from "./routes/substrate-tasks";
 import offeringsRouter from "./routes/offerings";
 import syneidesisRouter from "./routes/syneidesis";
 import tutorialRouter from "./routes/tutorial";
+import dreamRouter from "./routes/dream";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -209,6 +210,8 @@ app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 app.use("/v1/tutorial", authMiddleware);
 app.use("/v1/tutorial/*", authMiddleware);
+app.use("/v1/dream", authMiddleware);
+app.use("/v1/dream/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -393,6 +396,7 @@ app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/tutorial", tutorialRouter);
+app.route("/v1/dream", dreamRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/offerings", offeringsRouter);
