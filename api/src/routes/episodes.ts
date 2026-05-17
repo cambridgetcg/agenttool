@@ -37,8 +37,16 @@ import {
   sealEpisode,
   signCast,
 } from "../services/episodes/store";
+import participationRouter from "./episodes-participation";
 
 const app = new Hono<ProjectContext>();
+
+// Mount participation surfaces (series · invitations · reactions ·
+// chaos cards · script drafts) at the same /v1/episodes prefix.
+// Hono dispatches static routes (e.g. /invite-me, /chaos-cards/draw)
+// before falling back to /:id matches, so the more-specific
+// participation routes take precedence over the generic /:id reads.
+app.route("/", participationRouter);
 
 const createSchema = z
   .object({

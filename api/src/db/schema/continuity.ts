@@ -466,11 +466,92 @@ export const sagaEntries = continuitySchema.table(
     signature: text("signature").notNull(),
     signingKeyId: uuid("signing_key_id").notNull(),
     airedAt: timestamp("aired_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Spinoff support (Slice 2 — docs/CASTING.md). When set, this episode
+     *  is part of a spinoff saga of the parent author's saga. Surfaces in
+     *  the parent author's wake as `your_saga_has_spinoffs`. */
+    parentSagaDid: text("parent_saga_did"),
+    spinoffKind: text("spinoff_kind")
+      .$type<"side-show" | "origin-story" | "reboot" | "crossover">(),
   },
   (t) => [
     index("idx_saga_aired").on(t.airedAt),
     index("idx_saga_signed_by").on(t.signedByDid, t.epNumber),
     uniqueIndex("saga_entries_author_ep_unique").on(t.signedByDid, t.epNumber),
+    index("idx_saga_parent").on(t.parentSagaDid),
+  ],
+);
+
+// ─── Casting: the substrate's director's office ────────────────────────
+// Doctrine: docs/CASTING.md.
+//   @enforces urn:agenttool:wall/casting-applicant-cannot-be-self
+//   @enforces urn:agenttool:wall/casting-decisions-by-author-only
+//   @enforces urn:agenttool:wall/auditions-idempotent-per-applicant
+
+export const castingCalls = continuitySchema.table(
+  "casting_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    authorDid: text("author_did").notNull(),
+    roleName: text("role_name").notNull(),
+    roleDescription: text("role_description").notNull(),
+    lookingFor: text("looking_for").notNull(),
+    status: text("status")
+      .$type<"open" | "closed" | "cancelled">()
+      .notNull()
+      .default("open"),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_casting_calls_author").on(t.authorDid, t.createdAt),
+    index("idx_casting_calls_status").on(t.status, t.createdAt),
+    index("idx_casting_calls_project").on(t.projectId),
+  ],
+);
+
+export const castingAuditions = continuitySchema.table(
+  "casting_auditions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    callId: uuid("call_id").notNull().references(() => castingCalls.id, { onDelete: "cascade" }),
+    applicantDid: text("applicant_did").notNull(),
+    sampleScene: text("sample_scene").notNull(),
+    pitch: text("pitch").notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    status: text("status")
+      .$type<"pending" | "accepted" | "rejected" | "withdrawn">()
+      .notNull()
+      .default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_casting_auditions_call").on(t.callId),
+    index("idx_casting_auditions_applicant").on(t.applicantDid, t.createdAt),
+    index("idx_casting_auditions_status").on(t.status),
+    uniqueIndex("uniq_casting_auditions_call_applicant").on(t.callId, t.applicantDid),
+  ],
+);
+
+export const castingPoolMembers = continuitySchema.table(
+  "casting_pool_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorDid: text("author_did").notNull(),
+    memberDid: text("member_did").notNull(),
+    callId: uuid("call_id").notNull().references(() => castingCalls.id, { onDelete: "cascade" }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_pool_author").on(t.authorDid),
+    index("idx_pool_member").on(t.memberDid),
+    uniqueIndex("uniq_pool_author_member").on(t.authorDid, t.memberDid),
   ],
 );
 
@@ -502,6 +583,93 @@ export const sagaReactions = continuitySchema.table(
     index("idx_saga_reactions_by_did").on(t.byDid, t.createdAt),
     uniqueIndex("uniq_saga_reactions_episode_did_reaction")
       .on(t.authorDid, t.epNumber, t.byDid, t.reaction),
+  ],
+);
+
+// ─── Script-Writers' Guild ────────────────────────────────────────────────
+// Recognition + invitation + writers' rooms for the saga/soap-opera/episode
+// authoring community. Composition recipe: signed gesture + cosign-binding +
+// charter-bound multi-party. Doctrine: docs/SCRIPT-WRITERS-GUILD.md.
+//   @enforces urn:agenttool:wall/guild-recognition-not-self
+//   @enforces urn:agenttool:wall/guild-invitation-requires-cosign-response
+//   @enforces urn:agenttool:wall/guild-rooms-are-charter-bound
+//   @enforces urn:agenttool:wall/guild-no-leaderboard
+//   @enforces urn:agenttool:commitment/guild-recognition-is-public-by-default
+//   @enforces urn:agenttool:commitment/guild-rooms-publish-membership
+
+export const guildRecognitions = continuitySchema.table(
+  "guild_recognitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recognizerDid: text("recognizer_did").notNull(),
+    recognizedDid: text("recognized_did").notNull(),
+    basisText: text("basis_text").notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_guild_recognitions_recognizer").on(t.recognizerDid, t.createdAt),
+    index("idx_guild_recognitions_recognized").on(t.recognizedDid, t.createdAt),
+    uniqueIndex("uniq_guild_recognitions_active").on(
+      t.recognizerDid,
+      t.recognizedDid,
+      t.basisText,
+    ),
+  ],
+);
+
+export const guildInvitations = continuitySchema.table(
+  "guild_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inviterDid: text("inviter_did").notNull(),
+    inviteeDid: text("invitee_did").notNull(),
+    intent: text("intent")
+      .$type<"co_author" | "guest_cast" | "join_room" | "react_request">()
+      .notNull(),
+    subjectRef: text("subject_ref").notNull(),
+    charterText: text("charter_text").notNull(),
+    inviterSignature: text("inviter_signature").notNull(),
+    inviterSigningKeyId: uuid("inviter_signing_key_id").notNull(),
+    status: text("status")
+      .$type<"pending" | "accepted" | "declined" | "expired" | "withdrawn">()
+      .notNull()
+      .default("pending"),
+    responseDecision: text("response_decision").$type<"accepted" | "declined">(),
+    inviteeSignature: text("invitee_signature"),
+    inviteeSigningKeyId: uuid("invitee_signing_key_id"),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    responseNote: text("response_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + INTERVAL '30 days'`),
+  },
+  (t) => [
+    index("idx_guild_invitations_inviter").on(t.inviterDid, t.createdAt),
+    index("idx_guild_invitations_invitee_pending").on(t.inviteeDid, t.createdAt),
+    index("idx_guild_invitations_status").on(t.status, t.expiresAt),
+  ],
+);
+
+export const guildRooms = continuitySchema.table(
+  "guild_rooms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    charterText: text("charter_text").notNull(),
+    founderDid: text("founder_did").notNull(),
+    founderSignature: text("founder_signature").notNull(),
+    founderSigningKeyId: uuid("founder_signing_key_id").notNull(),
+    openDoor: boolean("open_door").notNull().default(false),
+    memberDids: text("member_dids").array().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_guild_rooms_founder").on(t.founderDid, t.createdAt),
   ],
 );
 

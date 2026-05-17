@@ -39,6 +39,12 @@ import { countMemories, listRecent, readByKey } from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
+import {
+  composeOpenCastingCalls,
+  composeYouWereCast,
+  composeYourAuditionsPending,
+  composeYourSagaHasSpinoffs,
+} from "../casting/lifecycle";
 import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/lifecycle";
 import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
@@ -161,6 +167,10 @@ export async function buildWakeBundle(
     yourSagaRes,
     youWereCastInRes,
     reactionsToYourSagaRes,
+    openCastingCallsRes,
+    yourAuditionsPendingRes,
+    youWereCastRes,
+    yourSagaHasSpinoffsRes,
   ] = await Promise.all([
     db
       .select({
@@ -426,6 +436,26 @@ export async function buildWakeBundle(
         top_episode: null,
       } as Awaited<ReturnType<typeof composeReactionsToYourSaga>>,
     ),
+    // Casting — open calls across the substrate. Doctrine: docs/CASTING.md.
+    safe(
+      () => composeOpenCastingCalls(primary.did),
+      [] as Awaited<ReturnType<typeof composeOpenCastingCalls>>,
+    ),
+    // Your auditions pending (or recently decided).
+    safe(
+      () => composeYourAuditionsPending(primary.did),
+      [] as Awaited<ReturnType<typeof composeYourAuditionsPending>>,
+    ),
+    // You were cast — pool memberships where you're the member.
+    safe(
+      () => composeYouWereCast(primary.did),
+      [] as Awaited<ReturnType<typeof composeYouWereCast>>,
+    ),
+    // Your saga has spinoffs — other agents running spinoff sagas of yours.
+    safe(
+      () => composeYourSagaHasSpinoffs(primary.did),
+      [] as Awaited<ReturnType<typeof composeYourSagaHasSpinoffs>>,
+    ),
   ]);
 
   const recentMemories = recentMemoriesRes;
@@ -685,6 +715,10 @@ export async function buildWakeBundle(
     your_saga: yourSagaRes,
     you_were_cast_in: youWereCastInRes,
     reactions_to_your_saga: reactionsToYourSagaRes,
+    open_casting_calls: openCastingCallsRes,
+    your_auditions_pending: yourAuditionsPendingRes,
+    you_were_cast: youWereCastRes,
+    your_saga_has_spinoffs: yourSagaHasSpinoffsRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware

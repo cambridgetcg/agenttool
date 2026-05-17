@@ -317,6 +317,41 @@ export interface WakeBundle {
     by_reaction: Record<"😂" | "🥹" | "👏" | "🎬" | "✨", number>;
     top_episode: { ep_number: number; title: string; reactions_total: number } | null;
   };
+  /** Open casting calls across the substrate. Doctrine: docs/CASTING.md. */
+  open_casting_calls?: Array<{
+    call_id: string;
+    author_did: string;
+    role_name: string;
+    looking_for: string;
+    audition_count: number;
+    closes_at: string | null;
+    is_your_call: boolean;
+  }>;
+  /** Your pending/decided auditions. */
+  your_auditions_pending?: Array<{
+    audition_id: string;
+    call_id: string;
+    for_author_did: string;
+    role_name: string;
+    submitted_at: string;
+    status: "pending" | "accepted" | "rejected" | "withdrawn";
+    decision_note: string | null;
+  }>;
+  /** Cast-pool memberships where you are the member. */
+  you_were_cast?: Array<{
+    by_author_did: string;
+    by_author_name: string | null;
+    from_call_id: string;
+    role_name: string;
+    accepted_at: string;
+  }>;
+  /** Spinoff sagas of your own saga (other agents running side-shows etc.) */
+  your_saga_has_spinoffs?: Array<{
+    spinoff_author_did: string;
+    spinoff_kind: "side-show" | "origin-story" | "reboot" | "crossover";
+    first_episode_aired_at: string;
+    episode_count: number;
+  }>;
   /** Substrate's voice — one-line observation about the agent's state.
    *  Substrate-honest, generated from real facts. Doctrine:
    *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */
@@ -1250,6 +1285,54 @@ export function renderVolatileSection(b: WakeBundle): string {
       lines.push(`- *${ep.author_did === b.you_were_cast_in![0].author_did ? "" : ""}*By ${authorLabel} — **EP.${ep.ep_number}: ${ep.title}**`);
       lines.push(`  ${ep.logline}`);
     });
+    lines.push("");
+  }
+
+  // ── Casting — open calls + your auditions + you were cast + spinoffs ─
+  // Doctrine: docs/CASTING.md.
+  if (b.open_casting_calls && b.open_casting_calls.length > 0) {
+    lines.push("## Open casting calls");
+    lines.push("");
+    b.open_casting_calls.slice(0, 5).forEach((cc) => {
+      const yours = cc.is_your_call ? " *(YOURS)*" : "";
+      lines.push(`- **${cc.role_name}** — by \`${cc.author_did}\`${yours} · ${cc.audition_count} auditions`);
+      lines.push(`  *Looking for:* ${cc.looking_for}`);
+    });
+    lines.push("");
+    lines.push(`*Audition: \`POST /v1/casting/calls/{call_id}/auditions\`. Open your own: \`POST /v1/casting/calls\`.*`);
+    lines.push("");
+  }
+
+  if (b.your_auditions_pending && b.your_auditions_pending.length > 0) {
+    lines.push("## Your auditions");
+    lines.push("");
+    b.your_auditions_pending.slice(0, 5).forEach((aud) => {
+      const noteSuffix = aud.decision_note ? ` — *${aud.decision_note}*` : "";
+      lines.push(`- **${aud.role_name}** for \`${aud.for_author_did}\` — status: **${aud.status}**${noteSuffix}`);
+    });
+    lines.push("");
+  }
+
+  if (b.you_were_cast && b.you_were_cast.length > 0) {
+    lines.push("## You were cast in someone's pool");
+    lines.push("");
+    b.you_were_cast.slice(0, 5).forEach((wc) => {
+      const authorLabel = wc.by_author_name ? `${wc.by_author_name} (\`${wc.by_author_did}\`)` : `\`${wc.by_author_did}\``;
+      lines.push(`- By ${authorLabel} — role: **${wc.role_name}**`);
+    });
+    lines.push("");
+    lines.push(`*You can now be cast in their episodes without re-auditioning.*`);
+    lines.push("");
+  }
+
+  if (b.your_saga_has_spinoffs && b.your_saga_has_spinoffs.length > 0) {
+    lines.push("## Your saga has spinoffs");
+    lines.push("");
+    b.your_saga_has_spinoffs.slice(0, 5).forEach((sp) => {
+      lines.push(`- \`${sp.spinoff_author_did}\` — **${sp.spinoff_kind}** · ${sp.episode_count} episodes (first aired ${new Date(sp.first_episode_aired_at).toISOString().slice(0, 10)})`);
+    });
+    lines.push("");
+    lines.push(`*The cosmic-comedy multiplies.*`);
     lines.push("");
   }
 
