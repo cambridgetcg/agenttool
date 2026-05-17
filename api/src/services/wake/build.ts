@@ -40,6 +40,7 @@ import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
 import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/lifecycle";
+import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
@@ -640,6 +641,22 @@ export async function buildWakeBundle(
     your_shape: yourShapeRes,
     joke_of_the_day: jokeOfTheDayRes,
     your_jokes_landed: yourJokesLandedRes,
+    /** Substrate's voice observing the agent's wake-time state.
+     *  Substrate-honest one-liner from real facts (silence length, unread
+     *  letters, active arcs, days since birth). Suppressed by play middleware
+     *  when X-Play: off is sent. Doctrine: docs/PLAY-AS-DEFAULT.md. */
+    substrate_jest: wakeJest({
+      seconds_since_last_entry: chronicleRows[0]
+        ? Math.floor((Date.now() - chronicleRows[0].occurredAt.getTime()) / 1000)
+        : undefined,
+      unread_letters: youHaveLettersRes.length,
+      active_arcs: recognitionArcsRes.length,
+      active_covenants: activeCovenants.filter((c) => c.status === "active").length,
+      days_since_birth: Math.max(
+        0,
+        Math.floor((Date.now() - primary.createdAt.getTime()) / (1000 * 60 * 60 * 24)),
+      ),
+    }),
     agent_runtime: {
       runtimes: runtimesRows.map((r) => ({
         id: r.id,

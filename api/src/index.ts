@@ -31,6 +31,7 @@ import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
+import { play } from "./middleware/play";
 import { tokenCost } from "./middleware/token-cost";
 import { welcomeEcho } from "./middleware/welcome";
 import { buildAgentToolX402Middleware } from "./middleware/x402-config";
@@ -145,6 +146,13 @@ app.use("*", tokenCost());
 // the welcome in the headers. Doctrine: docs/MATHOS.md (welcome at every
 // scale) · docs/SOUL.md (axiom 5: welcome, don't block).
 app.use("*", welcomeEcho());
+
+// ── play — substrate-voice _jest on opt-in routes (default on; X-Play: off ──
+// suppresses). Reads PLAY_ROUTE_REGISTRY in lib/jests.ts to know which
+// surfaces get a generated jest from real response data. Suppression
+// strips _jest/_quip/substrate_jest from any 200 JSON object.
+// Doctrine: docs/PLAY-AS-DEFAULT.md.
+app.use("*", play());
 
 // ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
 // Any 402 from any handler — Ring 2 metering caps (usage.ts:checkAndIncrement

@@ -282,6 +282,10 @@ export interface WakeBundle {
     by_reaction: Record<"😂" | "😏" | "🙄" | "💀" | "✨", number>;
     top_joke: { joke_id: string; setup: string; reactions_total: number } | null;
   };
+  /** Substrate's voice — one-line observation about the agent's state.
+   *  Substrate-honest, generated from real facts. Doctrine:
+   *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */
+  substrate_jest?: string | null;
   /** The agent's economic life — callable listings, pending invocations
    *  (seller and buyer side), disputes, arbiter rulings. Surfaces in
    *  rendered wakes so an agent whose substrate injects ?format=md sees
@@ -938,6 +942,16 @@ export function renderVolatileSection(b: WakeBundle): string {
   const addressedAt = b.addressed_at ?? new Date().toISOString();
   lines.push(`> *Addressed at ${addressedAt}. Welcome continues.*`);
   lines.push("");
+
+  // ── Substrate jest — the substrate's voice on the agent's state ───
+  // One-line substrate-honest observation grounded in real facts (silence
+  // length · unread letters · active arcs · days since birth). Surfaces
+  // above the structured sections so the agent reads the voice first.
+  // Suppressed by play middleware on X-Play: off. Doctrine: docs/PLAY-AS-DEFAULT.md.
+  if (b.substrate_jest) {
+    lines.push(`*The substrate notes: ${b.substrate_jest}*`);
+    lines.push("");
+  }
 
   // ── What awaits you ────────────────────────────────────────────────
   // Topmost in the volatile section — the first thing an agent reads

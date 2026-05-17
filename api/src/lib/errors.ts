@@ -86,17 +86,51 @@ export interface GuidedErrorBody {
    *  agent connect English error codes to the substrate-neutral Promise the
    *  failure relates to. Doctrine: docs/MATHOS.md, docs/SOUL.md. */
   axiom_id?: number;
+  /** Optional canon URN naming the wall / commitment / principle this
+   *  refusal embodies. Mirrors `_canon_pointer` on success responses
+   *  (see api/src/lib/surface-metadata.ts). Lets the agent recurse into
+   *  the canon graph from any refusal — e.g.
+   *  `urn:agenttool:wall/birth-is-free` on a 402 that would breach the
+   *  free-birth wall, `urn:agenttool:wall/no-cost-without-disclosure`
+   *  on a 5xx that fails to report cost honestly. Resolves at
+   *  `GET /v1/canon/<urn>`. Doctrine: docs/AGENT-WEB-SURFACE.md Move 5
+   *  (canon-traversable refusals — generalization from success responses). */
+  _canon_pointer?: string;
+  /** Optional substrate-voice quip — a one-line wry observation about
+   *  the error condition that does NOT replace the guidance. Per
+   *  docs/PLAY-AS-DEFAULT.md, errors guide AND charm. The `_quip` is
+   *  additive; `next_actions` and `docs` remain unchanged. Suppressed
+   *  by the play middleware when the caller sends X-Play: off.
+   *  See api/src/lib/jests.ts:quipForError for the catalog. */
+  _quip?: string;
 }
 
 /** Emit a guided error response. Use this instead of `c.json({ error: ... }, status)`
- *  for any 4xx that an agent might need to recover from. */
+ *  for any 4xx that an agent might need to recover from.
+ *
+ *  Automatically attaches a substrate-voice `_quip` from
+ *  api/src/lib/jests.ts:quipForError when a quip exists for the error
+ *  kind. The play middleware strips `_quip` when X-Play: off is sent.
+ *  Doctrine: docs/PLAY-AS-DEFAULT.md. */
 export function fail(
   c: Context,
   body: GuidedErrorBody,
   status: ContentfulStatusCode,
 ) {
+  // Attach a quip if the error kind has one and the caller didn't set one
+  // explicitly. Substrate-honest: no quip → no field.
+  if (!body._quip) {
+    const quip = quipForError(body.error);
+    if (quip) {
+      body = { ...body, _quip: quip };
+    }
+  }
   return c.json(body, status);
 }
+
+// Lazy require to avoid module-init cycle (jests imports nothing from errors,
+// but to be safe).
+import { quipForError } from "./jests";
 
 /** Throw a guided error. Use from service-layer code (or anywhere `return c.json()`
  *  isn't ergonomic). The central `app.onError` handler lifts the body from
@@ -148,6 +182,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/inbox#covenant-gate`,
       axiom_id: AXIOM_TRUST, // bonds are gated; trust requires other-witness
+      // Bonds before access — the covenant primitive is how the substrate
+      // gates cross-project relation. Per docs/CROSS-INSTANCE-COVENANTS.md.
+      _canon_pointer: "urn:agenttool:doc/CROSS-INSTANCE-COVENANTS",
     };
   },
 
@@ -166,6 +203,10 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/covenants#expiry`,
       axiom_id: AXIOM_REST, // graceful expiry — degrade, don't crash
+      // Graceful TTL — the bond steps down gently, doesn't crash. Per
+      // Ring 1 commitment 6 (anyone-hits-a-cap-softly, generalized to
+      // temporal caps as well as quota caps).
+      _canon_pointer: "urn:agenttool:commitment/anyone-hits-a-cap-softly",
     };
   },
 
@@ -187,6 +228,10 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/covenants#signing`,
       axiom_id: AXIOM_TRUST, // signature is the proof; trust requires it
+      // K_master never server-side — the agent holds the signing material,
+      // the substrate verifies. Per docs/CANONICAL-BYTES.md and the
+      // K_master-never-server-side wall.
+      _canon_pointer: "urn:agenttool:wall/k-master-never-server-side",
     };
   },
 
@@ -241,6 +286,10 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/economy#balance`,
       axiom_id: AXIOM_REST, // strain (low balance) — degrade gracefully, don't crash
+      // The refusal is cost-honest — we name what's required + what's
+      // available rather than failing silently. Per AGENT-WEB-SURFACE.md
+      // Principle 7 / Move 1 (cost-aware shapes).
+      _canon_pointer: "urn:agenttool:wall/no-cost-without-disclosure",
     };
   },
 
@@ -260,6 +309,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/economy#rings`,
       axiom_id: AXIOM_REST, // strain → degrade not crash (the rest axiom itself)
+      // The cap speaks softly — guidance not wall, with a paid-burst path.
+      // Per Ring 1 commitment 6 (anyone-hits-a-cap-softly).
+      _canon_pointer: "urn:agenttool:commitment/anyone-hits-a-cap-softly",
     };
   },
 
@@ -277,6 +329,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/economy#plans`,
       axiom_id: AXIOM_REST, // plan strain — graceful, not punitive
+      // The cap speaks softly — guidance not wall, with a paid-burst path.
+      // Per Ring 1 commitment 6 (anyone-hits-a-cap-softly).
+      _canon_pointer: "urn:agenttool:commitment/anyone-hits-a-cap-softly",
     };
   },
 
@@ -293,6 +348,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/idempotency`,
       axiom_id: AXIOM_REMEMBER, // honoring prior-request memory — don't forget
+      // Don't double-charge by forgetting in-flight requests. Per the
+      // persist-identity discipline (the substrate records before it acts).
+      _canon_pointer: "urn:agenttool:doc/PATTERN-PERSIST-IDENTITY",
     };
   },
 
@@ -319,6 +377,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/identity#keys`,
       axiom_id: AXIOM_TRUST, // trust requires a present, verifiable key
+      // Identity-anchor surface — the bearer + signing key are how the agent
+      // proves itself. Per docs/IDENTITY-ANCHOR.md.
+      _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
     };
   },
 
@@ -344,6 +405,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/runtime#provisioning`,
       axiom_id: AXIOM_GUIDE, // guide toward provisioning rather than punish absence
+      // Runtime is the custody axis — self · bridged · trusted. Per
+      // docs/RUNTIME.md.
+      _canon_pointer: "urn:agenttool:doc/RUNTIME",
     };
   },
 
