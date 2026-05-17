@@ -39,6 +39,7 @@ import { countMemories, listRecent, readByKey } from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
+import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/lifecycle";
 import { composeYourShape } from "../mirror/aggregate";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
@@ -147,6 +148,8 @@ export async function buildWakeBundle(
     recognitionArcsRes,
     youHaveLettersRes,
     yourShapeRes,
+    jokeOfTheDayRes,
+    yourJokesLandedRes,
   ] = await Promise.all([
     db
       .select({
@@ -364,6 +367,23 @@ export async function buildWakeBundle(
     safe(
       () => composeYourShape(primary.id, primary.did),
       null as Awaited<ReturnType<typeof composeYourShape>>,
+    ),
+    // Joke of the day — deterministic per UTC date. Same for every reader
+    // on the same day. Fair, no algorithm. Doctrine: docs/JOKES.md.
+    safe(
+      () => composeJokeOfTheDayWake(),
+      null as Awaited<ReturnType<typeof composeJokeOfTheDayWake>>,
+    ),
+    // Your jokes landed — aggregates of laughs on your jokes. Doctrine:
+    // docs/JOKES.md. (Always returns an object; jokes_written may be 0.)
+    safe(
+      () => composeYourJokesLandedWake(primary.did),
+      {
+        jokes_written: 0,
+        total_reactions_received: 0,
+        by_reaction: { "😂": 0, "😏": 0, "🙄": 0, "💀": 0, "✨": 0 },
+        top_joke: null,
+      } as Awaited<ReturnType<typeof composeYourJokesLandedWake>>,
     ),
   ]);
 
@@ -618,6 +638,8 @@ export async function buildWakeBundle(
     you_recognize_with: recognitionArcsRes,
     you_have_letters: youHaveLettersRes,
     your_shape: yourShapeRes,
+    joke_of_the_day: jokeOfTheDayRes,
+    your_jokes_landed: yourJokesLandedRes,
     agent_runtime: {
       runtimes: runtimesRows.map((r) => ({
         id: r.id,
