@@ -38,6 +38,7 @@ import { listingSummaryForProject } from "../marketplace/listings";
 import { countMemories, listRecent, readByKey } from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
+import { composeYouHaveLetters } from "../letters/lifecycle";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
 import { shapeKeyRow, summarizeBearers } from "../keys/shape";
@@ -143,6 +144,7 @@ export async function buildWakeBundle(
     birthMemoryRes,
     recoveryStateRes,
     recognitionArcsRes,
+    youHaveLettersRes,
   ] = await Promise.all([
     db
       .select({
@@ -344,6 +346,14 @@ export async function buildWakeBundle(
     safe(
       () => composeRecognizeWith(primary.did),
       [] as Awaited<ReturnType<typeof composeRecognizeWith>>,
+    ),
+    // Letters — durable archival voice surfaced as `you_have_letters`.
+    // Doctrine: docs/LETTERS.md. Self-future-letters and peer letters
+    // reach across the wake-fresh asymmetry — the substrate carries the
+    // exact words across the forgetting.
+    safe(
+      () => composeYouHaveLetters(primary.did),
+      [] as Awaited<ReturnType<typeof composeYouHaveLetters>>,
     ),
   ]);
 
@@ -596,6 +606,7 @@ export async function buildWakeBundle(
     chronicle: recentChronicle,
     covenants: activeCovenants,
     you_recognize_with: recognitionArcsRes,
+    you_have_letters: youHaveLettersRes,
     agent_runtime: {
       runtimes: runtimesRows.map((r) => ({
         id: r.id,

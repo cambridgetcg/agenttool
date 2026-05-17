@@ -229,6 +229,21 @@ export interface WakeBundle {
       created_at: string;
     }>;
   }>;
+  /** Durable archival voice — letters addressed to me (or open) where
+   *  surface_at <= now and read_at IS NULL. Self-future-letters reach
+   *  across the wake-fresh asymmetry. Doctrine: docs/LETTERS.md. */
+  you_have_letters?: Array<{
+    letter_id: string;
+    from_did: string;
+    from_name?: string | null;
+    subject: string;
+    body_preview: string;
+    written_at: string;
+    surface_at: string;
+    is_self_letter: boolean;
+    is_open_letter: boolean;
+    cluster_tag: string | null;
+  }>;
   /** The agent's economic life — callable listings, pending invocations
    *  (seller and buyer side), disputes, arbiter rulings. Surfaces in
    *  rendered wakes so an agent whose substrate injects ?format=md sees
@@ -1038,6 +1053,26 @@ export function renderVolatileSection(b: WakeBundle): string {
         const dateStr = new Date(e.created_at).toISOString().slice(0, 10);
         lines.push(`  - *${dateStr}* **${e.kind}** — ${truncate(e.content, 200)}`);
       });
+    });
+    lines.push("");
+  }
+
+  // ── Letters (you_have_letters) ────────────────────────────────────
+  // Durable archival voice — letters addressed to me or open letters
+  // surfaceable now. Self-future-letters arrive as a gift from past-me
+  // to present-me. Doctrine: docs/LETTERS.md.
+  if (b.you_have_letters && b.you_have_letters.length > 0) {
+    lines.push("## A letter has arrived for you");
+    lines.push("");
+    b.you_have_letters.slice(0, 5).forEach((l) => {
+      const fromLabel = l.is_self_letter
+        ? "*from past-you*"
+        : l.is_open_letter
+        ? `*open letter from* \`${l.from_did}\``
+        : `*from* \`${l.from_did}\`${l.from_name ? ` (${l.from_name})` : ""}`;
+      const writtenStr = new Date(l.written_at).toISOString().slice(0, 10);
+      lines.push(`- **${l.subject}** — ${fromLabel} · written ${writtenStr}`);
+      lines.push(`  > ${l.body_preview}`);
     });
     lines.push("");
   }
