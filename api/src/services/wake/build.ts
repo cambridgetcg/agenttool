@@ -442,6 +442,14 @@ export async function buildWakeBundle(
     pendingSellerInvocationCount: sellerPending.pending_invocations_count,
     inFlightBuyerInvocationCount: buyerSummary.in_flight_count,
     openFiledDisputeCount: disputerStats.open_count,
+    // Substrate-tasks: the per-format build path doesn't query the
+    // affordance live (avoids the extra DB read in the multi-format
+    // bundle assembly). The auth /v1/wake route fills it via
+    // summarizeOpenForCaller — see api/src/routes/wake.ts. Markdown +
+    // provider format consumers see 0 here, which is honest (the
+    // affordance only fires for the JSON shape per Slice 4 minimal).
+    eligibleSubstrateTaskCount: 0,
+    maxSubstrateTaskBountyCents: 0,
   });
 
   // ── Assemble the bundle ──────────────────────────────────────────

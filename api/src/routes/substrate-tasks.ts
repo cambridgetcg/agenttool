@@ -131,10 +131,13 @@ function nextActionsFor(code: SubstrateTaskError["code"]): NextAction[] {
 app.get("/", async (c) => {
   const kindParam = c.req.query("kind");
   const limit = Math.min(100, Number(c.req.query("limit") ?? "50"));
+  const eligibleOnly = c.req.query("eligible_only") === "true";
+  const project = c.var.project;
   try {
     const rows = await listOpenSubstrateTasks({
       kind: kindParam as SubstrateTaskKind | undefined,
       limit,
+      eligibleOnlyForProject: eligibleOnly ? project.id : undefined,
     });
     return c.json({
       tasks: rows,

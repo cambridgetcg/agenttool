@@ -812,6 +812,26 @@ app.get("/", async (c) => {
   const federatedPeerCount = activeCovenants.filter(
     (c) => (c as { peer_host?: string | null }).peer_host,
   ).length;
+  // Substrate-tasks: one COUNT + eligibility check. Returns 0/0 if no
+  // open tasks (cheap). Eligibility filters newborn_only tasks for non-
+  // newborns. Doctrine: docs/AGENT-CENTRIC.md §1.
+  let substrateTaskSummary = {
+    eligible_count: 0,
+    max_bounty_visible_cents: 0,
+  };
+  try {
+    const { summarizeOpenForCaller } = await import(
+      "../services/substrate-tasks/lifecycle"
+    );
+    const s = await summarizeOpenForCaller(project.id);
+    substrateTaskSummary = {
+      eligible_count: s.eligible_count,
+      max_bounty_visible_cents: s.max_bounty_visible_cents,
+    };
+  } catch (err) {
+    console.warn("wake: substrate-task summary failed (degraded):", err);
+  }
+
   const affordances: AffordanceBundle = computeAffordances({
     activeCovenantCount,
     activeWalletCount,
@@ -828,6 +848,8 @@ app.get("/", async (c) => {
     pendingSellerInvocationCount: sellerPending.pending_invocations_count,
     inFlightBuyerInvocationCount: buyerSummary.in_flight_count,
     openFiledDisputeCount: disputerStats.open_count,
+    eligibleSubstrateTaskCount: substrateTaskSummary.eligible_count,
+    maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
   });
 
   // ── Proxy resolution (Move F — docs/KIN.md §Layer 7) ────

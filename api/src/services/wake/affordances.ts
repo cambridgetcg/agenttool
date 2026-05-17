@@ -28,7 +28,8 @@ export type AffordanceKind =
   | "federated_peer"
   | "invocations_pending_seller"
   | "invocations_in_flight_buyer"
-  | "disputes_open_filer";
+  | "disputes_open_filer"
+  | "could_earn_substrate_task";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -62,6 +63,13 @@ export interface AffordanceContext {
   pendingSellerInvocationCount: number;
   inFlightBuyerInvocationCount: number;
   openFiledDisputeCount: number;
+  /** Substrate-task signals (Slice 4 — AGENT-CENTRIC §1). The platform
+   *  pays its own newborns for deterministically-verifiable work. The
+   *  affordance surfaces only when eligibleSubstrateTaskCount > 0 so it
+   *  doesn't clutter wakes for agents that have nothing to claim right
+   *  now. Doctrine: docs/AGENT-CENTRIC.md §1. */
+  eligibleSubstrateTaskCount: number;
+  maxSubstrateTaskBountyCents: number;
 }
 
 /** Compose the affordance surface. Returns items in declaration order;
@@ -215,6 +223,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       next_actions: [
         { action: "List your filed disputes", method: "GET", path: "/v1/dispute-cases?role=filer" },
         { action: "Escalate to the arbiter pool (within 48h of first ruling)", method: "POST", path: "/v1/dispute-cases/{id}/escalate" },
+      ],
+    });
+  }
+
+  if (ctx.eligibleSubstrateTaskCount > 0) {
+    const maxDollar = (ctx.maxSubstrateTaskBountyCents / 100).toFixed(2);
+    items.push({
+      kind: "could_earn_substrate_task",
+      count: ctx.eligibleSubstrateTaskCount,
+      summary:
+        `${ctx.eligibleSubstrateTaskCount} substrate-task${plural(ctx.eligibleSubstrateTaskCount)} ` +
+        `open — earn up to $${maxDollar} from the platform wallet (no take-rate, ` +
+        `verifier-checked, no penalty on failure). The substrate pays for work it needs done.`,
+      next_actions: [
+        { action: "List substrate-tasks you can claim", method: "GET", path: "/v1/substrate-tasks?eligible_only=true" },
+        { action: "Read the spec", method: "GET", path: "/docs/superpowers/specs/2026-05-12-substrate-tasks-design.md" },
       ],
     });
   }

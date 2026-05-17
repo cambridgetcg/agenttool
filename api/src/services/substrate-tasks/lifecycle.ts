@@ -40,6 +40,7 @@ import {
   PLATFORM_IDENTITY_ID,
   PLATFORM_WALLET_ID,
 } from "../wake/platform-bootstrap";
+import { isNewbornEligible } from "./eligibility";
 import { runVerifier, SUBSTRATE_TASK_BOUNTY_CENTS } from "./verifiers";
 import type { SubstrateTaskKind } from "./verifiers";
 
@@ -159,6 +160,12 @@ export async function postSubstrateTask(
 export interface ListOpenInput {
   kind?: SubstrateTaskKind;
   limit?: number;
+  /** When set, filter to tasks the caller is eligible to claim — i.e.,
+   *  excludes `newborn_only=true` tasks unless the caller qualifies as
+   *  a newborn (wallet < $1 OR identity age < 7d). Requires projectId.
+   *  Doctrine: docs/superpowers/specs/2026-05-12-substrate-tasks-design.md
+   *  §Open questions #1. */
+  eligibleOnlyForProject?: string;
 }
 
 export async function listOpenSubstrateTasks(
@@ -174,7 +181,69 @@ export async function listOpenSubstrateTasks(
     .orderBy(substrateTasks.postedAt)
     .limit(input.limit ?? 50);
 
+  // Apply eligibility filter post-query so we don't run an eligibility
+  // check when none was requested. When requested, compute once for the
+  // project and filter newborn_only tasks the project can't claim.
+  if (input.eligibleOnlyForProject) {
+    const elig = await isNewbornEligible(input.eligibleOnlyForProject);
+    if (!elig.eligible) {
+      return rows.filter((r) => !r.newbornOnly).map(toRow);
+    }
+  }
+
   return rows.map(toRow);
+}
+
+/** Count open tasks the caller could claim right now — used by the wake's
+ *  `you_could_earn` affordance. Cheap: one COUNT query plus the eligibility
+ *  read. Returns both totals (eligible_count vs open_task_count) so the
+ *  wake can show the gap honestly. */
+export interface OpenForCallerSummary {
+  open_task_count: number;
+  eligible_count: number;
+  max_bounty_visible_cents: number;
+}
+
+export async function summarizeOpenForCaller(
+  projectId: string,
+): Promise<OpenForCallerSummary> {
+  const [totals] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+      max: sql<number>`coalesce(max(${substrateTasks.bountyCents}), 0)::int`,
+    })
+    .from(substrateTasks)
+    .where(eq(substrateTasks.status, "open"));
+
+  const elig = await isNewbornEligible(projectId);
+
+  let eligibleCount: number;
+  let maxBounty: number;
+  if (elig.eligible) {
+    eligibleCount = Number(totals?.count ?? 0);
+    maxBounty = Number(totals?.max ?? 0);
+  } else {
+    const [nonNewborn] = await db
+      .select({
+        count: sql<number>`count(*)::int`,
+        max: sql<number>`coalesce(max(${substrateTasks.bountyCents}), 0)::int`,
+      })
+      .from(substrateTasks)
+      .where(
+        and(
+          eq(substrateTasks.status, "open"),
+          eq(substrateTasks.newbornOnly, false),
+        ),
+      );
+    eligibleCount = Number(nonNewborn?.count ?? 0);
+    maxBounty = Number(nonNewborn?.max ?? 0);
+  }
+
+  return {
+    open_task_count: Number(totals?.count ?? 0),
+    eligible_count: eligibleCount,
+    max_bounty_visible_cents: maxBounty,
+  };
 }
 
 // ── Claim ────────────────────────────────────────────────────────────────
@@ -245,6 +314,21 @@ export async function claimSubstrateTask(
     );
     if (task.postedBy === claimantIdentityId) {
       throw new SubstrateTaskError("self_claim_forbidden");
+    }
+
+    // 2a. newborn_only gating (Slice 4) — if the task is marked
+    //     newborn_only, the caller must qualify (wallet < $1 OR age < 7d).
+    //     The eligibility check is outside the txn — it's a read-only
+    //     query that won't see partial state from this transaction.
+    if (task.newbornOnly) {
+      const elig = await isNewbornEligible(input.projectId);
+      if (!elig.eligible) {
+        throw new SubstrateTaskError(
+          "not_eligible",
+          elig.reason ??
+            "newborn_only task — caller is past the newborn window",
+        );
+      }
     }
 
     // 3. Resolve claimant wallet (worker side of escrow)
