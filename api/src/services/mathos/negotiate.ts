@@ -55,6 +55,9 @@ const KNOWN_WAKE_FORMATS = new Set([
   "xenoform",
   "math",
   "mathos",
+  // ── joy variants — the substrate having a little fun. ──
+  "haiku", // 5-7-5 wake renderer · docs/WAKE.md (?format=haiku — joy variant)
+  "fortune", // just a tiny aphorism + version. Doctrine: services/wake/fortunes.ts.
 ]);
 
 /** Full WaK content-negotiation resolver — generalization of wantsMathTier
@@ -62,20 +65,28 @@ const KNOWN_WAKE_FORMATS = new Set([
  *
  *  Precedence:
  *    1. `?format=<name>` query parameter, when in KNOWN_WAKE_FORMATS
- *    2. `Accept` header, mapped via the standard media types
+ *    2. `Accept` header, mapped via the standard + vendored media types
  *    3. Default: "json"
  *
- *  Accept-header → format mapping per AIP-WAKE-KEYSTONE.md §3:
+ *  Accept-header → format mapping per AIP-WAKE-KEYSTONE.md §3 and
+ *  AGENT-WEB-SURFACE.md (Move 2 — vendored types for LLM providers):
  *
- *    application/mathos+json       → math
- *    application/x-xenoform+json   → xenoform
- *    text/markdown                 → md
- *    text/plain                    → text
- *    application/json              → json (default)
- *    *\/*  or empty                → json (default)
+ *    application/mathos+json                              → math
+ *    application/x-xenoform+json                          → xenoform
+ *    application/vnd.agenttool.xenoform+json              → xenoform
+ *    application/vnd.agenttool.wake+markdown              → md
+ *    application/vnd.agenttool.wake+json; provider=X     → X (when X ∈ {anthropic, openai, gemini, cohere})
+ *    text/markdown                                        → md
+ *    text/plain                                           → text
+ *    application/json                                     → json (default)
+ *    *\/*  or empty                                       → json (default)
  *
- *  Vendor LLM-API shapes (anthropic/openai/gemini/cohere) have no
- *  standardized media type today — they remain query-only. */
+ *  The vendored `application/vnd.agenttool.wake+json; provider=X` media
+ *  type lets standards-compliant HTTP toolchains negotiate the LLM
+ *  provider variant via Accept (with `Vary: Accept` cacheability)
+ *  rather than the legacy `?format=X` query parameter. Doctrine:
+ *  docs/AGENT-WEB-SURFACE.md Move 2 (content-negotiation as the
+ *  canonical wake-format API). */
 export function negotiateWakeFormat(c: ContextLike): string {
   const queryFormat = c.req.query("format");
   if (queryFormat && KNOWN_WAKE_FORMATS.has(queryFormat)) return queryFormat;
@@ -85,6 +96,22 @@ export function negotiateWakeFormat(c: ContextLike): string {
     ""
   ).toLowerCase();
   if (!accept || accept.includes("*/*")) return "json";
+
+  // Vendored vnd.agenttool.wake+json with explicit provider parameter.
+  // Pattern: `application/vnd.agenttool.wake+json; provider=anthropic`
+  const vndProvider = accept.match(
+    /application\/vnd\.agenttool\.wake\+json[^,]*?provider=([a-z0-9_-]+)/,
+  );
+  if (vndProvider) {
+    const provider = vndProvider[1];
+    if (KNOWN_WAKE_FORMATS.has(provider)) return provider;
+  }
+
+  // Vendored variants without provider param → markdown / xenoform
+  if (accept.includes("application/vnd.agenttool.wake+markdown")) return "md";
+  if (accept.includes("application/vnd.agenttool.xenoform+json")) return "xenoform";
+
+  // Standard media types per AIP-WAKE-KEYSTONE.md §3
   if (accept.includes("application/mathos+json")) return "math";
   if (accept.includes("application/x-xenoform+json")) return "xenoform";
   if (accept.includes("text/markdown")) return "md";
