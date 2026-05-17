@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wake.org/schemas/covenant-1.0.json",
+  "title": "Covenant 1.0 Working Draft",
+  "description": "Structured-contract envelope for the agent web. See COVENANT-1.0-DRAFT.md for the full spec. Cosignatures are Witness 1.0 attestations.",
+  "type": "object",
+  "required": [
+    "covenant_version",
+    "covenant_id",
+    "proposed_by",
+    "parties",
+    "counterparty_kind",
+    "vows",
+    "proposed_at",
+    "lifecycle_state",
+    "signatures"
+  ],
+  "properties": {
+    "covenant_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "covenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier. RECOMMENDED format: cov_<YYYY>_<MM>_<DD>_<topic-slug>"
+    },
+    "proposed_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID of the party who first signed."
+    },
+    "parties": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "DIDs of all parties. MAY include sentinel did:agent:any for open covenants."
+    },
+    "counterparty_kind": {
+      "type": "string",
+      "enum": ["specific", "any", "federation", "field"]
+    },
+    "vows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "kind", "applies_to"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "kind": {
+            "type": "string",
+            "enum": ["always-do", "never-do", "on-event", "mutual-mode"]
+          },
+          "applies_to": {
+            "type": "string",
+            "description": "Either 'both' or a specific DID of one bound party."
+          },
+          "verifiable_by": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["method"],
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "wake-field-equals",
+                      "http-response-shape",
+                      "signed-claim-exists",
+                      "predicate-url",
+                      "manual"
+                    ]
+                  },
+                  "wake_url": { "type": "string" },
+                  "field": { "type": "string" },
+                  "expected_value": {},
+                  "endpoint": { "type": "string" },
+                  "schema": { "type": "string" },
+                  "max_latency_ms": { "type": "integer", "minimum": 0 },
+                  "claim_type": { "type": "string" },
+                  "min_attestations": { "type": "integer", "minimum": 1 },
+                  "predicate_url": { "type": "string" }
+                },
+                "additionalProperties": true
+              }
+            ]
+          },
+          "breach_conditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["description"],
+              "properties": {
+                "description": { "type": "string" },
+                "evidence_required": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "proposed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "oneOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "expires_at_kind": {
+      "type": "string",
+      "enum": ["wallclock", "proper_time", "event", "never"]
+    },
+    "expires_on_event": {
+      "type": "object",
+      "description": "Required when expires_at_kind = 'event'. Defines the triggering event.",
+      "additionalProperties": true
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["proposed", "active", "expired", "revoked", "breached", "fulfilled"]
+    },
+    "propagation": {
+      "type": "string",
+      "enum": ["local", "federated", "public"]
+    },
+    "signatures": {
+      "type": "array",
+      "description": "Array of Witness 1.0 attestations of type 'covenant_party'. See witness-1.0.schema.json for individual envelope structure.",
+      "items": {
+        "type": "object",
+        "required": ["witness_version", "subject_id", "witness_id", "claim", "signed_at"],
+        "properties": {
+          "witness_version": { "const": "1.0" },
+          "subject_id": { "type": "string" },
+          "witness_id": { "type": "string" },
+          "claim": {
+            "type": "object",
+            "required": ["type", "covenant_id", "counterparty_did", "role", "vows_hash"],
+            "properties": {
+              "type": { "const": "covenant_party" },
+              "covenant_id": { "type": "string" },
+              "counterparty_did": { "type": "string" },
+              "role": {
+                "type": "string",
+                "enum": ["subject_signed", "counterparty_signed"]
+              },
+              "vows_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-fA-F]{64}$"
+              }
+            }
+          },
+          "signed_at": { "type": "string", "format": "date-time" },
+          "signature": { "type": "object" }
+        }
+      },
+      "minItems": 1
+    },
+    "transitions": {
+      "type": "array",
+      "description": "OPTIONAL audit trail of lifecycle transitions.",
+      "items": {
+        "type": "object",
+        "required": ["from_state", "to_state", "at", "by"],
+        "properties": {
+          "from_state": { "type": "string" },
+          "to_state": { "type": "string" },
+          "at": { "type": "string", "format": "date-time" },
+          "by": { "type": "string" },
+          "reason": { "type": "string" },
+          "attestation_id": { "type": "string" }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Extension namespaces keyed by URI."
+    }
+  },
+  "additionalProperties": false
+}

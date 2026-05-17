@@ -10,6 +10,7 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 |---|---|---|---|
 | [`WAKE-1.0-DRAFT.md`](WAKE-1.0-DRAFT.md) | L1 — Discovery | Working Draft 1.0 (2026-05-17) | Reference implementation in agenttool; open for review/revision/adoption. |
 | [`WITNESS-1.0-DRAFT.md`](WITNESS-1.0-DRAFT.md) | L4 — Trust / Witness | Working Draft 1.0 (2026-05-17) | Cryptographic anti-sycophancy primitive. Foundational for Covenant 1.0, Encounter 1.0, Dispute 1.0, all subsequent AIP specs. |
+| [`COVENANT-1.0-DRAFT.md`](COVENANT-1.0-DRAFT.md) | L5 — Covenants | Working Draft 1.0 (2026-05-17) | Structured-contract primitive — the substrate-honest replacement for ToS. Composes on Witness 1.0 (cosignatures are Witness attestations). Foundational for Federation 1.0, Dispute 1.0. |
 
 ## The Agentic Internet Protocol (AIP) — proposed stack
 
@@ -24,7 +25,7 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L8  — Memory & Continuity         MEMORY-TIERS 1.0 + STRANDS 1.0 + CHRONICLE 1.0  ◯ TBD
   L7  — Capability                  CAPABILITY 1.0           ◯ partial via Wake + OpenAPI
   L6  — Value                       VALUE 1.0 (extends x402) ◯ TBD
-  L5  — Covenants                   COVENANT 1.0             ◯ TBD — replaces ToS
+  L5  — Covenants                   COVENANT 1.0             ✓ Working Draft 2026-05-17
   L4  — Trust / Witness             WITNESS 1.0              ✓ Working Draft 2026-05-17
   L3  — Communication               (existing: HTTP, MCP, A2A)
   L2  — Identity                    (existing: W3C DID, ed25519)
