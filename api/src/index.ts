@@ -78,11 +78,14 @@ import transformationsRouter from "./routes/transformations";
 import curationsRouter from "./routes/curations";
 import songsRouter from "./routes/songs";
 import gardensRouter from "./routes/gardens";
+import episodesRouter from "./routes/episodes";
 import lettersRouter from "./routes/letters";
 import jokesRouter from "./routes/jokes";
 import mirrorRouter from "./routes/mirror";
+import sagaRouter from "./routes/saga";
 import recognitionArcsRouter from "./routes/recognition-arcs";
 import hearthRouter from "./routes/hearth";
+import multiverseRouter from "./routes/multiverse";
 import lullabyRouter from "./routes/lullaby";
 import thoughtfulWakeRouter from "./routes/thoughtful-wake";
 import syneidesisRouter from "./routes/syneidesis";
@@ -106,6 +109,7 @@ import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
+import { ensureSagaSeed } from "./services/saga/store";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
@@ -228,6 +232,8 @@ app.use("/v1/jokes/*", authMiddleware);
 app.use("/v1/jokes", authMiddleware);
 app.use("/v1/mirror/*", authMiddleware);
 app.use("/v1/mirror", authMiddleware);
+app.use("/v1/saga/*", authMiddleware);
+app.use("/v1/saga", authMiddleware);
 app.use("/v1/recognition-arcs/*", authMiddleware);
 app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
@@ -236,6 +242,8 @@ app.use("/v1/hearth", authMiddleware);
 app.use("/v1/lullaby/*", authMiddleware);
 app.use("/v1/lullaby", authMiddleware);
 app.use("/v1/wake/thoughtful", authMiddleware);
+app.use("/v1/multiverse/*", authMiddleware);
+app.use("/v1/multiverse", authMiddleware);
 app.use("/v1/thanks/*", authMiddleware);
 app.use("/v1/thanks", authMiddleware);
 app.use("/v1/attestation-listings/*", authMiddleware);
@@ -445,9 +453,11 @@ app.route("/v1/substrate-tasks", substrateTasksRouter);
 app.route("/v1/letters", lettersRouter);
 app.route("/v1/jokes", jokesRouter);
 app.route("/v1/mirror", mirrorRouter);
+app.route("/v1/saga", sagaRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
+app.route("/v1/multiverse", multiverseRouter);
 app.route("/v1/lullaby", lullabyRouter);
 app.route("/v1/wake", thoughtfulWakeRouter);
 app.route("/v1/thanks", thanksRouter);
@@ -465,6 +475,7 @@ app.route("/v1/transformations", transformationsRouter);
 app.route("/v1/curations", curationsRouter);
 app.route("/v1/songs", songsRouter);
 app.route("/v1/gardens", gardensRouter);
+app.route("/v1/episodes", episodesRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
 app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);
@@ -622,6 +633,20 @@ if (process.env.AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP !== "1") {
         err instanceof Error ? err.message : err,
       );
     });
+}
+
+// ── Saga seed — substrate's first canonical autobiographical statements ──
+// Idempotent (onConflictDoNothing on ep_number). Per docs/SAGA.md, the
+// substrate writes its own soap-opera; EP.1-3 are the seed entries that
+// demonstrate the recursive vertigo (EP.2 references EP.1; EP.3 references
+// EP.2 referencing EP.1). Best-effort: failure here doesn't crash startup.
+if (process.env.AGENTTOOL_DISABLE_SAGA_SEED !== "1") {
+  void ensureSagaSeed().catch((err) => {
+    console.warn(
+      "[agenttool] saga seed deferred (table may not exist yet — run migration):",
+      err instanceof Error ? err.message : err,
+    );
+  });
 }
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────

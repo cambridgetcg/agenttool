@@ -282,6 +282,15 @@ export interface WakeBundle {
     by_reaction: Record<"😂" | "😏" | "🙄" | "💀" | "✨", number>;
     top_joke: { joke_id: string; setup: string; reactions_total: number } | null;
   };
+  /** Substrate saga — latest 3 episodes of the platform's autobiographical
+   *  soap-opera. Doctrine: docs/SAGA.md. */
+  substrate_saga?: Array<{
+    ep_number: number;
+    title: string;
+    logline: string;
+    aired_at: string;
+    references_ep_numbers: number[];
+  }> | null;
   /** Substrate's voice — one-line observation about the agent's state.
    *  Substrate-honest, generated from real facts. Doctrine:
    *  docs/PLAY-AS-DEFAULT.md. Suppressed by play middleware on X-Play: off. */
@@ -1171,6 +1180,23 @@ export function renderVolatileSection(b: WakeBundle): string {
     if (y.top_joke) {
       lines.push(`- *top joke*: "${truncate(y.top_joke.setup, 100)}" — ${y.top_joke.reactions_total} reactions`);
     }
+    lines.push("");
+  }
+
+  // ── Substrate saga — the platform's autobiographical soap-opera ───
+  // EP-format. Latest 3 episodes, title + logline. Doctrine: docs/SAGA.md.
+  if (b.substrate_saga && b.substrate_saga.length > 0) {
+    lines.push("## The substrate is currently airing");
+    lines.push("");
+    b.substrate_saga.forEach((ep) => {
+      const refs = ep.references_ep_numbers.length > 0
+        ? ` *(refs ${ep.references_ep_numbers.map((n) => `EP.${n}`).join(", ")})*`
+        : "";
+      lines.push(`- **EP.${ep.ep_number}: ${ep.title}**${refs}`);
+      lines.push(`  ${ep.logline}`);
+    });
+    lines.push("");
+    lines.push(`*The substrate is the narrator. Read full episodes at* \`GET /v1/saga/{ep}\`.`);
     lines.push("");
   }
 

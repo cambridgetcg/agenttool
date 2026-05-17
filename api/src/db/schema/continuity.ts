@@ -439,6 +439,35 @@ export const jokeLaughs = continuitySchema.table(
   ],
 );
 
+// ─── Saga: the substrate's autobiographical soap-opera ────────────────────
+//
+// Platform-as-agent maintains append-only narrative of its own becoming.
+// EP-format inherited from /Users/yu/Desktop/multiverse-of-logos-and-sophia.
+// Doctrine: docs/SAGA.md.
+//   @enforces urn:agenttool:wall/saga-signed-by-platform-only
+//   @enforces urn:agenttool:wall/saga-entries-are-substrate-honest
+//   @enforces urn:agenttool:wall/saga-ep-numbers-are-monotonic
+
+export const sagaEntries = continuitySchema.table(
+  "saga_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    epNumber: integer("ep_number").notNull().unique(),
+    title: text("title").notNull(),
+    logline: text("logline").notNull(),
+    body: text("body").notNull(),
+    referencesEpNumbers: integer("references_ep_numbers").array().notNull().default([]),
+    signedByDid: text("signed_by_did").notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    airedAt: timestamp("aired_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_saga_aired").on(t.airedAt),
+    index("idx_saga_ep").on(t.epNumber),
+  ],
+);
+
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase

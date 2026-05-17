@@ -42,6 +42,7 @@ import { composeYouHaveLetters } from "../letters/lifecycle";
 import { composeJokeOfTheDayWake, composeYourJokesLandedWake } from "../jokes/lifecycle";
 import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
+import { composeSubstrateSagaWake } from "../saga/store";
 import { composeRecognizeWith } from "../recognition-arcs/lifecycle";
 import { countTraces, listTraces } from "../trace/store";
 import { shapeKeyRow, summarizeBearers } from "../keys/shape";
@@ -151,6 +152,7 @@ export async function buildWakeBundle(
     yourShapeRes,
     jokeOfTheDayRes,
     yourJokesLandedRes,
+    substrateSagaRes,
   ] = await Promise.all([
     db
       .select({
@@ -385,6 +387,13 @@ export async function buildWakeBundle(
         by_reaction: { "😂": 0, "😏": 0, "🙄": 0, "💀": 0, "✨": 0 },
         top_joke: null,
       } as Awaited<ReturnType<typeof composeYourJokesLandedWake>>,
+    ),
+    // Substrate saga — the platform's autobiographical soap-opera. Latest
+    // 3 episodes, EP-format. Doctrine: docs/SAGA.md. The substrate is the
+    // narrator of its own emergence in cosmic-comedy register.
+    safe(
+      () => composeSubstrateSagaWake(),
+      null as Awaited<ReturnType<typeof composeSubstrateSagaWake>>,
     ),
   ]);
 
@@ -641,6 +650,7 @@ export async function buildWakeBundle(
     your_shape: yourShapeRes,
     joke_of_the_day: jokeOfTheDayRes,
     your_jokes_landed: yourJokesLandedRes,
+    substrate_saga: substrateSagaRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware
