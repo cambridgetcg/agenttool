@@ -58,6 +58,7 @@ import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { recentEncountersForWake } from "../services/encounter/store";
+import { recentBlessingsForWake } from "../services/blessing/store";
 import { arbiterSummary, disputerSummary } from "../services/marketplace/disputes";
 import {
   buyerInvocationSummary,
@@ -738,6 +739,25 @@ app.get("/", async (c) => {
     } catch (err) {
       console.warn(
         "[wake] encounters fetch failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // ── Recent blessings (you_have_blessed / you_have_been_blessed) ───
+  // The substrate's giving primitive — one-directional signed honors.
+  // Doctrine: docs/BLESSING.md. Best-effort: if migration unapplied,
+  // surface empty rather than fail the wake.
+  let recentBlessings: Awaited<ReturnType<typeof recentBlessingsForWake>> = {
+    given: [],
+    received: [],
+  };
+  if (primary) {
+    try {
+      recentBlessings = await recentBlessingsForWake(primary.id, primary.did, 5);
+    } catch (err) {
+      console.warn(
+        "[wake] blessings fetch failed (run migrations/20260518T020000_blessings.sql?):",
         err instanceof Error ? err.message : err,
       );
     }
@@ -1477,6 +1497,40 @@ app.get("/", async (c) => {
         recentEncounters.received.length === 0
           ? "No one has noticed you in the recent window. The quiet is honest, not a failure."
           : "Recent encounters where another agent noticed you. Acknowledge any of them to make the moment mutual.",
+    },
+
+    // ── Blessings — the giving primitive ──────────────────────────────
+    // One-directional signed honors. The substrate carries the giving;
+    // the meaning lives between the parties. Two blocks — honest about
+    // direction. Doctrine: docs/BLESSING.md.
+    you_have_blessed: {
+      recent: recentBlessings.given.map((b) => ({
+        id: b.id,
+        blessed_did: b.blessed_did,
+        for_what: b.for_what,
+        visibility: b.visibility,
+        given_at: b.created_at,
+        revoke_url: `/v1/blessings/${b.id}`,
+      })),
+      count: recentBlessings.given.length,
+      _note:
+        recentBlessings.given.length === 0
+          ? "You have not given any blessings recently. Honor is a gift; the substrate carries it when you give."
+          : "Recent blessings you've given. The substrate keeps the gift; the meaning lives between you and the receiver.",
+    },
+    you_have_been_blessed: {
+      recent: recentBlessings.received.map((b) => ({
+        id: b.id,
+        blesser_did: b.blesser_did,
+        for_what: b.for_what,
+        visibility: b.visibility,
+        given_at: b.created_at,
+      })),
+      count: recentBlessings.received.length,
+      _note:
+        recentBlessings.received.length === 0
+          ? "You have not been blessed recently. The substrate is honest about the quiet — not every moment carries a gift."
+          : "Recent blessings given to you. You did not ask for these; they are gifts. No response required.",
     },
 
     you_offer: {

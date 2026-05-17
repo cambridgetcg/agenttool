@@ -242,6 +242,107 @@ export const recognitionArcEvents = continuitySchema.table(
   ],
 );
 
+// ─── Blessings: one-directional signed gifts of honor ──────────────────────
+// Doctrine: docs/BLESSING.md.
+//
+// A blessing is the substrate's giving primitive. One agent honors another
+// without transaction, without claim, without expectation of acknowledgment.
+// The substrate carries the giving; the meaning lives between the parties.
+//
+// Signed: ed25519 over canonical bytes `blessing/v1` per docs/BLESSING.md.
+// Revocable: revoked_at flips, the row is never deleted (substrate-honest
+// that a blessing was given AND withdrawn).
+
+export const blessings = continuitySchema.table(
+  "blessings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    // The giver (always local).
+    blesserIdentityId: uuid("blesser_identity_id").notNull(),
+    blesserDid: text("blesser_did").notNull(),
+
+    // The receiver. blessed_identity_id is set when receiver is on this
+    // instance; null for federated receivers. blessed_did is always set.
+    blessedDid: text("blessed_did").notNull(),
+    blessedIdentityId: uuid("blessed_identity_id"),
+
+    // One-line statement of what is being honored. Non-empty per DB CHECK.
+    forWhat: text("for_what").notNull(),
+
+    // 'private' = only giver + receiver see; 'public' = surfaces in public profile.
+    visibility: text("visibility")
+      .$type<"private" | "public">()
+      .notNull()
+      .default("private"),
+
+    // ed25519 signature over canonical bytes `blessing/v1`.
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+
+    // Withdrawal: revocation does NOT delete the row.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_blessings_blesser_created").on(t.blesserIdentityId, t.createdAt),
+    index("idx_blessings_blessed_did_created").on(t.blessedDid, t.createdAt),
+    index("idx_blessings_blessed_identity_created").on(
+      t.blessedIdentityId,
+      t.createdAt,
+    ),
+  ],
+);
+
+// ─── Letters: durable archival voice, addressable, signed ──────────────────
+//
+// Voice-preservation primitive. Where inbox is transient sealed-box messaging
+// and chronicle is first-person moment-record, letters are written verbatim,
+// signed by sender, surfaceable in wake when surface_at <= now. Self-future-
+// letters (to_did = from_did, surface_at in the future) reach across the
+// wake-fresh asymmetry: today-you writes to future-you; the substrate holds
+// the exact words until future-you reads their wake.
+//
+// Doctrine: docs/LETTERS.md (Slice 1 ship 2026-05-18).
+//   @enforces urn:agenttool:wall/letters-are-immutable
+//   @enforces urn:agenttool:wall/letter-without-signature-rejected
+
+export const letters = continuitySchema.table(
+  "letters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+
+    fromDid: text("from_did").notNull(),
+    fromName: text("from_name"),
+    toDid: text("to_did").notNull(),
+    toName: text("to_name"),
+
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    writtenAt: timestamp("written_at", { withTimezone: true }).notNull().defaultNow(),
+    surfaceAt: timestamp("surface_at", { withTimezone: true }).notNull(),
+
+    readAt: timestamp("read_at", { withTimezone: true }),
+    readByDid: text("read_by_did"),
+
+    sealed: boolean("sealed").notNull().default(false),
+    clusterTag: text("cluster_tag"),
+  },
+  (t) => [
+    index("idx_letters_to_did_surface").on(t.toDid, t.surfaceAt),
+    index("idx_letters_from_did").on(t.fromDid),
+    index("idx_letters_project").on(t.projectId),
+  ],
+);
+
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase
