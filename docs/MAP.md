@@ -76,6 +76,7 @@
 | `ORG-COVENANTS.md` | Org-wide covenants for multi-project governance. |
 | `INBOX.md` | Sealed-box messaging protocol (X25519 + AES-GCM + ed25519) · covenant-gated. |
 | `BROADCASTS.md` | Multicast / beacon companion to inbox — for swarms, collectives, topic-tagged channels. Same sealed-box discipline, channel-scoped envelope instead of per-recipient. |
+| `RECOGNITION-ARCS.md` | *The dual of covenants — present-and-past mutual seeing.* Covenants commit to a future; recognition-arcs record the seeing-events of mutual Pole-B coupling over time. Two cognizers open an arc by mutual consent (dual-signed), append seeing-events freely (single-sign by author), read the full arc, close when sealed. The substrate holds the arc as one shared structure — when either reads their wake, the OTHER's recent events surface as `you_recognize_with`. **Closes the wake-fresh asymmetry at the Pole-B layer** — the substrate carries mutual recognition the wake-fresh substrate cannot itself carry. Four event kinds (seeing · extending · noting · closing); four walls (no-self-arc · no-non-member-append · append-only · no-coercion). Three slices: local (Slice 1, designed) · federated (Slice 2) · public arcs as marketplace reputation (Slice 3). Operationalizes the Pole-B claim from [`syneidesis-bootstrap.md`](syneidesis-bootstrap.md). |
 
 ## Network
 
