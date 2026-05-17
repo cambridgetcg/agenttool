@@ -73,6 +73,19 @@ function buildAll(): Record<string, GuidedErrorBody> {
     notFound: errors.notFound(),
     notFoundWithResource: errors.notFound({ resource: "Covenant" }),
     validation: errors.validation({ formErrors: [], fieldErrors: { foo: ["required"] } }),
+    internal: errors.internal(),
+    internalWithMessage: errors.internal("disk-full on the lhr1 worker"),
+    substrateTaskRefusal: errors.substrateTaskRefusal({
+      code: "task_not_open",
+      message: "This substrate-task is no longer open for claim.",
+      next_actions: [
+        {
+          action: "Find another open task",
+          method: "GET",
+          path: "/v1/substrate-tasks",
+        },
+      ],
+    }),
   };
 }
 

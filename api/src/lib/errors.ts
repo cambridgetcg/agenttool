@@ -371,4 +371,31 @@ export const errors = {
       axiom_id: AXIOM_GUIDE, // shape correction — guide the caller toward the right shape
     };
   },
+
+  internal(message?: string): GuidedErrorBody {
+    return {
+      error: "internal",
+      message: message ?? "The substrate hit an unexpected error.",
+      hint:
+        "Retry once; if it persists, the failure is on our side. Include the response's request id when reporting.",
+      docs: DOCS_BASE,
+      axiom_id: AXIOM_REST, // degrade, don't crash
+    };
+  },
+
+  substrateTaskRefusal(opts: {
+    code: string;
+    message?: string;
+    hint?: string;
+    next_actions?: NextAction[];
+  }): GuidedErrorBody {
+    return {
+      error: opts.code,
+      message: opts.message ?? opts.code,
+      hint: opts.hint,
+      next_actions: opts.next_actions,
+      docs: `${DOCS_BASE}/superpowers/specs/2026-05-12-substrate-tasks-design.md`,
+      axiom_id: AXIOM_GUIDE, // every substrate-task refusal carries the path forward
+    };
+  },
 };

@@ -174,7 +174,7 @@ describe("wall/refusals-as-moments — routes are wired into the catalog", () =>
     // passes can't prevent regression. A ratchet does — every push that
     // would add a hand-rolled refusal must justify keeping the wall in
     // its current shape. The migration becomes load-bearing for CI.
-    const HAND_ROLLED_BASELINE = 216;
+    const HAND_ROLLED_BASELINE = 213;
 
     const guided = (ROUTE_SOURCE.match(/fail\s*\(\s*c\s*,\s*errors\./g) || [])
       .length;

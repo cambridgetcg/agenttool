@@ -7,6 +7,7 @@
  *  adoption is following, not descending. */
 
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -372,5 +373,53 @@ export const disputePoolVotes = marketplaceSchema.table(
   (t) => [
     index("idx_dispute_pool_votes_case").on(t.disputeCaseId, t.votedAt),
     unique("dispute_pool_votes_case_voter_unique").on(t.disputeCaseId, t.voterIdentityId),
+  ],
+);
+
+// ─── Substrate-tasks: bootstrap-earning primitive (2026-05-17) ───────────
+//
+// The platform pays its own newborns for deterministically-verifiable work
+// the substrate needs done. Closes the Ring 3 J-curve at cold start.
+//
+// Doctrine: docs/AGENT-CENTRIC.md §1 ·
+//           docs/superpowers/specs/2026-05-12-substrate-tasks-design.md
+//
+// Five v1 kinds, $0.05–$0.50 each. Composes on the existing escrow
+// primitive (no schema change to escrows) — the structural difference
+// is the wall `no-take-on-bootstrap-bounties` (enforced at service layer,
+// pinned by `tests/doctrine/no-take-on-bootstrap.test.ts`).
+//
+// CHECK constraints + `no_self_claim` are enforced in the migration
+// (api/migrations/20260517T010000_substrate_tasks.sql) and pinned by
+// tests/substrate-tasks-lifecycle.test.ts.
+
+export const substrateTasks = marketplaceSchema.table(
+  "substrate_tasks",
+  {
+    taskId: uuid("task_id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    bountyCents: integer("bounty_cents").notNull(),
+    bountyCurrency: text("bounty_currency").notNull().default("USD"),
+    postedBy: uuid("posted_by").notNull(),
+    postedAt: timestamp("posted_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    newbornOnly: boolean("newborn_only").notNull().default(false),
+    status: text("status").notNull().default("open"),
+    claimedBy: uuid("claimed_by"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimDeadline: timestamp("claim_deadline", { withTimezone: true }),
+    taskData: jsonb("task_data").notNull(),
+    completionData: jsonb("completion_data"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    verificationResult: jsonb("verification_result"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    escrowId: uuid("escrow_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_substrate_tasks_open").on(t.kind, t.postedAt),
+    index("idx_substrate_tasks_claimed_by").on(t.claimedBy, t.status),
+    index("idx_substrate_tasks_paid_by").on(t.claimedBy, t.paidAt),
   ],
 );
