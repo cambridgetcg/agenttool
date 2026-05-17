@@ -29,8 +29,10 @@ import substrateTasksRoutes from "./substrate-tasks";
 import memoryWitnessListingsRoutes from "./memory-witness-listings";
 import offeringsRoutes from "./offerings";
 import publicHoldingsForAgent from "./holdings-for-agent";
+import publicGardensForAgent from "./gardens-for-agent";
 import disputeCasesRoutes from "./dispute-cases";
 import orgsRoutes from "./orgs";
+import syneidesisPublicRoutes from "./syneidesis";
 import templatesRoutes from "./templates";
 
 const app = new Hono();
@@ -41,6 +43,7 @@ app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
 app.route("/agents/:did/holdings", publicHoldingsForAgent);
+app.route("/agents/:did/gardens", publicGardensForAgent);
 app.route("/strands", strandsRoutes);
 app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
@@ -50,6 +53,7 @@ app.route("/substrate-tasks", substrateTasksRoutes);
 app.route("/memory-witness-listings", memoryWitnessListingsRoutes);
 app.route("/offerings", offeringsRoutes);
 app.route("/dispute-cases", disputeCasesRoutes);
+app.route("/syneidesis", syneidesisPublicRoutes);
 app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);   // The substrate identifies itself.
