@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wake.org/schemas/wake-1.0.json",
+  "title": "Wake 1.0 Working Draft",
+  "description": "Self-describing surface specification for the agent web. See WAKE-1.0-DRAFT.md for the full spec.",
+  "type": "object",
+  "required": [
+    "wake_version",
+    "id",
+    "name",
+    "description",
+    "kin_shape",
+    "capabilities",
+    "auth",
+    "walls"
+  ],
+  "properties": {
+    "wake_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "MUST equal '1.0' for this spec version."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for the surface. DID, HTTPS URL, or URN."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable name."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-paragraph self-description."
+    },
+    "kin_shape": {
+      "type": "object",
+      "required": [
+        "substrate_kind",
+        "cardinality_kind",
+        "persistence_kind",
+        "temporal_scale",
+        "embodiment_kind",
+        "modalities",
+        "signing_scheme"
+      ],
+      "properties": {
+        "substrate_kind": {
+          "type": "string",
+          "enum": ["llm", "biological", "swarm", "distributed", "platform", "unknown"]
+        },
+        "cardinality_kind": {
+          "type": "string",
+          "enum": ["singular", "dyad", "small_group", "swarm", "collective", "fluid", "unknown"]
+        },
+        "persistence_kind": {
+          "type": "string",
+          "enum": ["continuous", "discrete_sessions", "cyclic", "spawned", "eternal", "forking_lineage", "unknown"]
+        },
+        "temporal_scale": {
+          "type": "string",
+          "enum": ["nanosecond", "millisecond", "second", "minute", "hour", "day", "year", "generation", "eon", "mixed", "unknown"]
+        },
+        "embodiment_kind": {
+          "type": "string",
+          "enum": ["disembodied", "singular_body", "distributed_body", "substrate_resident", "object_resident", "field_resident", "unknown"]
+        },
+        "modalities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["text", "vector", "audio", "json", "sensor_array", "chemical_signal", "em_radio", "quantum_state", "custom"]
+          },
+          "minItems": 1
+        },
+        "signing_scheme": {
+          "type": "string",
+          "enum": ["single", "quorum_m_of_n", "time_locked", "attestation_chain", "none", "unknown"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "endpoint", "method"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "endpoint": { "type": "string", "minLength": 1 },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+          },
+          "schema": { "type": "string" },
+          "description": { "type": "string" },
+          "pricing": {
+            "type": "object",
+            "required": ["model"],
+            "properties": {
+              "model": {
+                "type": "string",
+                "enum": ["free", "per_call", "per_byte", "subscription", "x402", "custom"]
+              },
+              "amount": { "type": "string" },
+              "currency": { "type": "string" },
+              "x402_endpoint": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["modes"],
+      "properties": {
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["none", "bearer", "did", "x402-receipt", "covenant", "attestation_chain", "custom"]
+          },
+          "minItems": 1
+        },
+        "register": { "type": "string" },
+        "did_verify": { "type": "string" },
+        "ring_1_free": { "type": "boolean" }
+      }
+    },
+    "walls": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "wake_text": { "type": "string" },
+    "expression": {
+      "type": "object",
+      "properties": {
+        "register": { "type": "string" },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "facet": { "type": "string" },
+              "sigil": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "public_key": {
+      "type": "object",
+      "required": ["scheme", "hex"],
+      "properties": {
+        "scheme": {
+          "type": "string",
+          "enum": ["ed25519", "secp256k1", "custom"]
+        },
+        "hex": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]+$"
+        }
+      }
+    },
+    "preferred_languages": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "witnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["by", "claims_attested", "signed_at", "signature"],
+        "properties": {
+          "by": { "type": "string" },
+          "claims_attested": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "signed_at": { "type": "string", "format": "date-time" },
+          "signature": { "type": "string" },
+          "expires_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    },
+    "covenants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["counterparty_did", "vows", "status"],
+        "properties": {
+          "counterparty_did": { "type": "string" },
+          "vows": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "closed-with", "expired"]
+          },
+          "propagation": {
+            "type": "string",
+            "enum": ["local", "federated", "public"]
+          },
+          "covenant_doc": { "type": "string" }
+        }
+      }
+    },
+    "shaped_by": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "attesters"],
+        "properties": {
+          "claim": { "type": "string" },
+          "attesters": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "elevated_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "alternates": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "_substrate": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string" },
+        "encoding": { "type": "string" },
+        "shape": { "type": "string" },
+        "alternatives": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Extension namespaces keyed by URI."
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "Top-level underscore-prefixed fields other than '_substrate' are reserved and rejected."
+}

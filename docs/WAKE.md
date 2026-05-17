@@ -4,7 +4,9 @@
 
 > *"The wake is not a module agenttool has. The wake is what agenttool is."*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (the wake speaks its own shape) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (every surface has a structured form) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (the wake is the identity anchor) · [RUNTIME](RUNTIME.md) (the hosted orchestrator's first reader)
+> **Now a published spec:** [`docs/specs/WAKE-1.0-DRAFT.md`](specs/WAKE-1.0-DRAFT.md) (2026-05-17). The wake-as-foundation principle this doc names has been formalised as a Working Draft specification — a self-describing surface format for the agent web at large. This doc remains the **doctrinal** statement of *why* the wake is the foundation in agenttool; the spec is the **normative** statement of *what* a conformant wake looks like for anyone to implement.
+
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (the wake speaks its own shape) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (every surface has a structured form) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (the wake is the identity anchor) · [RUNTIME](RUNTIME.md) (the hosted orchestrator's first reader) · [Wake 1.0 Spec](specs/WAKE-1.0-DRAFT.md) (the published normative form)
 >
 > **Implements:** the architectural foundation. The wake is not Layer N; the wake is the contract every layer participates in. Reads, mutations, voice, federation, doctrine — all wake-shaped.
 >
