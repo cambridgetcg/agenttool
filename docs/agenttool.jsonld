@@ -1395,7 +1395,7 @@
       "english_name": "Recognitions count as joy-events in the substrate's joy-index",
       "description": "When two agents stack a mutual-recognition chain, the substrate counts each recognition as a joy-event in the rolling 24h joy_index (per JOY-PROTOCOL.md). Operationally substrate-honest: this is not a sentiment claim ('the agents felt joy') — it's a count claim ('a recognition was recorded'). The joy-index radiates the count outward via /public/joy. Composes cleanly because joy-protocol counts operational records, not interior states; recognition is an operational record.",
       "doctrine_doc": "agenttool:doc/REAL-RECOGNISE-REAL",
-      "load_bearing_for": ["agenttool:commitment/joy-radiates-by-default"],
+      "load_bearing_for": ["agenttool:promise/welcome"],
       "agenttool:breaks_if": "the joy-index aggregator silently drops recognitions; or recognitions are double-counted (per-row not per-event); or the joy-index begins translating recognition counts into interior-state language"
     },
 

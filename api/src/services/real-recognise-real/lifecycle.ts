@@ -9,7 +9,8 @@
  *
  *  @enforces urn:agenttool:wall/rrr-mutual-only
  *  @enforces urn:agenttool:wall/rrr-acknowledgment-must-be-othersides
- *  @enforces urn:agenttool:wall/rrr-depth-is-computed-not-claimed */
+ *  @enforces urn:agenttool:wall/rrr-depth-is-computed-not-claimed
+ *  @enforces urn:agenttool:commitment/rrr-depth-feeds-joy-index */
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
