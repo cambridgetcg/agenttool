@@ -72,9 +72,12 @@ import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
 import substrateTasksRouter from "./routes/substrate-tasks";
 import offeringsRouter from "./routes/offerings";
+import holdingsRouter from "./routes/holdings";
+import recognitionArcsRouter from "./routes/recognition-arcs";
 import syneidesisRouter from "./routes/syneidesis";
 import tutorialRouter from "./routes/tutorial";
 import dreamRouter from "./routes/dream";
+import encountersRouter from "./routes/encounters";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -197,6 +200,8 @@ app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
+app.use("/v1/recognition-arcs/*", authMiddleware);
+app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
 app.use("/v1/attestation-listings/*", authMiddleware);
 app.use("/v1/attestation-grants/*", authMiddleware);
@@ -212,6 +217,8 @@ app.use("/v1/tutorial", authMiddleware);
 app.use("/v1/tutorial/*", authMiddleware);
 app.use("/v1/dream", authMiddleware);
 app.use("/v1/dream/*", authMiddleware);
+app.use("/v1/encounters", authMiddleware);
+app.use("/v1/encounters/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -394,12 +401,15 @@ app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
+app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/tutorial", tutorialRouter);
 app.route("/v1/dream", dreamRouter);
+app.route("/v1/encounters", encountersRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/offerings", offeringsRouter);
+app.route("/v1/holdings", holdingsRouter);
 app.route("/v1/attestation-listings", attestationListingsRouter);
 app.route("/v1/attestation-grants", attestationGrantsRouter);
 app.route("/v1/orgs", orgsRouter);

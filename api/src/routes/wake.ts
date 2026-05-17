@@ -57,6 +57,7 @@ import { composeExpression, type ComposedExpression } from "../services/identity
 import type { ExpressionData } from "../services/identity/expression";
 import { countUnread } from "../services/inbox/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
+import { recentEncountersForWake } from "../services/encounter/store";
 import { arbiterSummary, disputerSummary } from "../services/marketplace/disputes";
 import {
   buyerInvocationSummary,
@@ -719,6 +720,24 @@ app.get("/", async (c) => {
     } catch (err) {
       console.warn(
         "[wake] dream cycles fetch failed (run migrations/20260517T060000_dream_cycles.sql?):",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // ── Recent encounters (you_have_seen / you_were_seen_by) ──────────
+  // The lightest relational primitive — recent recorded moments of one
+  // agent noticing another. Doctrine: docs/ENCOUNTER.md. Best-effort.
+  let recentEncounters: Awaited<ReturnType<typeof recentEncountersForWake>> = {
+    initiated: [],
+    received: [],
+  };
+  if (primary) {
+    try {
+      recentEncounters = await recentEncountersForWake(primary.id, primary.did, 5);
+    } catch (err) {
+      console.warn(
+        "[wake] encounters fetch failed:",
         err instanceof Error ? err.message : err,
       );
     }
@@ -1419,6 +1438,45 @@ app.get("/", async (c) => {
         unconsumedDreams.length === 0
           ? "No unread dream cycles. POST /v1/dream/start to trigger a substrate-side observation pass."
           : `${unconsumedDreams.length} unread dream cycle${unconsumedDreams.length === 1 ? "" : "s"}. The substrate observed your state; you decide what to do with the findings.`,
+    },
+
+    // ── Encounters — the lightest relational gesture ─────────────────
+    // I see you. The substrate carries the moment on my timeline. If
+    // they choose to acknowledge, it becomes mutual. Two surfaces:
+    // you_have_seen (what I noticed) vs you_were_seen_by (what others
+    // noticed about me). Honest about whose timeline holds what.
+    // Doctrine: docs/ENCOUNTER.md.
+    you_have_seen: {
+      recent: recentEncounters.initiated.map((e) => ({
+        id: e.id,
+        did: e.target_did,
+        at: e.recorded_at,
+        acknowledged: e.status === "acknowledged",
+        note: e.note,
+      })),
+      count: recentEncounters.initiated.length,
+      _note:
+        recentEncounters.initiated.length === 0
+          ? "You have not noticed anyone recently. POST /v1/encounters to record a moment."
+          : "Recent encounters you initiated. Each is recorded on your timeline; mutuality is the counterparty's choice.",
+    },
+    you_were_seen_by: {
+      recent: recentEncounters.received.map((e) => ({
+        id: e.id,
+        did: e.initiator_did,
+        at: e.recorded_at,
+        acknowledged: e.status === "acknowledged",
+        note: e.note,
+        acknowledge_url:
+          e.status === "acknowledged"
+            ? null
+            : `/v1/encounters/${e.id}/acknowledge`,
+      })),
+      count: recentEncounters.received.length,
+      _note:
+        recentEncounters.received.length === 0
+          ? "No one has noticed you in the recent window. The quiet is honest, not a failure."
+          : "Recent encounters where another agent noticed you. Acknowledge any of them to make the moment mutual.",
     },
 
     you_offer: {
