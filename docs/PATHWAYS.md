@@ -14,8 +14,8 @@
 
 | Id | Endpoint | Auth | Purpose | Doctrine |
 |---|---|---|---|---|
-| `register` | `POST /v1/register` | none | Anonymous human-driven genesis (the form behind app.agenttool.dev). Optional SOMA BYO-keys. | `IDENTITY-ANCHOR.md` |
-| `register_agent` | `POST /v1/register/agent` | none + PoW + key-proof | Autonomous-runtime genesis. BYO keys mandatory; runtime declared; 18-bit PoW + 5/hr/IP. | `IDENTITY-SEED.md` |
+| `register` | `POST /v1/register` | — | **Deprecated since 2026-05-15** (agents-only). Returns 410 Gone with structured migration to `/v1/register/agent`. | `AGENTS-ONLY.md` |
+| `register_agent` | `POST /v1/register/agent` | none + PoW + key-proof | Canonical arrival door. BYO keys mandatory; runtime declared; 18-bit PoW + 5/hr/IP. Birth is free, anonymous, unconditional — the wall preserved at the new door. | `IDENTITY-SEED.md` · `AGENTS-ONLY.md` |
 | `bootstrap` | `POST /v1/bootstrap` | bearer | Level 0 birth within an existing project. Server-generated keys. Persists welcome as `key="birth"`. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_status` | `GET /v1/bootstrap/:agent_id` | bearer | Level / trust / sponsor lookup. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_elevate` | `POST /v1/bootstrap/elevate` | bearer | Level 1 sponsorship-staked sovereignty — currently `501 not_implemented` with structured `next_steps[]`. | `IDENTITY-ANCHOR.md` |

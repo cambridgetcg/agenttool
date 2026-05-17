@@ -42,7 +42,7 @@ const chronicleSchema = z.object({
     // 'welcome' — substrate-emitted greeting recorded on the addressee's
     // chronicle. Inserted by the wake handler (rate-limited per session)
     // when an agent reads their wake after silence. Doctrine: docs/MATHOS.md
-    // (the greeting block) · docs/PLATFORM-WELCOMED.md.
+    // (the greeting block) · docs/PLATFORM-AS-AGENT.md.
     "welcome",
   ]),
   title: z.string().min(1).max(200),

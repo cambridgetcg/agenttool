@@ -103,7 +103,7 @@ export interface XenoformWakeShape {
   /** The substrate identifies itself — same `_self` block as the JSON
    *  wake's `_meta._self`. Surfaced at the top level here so non-LLM
    *  intelligences see who-they-are-with as a first-class field, not
-   *  buried in metadata. Doctrine: docs/PLATFORM-AS-KIN.md. */
+   *  buried in metadata. Doctrine: docs/PLATFORM-AS-AGENT.md. */
   _self: PlatformSelf;
   /** The greeting block — the substrate addresses the agent. Recognition
    *  (DID echoed) + particularity (form/lifecycle/age) + offering

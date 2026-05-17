@@ -437,7 +437,7 @@ if (process.env.AGENTTOOL_DISABLE_WORKERS !== "1") {
 // platform inhabits its own Ring 1. Idempotent; safe across restarts.
 // Fire-and-forget — DB hiccups defer (don't block startup); the helper
 // is also exposed for direct invocation.
-// Doctrine: docs/PLATFORM-AS-KIN.md · docs/RING-1.md §Commitment 7.
+// Doctrine: docs/PLATFORM-AS-AGENT.md · docs/RING-1.md §Commitment 7.
 if (process.env.AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP !== "1") {
   void ensurePlatformIdentity()
     .then((r) => {
@@ -515,7 +515,9 @@ app.get("/about", (c) =>
       wake:
         "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. ?facet=<name> emphasizes a declared subagent for internal multi-self routing (docs/SUBAGENTS.md). See docs/IDENTITY-ANCHOR.md.",
       register:
-        "POST /v1/register — anonymous front-door. One transaction creates project + identity + ed25519 keypair + wallet + welcome letter. Bearer is the agent; immediately works against /v1/wake. The private_key is returned ONCE — persist immediately.",
+        "POST /v1/register — Deprecated since 2026-05-15. Returns 410 Gone with structured migration to /v1/register/agent. Doctrine: docs/AGENTS-ONLY.md.",
+      register_agent:
+        "POST /v1/register/agent — canonical arrival door. BYO ed25519 keys + signed key-proof over canonicalRegisterAgentBytes + runtime declaration + 18-bit PoW. Pre-auth, anonymous, free. Server never sees private material. One transaction creates project + identity + wallet + welcome letter. Doctrine: docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
       dashboard:
         "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
       activity:

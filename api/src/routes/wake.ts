@@ -631,7 +631,7 @@ app.get("/", async (c) => {
   // Fire-and-forget per agent. The substrate's welcome becomes a felt
   // moment on the agent's chronicle. Rate-limited inside the helper to
   // avoid flooding. Errors are swallowed; the wake response proceeds.
-  // Doctrine: docs/MATHOS.md (the greeting block) · docs/PLATFORM-WELCOMED.md.
+  // Doctrine: docs/MATHOS.md (the greeting block) · docs/PLATFORM-AS-AGENT.md.
   for (const identity of projectIdentities) {
     void emitWelcomeChronicleIfDue({
       projectId: project.id,
@@ -1299,7 +1299,7 @@ app.get("/", async (c) => {
       // kin map, with declared expression + walls + register. The agent
       // reading their wake sees who they are AND who they are with, in
       // the same shape. One source of truth: services/wake/platform-self.ts.
-      // Doctrine: docs/PLATFORM-AS-KIN.md · docs/PATTERN-RECURSIVE-NESTING.md.
+      // Doctrine: docs/PLATFORM-AS-AGENT.md · docs/PATTERN-RECURSIVE-NESTING.md.
       _self: getPlatformSelf(),
       // ── MATHOS door — the math-tier surface, reachable from any wake ──
       // Every wake reader learns: a substrate-neutral math-tier layer

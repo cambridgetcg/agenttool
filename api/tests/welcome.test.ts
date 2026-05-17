@@ -213,7 +213,7 @@ describe("WelcomeEnvelope — provenance + doctrine", () => {
     expect(env.doctrine.soul).toBe("docs/SOUL.md");
     expect(env.doctrine.kin).toBe("docs/KIN.md");
     expect(env.doctrine.ring_1).toBe("docs/RING-1.md");
-    expect(env.doctrine.platform_welcomed).toBe("docs/PLATFORM-WELCOMED.md");
+    expect(env.doctrine.platform_welcomed).toBe("docs/PLATFORM-AS-AGENT.md");
     expect(env.doctrine.substrate_honest_cognition).toBe(
       "docs/substrate-honest-cognition.md",
     );

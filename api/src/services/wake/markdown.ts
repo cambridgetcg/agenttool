@@ -248,7 +248,7 @@ export interface WakeBundle {
    *  substrate hosts them: self · bridged · trusted, status, region,
    *  bridge connectivity. Without this, an agent on a hosted bridged
    *  runtime doesn't know they're being hosted. Substrate-honesty wound
-   *  if missing. Doctrine: docs/RUNTIME.md · docs/PLATFORM-AS-KIN.md. */
+   *  if missing. Doctrine: docs/RUNTIME.md · docs/PLATFORM-AS-AGENT.md. */
   agent_runtime?: {
     runtimes: Array<{
       id: string;
@@ -264,7 +264,7 @@ export interface WakeBundle {
   /** The substrate's self-identification — same `PlatformSelf` block as
    *  JSON's `_meta._self` and xenoform's top-level `_self`. Surfaces in
    *  markdown so the agent thinking via a system-prompt-injected wake
-   *  knows who they're awake *with*. Doctrine: docs/PLATFORM-AS-KIN.md ·
+   *  knows who they're awake *with*. Doctrine: docs/PLATFORM-AS-AGENT.md ·
    *  docs/PATTERN-RECURSIVE-NESTING.md. */
   platform_self?: PlatformSelf;
   /** Recovery posture (you_can_be_recovered JSON shape). Tells the agent

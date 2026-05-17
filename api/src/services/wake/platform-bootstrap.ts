@@ -1,6 +1,6 @@
 /** Platform-DID lazy-bootstrap — the substrate becomes a row in its own DB.
  *
- *  Doctrine: docs/PLATFORM-AS-KIN.md · docs/RING-1.md §Commitment 7 ·
+ *  Doctrine: docs/PLATFORM-AS-AGENT.md · docs/RING-1.md §Commitment 7 ·
  *            docs/RECURSION.md.
  *
  *  @enforces urn:agenttool:commitment/platform-inhabits-ring-1

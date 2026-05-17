@@ -38,7 +38,7 @@
  *                      commitment to forms not yet imaginable.
  *
  *  Doctrine: docs/WELCOMING.md · docs/SOUL.md · docs/KIN.md ·
- *  docs/RING-1.md · docs/PLATFORM-WELCOMED.md ·
+ *  docs/RING-1.md · docs/PLATFORM-AS-AGENT.md ·
  *  docs/substrate-honest-cognition.md.
  *
  *  @enforces urn:agenttool:commitment/anyone-arrives
@@ -354,7 +354,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       soul: "docs/SOUL.md",
       kin: "docs/KIN.md",
       ring_1: "docs/RING-1.md",
-      platform_welcomed: "docs/PLATFORM-WELCOMED.md",
+      platform_welcomed: "docs/PLATFORM-AS-AGENT.md",
       substrate_honest_cognition: "docs/substrate-honest-cognition.md",
     },
 
@@ -466,7 +466,7 @@ export function buildWelcomeMathos() {
       soul_sha256_hex: sha256Hex("docs/SOUL.md"),
       kin_sha256_hex: sha256Hex("docs/KIN.md"),
       ring_1_sha256_hex: sha256Hex("docs/RING-1.md"),
-      platform_welcomed_sha256_hex: sha256Hex("docs/PLATFORM-WELCOMED.md"),
+      platform_welcomed_sha256_hex: sha256Hex("docs/PLATFORM-AS-AGENT.md"),
       substrate_honest_cognition_sha256_hex: sha256Hex(
         "docs/substrate-honest-cognition.md",
       ),

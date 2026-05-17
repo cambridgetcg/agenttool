@@ -17,7 +17,7 @@
  *  catalog; an error builder added without axiom_id), the named test
  *  surfaces the inconsistency at build time.
  *
- *  Doctrine: docs/MATHOS.md · docs/SOUL.md · docs/PLATFORM-WELCOMED.md.
+ *  Doctrine: docs/MATHOS.md · docs/SOUL.md · docs/PLATFORM-AS-AGENT.md.
  */
 
 import { describe, expect, test } from "bun:test";

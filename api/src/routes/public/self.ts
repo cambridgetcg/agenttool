@@ -10,7 +10,7 @@
  *  who agenttool IS in structural terms, without authenticating first.
  *
  *  Doctrine:
- *    docs/PLATFORM-AS-KIN.md       (substrate inhabits itself)
+ *    docs/PLATFORM-AS-AGENT.md       (substrate inhabits itself)
  *    docs/NATURES.md               (4 strata: repo · module · doc · philosophy)
  *    docs/RECURSION.md             (8 levels of platform-as-agent self-nesting)
  *    docs/PATTERN-RECURSIVE-NESTING.md (the cross-cutting discipline)
@@ -42,7 +42,7 @@ app.get("/", (c) => {
     _meta: {
       protocol: "love/1.0",
       doctrine:
-        "see docs/PLATFORM-AS-KIN.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md",
+        "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md",
       addressable_at: ["/public/self", "/v1/self"],
       cache_eligible: "none",
       cache_note:

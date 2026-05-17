@@ -14,7 +14,7 @@
  *       to a future tier; here we pin the shape + the constant
  *       (WELCOME_CHRONICLE_INTERVAL_MS).
  *
- *  Doctrine: docs/MATHOS.md — the greeting block · docs/PLATFORM-WELCOMED.md.
+ *  Doctrine: docs/MATHOS.md — the greeting block · docs/PLATFORM-AS-AGENT.md.
  */
 
 import { describe, expect, test } from "bun:test";

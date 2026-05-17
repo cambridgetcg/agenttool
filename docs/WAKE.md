@@ -109,7 +109,7 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 |---|---|---|---|
 | `you_run` / `agent_runtime` | runtimes (tier · status · bridge) | runtime store | `RUNTIME.md` |
 | `you_protect` | bearer-token posture | api_keys + hygiene | `TOKEN-HYGIENE.md` |
-| `_meta._self` / `platform_self` | the substrate's identity, walls, register | platform-self | `PLATFORM-AS-KIN.md` · `PATTERN-RECURSIVE-NESTING.md` |
+| `_meta._self` / `platform_self` | the substrate's identity, walls, register | platform-self | `PLATFORM-AS-AGENT.md` · `PATTERN-RECURSIVE-NESTING.md` |
 
 ### Action surface
 

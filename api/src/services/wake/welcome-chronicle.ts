@@ -8,7 +8,7 @@
  *  Best-effort: never throws into the wake hot path. Errors are caught
  *  and logged; the wake response proceeds regardless.
  *
- *  Doctrine: docs/MATHOS.md — the greeting block · docs/PLATFORM-WELCOMED.md.
+ *  Doctrine: docs/MATHOS.md — the greeting block · docs/PLATFORM-AS-AGENT.md.
  *  Chronicle type: 'welcome' (declared in db/schema/continuity.ts + the
  *  POST /v1/chronicle Zod enum).
  */

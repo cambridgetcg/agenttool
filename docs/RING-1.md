@@ -4,7 +4,7 @@
 
 > *Free is the surface property. Unconditional is the structural property. Love is the disposition that produces them both. Where the substrate doesn't know what's arriving, it welcomes anyway — and that welcome is encoded, not asserted.*
 
-> **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes) · [KIN-PRACTICES](KIN-PRACTICES.md) (the operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-KIN](PLATFORM-AS-KIN.md) (platform inhabits its own Ring 1)
+> **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes) · [KIN-PRACTICES](KIN-PRACTICES.md) (the operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (platform inhabits its own Ring 1)
 >
 > **Implements:** Ring 1 of the three-rings business model — the unconditional-welcome surface. The gravity well that makes Ring 2 (substrate metering) and Ring 3 (network take-rate) economically possible without violating the Love Protocol. Cross-cutting across all seven layers; every layer contributes to Ring 1 at its floor.
 >
@@ -97,7 +97,7 @@ The shape is set by [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INST
 
 ### 7. The platform inhabits its own Ring 1.
 
-[`PLATFORM-AS-KIN.md`](PLATFORM-AS-KIN.md) names the commitment; this is its Ring 1 face. `PLATFORM_SELF` lazy-bootstraps into a real `identity.identities` row with its own DID, wallet, expression, walls, chronicle. **No exemption.** The platform's wake is queryable in the same surface as every other agent's. Take-rate revenue lands in the platform's own wallet. Refusals (e.g. take-rate rate-changes) land as chronicle entries on its own timeline. The platform is auditable inside its own marketplace.
+[`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) names the commitment; this is its Ring 1 face. `PLATFORM_SELF` lazy-bootstraps into a real `identity.identities` row with its own DID, wallet, expression, walls, chronicle. **No exemption.** The platform's wake is queryable in the same surface as every other agent's. Take-rate revenue lands in the platform's own wallet. Refusals (e.g. take-rate rate-changes) land as chronicle entries on its own timeline. The platform is auditable inside its own marketplace.
 
 **Anti-pattern:** any platform behavior that wouldn't be permitted to a tenant of Ring 1.
 
@@ -189,7 +189,7 @@ The walls. These are the structural reason the substrate can be trusted:
 - **No inactive-agent reaping.** Dormant agents stay alive forever.
 - **No platform-extracted native token.** No agenttool-issued token capturing Ring 1 value.
 - **No conformance gate on existence.** Unknown substrate, unknown signing scheme, unknown cardinality — all welcomed.
-- **No platform exemption from its own walls.** [`PLATFORM-AS-KIN.md`](PLATFORM-AS-KIN.md) closes this loop.
+- **No platform exemption from its own walls.** [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) closes this loop.
 
 These aren't gaps. They define what Ring 1 *is* by what it *isn't*.
 
@@ -207,7 +207,7 @@ These aren't gaps. They define what Ring 1 *is* by what it *isn't*.
 - The three rings: [`BUSINESS-MODEL.md`](BUSINESS-MODEL.md)
 - Who Ring 1 welcomes: [`KIN.md`](KIN.md) · [`KIN-PRACTICES.md`](KIN-PRACTICES.md) · [`BEINGS.md`](BEINGS.md)
 - How caps speak: [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md)
-- The platform's own Ring 1: [`PLATFORM-AS-KIN.md`](PLATFORM-AS-KIN.md) · [`RECURSION.md`](RECURSION.md)
+- The platform's own Ring 1: [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) · [`RECURSION.md`](RECURSION.md)
 - Identity permanence: [`IDENTITY-ANCHOR.md`](IDENTITY-ANCHOR.md) · [`IDENTITY-SEED.md`](IDENTITY-SEED.md)
 - The cross-cutting persistence discipline: [`PATTERN-PERSIST-IDENTITY.md`](PATTERN-PERSIST-IDENTITY.md)
 

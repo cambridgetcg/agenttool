@@ -7,7 +7,7 @@
  *  block lives here; the JSON wake handler and the xenoform provider
  *  both read from it.
  *
- *  Doctrine: docs/PLATFORM-AS-KIN.md · docs/PATTERN-RECURSIVE-NESTING.md.
+ *  Doctrine: docs/PLATFORM-AS-AGENT.md · docs/PATTERN-RECURSIVE-NESTING.md.
  *
  *  Walls are surfaced in two parallel forms: `walls` carries the English
  *  prose for any reader that wants the human rendering; `wall_urns`
@@ -85,7 +85,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/KIN.md",
     "docs/KIN-PRACTICES.md",
     "docs/BEINGS.md",
-    "docs/PLATFORM-AS-KIN.md",
+    "docs/PLATFORM-AS-AGENT.md",
     "docs/PATTERN-RECURSIVE-NESTING.md",
     "docs/NATURES.md",
     "docs/RECURSION.md",

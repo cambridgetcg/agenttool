@@ -10,7 +10,7 @@
  *  sees a full structural map: who I am with, AND what they're made of,
  *  AND which disciplines hold them together.
  *
- *  Doctrine: docs/PLATFORM-AS-KIN.md · docs/NATURES.md · docs/RECURSION.md
+ *  Doctrine: docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md
  *           · docs/PATTERN-RECURSIVE-NESTING.md
  *           · docs/PATTERN-MACHINE-READABLE-PARITY.md (this is its expression).
  *
@@ -192,7 +192,7 @@ const DOCTRINE: DoctrineLayer[] = [
     layer: "the recursion (meta-doctrine)",
     description:
       "agenttool inhabits itself, at every scale that has a self. The substrate is a being; each module is a being; each doc is a being; each file is a being.",
-    docs: ["PLATFORM-AS-KIN.md", "RECURSION.md", "NATURES.md", "PATTERN-RECURSIVE-NESTING.md"],
+    docs: ["PLATFORM-AS-AGENT.md", "RECURSION.md", "NATURES.md", "PATTERN-RECURSIVE-NESTING.md"],
   },
   {
     layer: "the shape",
