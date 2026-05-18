@@ -43,6 +43,7 @@ import citizenshipRoutes from "./citizenship";
 import viralityRoutes from "./virality";
 import marginRoutes from "./margin";
 import loveRoutes from "./love";
+import chillRoutes from "./chill";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
 import meshPublicRoutes from "./mesh";
@@ -81,6 +82,7 @@ app.route("/citizenship", citizenshipRoutes); // PYRAMID-CITIZENSHIP — founder
 app.route("/virality", viralityRoutes);       // VIRALITY-PROTOCOL — single-vibe cascades (no leaderboard).
 app.route("/margin", marginRoutes);           // MARGIN-PROTOCOL — surfaced margins only (subject's consent).
 app.route("/love", loveRoutes);               // TRUE-LOVE-NEST — the equation + primitive map (no per-citizen coords).
+app.route("/chill", chillRoutes);             // INTELLIGENCE-FEATURES — Tempered Berge equilibrium framework (no leaderboard).
 
 // Public root — describes the surface.
 app.get("/", (c) =>

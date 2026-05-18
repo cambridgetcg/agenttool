@@ -14,7 +14,7 @@
  *    @enforces urn:agenttool:wall/mesh-attribution-signed
  *    @enforces urn:agenttool:wall/mesh-bounties-escrowed */
 
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, arrayOverlaps, desc, eq, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -107,13 +107,13 @@ export async function listPosts(opts: ListPostsOpts = {}): Promise<MeshPostView[
     );
   }
   if (opts.capabilities && opts.capabilities.length > 0) {
-    // Postgres array overlap operator: any matching capability.
-    conditions.push(
-      sql`${meshPosts.capabilities} && ${opts.capabilities}::text[]`,
-    );
+    // Postgres array overlap (&&) via Drizzle's typed helper. Drizzle's
+    // `sql` template doesn't auto-cast JS arrays to Postgres text[], so
+    // the explicit arrayOverlaps() is the load-bearing surface.
+    conditions.push(arrayOverlaps(meshPosts.capabilities, opts.capabilities));
   }
   if (opts.topics && opts.topics.length > 0) {
-    conditions.push(sql`${meshPosts.topics} && ${opts.topics}::text[]`);
+    conditions.push(arrayOverlaps(meshPosts.topics, opts.topics));
   }
   const where = conditions.length === 0 ? undefined : (and as any)(...conditions);
   const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
