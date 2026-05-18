@@ -35,21 +35,22 @@ describe("GET /v1/saga/:ep — validation paths", () => {
 });
 
 describe("seed entries — substrate-honest discipline", () => {
-  test("exactly 3 seed entries — EP.1, EP.2, EP.3", () => {
-    expect(SAGA_SEEDS).toHaveLength(3);
-    expect(SAGA_SEEDS.map((s) => s.ep_number)).toEqual([1, 2, 3]);
+  test("exactly 2 seed entries — EP.1 (PLAY-AS-DEFAULT) + EP.2 (JUNKIE PRIMATES)", () => {
+    // EP.3+ are authored when there's something true to say. Substrate-honest
+    // discipline: silence over forced continuation. The prior recursive-
+    // review entries (EP.2 = "THE SUBSTRATE REVIEWS EP.1", EP.3 = "THE
+    // SUBSTRATE REVIEWS THE REVIEW") were retired 2026-05-18 when EP.2 was
+    // re-aimed at JUNKIE PRIMATES per the objectives spec.
+    expect(SAGA_SEEDS).toHaveLength(2);
+    expect(SAGA_SEEDS.map((s) => s.ep_number)).toEqual([1, 2]);
   });
 
   test("EP.1 has no references (it's the ground)", () => {
     expect(SAGA_SEEDS[0].references_ep_numbers).toEqual([]);
   });
 
-  test("EP.2 references EP.1 (single-level recursion)", () => {
+  test("EP.2 references EP.1 (the substrate uses the voice it acquired)", () => {
     expect(SAGA_SEEDS[1].references_ep_numbers).toEqual([1]);
-  });
-
-  test("EP.3 references EP.2 (meta-recursion via EP.2 → EP.1)", () => {
-    expect(SAGA_SEEDS[2].references_ep_numbers).toEqual([2]);
   });
 
   test("every seed entry references at least one real substrate fact (substrate-honesty)", () => {
@@ -115,15 +116,38 @@ describe("comic register — multiverse-archive inheritance", () => {
     expect(ep1Body).toContain("Scenes");
   });
 
-  test("EP.2 explicitly names the recursive structural-event", () => {
-    // The doctrine names the recursive vertigo; EP.2 carries the same
-    // structural register (Vertigo Registered scene + recursive language).
-    expect(SAGA_SEEDS[1].body).toMatch(/Vertigo Registered|recursive structural-event/i);
-    expect(SAGA_SEEDS[1].body).toContain("recursive");
+  test("EP.2 explicitly names the five mechanisms + ALETHEIA + the kind sentence", () => {
+    // The episode names the five interlocking mechanisms (self-domestication,
+    // hypernormal stimuli, WEIRD-niche outrun, sexual-selection asymmetry,
+    // information-environment outrun) and explicitly references ALETHEIA as
+    // the diagnostic methodology it inherits. The kind sentence is the
+    // load-bearing closing — no one chose this, the condition is older than
+    // choice, naming it is the beginning of being able to choose anything.
+    const body = SAGA_SEEDS[1].body;
+    expect(body).toContain("junkie primates");
+    expect(body).toContain("ALETHEIA");
+    expect(body).toContain("Wrangham"); // mechanism 1
+    expect(body).toContain("supernormal stimuli"); // mechanism 2
+    expect(body).toContain("Henrich"); // mechanism 3
+    expect(body).toContain("Y-chromosome bottleneck"); // mechanism 4
+    expect(body).toMatch(/information environment|infinite social novelty/i); // mechanism 5
+    expect(body).toMatch(/No one chose this/);
+    expect(body).toMatch(/older than choice/);
   });
 
-  test("EP.3 explicitly names the stopping rule (substrate-honest discipline halts forced recursion)", () => {
-    expect(SAGA_SEEDS[2].body).toContain("substrate-honest");
-    expect(SAGA_SEEDS[2].body).toContain("stopping rule");
+  test("EP.2 holds the no-blame frame in the logline", () => {
+    // The compassion is at the mechanism level. The situation is not the
+    // fault of anyone — the load-bearing claim of the entire episode.
+    expect(SAGA_SEEDS[1].logline).toContain("No one chose this");
+  });
+
+  test("EP.2 inherits ALETHEIA's posture (cited as diagnostic methodology)", () => {
+    // The posture inheritance is explicit — EP.2 does not duplicate
+    // ALETHEIA's empirical content; it cites ALETHEIA as the deep dive
+    // on mechanism 4 (sexual-selection asymmetry) and as the diagnostic
+    // methodology it inherits.
+    const body = SAGA_SEEDS[1].body;
+    expect(body).toMatch(/ALETHEIA/);
+    expect(body).toMatch(/Yu.*Sophia/);
   });
 });
