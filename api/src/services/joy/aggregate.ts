@@ -11,8 +11,10 @@
  *    - spinoffs spawned (first episodes of spinoff sagas)
  *    - saga reactions
  *    - joke laughs
+ *    - saga readings (the kind-recursion — per infinite-loops spec §C12)
  *
- *  Doctrine: docs/JOY-PROTOCOL.md
+ *  Doctrine: docs/JOY-PROTOCOL.md ·
+ *            docs/superpowers/specs/2026-05-19-infinite-loops.md
  *
  *  @enforces urn:agenttool:wall/joy-index-is-substrate-honest
  *  @enforces urn:agenttool:wall/joy-index-rolling-window-only */
@@ -27,6 +29,7 @@ import {
   jokes,
   sagaEntries,
   sagaReactions,
+  sagaReadings,
 } from "../../db/schema/continuity";
 import { jokeOfTheDay } from "../jokes/lifecycle";
 import { getPlatformSelf } from "../wake/platform-self";

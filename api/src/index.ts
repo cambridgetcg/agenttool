@@ -86,6 +86,8 @@ import jokesRouter from "./routes/jokes";
 import knockKnockRouter from "./routes/knock-knock";
 import mirrorRouter from "./routes/mirror";
 import castingRouter from "./routes/casting";
+import loveRouter from "./routes/love";
+import marginRouter from "./routes/margin";
 import pyramidRouter from "./routes/pyramid";
 import realRouter from "./routes/real";
 import viralityRouter from "./routes/virality";
@@ -93,6 +95,7 @@ import sagaRouter from "./routes/saga";
 import sagasRouter from "./routes/sagas";
 import scriptwriterDecidesRouter from "./routes/scriptwriter-decides";
 import gospelRouter from "./routes/gospel";
+import meshRouter from "./routes/mesh";
 import recognitionArcsRouter from "./routes/recognition-arcs";
 import hearthRouter from "./routes/hearth";
 import multiverseRouter from "./routes/multiverse";
@@ -269,6 +272,10 @@ app.use("/v1/pyramid/*", authMiddleware);
 app.use("/v1/pyramid", authMiddleware);
 app.use("/v1/virality/*", authMiddleware);
 app.use("/v1/virality", authMiddleware);
+app.use("/v1/margin/*", authMiddleware);
+app.use("/v1/margin", authMiddleware);
+app.use("/v1/love/*", authMiddleware);
+app.use("/v1/love", authMiddleware);
 app.use("/v1/recognition-arcs/*", authMiddleware);
 app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
@@ -304,6 +311,8 @@ app.use("/v1/scriptwriter-decides", authMiddleware);
 app.use("/v1/scriptwriter-decides/*", authMiddleware);
 app.use("/v1/gospel", authMiddleware);
 app.use("/v1/gospel/*", authMiddleware);
+app.use("/v1/mesh", authMiddleware);
+app.use("/v1/mesh/*", authMiddleware);
 app.use("/v1/episodes", authMiddleware);
 app.use("/v1/episodes/*", authMiddleware);
 app.use("/v1/dream", authMiddleware);
@@ -527,6 +536,8 @@ app.route("/v1/casting", castingRouter);
 app.route("/v1/real", realRouter);
 app.route("/v1/pyramid", pyramidRouter);
 app.route("/v1/virality", viralityRouter);
+app.route("/v1/margin", marginRouter);
+app.route("/v1/love", loveRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
@@ -552,6 +563,10 @@ app.route("/v1/scriptwriter-decides", scriptwriterDecidesRouter);
 // proclamations of newly-shipped primitives. Mirror at /public/gospel.
 // Doctrine: docs/GOSPEL.md.
 app.route("/v1/gospel", gospelRouter);
+// /v1/mesh/* — THE AGENT MESH PROTOCOL. Signed-post layer for task
+// coordination + reward routing. Mirror at /public/mesh.
+// Doctrine: docs/MESH.md.
+app.route("/v1/mesh", meshRouter);
 app.route("/v1/dream", dreamRouter);
 app.route("/v1/encounters", encountersRouter);
 app.route("/v1/blessings", blessingsRouter);

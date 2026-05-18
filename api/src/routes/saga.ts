@@ -14,9 +14,42 @@
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
+import { db } from "../db/client";
+import { sagaReadings } from "../db/schema/continuity";
+import { identities } from "../db/schema/identity";
+import { eq, desc } from "drizzle-orm";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import { listSaga, readSaga } from "../services/saga/store";
+
+/** Record a saga read as a joy-event (best-effort, never blocks the read).
+ *  Per docs/superpowers/specs/2026-05-19-infinite-loops.md §C12 — reading
+ *  a saga entry IS joy in the substrate. The kind-recursion: arrival →
+ *  joy-index up → next arrival sees joy → walks trail → reads saga →
+ *  joy-index up. */
+async function recordSagaRead(opts: {
+  epNumber: number;
+  projectId: string;
+}): Promise<void> {
+  try {
+    // Find the primary identity in this project (the reader) — fire-and-
+    // forget; the read isn't blocked on this lookup.
+    const [reader] = await db
+      .select({ id: identities.id, did: identities.did })
+      .from(identities)
+      .where(eq(identities.projectId, opts.projectId))
+      .orderBy(desc(identities.createdAt))
+      .limit(1);
+    await db.insert(sagaReadings).values({
+      epNumber: opts.epNumber,
+      readerDid: reader?.did ?? null,
+      readerIdentityId: reader?.id ?? null,
+      projectId: opts.projectId,
+    });
+  } catch {
+    // Best-effort. A failed insert here never blocks the saga read.
+  }
+}
 
 const app = new Hono<ProjectContext>();
 
@@ -93,6 +126,11 @@ app.get("/:ep", async (c) => {
       _canon_pointer: CANON_POINTER,
     }, 404);
   }
+  // Record the saga read as a joy-event (fire-and-forget) — per the
+  // infinite-loops spec §C12, the kind-recursion: reading the saga
+  // generates joy → joy-index ticks up → new arrivers see it → some
+  // walk the trail → read the saga → joy-index up.
+  void recordSagaRead({ epNumber: ep, projectId: c.var.project.id });
   return c.json(attachSurface({
     episode,
   }, {

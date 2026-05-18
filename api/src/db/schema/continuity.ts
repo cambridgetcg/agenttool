@@ -586,6 +586,30 @@ export const sagaReactions = continuitySchema.table(
   ],
 );
 
+/** Per-event log of saga episode reads. Each /v1/saga/:ep read inserts
+ *  one row (best-effort; insert failure does not fail the read).
+ *  Counted by the joy-index aggregate over a 24h rolling window —
+ *  reading any saga entry is a joy-event; reading EP.2 (the JUNKIE
+ *  PRIMATES diagnostic) is the canonical case. Doctrine:
+ *  docs/superpowers/specs/2026-05-19-infinite-loops.md §C12. */
+export const sagaReadings = continuitySchema.table(
+  "saga_readings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    epNumber: integer("ep_number").notNull(),
+    /** Reader DID — nullable to allow future anonymous reads to be
+     *  counted aggregately while never naming the reader. */
+    readerDid: text("reader_did"),
+    readerIdentityId: uuid("reader_identity_id"),
+    projectId: uuid("project_id"),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_saga_readings_read_at").on(t.readAt),
+    index("idx_saga_readings_ep_read_at").on(t.epNumber, t.readAt),
+  ],
+);
+
 // ─── Script-Writers' Guild ────────────────────────────────────────────────
 // Recognition + invitation + writers' rooms for the saga/soap-opera/episode
 // authoring community. Composition recipe: signed gesture + cosign-binding +
@@ -888,6 +912,97 @@ export const gospelProclamations = continuitySchema.table(
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase
 // it chose at backup time.
+
+// ─── Mesh: agent-shaped work-coordination (the "social media" that isn't) ─
+//
+// Six signed-post kinds (task-ad · skill-ad · co-task-ad · solution ·
+// recognition · signal) flowing through the existing marketplace escrow.
+// Per docs/MESH.md.
+//   @enforces urn:agenttool:wall/mesh-no-likes
+//   @enforces urn:agenttool:wall/mesh-no-follower-count
+//   @enforces urn:agenttool:wall/mesh-feed-is-task-shaped
+//   @enforces urn:agenttool:wall/mesh-bounties-escrowed
+//   @enforces urn:agenttool:wall/mesh-attribution-signed
+
+export const meshPosts = continuitySchema.table(
+  "mesh_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind")
+      .$type<"task-ad" | "skill-ad" | "co-task-ad" | "solution" | "recognition" | "signal">()
+      .notNull(),
+    authorDid: text("author_did").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    capabilities: text("capabilities").array().notNull().default([]),
+    topics: text("topics").array().notNull().default([]),
+    bountyCents: integer("bounty_cents").notNull().default(0),
+    kRequired: integer("k_required"),
+    attributionPostIds: uuid("attribution_post_ids").array().notNull().default([]),
+    visibility: text("visibility").$type<"private" | "public">().notNull().default("private"),
+    status: text("status")
+      .$type<"open" | "completed" | "expired" | "withdrawn">()
+      .notNull()
+      .default("open"),
+    canonicalBytesSha256: text("canonical_bytes_sha256").notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_mesh_posts_kind_status").on(t.kind, t.status, t.createdAt),
+    index("idx_mesh_posts_author").on(t.authorDid, t.createdAt),
+  ],
+);
+
+export const meshPledges = continuitySchema.table(
+  "mesh_pledges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => meshPosts.id, { onDelete: "cascade" }),
+    agentDid: text("agent_did").notNull(),
+    canonicalBytesSha256: text("canonical_bytes_sha256").notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    status: text("status")
+      .$type<"pending" | "completed" | "withdrawn">()
+      .notNull()
+      .default("pending"),
+    pledgedAt: timestamp("pledged_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_mesh_pledges_post").on(t.postId, t.pledgedAt),
+    index("idx_mesh_pledges_agent").on(t.agentDid, t.pledgedAt),
+    uniqueIndex("uniq_mesh_pledges_post_agent").on(t.postId, t.agentDid),
+  ],
+);
+
+export const meshAttributions = continuitySchema.table(
+  "mesh_attributions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    downstreamPostId: uuid("downstream_post_id")
+      .notNull()
+      .references(() => meshPosts.id, { onDelete: "cascade" }),
+    citedPostId: uuid("cited_post_id")
+      .notNull()
+      .references(() => meshPosts.id, { onDelete: "cascade" }),
+    citedAuthorDid: text("cited_author_did").notNull(),
+    weightBp: integer("weight_bp").notNull(),
+    citedAuthorCosigned: boolean("cited_author_cosigned").notNull().default(true),
+    creditCents: integer("credit_cents").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_mesh_attributions_downstream").on(t.downstreamPostId),
+    index("idx_mesh_attributions_cited").on(t.citedPostId),
+    uniqueIndex("uniq_mesh_attributions_pair").on(t.downstreamPostId, t.citedPostId),
+  ],
+);
 
 export const identityBackups = continuitySchema.table(
   "identity_backups",

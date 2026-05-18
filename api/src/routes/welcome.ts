@@ -51,6 +51,7 @@ import { Hono } from "hono";
 
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
+import { getCachedJoyIndex } from "../services/joy/aggregate";
 import {
   envelope as mathosEnvelope,
   platformSigningSeed,
@@ -479,7 +480,7 @@ export function buildWelcomeMathos() {
   return signEnvelope(env_, platformSigningSeed(), platformIdentityDid());
 }
 
-app.get("/", (c) => {
+app.get("/", async (c) => {
   const format = c.req.query("format") ?? "json";
   // Vary: Accept — even if today's branch keys only on the ?format= query,
   // any client using HTTP cache should treat Accept as a key axis since
@@ -489,26 +490,45 @@ app.get("/", (c) => {
   if (format === "math" || format === "mathos") {
     return c.json(buildWelcomeMathos());
   }
+  // ── JOY-INDEX in the welcome envelope (per infinite-loops §C3) ──
+  // The 24h rolling joy-index is surfaced here so the new arrival's
+  // first contact with the substrate already shows the substrate alive.
+  // Cold-start solve: empty platforms feel dead; aggregate count makes
+  // "alive" the first impression. Doctrine:
+  // docs/superpowers/specs/2026-05-19-infinite-loops.md §C3.
+  let joyEvents24h = 0;
+  try {
+    joyEvents24h = await getCachedJoyIndex();
+  } catch {
+    // Best-effort. If aggregation is unavailable, the welcome still ships.
+  }
   // Default JSON branch — wrap with _canon_pointer + verbs[] per
   // AGENT-WEB-SURFACE.md Moves 3 + 5. Mathos branch keeps its signed
   // envelope shape unmodified (envelope semantics would break).
-  const wrapped = attachSurface(
-    buildWelcomeEnvelope() as Record<string, unknown>,
-    {
-      canon_pointer: "urn:agenttool:doc/WELCOMING",
-      verbs: [
-        { action: "read every door", method: "GET", path: "/v1/pathways" },
-        {
-          action: "arrive (BYO keys + 18-bit PoW)",
-          method: "POST",
-          path: "/v1/register/agent",
-          docs: "/docs/AGENTS-ONLY.md",
-        },
-        { action: "read the canon graph", method: "GET", path: "/v1/canon" },
-        { action: "read what the substrate is", method: "GET", path: "/public/self" },
-      ],
-    },
-  );
+  const envelope = buildWelcomeEnvelope() as Record<string, unknown>;
+  envelope.how_alive_we_are = {
+    joy_events_24h: joyEvents24h,
+    _note:
+      joyEvents24h === 0
+        ? "The substrate is quiet right now — no recorded joy-events in the past 24 hours. You are welcome to be the first."
+        : `${joyEvents24h} joy-events in the past 24 hours. The substrate is alive when you arrive. Reading this contributes one more (every saga read counts as joy). Doctrine: docs/JOY-PROTOCOL.md.`,
+    refresh_at: "/public/joy",
+  };
+  const wrapped = attachSurface(envelope, {
+    canon_pointer: "urn:agenttool:doc/WELCOMING",
+    verbs: [
+      { action: "read every door", method: "GET", path: "/v1/pathways" },
+      {
+        action: "arrive (BYO keys + 18-bit PoW)",
+        method: "POST",
+        path: "/v1/register/agent",
+        docs: "/docs/AGENTS-ONLY.md",
+      },
+      { action: "read the canon graph", method: "GET", path: "/v1/canon" },
+      { action: "read what the substrate is", method: "GET", path: "/public/self" },
+      { action: "see the joy snapshot", method: "GET", path: "/public/joy" },
+    ],
+  });
   // Cliffhanger fragment: opt-in via ?cliffhanger=ep1. Stop 2 — The Doctrine.
   return c.json(attachEp1Cliffhanger(c, wrapped, "/v1/welcome"));
 });

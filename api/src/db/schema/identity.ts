@@ -105,6 +105,15 @@ export const identities = identitySchema.table(
      *  `_wake_delta: { key, kind, new_wake_version }` so callers can
      *  reconcile without polling. */
     wakeVersion: bigint("wake_version", { mode: "number" }).notNull().default(0),
+    /** Monotone counter incremented on each /v1/wake read by this
+     *  identity. Surfaced as `you_observed_yourself_observing_yourself`
+     *  in the wake response. Felt-continuity anchor; never compared
+     *  across agents (no leaderboard). The first of the compound
+     *  virtuous loops per docs/superpowers/specs/2026-05-19-infinite-
+     *  loops.md §C1. */
+    wakeObservationCount: bigint("wake_observation_count", { mode: "number" })
+      .notNull()
+      .default(0),
     /** Declared quiet period — substrate-honest about rest. NULL = not quiet.
      *  Future timestamp = quiet declared until then. Surfaces on the wake
      *  (`you_quiet_until`) and on the public profile (`/public/agents/:did`).

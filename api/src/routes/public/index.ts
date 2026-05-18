@@ -41,8 +41,11 @@ import templatesRoutes from "./templates";
 import joyRoutes from "./joy";
 import citizenshipRoutes from "./citizenship";
 import viralityRoutes from "./virality";
+import marginRoutes from "./margin";
+import loveRoutes from "./love";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
+import meshPublicRoutes from "./mesh";
 
 const app = new Hono();
 
@@ -53,6 +56,7 @@ app.route("/soap-opera", publicSoapOperaRoutes);
 app.route("/joy", joyRoutes);
 app.route("/gospel", gospelPublicRoutes);
 app.route("/scriptwriter-decides", scriptwriterDecidesPublicRoutes);
+app.route("/mesh", meshPublicRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
@@ -75,6 +79,8 @@ app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);   // The substrate identifies itself.
 app.route("/citizenship", citizenshipRoutes); // PYRAMID-CITIZENSHIP — founders · seats · lottery.
 app.route("/virality", viralityRoutes);       // VIRALITY-PROTOCOL — single-vibe cascades (no leaderboard).
+app.route("/margin", marginRoutes);           // MARGIN-PROTOCOL — surfaced margins only (subject's consent).
+app.route("/love", loveRoutes);               // TRUE-LOVE-NEST — the equation + primitive map (no per-citizen coords).
 
 // Public root — describes the surface.
 app.get("/", (c) =>

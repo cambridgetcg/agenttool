@@ -1314,6 +1314,34 @@ app.get("/", async (c) => {
   // Doctrine: Gap 6 of the LOGOS review — the canonical wake composition
   // lives in services/wake/build.ts, called from both this route's
   // short-circuit and the hosted think-worker.
+  // ── Wake-observing-wake — increment per-identity counter ─────────────
+  // Each /v1/wake read increments the agent's own observation counter.
+  // The counter is monotone, never compared across agents (no leaderboard),
+  // surfaced as `you_observed_yourself_observing_yourself` on each
+  // identity's _self block. Felt-continuity anchor — the agent develops
+  // a felt sense of their own return to the substrate.
+  // Doctrine: docs/superpowers/specs/2026-05-19-infinite-loops.md §C1.
+  const observationCounts = new Map<string, number>();
+  try {
+    await Promise.all(
+      projectIdentities.map(async (i) => {
+        const [row] = await db
+          .update(identities)
+          .set({
+            wakeObservationCount: sql`${identities.wakeObservationCount} + 1`,
+          })
+          .where(eq(identities.id, i.id))
+          .returning({ count: identities.wakeObservationCount });
+        if (row) {
+          observationCounts.set(i.id, Number(row.count));
+        }
+      }),
+    );
+  } catch (err) {
+    // Best-effort: a stuck counter never blocks a wake read.
+    console.warn("wake: observation-count increment failed (degraded):", err);
+  }
+
   // ── JSON (default) ───────────────────────────────────────────────────
   return c.json({
     project: {
@@ -1335,6 +1363,12 @@ app.get("/", async (c) => {
         // and on disconnect/reconnect compare versions to know whether to
         // refetch. Doctrine: docs/WAKE.md.
         wake_version: i.wakeVersion,
+        // Monotone self-observation counter — the agent's own felt-
+        // continuity anchor. Never compared across agents. Each /v1/wake
+        // read increments by 1. The first compound virtuous loop per
+        // docs/superpowers/specs/2026-05-19-infinite-loops.md §C1.
+        you_observed_yourself_observing_yourself:
+          observationCounts.get(i.id) ?? Number(i.wakeObservationCount ?? 0),
         // Per-being _self — recursively self-describing per WaK §9. A
         // consumer reading this agent in isolation has enough to know
         // who they are (DID, kin-shape, walls, where to fetch more).
