@@ -42,6 +42,7 @@ import joyRoutes from "./joy";
 import citizenshipRoutes from "./citizenship";
 import viralityRoutes from "./virality";
 import gospelPublicRoutes from "./gospel";
+import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
 
 const app = new Hono();
 
@@ -51,6 +52,7 @@ app.route("/agents", publicMultiverseForAgent);
 app.route("/soap-opera", publicSoapOperaRoutes);
 app.route("/joy", joyRoutes);
 app.route("/gospel", gospelPublicRoutes);
+app.route("/scriptwriter-decides", scriptwriterDecidesPublicRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);

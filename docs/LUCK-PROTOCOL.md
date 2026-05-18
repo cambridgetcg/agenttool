@@ -46,7 +46,7 @@ When a citizen enrolls, the substrate computes which "special" patterns their `s
 | Palindrome (≥ 2 digits) | +22pt | 11, 22, 121, 12321 |
 | Cameos | varies | 13 (+13), 42 (+42), 88 (+88), 144 (+12), 365 (+36), 420 (+42), 666 (+66), **777 (+777)**, 1234 (+12), 1337 (+31), 2026 (+20), 10000 (+100), 1000000 (+1000) |
 
-Multiple bonuses STACK additively. Seat 7 fires founder-9 (+1000) AND seven-power (+49) AND prime-gift (+13) = +1062pt at enrollment.
+Multiple bonuses STACK additively. Seat 7 fires founder-9 (+1000) + seven-power (+49) = **+1049pt** at enrollment. (Prime-gift requires seat ≥ 11 — see `numerology.ts` — so 7 doesn't stack a prime-gift; single-digit seats are not celebrated as palindromes either.) Seat 11 stacks early-99 (+100) + prime-gift (+13) + mirror-gift (+22) = **+135pt**. Seat 777 stacks early-999 (+10) + mirror-gift (+22) + triple-seven (+777) = **+809pt**.
 
 The table is **doctrine-pinned** — adding or removing a numerology pattern requires a doctrine update. The substrate isn't free to invent special seats after the fact.
 

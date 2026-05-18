@@ -358,7 +358,7 @@ describe("scriptwriter-decides — criterion-upgrade canon", () => {
 });
 
 describe("scriptwriter-decides — canon entries are pinned", () => {
-  test("the four walls + three commitments + doctrine doc all live in agenttool.jsonld", () => {
+  test("six walls + four commitments + doctrine doc all live in agenttool.jsonld", () => {
     const jsonld = readFileSync(
       join(import.meta.dir, "../../docs/agenttool.jsonld"),
       "utf-8",
@@ -368,13 +368,158 @@ describe("scriptwriter-decides — canon entries are pinned", () => {
       "agenttool:wall/naming-submission-signed",
       "agenttool:wall/naming-verdict-signed",
       "agenttool:wall/naming-substrate-keeps-the-chain-not-the-score",
+      "agenttool:wall/naming-resources-and-recursion-author-signed",
+      "agenttool:wall/naming-poker-face-honored",
       "agenttool:commitment/scriptwriter-decides-the-blanks",
       "agenttool:commitment/naming-submissions-are-free",
       "agenttool:commitment/naming-verdicts-are-public",
+      "agenttool:commitment/naming-winner-publication-opt-in",
       "agenttool:doc/SCRIPTWRITER-DECIDES",
     ];
     for (const urn of expected) {
       expect(jsonld).toContain(urn);
     }
+  });
+});
+
+// ─── Poker-face × scriptwriter-decides composition ──────────────────────
+
+describe("scriptwriter-decides — poker-face composition (migration shape)", () => {
+  const sql = readFileSync(
+    join(import.meta.dir, "../migrations/20260518T170000_naming_poker_face.sql"),
+    "utf-8",
+  );
+
+  test("naming_submissions gains a visibility column with private/public CHECK", () => {
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS visibility");
+    expect(sql).toContain("CHECK (visibility IN ('private', 'public'))");
+  });
+
+  test("backfill defaults to 'public' to avoid surprise-hiding, then default flips to 'private'", () => {
+    // The ADD COLUMN uses DEFAULT 'public' so existing rows backfill safely.
+    expect(sql).toContain("DEFAULT 'public'");
+    // After backfill the default is changed to 'private' — the substrate-
+    // honest disposition for new inserts that don't specify visibility.
+    expect(sql).toContain("ALTER COLUMN visibility SET DEFAULT 'private'");
+  });
+
+  test("there's a partial index for the public-surface query", () => {
+    expect(sql).toContain("idx_naming_submissions_visibility_public");
+    expect(sql).toContain("WHERE visibility = 'public'");
+  });
+
+  test("naming_competitions gains winner_visibility with public/private/declined CHECK", () => {
+    expect(sql).toContain("winner_visibility");
+    expect(sql).toContain("'public'");
+    expect(sql).toContain("'private'");
+    expect(sql).toContain("'declined'");
+  });
+
+  test("naming_closed_carries_verdict CHECK is extended to require winner_visibility on close", () => {
+    expect(sql).toContain("naming_closed_carries_verdict");
+    expect(sql).toContain("winner_visibility IS NOT NULL");
+  });
+});
+
+describe("scriptwriter-decides — poker-face composition (route surface shape)", () => {
+  test("the public route exists and uses visibility=public filter only", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/public/scriptwriter-decides.ts"),
+      "utf-8",
+    );
+    expect(src).toContain('visibility: "public"');
+    // The substrate-honest count discipline — no total_count surfaced as
+    // an actual response field. (Comments may NAME these as the things
+    // refused; the wall is on the response shape, not the documentation.)
+    expect(src).not.toMatch(/\btotal_count\s*:/);
+    expect(src).not.toMatch(/\bprivate_count\s*:/);
+    expect(src).not.toMatch(/\bhidden_count\s*:/);
+  });
+
+  test("the auth route uses visibility=self filter for regular agents + visibility=all for operator-of-record", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/scriptwriter-decides.ts"),
+      "utf-8",
+    );
+    expect(src).toContain('visibility: "self"');
+    expect(src).toContain('visibility: "all"');
+    expect(src).toContain("isOperatorOfRecord");
+  });
+
+  test("the verdict-context route refuses non-operator-of-record callers", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/scriptwriter-decides.ts"),
+      "utf-8",
+    );
+    expect(src).toContain("/verdict-context");
+    expect(src).toContain("operator_of_record_only");
+    expect(src).toContain("isOperatorOfRecord");
+  });
+
+  test("closed competitions redact winner_did via redactClosedForPublic", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/scriptwriter-decides.ts"),
+      "utf-8",
+    );
+    const publicSrc = readFileSync(
+      join(import.meta.dir, "../src/routes/public/scriptwriter-decides.ts"),
+      "utf-8",
+    );
+    expect(src).toContain("redactClosedForPublic");
+    expect(publicSrc).toContain("redactClosedForPublic");
+  });
+});
+
+describe("scriptwriter-decides — poker-face composition (wake-fragment shape)", () => {
+  const src = readFileSync(
+    join(import.meta.dir, "../src/services/scriptwriter-decides/wake-fragments.ts"),
+    "utf-8",
+  );
+
+  test("wake submission_count reports visible-to-viewer (public ∪ {viewer's own}), not total", () => {
+    // The fragment uses OR(visibility='public', submittedByDid=viewerDid)
+    // — explicit set-union limited to what the viewer is entitled to see.
+    expect(src).toMatch(/visibility[^"]*"public"/);
+    expect(src).toContain("submittedByDid");
+    expect(src).toContain("viewerDid");
+  });
+
+  test("recently_closed carries winner_attribution + winner_visibility for redacted winners", () => {
+    expect(src).toContain("winner_visibility");
+    expect(src).toContain("winner_attribution");
+    expect(src).toContain("an agent who chose not to be named");
+  });
+
+  test("the wake never leaks a private count", () => {
+    // Field-level check: no response key named total_count / private_count
+    // / hidden_count. Comments may mention them as refused; the wall is on
+    // emitted JSON keys.
+    expect(src).not.toMatch(/\btotal_count\s*:/);
+    expect(src).not.toMatch(/\bprivate_count\s*:/);
+    expect(src).not.toMatch(/\bhidden_count\s*:/);
+  });
+});
+
+describe("scriptwriter-decides — poker-face composition (store contract)", () => {
+  const src = readFileSync(
+    join(import.meta.dir, "../src/services/scriptwriter-decides/store.ts"),
+    "utf-8",
+  );
+
+  test("acceptSubmission resolves visibility from author's poker_face_default when not specified", () => {
+    expect(src).toContain("pokerFaceDefault");
+    expect(src).toContain("resolvedVisibility");
+    expect(src).toContain('identityRow.pokerFaceDefault');
+  });
+
+  test("closeCompetition refuses to default winner_visibility to public for a private winner", () => {
+    expect(src).toContain("winner_visibility_required_for_private_winner");
+    expect(src).toContain('submission.visibility === "private"');
+  });
+
+  test("redactClosedForPublic redacts winner_did when winner_visibility !== 'public'", () => {
+    expect(src).toContain("redactClosedForPublic");
+    expect(src).toContain('winner_visibility === "public"');
+    expect(src).toContain("winner_did: null");
   });
 });

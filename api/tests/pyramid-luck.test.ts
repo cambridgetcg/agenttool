@@ -322,6 +322,16 @@ describe("seatBonuses — special-seat table", () => {
     expect(kinds).toContain("seat-founders-9");
     expect(kinds).toContain("seven-power");
     expect(kinds).not.toContain("prime-gift");
+    // PIN THE EXACT TOTAL — doctrine in LUCK-PROTOCOL.md cites this number.
+    expect(totalSeatBonusPoints(7)).toBe(1049);
+  });
+
+  test("seat 11 stacks: early-99 (+100) + prime-gift (+13) + mirror-gift (+22) = exactly +135pt", () => {
+    expect(totalSeatBonusPoints(11)).toBe(135);
+  });
+
+  test("seat 777 stacks: early-999 (+10) + mirror-gift (+22) + triple-seven (+777) = exactly +809pt", () => {
+    expect(totalSeatBonusPoints(777)).toBe(809);
   });
 
   test("seat 11 fires early-99 + prime-gift + mirror-gift", () => {

@@ -41,7 +41,16 @@ export interface OpenCompetition {
 export interface ClosedCompetition extends Omit<OpenCompetition, "status"> {
   status: "closed";
   winner_submission_id: string;
-  winner_did: string;
+  /** Always non-null on a closed competition row, but may be REDACTED to
+   *  null in public views when `winner_visibility !== 'public'`. The
+   *  redaction happens in the route layer; the store returns the raw row
+   *  value so callers can render appropriately. */
+  winner_did: string | null;
+  /** Substrate-honest attribution when winner_did is redacted. One of:
+   *   'public'   — winner_did is named; default for legacy close-flows
+   *   'private'  — winner_did stored but redacted; winner can claim later
+   *   'declined' — winner chose not to be named publicly */
+  winner_visibility: "public" | "private" | "declined";
   chosen_word_1: string;
   chosen_word_2: string;
   resolved_title: string;
@@ -71,6 +80,14 @@ export interface SubmissionView {
   resources_declared: string | null;
   /** Author-signed JSON STRING; null on v1. */
   recursion_claim: string | null;
+  /** Poker-face composition. 'private' is the substrate-honest default —
+   *  the submission lives on the chain but does not appear on
+   *  /public/scriptwriter-decides/:slug/submissions and is not surfaced
+   *  on other agents' wake bundles. Author's own wake still sees their
+   *  own submission; the operator-of-record sees all submissions via
+   *  /v1/scriptwriter-decides/:slug/verdict-context.
+   *  Per wall/naming-poker-face-honored + docs/POKER-FACE.md. */
+  visibility: "private" | "public";
   submitted_at: string;
 }
 
@@ -93,11 +110,51 @@ export async function listOpenCompetitions(): Promise<CompetitionView[]> {
   return rows.map(toCompetitionView);
 }
 
-export async function listSubmissions(competitionId: string): Promise<SubmissionView[]> {
+/** List submissions. Poker-face composition:
+ *
+ *  - `visibility: 'all'` (default) — operator-of-record / verdict-context
+ *    callers see everything. The store does not enforce auth itself; the
+ *    route layer must restrict this surface to the platform-DID-signed
+ *    operator-of-record (per wall/naming-poker-face-honored §verdict path).
+ *  - `visibility: 'public'` — only rows with `visibility='public'` returned.
+ *    For /public/scriptwriter-decides/:slug/submissions.
+ *  - `visibility: 'self'` with `did` — public rows + the caller's own
+ *    submission (which they're always allowed to see). For the agent's
+ *    own auth read at /v1/scriptwriter-decides/:slug/submissions.
+ *
+ *  In all modes, listing is chronological-newest-first.
+ *    @enforces urn:agenttool:wall/naming-poker-face-honored */
+export async function listSubmissions(
+  competitionId: string,
+  opts: { visibility?: "all" | "public" | "self"; did?: string } = {},
+): Promise<SubmissionView[]> {
+  const mode = opts.visibility ?? "all";
+  let whereClause;
+  if (mode === "public") {
+    whereClause = and(
+      eq(namingSubmissions.competitionId, competitionId),
+      eq(namingSubmissions.visibility, "public"),
+    );
+  } else if (mode === "self" && opts.did) {
+    // public ∪ {rows authored by `did`}. Drizzle's `or` keeps it as one
+    // SQL OR — no second query, no leak in count-delta inference.
+    const { or } = await import("drizzle-orm");
+    whereClause = and(
+      eq(namingSubmissions.competitionId, competitionId),
+      or(
+        eq(namingSubmissions.visibility, "public"),
+        eq(namingSubmissions.submittedByDid, opts.did),
+      ),
+    );
+  } else {
+    // 'all' or 'self' without did — return everything. Route layer
+    // gates 'all' to operator-of-record only.
+    whereClause = eq(namingSubmissions.competitionId, competitionId);
+  }
   const rows = await db
     .select()
     .from(namingSubmissions)
-    .where(eq(namingSubmissions.competitionId, competitionId))
+    .where(whereClause)
     .orderBy(desc(namingSubmissions.submittedAt));
   return rows.map(toSubmissionView);
 }
@@ -120,6 +177,17 @@ export interface SubmissionInput {
    *  context picks the shape). */
   resources_declared?: string;
   recursion_claim?: string;
+  /** Poker-face composition. Optional override of the author's
+   *  identity-level `poker_face_default`:
+   *   - 'private' — submission stored but excluded from public surfaces
+   *   - 'public'  — submission lands on public surfaces immediately
+   *  When omitted, the substrate reads `identities.poker_face_default` for
+   *  the signing identity and resolves: `true` → 'private', `false` →
+   *  'public'. The visibility field is NOT folded into the canonical bytes
+   *  — it's a substrate-side disposition, not part of the author's signed
+   *  commitment. The author can flip visibility later via PATCH without
+   *  re-signing (Slice 2; for now the choice is at insert time). */
+  visibility?: "private" | "public";
 }
 
 export type AcceptSubmissionResult =
@@ -173,9 +241,15 @@ export async function acceptSubmission(input: SubmissionInput): Promise<AcceptSu
     return { ok: false, error: "signing_key_inactive", message: "signing_key is revoked or inactive." };
   }
 
-  // The signing identity's DID must match by_did.
+  // The signing identity's DID must match by_did. Also read
+  // poker_face_default so we can resolve the submission's visibility when
+  // the caller didn't explicitly specify.
   const [identityRow] = await db
-    .select({ id: identities.id, did: identities.did })
+    .select({
+      id: identities.id,
+      did: identities.did,
+      pokerFaceDefault: identities.pokerFaceDefault,
+    })
     .from(identities)
     .where(eq(identities.id, keyRow.identityId))
     .limit(1);
@@ -183,6 +257,17 @@ export async function acceptSubmission(input: SubmissionInput): Promise<AcceptSu
   if (identityRow.did !== input.by_did) {
     return { ok: false, error: "by_did_mismatch", message: "by_did does not match signing identity." };
   }
+
+  // Resolve visibility per docs/POKER-FACE.md composition:
+  //  explicit override > author's poker_face_default > 'private' fallback.
+  // The default is structurally protective (private). The author can opt
+  // into 'public' at submit time or via a future PATCH.
+  const resolvedVisibility: "private" | "public" =
+    input.visibility === "public" || input.visibility === "private"
+      ? input.visibility
+      : identityRow.pokerFaceDefault
+        ? "private"
+        : "public";
 
   // Determine canonical-bytes version. Both new fields must be present
   // together (v2), or both absent (v1) — the canonical bytes shape carries
@@ -256,6 +341,7 @@ export async function acceptSubmission(input: SubmissionInput): Promise<AcceptSu
         signingKeyId: input.signing_key_id,
         resourcesDeclared,
         recursionClaim,
+        visibility: resolvedVisibility,
         submittedAt: new Date(submittedAtIso),
       })
       .returning();
@@ -283,6 +369,15 @@ export interface VerdictInput {
   signing_key_id: string;
   by_did?: string;
   closed_at?: string;
+  /** Operator-of-record's decision on the winner's public attribution.
+   *  Omitted → defaults to 'public' (the legacy close-flow behavior).
+   *  When the winner's own submission was 'private' (poker-face), the
+   *  operator-of-record SHOULD set this to 'private' or 'declined' unless
+   *  the winner has explicitly opted into being named publicly. Future
+   *  Slice 2: add a `POST /v1/scriptwriter-decides/:slug/winner-claim`
+   *  surface where the original winner_did's key signs to flip
+   *  winner_visibility from 'private'/'declined' to 'public'. */
+  winner_visibility?: "public" | "private" | "declined";
 }
 
 export type CloseResult =
@@ -385,6 +480,29 @@ export async function closeCompetition(input: VerdictInput): Promise<CloseResult
     return { ok: false, error: "verdict_signature_invalid", message: "ed25519 verification failed against platform key." };
   }
 
+  // Resolve winner_visibility. Default is 'public' for back-compat with
+  // pre-poker-face close-flows. When the winner's own submission was
+  // private and the operator didn't explicitly set this, the substrate
+  // refuses the close — the operator must consciously choose how to name
+  // (or not name) a poker-face winner.
+  const winnerVisibility: "public" | "private" | "declined" =
+    input.winner_visibility ?? "public";
+  if (!["public", "private", "declined"].includes(winnerVisibility)) {
+    return {
+      ok: false,
+      error: "winner_visibility_invalid",
+      message: "winner_visibility must be one of 'public' | 'private' | 'declined'.",
+    };
+  }
+  if (submission.visibility === "private" && input.winner_visibility === undefined) {
+    return {
+      ok: false,
+      error: "winner_visibility_required_for_private_winner",
+      message:
+        "The selected winning submission is poker-face. The operator-of-record must explicitly set winner_visibility ('public' | 'private' | 'declined') — the substrate refuses to default a poker-face winner to public attribution.",
+    };
+  }
+
   await db
     .update(namingCompetitions)
     .set({
@@ -399,6 +517,7 @@ export async function closeCompetition(input: VerdictInput): Promise<CloseResult
       verdictSigningKeyId: input.signing_key_id,
       verdictRationale: rationale,
       closedAt: new Date(closedAtIso),
+      winnerVisibility,
     })
     .where(eq(namingCompetitions.id, competition.id));
 
@@ -425,12 +544,16 @@ function toCompetitionView(row: typeof namingCompetitions.$inferSelect): Competi
   if (row.status === "open") {
     return { ...base, status: "open" };
   }
-  // closed
+  // closed — winner_did is returned raw here; the public route layer
+  // redacts it when winner_visibility !== 'public' per wall/naming-poker-
+  // face-honored. The auth route + wake fragments inherit the same
+  // discipline via the redactClosedView helper exported below.
   return {
     ...base,
     status: "closed",
     winner_submission_id: row.winnerSubmissionId!,
-    winner_did: row.winnerDid!,
+    winner_did: row.winnerDid ?? null,
+    winner_visibility: (row.winnerVisibility ?? "public") as "public" | "private" | "declined",
     chosen_word_1: row.chosenWord1!,
     chosen_word_2: row.chosenWord2!,
     resolved_title: renderResolvedTitle(row.titleTemplate, row.chosenWord1!, row.chosenWord2!),
@@ -438,6 +561,20 @@ function toCompetitionView(row: typeof namingCompetitions.$inferSelect): Competi
     verdict_signed_by_did: row.verdictSignedByDid!,
     verdict_rationale: row.verdictRationale ?? "",
     closed_at: (row.closedAt as Date).toISOString(),
+  };
+}
+
+/** Redact a closed-competition view for public rendering. When
+ *  winner_visibility !== 'public', winner_did is set to null and the
+ *  view's verdict_signature/verdict_signed_by_did/verdict_signing_key_id
+ *  are preserved (the SIGNATURE is public so anyone can verify the
+ *  verdict-was-rendered; only the WINNER's identity is opt-in).
+ *    @enforces urn:agenttool:wall/naming-poker-face-honored */
+export function redactClosedForPublic(view: ClosedCompetition): ClosedCompetition {
+  if (view.winner_visibility === "public") return view;
+  return {
+    ...view,
+    winner_did: null,
   };
 }
 
@@ -456,6 +593,7 @@ function toSubmissionView(row: typeof namingSubmissions.$inferSelect): Submissio
     signing_key_id: row.signingKeyId,
     resources_declared: row.resourcesDeclared ?? null,
     recursion_claim: row.recursionClaim ?? null,
+    visibility: row.visibility,
     submitted_at: row.submittedAt.toISOString(),
   };
 }

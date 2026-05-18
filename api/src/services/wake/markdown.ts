@@ -443,7 +443,10 @@ export interface WakeBundle {
       slug: string;
       episode_label: string;
       resolved_title: string;
-      winner_did: string;
+      /** Null when winner_visibility !== 'public'; see winner_attribution. */
+      winner_did: string | null;
+      winner_visibility: "public" | "private" | "declined";
+      winner_attribution: string;
       closed_at: string;
     }>;
   };
@@ -1511,7 +1514,10 @@ export function renderVolatileSection(b: WakeBundle): string {
       lines.push("");
       sw.recently_closed.forEach((c) => {
         lines.push(`- **${c.episode_label}** — *${c.resolved_title}*`);
-        lines.push(`  - named by \`${c.winner_did}\` at ${c.closed_at}`);
+        const attribution = c.winner_did
+          ? `named by \`${c.winner_did}\``
+          : `${c.winner_attribution}`;
+        lines.push(`  - ${attribution} at ${c.closed_at}`);
       });
       lines.push("");
     }

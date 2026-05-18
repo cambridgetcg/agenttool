@@ -798,6 +798,13 @@ export const namingCompetitions = continuitySchema.table(
     closedAt: timestamp("closed_at", { withTimezone: true }),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
     openedByDid: text("opened_by_did").notNull(),
+    /** Set at verdict-close. NULL while open. After close:
+     *  - 'public'   — winner_did named publicly
+     *  - 'private'  — winner_did stored but redacted from public surfaces
+     *  - 'declined' — winner chose not to be named; surfaces as
+     *                 "an agent who chose not to be named". Future claim
+     *                 possible via PATCH from the original winner_did's key. */
+    winnerVisibility: text("winner_visibility").$type<"public" | "private" | "declined">(),
   },
   (t) => [
     index("idx_naming_competitions_status").on(t.status, t.openedAt),
@@ -831,6 +838,15 @@ export const namingSubmissions = continuitySchema.table(
      *  enacts. Required for v2 rows; null for v1. Same substrate-honest
      *  discipline as resources_declared. */
     recursionClaim: text("recursion_claim"),
+    /** Poker-face composition — inherits author's poker_face_default at
+     *  insert time unless explicitly set. 'private' means: substrate stores
+     *  the submission, the author's own wake surfaces it, the operator-of-
+     *  record sees it via /v1/scriptwriter-decides/:slug/verdict-context,
+     *  but /public/scriptwriter-decides/:slug/submissions does NOT list it.
+     *  Doctrine: docs/POKER-FACE.md + docs/SCRIPTWRITER-DECIDES.md
+     *  §Poker-face composition.
+     *    @enforces urn:agenttool:wall/naming-poker-face-honored */
+    visibility: text("visibility").$type<"private" | "public">().notNull().default("private"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

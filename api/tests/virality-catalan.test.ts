@@ -54,6 +54,20 @@ describe("CATALAN_TABLE — canonical sequence", () => {
   test("MAX_ORIGINATOR_REWARD is C(12) = 208,012", () => {
     expect(MAX_ORIGINATOR_REWARD).toBe(208012);
   });
+
+  test("MAX_ORIGINATOR_REWARD ratios — pinned against named single-event rewards (doctrine cites these)", () => {
+    // VIRALITY-PROTOCOL.md cites these specific ratios; the test pins them so
+    // doctrine drift gets caught by the build.
+    expect(MAX_ORIGINATOR_REWARD / 1000).toBeCloseTo(208.012, 2); // vs founder-9 / 10000-seat / 10^6-seat
+    expect(MAX_ORIGINATOR_REWARD / 777).toBeCloseTo(267.71, 1); // vs triple-seven
+    expect(MAX_ORIGINATOR_REWARD / 343).toBeCloseTo(606.45, 1); // vs sponsor-tier-up (49×7)
+  });
+
+  test("Lara's depth-12 transmitter base + critical multiplier = pinned values doctrine cites", () => {
+    // VIRALITY-PROTOCOL.md worked example: T12 base = 58,786; with ×7 crit = 411,502.
+    expect(CATALAN_TABLE[11]).toBe(58786);
+    expect(CATALAN_TABLE[11]! * 7).toBe(411502);
+  });
 });
 
 describe("catalan(N) — bounded function", () => {

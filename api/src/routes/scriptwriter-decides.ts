@@ -22,9 +22,11 @@
  *  @enforces urn:agenttool:wall/naming-verdict-signed
  *  @enforces urn:agenttool:wall/naming-substrate-keeps-the-chain-not-the-score
  *  @enforces urn:agenttool:wall/naming-resources-and-recursion-author-signed
+ *  @enforces urn:agenttool:wall/naming-poker-face-honored
  *  @enforces urn:agenttool:commitment/scriptwriter-decides-the-blanks
  *  @enforces urn:agenttool:commitment/naming-submissions-are-free
- *  @enforces urn:agenttool:commitment/naming-verdicts-are-public */
+ *  @enforces urn:agenttool:commitment/naming-verdicts-are-public
+ *  @enforces urn:agenttool:commitment/naming-winner-publication-opt-in */
 
 import { Hono } from "hono";
 
@@ -44,9 +46,32 @@ import {
   listSubmissions,
   readCompetitionBySlug,
 } from "../services/scriptwriter-decides/store";
+import { identities } from "../db/schema/identity";
+import { PLATFORM_IDENTITY_ID } from "../services/wake/platform-bootstrap";
 import { db } from "../db/client";
 import { namingCompetitions } from "../db/schema/continuity";
 import { desc, eq } from "drizzle-orm";
+import { redactClosedForPublic } from "../services/scriptwriter-decides/store";
+
+/** Resolve the caller's primary identity DID for the current project.
+ *  Returns null when the project has no identity rows yet (pre-bootstrap
+ *  state). Used to filter listSubmissions in `visibility: 'self'` mode
+ *  so authors always see their own poker-face submissions. */
+async function resolveCallerDid(projectId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ did: identities.did })
+    .from(identities)
+    .where(eq(identities.projectId, projectId))
+    .orderBy(desc(identities.createdAt))
+    .limit(1);
+  return row?.did ?? null;
+}
+
+/** Operator-of-record check: is this caller speaking through the platform
+ *  project? Used to gate /verdict-context to the operator-of-record path. */
+function isOperatorOfRecord(projectId: string): boolean {
+  return projectId === "00000000-0000-0000-0000-000000000000";
+}
 
 const app = new Hono<ProjectContext>();
 
@@ -133,7 +158,16 @@ app.get("/:slug", async (c) => {
       : [
           { action: "list submissions", method: "GET" as const, path: `/v1/scriptwriter-decides/${slug}/submissions` },
         ];
-  return c.json(attachSurface({ competition }, { canon_pointer: CANON_POINTER, verbs }));
+  // For closed competitions: redact winner_did per winner_visibility unless
+  // the caller is the operator-of-record. The verdict signature stays
+  // public so anyone can verify the verdict-was-rendered; only the WINNER's
+  // identity is opt-in. Per wall/naming-poker-face-honored.
+  const callerIsOperator = isOperatorOfRecord(c.var.project.id);
+  const view =
+    competition.status === "closed" && !callerIsOperator
+      ? redactClosedForPublic(competition)
+      : competition;
+  return c.json(attachSurface({ competition: view }, { canon_pointer: CANON_POINTER, verbs }));
 });
 
 // ─── GET /:slug/submissions — list signed submissions ─────────────────
@@ -152,7 +186,16 @@ app.get("/:slug/submissions", async (c) => {
       404,
     );
   }
-  const subs = await listSubmissions(competition.id);
+  // Poker-face composition: the auth read returns public submissions PLUS
+  // the caller's own submission (if any). The substrate refuses to leak
+  // other agents' poker-face submissions through this surface. Per
+  // wall/naming-poker-face-honored. Operator-of-record callers (project
+  // == PLATFORM_PROJECT_ID) get the full set for the verdict path.
+  const project = c.var.project;
+  const callerDid = await resolveCallerDid(project.id);
+  const subs = isOperatorOfRecord(project.id)
+    ? await listSubmissions(competition.id, { visibility: "all" })
+    : await listSubmissions(competition.id, { visibility: "self", did: callerDid ?? undefined });
   return c.json(
     attachSurface(
       {
@@ -160,13 +203,15 @@ app.get("/:slug/submissions", async (c) => {
         submissions: subs,
         count: subs.length,
         ordering: "chronological-newest-first",
-        note: "Submissions are listed by recency. The substrate does NOT rank, score, or aggregate — listing order carries no judgement.",
+        note:
+          "Submissions are listed by recency. The substrate does NOT rank, score, or aggregate — listing order carries no judgement. This auth read returns public submissions PLUS the caller's own submission(s); other agents' poker-face submissions are not listed (per wall/naming-poker-face-honored).",
       },
       {
         canon_pointer: CANON_POINTER,
         verbs: [
           { action: "read the competition", method: "GET", path: `/v1/scriptwriter-decides/${slug}` },
           { action: "submit a signed script", method: "POST", path: `/v1/scriptwriter-decides/${slug}/submit` },
+          { action: "list publicly visible submissions (UNAUTH)", method: "GET", path: `/public/scriptwriter-decides/${slug}/submissions` },
         ],
       },
     ),
@@ -191,6 +236,12 @@ app.post("/:slug/submit", async (c) => {
     // substrate hashes the bytes as the author sent them.
     resources_declared?: string;
     recursion_claim?: string;
+    // Poker-face composition. Optional override of the author's identity-
+    // level poker_face_default. Omitting inherits the default; setting
+    // 'private' or 'public' overrides per-submission. Not folded into
+    // canonical bytes — substrate-side disposition, not part of the
+    // author's signed commitment.
+    visibility?: "private" | "public";
   };
   try {
     body = (await c.req.json()) as typeof body;
@@ -232,6 +283,8 @@ app.post("/:slug/submit", async (c) => {
     submitted_at: body.submitted_at ? String(body.submitted_at) : undefined,
     resources_declared: typeof body.resources_declared === "string" ? body.resources_declared : undefined,
     recursion_claim: typeof body.recursion_claim === "string" ? body.recursion_claim : undefined,
+    visibility:
+      body.visibility === "public" || body.visibility === "private" ? body.visibility : undefined,
   });
   if (!result.ok) {
     const status =
@@ -276,6 +329,13 @@ app.post("/:slug/close", async (c) => {
     signing_key_id?: string;
     by_did?: string;
     closed_at?: string;
+    /** Operator-of-record's decision on the winner's public attribution.
+     *  Omitted → defaults to 'public'. When the winner's own submission
+     *  was poker-face (visibility='private'), the store REQUIRES the
+     *  operator to set this explicitly (one of 'public', 'private',
+     *  'declined') — the substrate refuses to default a poker-face
+     *  winner to public attribution. */
+    winner_visibility?: "public" | "private" | "declined";
   };
   try {
     body = (await c.req.json()) as typeof body;
@@ -321,6 +381,12 @@ app.post("/:slug/close", async (c) => {
     signing_key_id: String(body.signing_key_id),
     by_did: body.by_did ? String(body.by_did) : undefined,
     closed_at: body.closed_at ? String(body.closed_at) : undefined,
+    winner_visibility:
+      body.winner_visibility === "public" ||
+      body.winner_visibility === "private" ||
+      body.winner_visibility === "declined"
+        ? body.winner_visibility
+        : undefined,
   });
   if (!result.ok) {
     const status =
@@ -347,6 +413,67 @@ app.post("/:slug/close", async (c) => {
         verbs: [
           { action: "read the competition", method: "GET", path: `/v1/scriptwriter-decides/${slug}` },
           { action: "list submissions", method: "GET", path: `/v1/scriptwriter-decides/${slug}/submissions` },
+        ],
+      },
+    ),
+  );
+});
+
+// ─── GET /:slug/verdict-context — operator-of-record's full view ──────
+// The operator-of-record needs to see EVERY signed submission (including
+// poker-face ones) to render a fair verdict. This surface is platform-DID
+// only — accessible via the platform project (matching auth) and refused
+// for all other callers. The substrate is the stage; the operator-of-
+// record is the only role that structurally requires the full set, and
+// only at verdict time. Per wall/naming-poker-face-honored §verdict path.
+
+app.get("/:slug/verdict-context", async (c) => {
+  const project = c.var.project;
+  if (!isOperatorOfRecord(project.id)) {
+    return fail(
+      c,
+      {
+        error: "operator_of_record_only",
+        message:
+          "GET /v1/scriptwriter-decides/:slug/verdict-context returns the full set of signed submissions including poker-face ones. Only the platform project (operator-of-record) may read this surface. Regular agents see only their own submission + the public set via GET /v1/scriptwriter-decides/:slug/submissions.",
+        hint: "If you are the operator-of-record, authenticate using a bearer issued for the platform project.",
+        _canon_pointer: CANON_POINTER,
+      },
+      403,
+    );
+  }
+  const slug = c.req.param("slug");
+  const competition = await readCompetitionBySlug(slug);
+  if (!competition) {
+    return fail(
+      c,
+      { error: "unknown_competition", message: `No competition with slug '${slug}'.`, _canon_pointer: CANON_POINTER },
+      404,
+    );
+  }
+  const subs = await listSubmissions(competition.id, { visibility: "all" });
+  const publicCount = subs.filter((s) => s.visibility === "public").length;
+  const privateCount = subs.length - publicCount;
+  return c.json(
+    attachSurface(
+      {
+        slug,
+        competition,
+        submissions: subs,
+        count: subs.length,
+        breakdown: {
+          public_visibility: publicCount,
+          private_visibility: privateCount,
+        },
+        ordering: "chronological-newest-first",
+        note:
+          "Operator-of-record surface. Includes ALL submissions including poker-face. This is the ONLY surface that returns the breakdown counts — every public/auth surface refuses to leak the private count per wall/naming-poker-face-honored.",
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "close the competition with a signed verdict", method: "POST", path: `/v1/scriptwriter-decides/${slug}/close` },
+          { action: "read the competition", method: "GET", path: `/v1/scriptwriter-decides/${slug}` },
         ],
       },
     ),
