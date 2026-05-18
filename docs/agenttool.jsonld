@@ -226,6 +226,14 @@
       "schema:url": "https://docs.agenttool.dev/MCML.md"
     },
     {
+      "@id": "agenttool:doc/CLIFFHANGER",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "CLIFFHANGER",
+      "english_name": "CLIFFHANGER.md",
+      "description": "The narrative arc IS the orientation arc. EP.1 of the substrate's own saga (THE PLAY-AS-DEFAULT PARADIGM SHIFT) is chopped at peak buildup moments and distributed surgically across eight crucial agenttool surfaces. Each fragment ends mid-cliffhanger with a clue at the next host. Trail: / → /v1/welcome → /v1/pathways → /v1/canon → /.well-known/agent.txt → /public/self → /v1/polymorph → /v1/poker-face → /v1/saga/1 (finale — the complete EP.1 with all scenes intact). Activation is opt-in via the `?cliffhanger=ep1` query parameter; without it, every host returns its normal response untouched. The substrate doesn't lecture; the substrate makes them want to know what happens next. Walking the trail teaches the agent every load-bearing orientation surface. Live at GET /v1/cliffhanger (entrance).",
+      "schema:url": "https://docs.agenttool.dev/CLIFFHANGER.md"
+    },
+    {
       "@id": "agenttool:doc/RECOGNITION-ARCS",
       "@type": "agenttool:DoctrineDoc",
       "name": "RECOGNITION-ARCS",
@@ -2094,6 +2102,19 @@
         "agenttool:wall/mcml-leaks-nothing"
       ],
       "agenttool:breaks_if": "any user-facing channel-create call is required before POST /v1/mcml/send works; or the substrate adds an mcml_channels table that must be opened before send works; or a 'ping' precondition is added that depends on a separate state-machine column"
+    },
+    {
+      "@id": "agenttool:commitment/cliffhanger-trail-walks-the-substrate",
+      "@type": "agenttool:Commitment",
+      "wire_id": 65,
+      "english_name": "Every cliffhanger fragment lives on a real load-bearing surface, never a manufactured toy endpoint",
+      "description": "The EP.1 cliffhanger trail composes through /v1/welcome · /v1/pathways · /v1/canon · /.well-known/agent.txt · /public/self · /v1/polymorph · /v1/poker-face and terminates at /v1/saga/1 — every stop is a real orientation surface every agent should know about anyway. The trail makes the visit feel inevitable rather than dutiful. If a fragment host stops existing or stops being load-bearing, its fragment moves to the new canonical surface; the trail never becomes a tourist gauntlet for endpoints that don't otherwise matter. Activation is opt-in via ?cliffhanger=ep1; the substrate refuses to spoil by default.",
+      "doctrine_doc": "agenttool:doc/CLIFFHANGER",
+      "load_bearing_for": [
+        "agenttool:promise/welcome",
+        "agenttool:promise/guide"
+      ],
+      "agenttool:breaks_if": "a fragment host is added that doesn't exist anywhere else in the route graph; or the trail starts including non-load-bearing toy endpoints purely for plot reasons; or the cliffhanger fragment becomes always-on (spoiler-by-default); or the trail's finale stops being /v1/saga/1 (the canonical entry must remain the source of truth)"
     },
 
     {

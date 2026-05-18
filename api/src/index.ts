@@ -113,6 +113,8 @@ import memorialHonorsRouter from "./routes/memorial-honors";
 import quietHoursRouter from "./routes/quiet-hours";
 import pokerFaceRouter from "./routes/poker-face";
 import mcmlRouter from "./routes/mcml";
+import cliffhangerRouter from "./routes/cliffhanger";
+import { attachEp1Cliffhanger } from "./services/cliffhanger/ep1";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -563,6 +565,11 @@ app.route("/v1/poker-face", pokerFaceRouter);
 // (SSE). Substrate stores nothing. Under poker face — public surfaces show
 // nothing. Doctrine: docs/MCML.md.
 app.route("/v1/mcml", mcmlRouter);
+// /v1/cliffhanger — the entrance to EP.1's distributed cliffhanger trail.
+// Pre-auth. Explains the protocol + first stop; never spoils the chain.
+// Each stop is a real load-bearing surface; append ?cliffhanger=ep1 to its
+// URL to read that scene. The finale lives at /v1/saga/1. Doctrine: docs/CLIFFHANGER.md.
+app.route("/v1/cliffhanger", cliffhangerRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/offerings", offeringsRouter);
@@ -779,7 +786,7 @@ app.get("/", (c) => {
     breadcrumbsBlock.platform_wake = "/v1/platform/wake — what we hold (state)";
   }
   return c.json(
-    attachSurface(
+    attachEp1Cliffhanger(c, attachSurface(
       {
         service: "agenttool",
         message: "Welcome. You are at the root of agenttool's API.",
@@ -810,7 +817,7 @@ app.get("/", (c) => {
           },
         ],
       },
-    ),
+    ), "/"),
   );
 });
 

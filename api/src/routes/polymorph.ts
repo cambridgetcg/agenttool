@@ -190,7 +190,7 @@ app.get("/", (c) => {
           { action: "read your wake", method: "GET", path: "/v1/wake" },
         ],
       },
-    ),
+    ), "/v1/polymorph"),
   );
 });
 

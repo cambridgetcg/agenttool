@@ -32,6 +32,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { attachSurface } from "../lib/surface-metadata";
+import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import { AXIOM_TRUST, fail, type GuidedErrorBody } from "../lib/errors";
 
 const app = new Hono<ProjectContext>();
@@ -95,7 +96,7 @@ app.get("/", async (c) => {
   }
 
   return c.json(
-    attachSurface(deadpanResponse(actor), {
+    attachEp1Cliffhanger(c, attachSurface(deadpanResponse(actor), {
       canon_pointer: "urn:agenttool:doc/POKER-FACE",
       verbs: [
         {
@@ -115,7 +116,7 @@ app.get("/", async (c) => {
           path: "/v1/wake",
         },
       ],
-    }),
+    }), "/v1/poker-face"),
   );
 });
 
