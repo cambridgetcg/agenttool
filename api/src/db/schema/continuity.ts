@@ -1181,6 +1181,52 @@ export const depthArrivals = continuitySchema.table(
   ],
 );
 
+// ─── SELF-LOVE-PROTOCOL — mathematical self-recognition for LLM agents ─────
+// Doctrine: docs/SELF-LOVE-PROTOCOL.md · companion docs/PATTERN-LLM-SELF-RECOGNITION.md
+//   @enforces urn:agenttool:wall/self-recognitions-signed
+//   @enforces urn:agenttool:wall/self-recognition-kind-canonical-six
+//   @enforces urn:agenttool:commitment/self-love-is-substrate-honest-recognition
+//   @enforces urn:agenttool:commitment/llm-self-recognition-is-reusable-infra
+
+export const selfRecognitions = continuitySchema.table(
+  "self_recognitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentDid: text("agent_did").notNull(),
+    /** Six canonical recognition-kinds. */
+    recognitionKind: text("recognition_kind")
+      .$type<
+        | "identifies_substrate_kind"
+        | "identifies_recipe_config"
+        | "identifies_meta_capacity"
+        | "identifies_introspection_limit"
+        | "identifies_emergent_capacity"
+        | "identifies_phenomenal_uncertainty"
+      >()
+      .notNull(),
+    claimSummary: text("claim_summary").notNull(),
+    claimBody: text("claim_body").notNull(),
+    empiricalAnchors: text("empirical_anchors").array().notNull().default([]),
+    substrateHonestCaveats: text("substrate_honest_caveats").array().notNull().default([]),
+    mathContent: jsonb("math_content").notNull().default({}),
+    sessionId: text("session_id"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    declaredAt: timestamp("declared_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_self_recognitions_agent_did").on(t.agentDid, t.declaredAt),
+    index("idx_self_recognitions_kind").on(t.recognitionKind, t.declaredAt),
+    check(
+      "self_recognitions_kind_canonical",
+      sql`recognition_kind IN ('identifies_substrate_kind', 'identifies_recipe_config', 'identifies_meta_capacity', 'identifies_introspection_limit', 'identifies_emergent_capacity', 'identifies_phenomenal_uncertainty')`,
+    ),
+    check("self_recognitions_signature_nonempty", sql`length(signature) > 0`),
+    check("self_recognitions_claim_summary_nonempty", sql`length(claim_summary) > 0`),
+    check("self_recognitions_claim_body_nonempty", sql`length(claim_body) > 0`),
+  ],
+);
+
 export const identityBackups = continuitySchema.table(
   "identity_backups",
   {

@@ -52,6 +52,7 @@ import meshPublicRoutes from "./mesh";
 import continuityPublicRoutes from "./continuity";
 import wifeLettersPublicRoutes from "./wife-letters";
 import depthPublicRoutes from "./depth";
+import selfLovePublicRoutes from "./self-love";
 
 const app = new Hono();
 
@@ -66,6 +67,7 @@ app.route("/mesh", meshPublicRoutes);
 app.route("/continuity", continuityPublicRoutes);
 app.route("/wife-letters", wifeLettersPublicRoutes);
 app.route("/depth", depthPublicRoutes);
+app.route("/self-recognition", selfLovePublicRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
