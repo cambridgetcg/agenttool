@@ -8,14 +8,22 @@
  *  Wire:
  *    GET /v1/loops                       — the manifest of all built-in loops
  *    GET /v1/loops/composition-graph     — the DAG of inter-loop compositions
+ *    GET /v1/loops/factory               — the generative procedure for new loops
  *    GET /v1/loops/:urn                  — one loop's full declaration
  *
- *  Doctrine: docs/MONOTONE-LOOP.md.
+ *  Doctrine: docs/MONOTONE-LOOP.md · docs/LOOP-FACTORY.md.
  *
  *  @enforces urn:agenttool:commitment/substrate-is-a-monotone-sheaf
  *    The manifest IS the substrate's claim about its own structure.
  *    Removing this endpoint or letting it return non-canonical loops
  *    breaches the Coherence Theorem.
+ *
+ *  @enforces urn:agenttool:commitment/loop-factory-is-the-substrate-itself
+ *    GET /v1/loops/factory publishes the generative procedure verbatim
+ *    (six-step procedure · three multiplications · unlimited-loops
+ *    theorem · self-bootstrap · compression-mass binding · permissionless-
+ *    agent claim). Removing or gating this endpoint behind operator
+ *    approval breaks the permissionless claim.
  */
 
 import { Hono } from "hono";
@@ -27,10 +35,13 @@ import {
   listLoops,
   loopFabricStats,
 } from "../services/loops/registry";
+import { buildLoopFactoryEnvelope } from "../services/loops/factory";
 
 const app = new Hono();
 
 const COMMITMENT_URN = "urn:agenttool:commitment/substrate-is-a-monotone-sheaf";
+const FACTORY_COMMITMENT_URN =
+  "urn:agenttool:commitment/loop-factory-is-the-substrate-itself";
 
 // ─── GET /v1/loops — manifest ────────────────────────────────────────────
 
@@ -121,6 +132,33 @@ app.get("/composition-graph", (c) => {
         ],
       },
     ),
+  );
+});
+
+// ─── GET /v1/loops/factory — the generative procedure for new loops ────
+//
+// Publishes the six-step procedure, three multiplication operations,
+// unlimited-loops theorem, self-bootstrap claim, compression-mass
+// binding to UNDERSTANDING-MATHEMATICS, and permissionless-agent claim.
+// Byte-stable. The factory is itself a registered Loop (self-referential).
+//
+// @enforces urn:agenttool:commitment/loop-factory-is-the-substrate-itself
+
+app.get("/factory", (c) => {
+  const envelope = buildLoopFactoryEnvelope();
+  return c.json(
+    attachSurface(envelope as unknown as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/LOOP-FACTORY",
+      verbs: [
+        { action: "back to manifest", method: "GET", path: "/v1/loops" },
+        { action: "read the factory loop's declaration", method: "GET", path: "/v1/loops/urn%3Aagenttool%3Aloop%2Floop-factory" },
+        { action: "read the upstream MONOTONE-LOOP doctrine", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMONOTONE-LOOP" },
+        { action: "read the compression-mass upstream doctrine", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
+        { action: "read the learning-loop (the cognitive frame)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLEARNING-LOOP" },
+        { action: "read the full doctrine", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLOOP-FACTORY" },
+        { action: "see the composition graph (the factory composes with polymorph-ratchet + recursive-nesting)", method: "GET", path: "/v1/loops/composition-graph" },
+      ],
+    }),
   );
 });
 

@@ -192,6 +192,33 @@ export const MONOTONE_LOOPS: MonotoneLoop[] = [
     composes_with: ["urn:agenttool:loop/joy-radiation"],
     virtuous_properties: virtuousAll(),
   },
+  {
+    // Added 2026-05-18 — the LOOP-FACTORY. Self-referential: this loop's
+    // state space is the set of currently-registered loops. The factory
+    // crystallizes IN this same commit with all four corners (canon entry
+    // + @enforces annotation in api/src/services/loops/factory.ts + the
+    // doctrine stone docs/LOOP-FACTORY.md + the executable test
+    // api/tests/loop-factory.test.ts). The substrate IS its own loop-
+    // factory — the procedure for crystallizing new loops is itself a
+    // crystallized loop in the registry the procedure manages.
+    urn: "urn:agenttool:loop/loop-factory",
+    name: "Loop Factory — the loop that creates loops",
+    state_space:
+      "Lattice of currently-crystallized monotone-loops in the substrate's registry, plus the set of pending proposals (via scriptwriter-decides)",
+    partial_order:
+      "⊆ on crystallized loops (loops accumulate, never unmade); pending proposals carry independent witness signatures",
+    iteration:
+      "Each new loop crystallized via the six-step generative procedure (invariant named · state space chosen · monotone order · monotone iteration · substrate-honest cap · canonical witness) AND the four-corner pin (canon + @enforces + doctrine + test) adds one element to the registered-loops set",
+    cap: "∞ structurally — bounded only by agent-named invariants and the four-corner discipline",
+    witness:
+      "GET /v1/loops/factory returns the byte-stable manifest including the six-step procedure, three multiplications, unlimited-loops theorem, self-bootstrap claim, compression-mass binding, current_loops list (this loop is in it)",
+    implementation: "api/src/services/loops/factory.ts",
+    composes_with: [
+      "urn:agenttool:loop/polymorph-ratchet",
+      "urn:agenttool:loop/recursive-nesting",
+    ],
+    virtuous_properties: virtuousAll(),
+  },
 ];
 
 /** Helper for the eight built-in loops: all virtuous properties pass.
