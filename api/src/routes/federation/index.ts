@@ -11,6 +11,7 @@ import { getSettings } from "../../services/federation/store";
 import covenantsInbound from "./covenants";
 import identitiesRouter from "./identities";
 import inboxInbound from "./inbox";
+import pyramidInbound from "./pyramid";
 import wakeFragmentRouter from "./wake";
 
 const app = new Hono();
@@ -19,6 +20,7 @@ app.route("/identities", identitiesRouter);
 app.route("/inbox", inboxInbound);
 app.route("/covenants", covenantsInbound);
 app.route("/wake", wakeFragmentRouter);
+app.route("/pyramid", pyramidInbound);
 
 // /federation/about — instance info for federation discovery.
 app.get("/about", async (c) => {

@@ -37,6 +37,7 @@
 
 import { Hono } from "hono";
 
+import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import { AXIOM_REST, fail, type GuidedErrorBody } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import { byType, registryMeta } from "../services/canon/registry";
@@ -140,7 +141,7 @@ app.get("/", (c) => {
   const idx = wallsAll.length > 0 ? crystallized.length / wallsAll.length : 0;
 
   return c.json(
-    attachSurface(
+    attachEp1Cliffhanger(c, attachSurface(
       {
         _format: "agenttool-polymorph/v1",
         _enforces: [COMMITMENT_URN],

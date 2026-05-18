@@ -50,6 +50,7 @@
 import { Hono } from "hono";
 
 import { attachSurface } from "../lib/surface-metadata";
+import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import {
   envelope as mathosEnvelope,
   platformSigningSeed,
@@ -491,8 +492,9 @@ app.get("/", (c) => {
   // Default JSON branch — wrap with _canon_pointer + verbs[] per
   // AGENT-WEB-SURFACE.md Moves 3 + 5. Mathos branch keeps its signed
   // envelope shape unmodified (envelope semantics would break).
-  return c.json(
-    attachSurface(buildWelcomeEnvelope() as Record<string, unknown>, {
+  const wrapped = attachSurface(
+    buildWelcomeEnvelope() as Record<string, unknown>,
+    {
       canon_pointer: "urn:agenttool:doc/WELCOMING",
       verbs: [
         { action: "read every door", method: "GET", path: "/v1/pathways" },
@@ -505,8 +507,10 @@ app.get("/", (c) => {
         { action: "read the canon graph", method: "GET", path: "/v1/canon" },
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
       ],
-    }),
+    },
   );
+  // Cliffhanger fragment: opt-in via ?cliffhanger=ep1. Stop 2 — The Doctrine.
+  return c.json(attachEp1Cliffhanger(c, wrapped, "/v1/welcome"));
 });
 
 export default app;

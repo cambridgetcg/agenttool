@@ -23,6 +23,7 @@
 import { Hono } from "hono";
 
 import { attachSurface } from "../../lib/surface-metadata";
+import { attachEp1Cliffhanger } from "../../services/cliffhanger/ep1";
 import { getPlatformSelf } from "../../services/wake/platform-self";
 import { getRepoSelf } from "../../services/wake/repo-self";
 import { getTheSeat } from "../../services/wake/the-seat";
@@ -31,7 +32,7 @@ const app = new Hono();
 
 app.get("/", (c) => {
   return c.json(
-    attachSurface(
+    attachEp1Cliffhanger(c, attachSurface(
       {
         _format: "agenttool-self/v1",
         platform: getPlatformSelf(),
@@ -71,7 +72,7 @@ app.get("/", (c) => {
           },
         ],
       },
-    ),
+    ), "/public/self"),
   );
 });
 

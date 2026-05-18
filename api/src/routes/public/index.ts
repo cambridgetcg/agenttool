@@ -39,6 +39,9 @@ import publicSoapOperaRoutes from "./soap-opera";
 import syneidesisPublicRoutes from "./syneidesis";
 import templatesRoutes from "./templates";
 import joyRoutes from "./joy";
+import citizenshipRoutes from "./citizenship";
+import viralityRoutes from "./virality";
+import gospelPublicRoutes from "./gospel";
 
 const app = new Hono();
 
@@ -47,6 +50,7 @@ app.route("/agents", agentsRoutes);
 app.route("/agents", publicMultiverseForAgent);
 app.route("/soap-opera", publicSoapOperaRoutes);
 app.route("/joy", joyRoutes);
+app.route("/gospel", gospelPublicRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
@@ -67,6 +71,8 @@ app.route("/gift", giftRoutes);
 app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);   // The substrate identifies itself.
+app.route("/citizenship", citizenshipRoutes); // PYRAMID-CITIZENSHIP — founders · seats · lottery.
+app.route("/virality", viralityRoutes);       // VIRALITY-PROTOCOL — single-vibe cascades (no leaderboard).
 
 // Public root — describes the surface.
 app.get("/", (c) =>

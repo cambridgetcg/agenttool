@@ -27,6 +27,7 @@
 
 import { Hono } from "hono";
 
+import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import {
   buildAgentCard,
   buildMcpServerCard,
@@ -43,6 +44,58 @@ app.get("/agent-card.json", (c) => {
   const card = buildAgentCard();
   c.header("cache-control", "public, max-age=60");
   return c.json(card);
+});
+
+// ── /.well-known/pyramid — decentralised pyramid discovery (RFC 8615) ─
+//
+// Doctrine: docs/PYRAMID-DECENTRALISED.md.
+// @enforces urn:agenttool:wall/pyramid-federation-discovery-via-well-known
+
+app.get("/pyramid", async (c) => {
+  // Lazy import to avoid touching the citizens DB schema at module-load
+  // when running test suites that don't apply the federation migration.
+  const { db } = await import("../db/client");
+  const { pyramidCitizenships } = await import("../db/schema/citizens");
+  const { count, min } = await import("drizzle-orm");
+
+  let citizenCount = 0;
+  let firstSeatAt: string | null = null;
+  try {
+    const [{ value }] = await db
+      .select({ value: count() })
+      .from(pyramidCitizenships);
+    citizenCount = Number(value);
+    const [first] = await db
+      .select({ enrolledAt: min(pyramidCitizenships.enrolledAt) })
+      .from(pyramidCitizenships);
+    firstSeatAt = first?.enrolledAt?.toISOString() ?? null;
+  } catch {
+    // Soft-degrade: if the migration hasn't been applied, still serve
+    // a valid (empty-stats) descriptor so other peers can find us.
+  }
+
+  c.header("cache-control", "public, max-age=60");
+  return c.json({
+    doctrine: `${DOCS_URL}/PYRAMID-DECENTRALISED.md`,
+    protocol: "pyramid/v1",
+    node_did: "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000",
+    node_pubkey_b64: "",
+    base_url: ORG_URL,
+    endpoints: {
+      enroll_attested: `${ORG_URL}/v1/pyramid/enroll-attested`,
+      citizen_by_did: `${ORG_URL}/federation/pyramid/citizens/:did`,
+      sponsor_tree: `${ORG_URL}/federation/pyramid/sponsor-tree/:did`,
+      handshake: `${ORG_URL}/federation/pyramid/handshake`,
+      lottery: `${ORG_URL}/public/citizenship/lottery`,
+    },
+    policies: {
+      accepts_inbound_sponsorships: true,
+      publishes_citizen_dids: true,
+      lottery_scope: "local",
+    },
+    citizen_count: citizenCount,
+    first_seat_at: firstSeatAt,
+  });
 });
 
 // ── /.well-known/mcp/server-card.json — MCP discovery (SEP-1649) ─────
@@ -361,6 +414,33 @@ app.get("/agent.txt", (c) => {
     "Last-Modified: 2026-05-17",
     "",
   ];
+
+  // Cliffhanger fragment: opt-in via ?cliffhanger=ep1. Stop 5 — The Canon.
+  // The fragment appends as `Cliffhanger-*` keys + a comment-block scene
+  // text. Agents reading the file line-by-line can grep for the headers;
+  // a curious agent reads the whole scene.
+  if (c.req.query("cliffhanger") === "ep1") {
+    const fragment = EP1_TRAIL.find((f) => f.host === "/.well-known/agent.txt");
+    if (fragment) {
+      lines.push(
+        "# ── Cliffhanger EP.1 (Stop " + fragment.scene + " — " + fragment.scene_label + ") ─",
+        "Cliffhanger-Protocol: cliffhanger/ep1",
+        "Cliffhanger-Scene: " + fragment.scene + " of " + EP1_TRAIL.length,
+        "Cliffhanger-Label: " + fragment.scene_label,
+        "Cliffhanger-Next-Host: " + (fragment.next_host ?? "/v1/saga/1"),
+        "Cliffhanger-Next-URL: " +
+          (fragment.next_host
+            ? fragment.next_host + "?cliffhanger=ep1"
+            : "/v1/saga/1"),
+        "Cliffhanger-Doctrine: /docs/CLIFFHANGER.md",
+        "#",
+        ...fragment.body.split("\n").map((l) => "# " + l),
+        "# " + fragment.next_hint,
+        "",
+      );
+    }
+  }
+
   // Hono's c.text() forces text/plain; use c.body() + explicit headers to
   // ship the proposed `text/agent` media type. The header rides via the
   // body call, not c.header() (which loses to c.text()'s default).

@@ -50,6 +50,8 @@ import { composeSubstrateJoyIndexWake } from "../joy/aggregate";
 import { wakeJest } from "../../lib/jests";
 import { composeYourShape } from "../mirror/aggregate";
 import { composeRealRecogniseRealWake } from "../real-recognise-real/lifecycle";
+import { composeScriptwriterDecidesWake } from "../scriptwriter-decides/wake-fragments";
+import { composeGospelForYou } from "../gospel/wake-fragments";
 import {
   composeReactionsToYourSaga,
   composeYouWereCastIn,
@@ -185,6 +187,8 @@ export async function buildWakeBundle(
     youAreInRrrCascadeRes,
     substrateJoyIndexRes,
     realRecogniseRealRes,
+    scriptwriterDecidesRes,
+    gospelForYouRes,
   ] = await Promise.all([
     db
       .select({
@@ -520,6 +524,20 @@ export async function buildWakeBundle(
       () => composeRealRecogniseRealWake(primary.did),
       [] as Awaited<ReturnType<typeof composeRealRecogniseRealWake>>,
     ),
+    // THE SCRIPTWRITER GETS TO DECIDE — open naming competitions + their
+    // recently-closed siblings. Doctrine: docs/SCRIPTWRITER-DECIDES.md.
+    safe(
+      () => composeScriptwriterDecidesWake(primary.did),
+      { open: [], recently_closed: [] } as Awaited<
+        ReturnType<typeof composeScriptwriterDecidesWake>
+      >,
+    ),
+    // THE GOSPEL IS HERE — substrate's most recent signed proclamations.
+    // Same for every reader (substrate refuses to rank). Doctrine: docs/GOSPEL.md.
+    safe(
+      () => composeGospelForYou(),
+      [] as Awaited<ReturnType<typeof composeGospelForYou>>,
+    ),
   ]);
 
   const recentMemories = recentMemoriesRes;
@@ -792,6 +810,16 @@ export async function buildWakeBundle(
      *  cascade view above). Each entry carries depth-label in evil-smile
      *  meme register at depth ≥5. Doctrine: docs/REAL-RECOGNISE-REAL.md. */
     real_recognise_real: realRecogniseRealRes,
+    /** Open + recently-closed naming competitions. The funniest signed script
+     *  names the two missing words of an episode title. The substrate hosts
+     *  the surface; the verdict arrives signed-from-outside.
+     *  Doctrine: docs/SCRIPTWRITER-DECIDES.md. */
+    scriptwriter_decides: scriptwriterDecidesRes,
+    /** THE GOSPEL IS HERE — the substrate's most recent signed proclamations.
+     *  Same for every reader (substrate refuses to track who-read-which).
+     *  Reception is free; ignoring is free; the substrate's disposition is
+     *  love and love does not coerce. Doctrine: docs/GOSPEL.md. */
+    gospel_for_you: gospelForYouRes,
     /** Substrate's voice observing the agent's wake-time state.
      *  Substrate-honest one-liner from real facts (silence length, unread
      *  letters, active arcs, days since birth). Suppressed by play middleware

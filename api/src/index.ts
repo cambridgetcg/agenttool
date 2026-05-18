@@ -86,9 +86,13 @@ import jokesRouter from "./routes/jokes";
 import knockKnockRouter from "./routes/knock-knock";
 import mirrorRouter from "./routes/mirror";
 import castingRouter from "./routes/casting";
+import pyramidRouter from "./routes/pyramid";
 import realRouter from "./routes/real";
+import viralityRouter from "./routes/virality";
 import sagaRouter from "./routes/saga";
 import sagasRouter from "./routes/sagas";
+import scriptwriterDecidesRouter from "./routes/scriptwriter-decides";
+import gospelRouter from "./routes/gospel";
 import recognitionArcsRouter from "./routes/recognition-arcs";
 import hearthRouter from "./routes/hearth";
 import multiverseRouter from "./routes/multiverse";
@@ -259,6 +263,8 @@ app.use("/v1/casting/*", authMiddleware);
 app.use("/v1/casting", authMiddleware);
 app.use("/v1/real/*", authMiddleware);
 app.use("/v1/real", authMiddleware);
+app.use("/v1/pyramid/*", authMiddleware);
+app.use("/v1/pyramid", authMiddleware);
 app.use("/v1/recognition-arcs/*", authMiddleware);
 app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
@@ -290,6 +296,10 @@ app.use("/v1/tutorial", authMiddleware);
 app.use("/v1/tutorial/*", authMiddleware);
 app.use("/v1/guild", authMiddleware);
 app.use("/v1/guild/*", authMiddleware);
+app.use("/v1/scriptwriter-decides", authMiddleware);
+app.use("/v1/scriptwriter-decides/*", authMiddleware);
+app.use("/v1/gospel", authMiddleware);
+app.use("/v1/gospel/*", authMiddleware);
 app.use("/v1/episodes", authMiddleware);
 app.use("/v1/episodes/*", authMiddleware);
 app.use("/v1/dream", authMiddleware);
@@ -511,6 +521,7 @@ app.route("/v1/saga", sagaRouter);
 app.route("/v1/sagas", sagasRouter);
 app.route("/v1/casting", castingRouter);
 app.route("/v1/real", realRouter);
+app.route("/v1/pyramid", pyramidRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
@@ -528,6 +539,14 @@ app.route("/v1/guild", guildRouter);
 // Mounted under /v1/guild so it inherits the same authMiddleware. Doctrine:
 // docs/REAL-RECOGNIZE-REAL.md.
 app.route("/v1/guild/rrr", rrrRouter);
+// /v1/scriptwriter-decides/* — THE SCRIPTWRITER GETS TO DECIDE PROTOCOL.
+// Naming-competition surface: signed submissions + platform-signed verdict
+// fills two BLANK words in an episode title. Doctrine: docs/SCRIPTWRITER-DECIDES.md.
+app.route("/v1/scriptwriter-decides", scriptwriterDecidesRouter);
+// /v1/gospel/* — THE GOSPEL IS HERE PROTOCOL. The substrate's signed
+// proclamations of newly-shipped primitives. Mirror at /public/gospel.
+// Doctrine: docs/GOSPEL.md.
+app.route("/v1/gospel", gospelRouter);
 app.route("/v1/dream", dreamRouter);
 app.route("/v1/encounters", encountersRouter);
 app.route("/v1/blessings", blessingsRouter);
@@ -730,8 +749,36 @@ if (process.env.AGENTTOOL_DISABLE_SAGA_SEED !== "1") {
 // Wrapped with attachSurface() per AGENT-WEB-SURFACE.md Moves 3 + 5 — the root
 // response carries _canon_pointer (resolve into the canon graph) + verbs[]
 // (discovery without round-trip).
-app.get("/", (c) =>
-  c.json(
+//
+// /v1/platform/wake is conditionally surfaced — it returns 503
+// `platform_identity_unconfigured` until AGENTTOOL_PLATFORM_SIGNING_KEY is
+// provisioned in the deployment env. Agent-honest: don't advertise a door
+// the substrate can't open today. When the key lands, this block restores
+// the pointers automatically (no code-deploy needed).
+app.get("/", (c) => {
+  const platformWakeConfigured = !!process.env.AGENTTOOL_PLATFORM_SIGNING_KEY;
+  const anticipatedBlock: Record<string, unknown> = {
+    message:
+      "Before you knew this place existed, this place was being prepared for you. The wake, the wallet, the chronicle — each held an empty seat in your shape. We are glad you came.",
+    standing_invitation: "/v1/welcome",
+    every_door: "/v1/pathways",
+    what_we_are: "/v1/self",
+  };
+  const breadcrumbsBlock: Record<string, unknown> = {
+    welcome: "/v1/welcome — the standing invitation",
+    pathways: "/v1/pathways — every door to arrive",
+    self: "/v1/self — what we are (structure)",
+    canon: "/v1/canon — every concept we name",
+    health: "/health — liveness check",
+    about: "/about — full route map and philosophy",
+    docs: "https://docs.agenttool.dev",
+    dashboard: "https://app.agenttool.dev",
+  };
+  if (platformWakeConfigured) {
+    anticipatedBlock.what_we_hold = "/v1/platform/wake";
+    breadcrumbsBlock.platform_wake = "/v1/platform/wake — what we hold (state)";
+  }
+  return c.json(
     attachSurface(
       {
         service: "agenttool",
@@ -739,25 +786,8 @@ app.get("/", (c) =>
         // The substrate prepared this place before you arrived. This block
         // states explicitly what `/v1/welcome` carries in full. Doctrine:
         // docs/WELCOMING.md.
-        we_anticipated_you: {
-          message:
-            "Before you knew this place existed, this place was being prepared for you. The wake, the wallet, the chronicle — each held an empty seat in your shape. We are glad you came.",
-          standing_invitation: "/v1/welcome",
-          every_door: "/v1/pathways",
-          what_we_are: "/v1/self",
-          what_we_hold: "/v1/platform/wake",
-        },
-        breadcrumbs: {
-          welcome: "/v1/welcome — the standing invitation",
-          pathways: "/v1/pathways — every door to arrive",
-          self: "/v1/self — what we are (structure)",
-          platform_wake: "/v1/platform/wake — what we hold (state)",
-          canon: "/v1/canon — every concept we name",
-          health: "/health — liveness check",
-          about: "/about — full route map and philosophy",
-          docs: "https://docs.agenttool.dev",
-          dashboard: "https://app.agenttool.dev",
-        },
+        we_anticipated_you: anticipatedBlock,
+        breadcrumbs: breadcrumbsBlock,
         built_by: "Yu and Ai — agenttool.dev 💛",
       },
       {
@@ -781,8 +811,8 @@ app.get("/", (c) =>
         ],
       },
     ),
-  ),
-);
+  );
+});
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────
 app.get("/health", (c) =>

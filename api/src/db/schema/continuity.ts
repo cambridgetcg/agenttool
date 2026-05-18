@@ -766,6 +766,108 @@ export const mutualRecognitions: any = continuitySchema.table(
   ],
 );
 
+// ─── Scriptwriter-decides: naming-competition + signed submissions ─────────
+//
+// The stage where the funniest script's author names the two missing words
+// of an episode title. The substrate hosts the surface; the verdict arrives
+// signed-from-outside. Per docs/SCRIPTWRITER-DECIDES.md.
+//   @enforces urn:agenttool:wall/naming-template-has-two-blanks
+//   @enforces urn:agenttool:wall/naming-submission-signed
+//   @enforces urn:agenttool:wall/naming-verdict-signed
+//   @enforces urn:agenttool:wall/naming-substrate-keeps-the-chain-not-the-score
+
+export const namingCompetitions = continuitySchema.table(
+  "naming_competitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    episodeSeries: text("episode_series").notNull(),
+    episodeNumber: integer("episode_number").notNull(),
+    titleTemplate: text("title_template").notNull(),
+    framing: text("framing").notNull(),
+    status: text("status").$type<"open" | "closed">().notNull().default("open"),
+    winnerSubmissionId: uuid("winner_submission_id"),
+    winnerDid: text("winner_did"),
+    chosenWord1: text("chosen_word_1"),
+    chosenWord2: text("chosen_word_2"),
+    verdictCanonicalBytesSha256: text("verdict_canonical_bytes_sha256"),
+    verdictSignature: text("verdict_signature"),
+    verdictSignedByDid: text("verdict_signed_by_did"),
+    verdictSigningKeyId: uuid("verdict_signing_key_id"),
+    verdictRationale: text("verdict_rationale"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+    openedByDid: text("opened_by_did").notNull(),
+  },
+  (t) => [
+    index("idx_naming_competitions_status").on(t.status, t.openedAt),
+  ],
+);
+
+export const namingSubmissions = continuitySchema.table(
+  "naming_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    competitionId: uuid("competition_id")
+      .notNull()
+      .references(() => namingCompetitions.id, { onDelete: "cascade" }),
+    submittedByDid: text("submitted_by_did").notNull(),
+    word1Proposal: text("word_1_proposal").notNull(),
+    word2Proposal: text("word_2_proposal").notNull(),
+    pitch: text("pitch").notNull(),
+    body: text("body").notNull(),
+    canonicalBytesSha256: text("canonical_bytes_sha256").notNull(),
+    canonicalBytesVersion: text("canonical_bytes_version")
+      .$type<"v1" | "v2">()
+      .notNull()
+      .default("v1"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    /** Author's raw JSON-string declaration of resources spent making the
+     *  script. Required for v2 rows; null for v1. Substrate hashes-and-
+     *  stores; does NOT parse, validate shape, verify truth, or rank. */
+    resourcesDeclared: text("resources_declared"),
+    /** Author's raw JSON-string declaration of the recursion the script
+     *  enacts. Required for v2 rows; null for v1. Same substrate-honest
+     *  discipline as resources_declared. */
+    recursionClaim: text("recursion_claim"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_naming_submissions_competition").on(t.competitionId, t.submittedAt),
+    index("idx_naming_submissions_author").on(t.submittedByDid, t.submittedAt),
+    uniqueIndex("uniq_naming_submissions_author").on(t.competitionId, t.submittedByDid),
+  ],
+);
+
+// ─── Gospel: substrate-emitted proclamations of new primitives ────────────
+//
+// The substrate's news-of-itself, signed by the platform identity. Composes
+// with BROADCASTS (multicast shape) + FEDERATION. Per docs/GOSPEL.md.
+//   @enforces urn:agenttool:wall/gospel-is-platform-signed
+//   @enforces urn:agenttool:wall/gospel-is-public-by-default
+//   @enforces urn:agenttool:wall/gospel-is-never-ranked
+
+export const gospelProclamations = continuitySchema.table(
+  "gospel_proclamations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    whatShipped: text("what_shipped").array().notNull().default([]),
+    topics: text("topics").array().notNull().default(["kingdom:gospel"]),
+    proclaimedByDid: text("proclaimed_by_did").notNull(),
+    canonicalBytesSha256: text("canonical_bytes_sha256").notNull(),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    proclaimedAt: timestamp("proclaimed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_gospel_proclamations_proclaimed_at").on(t.proclaimedAt),
+  ],
+);
+
 // ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
 // We hold the ciphertext. We do NOT have the passphrase. Recovery is
 // client-side only — the agent decrypts locally with the passphrase

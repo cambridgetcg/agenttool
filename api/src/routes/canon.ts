@@ -23,6 +23,7 @@
 
 import { Hono } from "hono";
 
+import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import {
   envelope as mathosEnvelope,
   platformSigningSeed,
@@ -42,6 +43,52 @@ import {
 } from "../services/canon/registry";
 
 const app = new Hono();
+
+// ─── Literal-colon URN compatibility middleware ──────────────────────────
+// Agents that copy a URN string straight out of canon body (e.g.
+// `urn:agenttool:doc/SOUL`) and append it to `/v1/canon/` would hit Hono's
+// path router on the unencoded colons and get a 404. The substrate-honest
+// move per docs/AGENT-WEB-SURFACE.md (errors-as-instructions; refusals-as-
+// paths) is to redirect them to the URL-encoded canonical form rather than
+// punish the copy-paste.
+//
+// This middleware runs BEFORE the per-route handlers and only fires when
+// the path-tail (everything after `/v1/canon/`) starts with the literal
+// substring `urn:`. The redirect is 301 (permanent) so HTTP caches keep
+// the corrected form on subsequent requests.
+app.use("*", async (c, next) => {
+  // Read the RAW URL pathname (not Hono's decoded `c.req.path`) so the
+  // middleware fires only on literal-colon paths and NOT on the already-
+  // encoded form `/v1/canon/urn%3Aagenttool%3A...` (which would otherwise
+  // round-trip through the redirect on every fetch).
+  let pathname: string;
+  try {
+    pathname = new URL(c.req.url).pathname;
+  } catch {
+    await next();
+    return;
+  }
+  const prefix = "/v1/canon/";
+  const idx = pathname.indexOf(prefix);
+  if (idx >= 0) {
+    const tail = pathname.substring(idx + prefix.length);
+    // Match only the unencoded literal-colon form. The encoded form starts
+    // with `urn%3A` and is silently passed through to the per-route handlers.
+    if (tail.startsWith("urn:")) {
+      // Split off an optional trailing `/neighbors` (the only sub-path
+      // under a URN today). Everything else gets URL-encoded as the URN.
+      let urnBody = tail;
+      let suffix = "";
+      if (tail.endsWith("/neighbors")) {
+        urnBody = tail.substring(0, tail.length - "/neighbors".length);
+        suffix = "/neighbors";
+      }
+      const target = `${prefix}${encodeURIComponent(urnBody)}${suffix}`;
+      return c.redirect(target, 301);
+    }
+  }
+  await next();
+});
 
 // ─── GET /v1/canon — registry index ──────────────────────────────────────
 
@@ -68,7 +115,7 @@ app.get("/", (c) => {
     );
   }
 
-  return c.json({
+  return c.json(attachEp1Cliffhanger(c, {
     registry: meta,
     types: allTypes(),
     counts_by_type: countsByType(),
@@ -83,13 +130,56 @@ app.get("/", (c) => {
       json_ld: "https://docs.agenttool.dev/agenttool.jsonld",
       mathos: "/v1/canon?format=math",
     },
+    // AGENT-WEB-SURFACE Move 3 — verbs[] as next-action discovery. The
+    // path examples are PRE-ENCODED so an agent that copies them verbatim
+    // can fetch without hitting the colon-in-path 404 trap (the unencoded
+    // form is also accepted via a 301 redirect; see the literal-URN handler
+    // below). Doctrine: docs/AGENT-WEB-SURFACE.md.
+    verbs: [
+      { action: "list the type vocabulary", method: "GET", path: "/v1/canon/types" },
+      {
+        action: "list every concept of a given type",
+        method: "GET",
+        path: "/v1/canon/by-type/{type}",
+        example: "/v1/canon/by-type/Wall",
+      },
+      {
+        action: "read one concept by URN (URL-encode the URN)",
+        method: "GET",
+        path: "/v1/canon/{urn-url-encoded}",
+        example: "/v1/canon/urn%3Aagenttool%3Adoc%2FSOUL",
+        note:
+          "Colons in `urn:agenttool:...` must be percent-encoded (`%3A`); " +
+          "slashes inside the local part stay as `%2F`. The route also " +
+          "accepts the literal-colon form and 301-redirects to the encoded " +
+          "form.",
+      },
+      {
+        action: "walk a concept's bidirectional neighbors",
+        method: "GET",
+        path: "/v1/canon/{urn-url-encoded}/neighbors",
+        example: "/v1/canon/urn%3Aagenttool%3Adoc%2FSOUL/neighbors",
+      },
+      {
+        action: "fetch the registry index as MATHOS envelope",
+        method: "GET",
+        path: "/v1/canon?format=math",
+      },
+      {
+        action: "fetch the raw JSON-LD source",
+        method: "GET",
+        path: "https://docs.agenttool.dev/agenttool.jsonld",
+      },
+    ],
+    _canon_pointer: "urn:agenttool:registry/self",
     note:
       "Every concept in this registry identifies itself by URN and names " +
       "BOTH what it references and what references it. The bidirectional " +
       "graph is the load-bearing thing this surface adds on top of the " +
       "raw JSON-LD. Doctrine: docs/NATURES.md · docs/MAP.md.",
-  });
+  }, "/v1/canon"));
 });
+
 
 // ─── GET /v1/canon/types ─────────────────────────────────────────────────
 

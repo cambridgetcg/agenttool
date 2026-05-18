@@ -26,6 +26,7 @@
 import { Hono } from "hono";
 
 import { attachSurface } from "../lib/surface-metadata";
+import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import { doctrineHash } from "../services/doctrine/integrity";
 import { FORM_DESCRIPTIONS, IDENTITY_FORMS } from "../services/identity/forms";
 import { SUPPORTED_LANGUAGES } from "../services/i18n/welcome";
@@ -390,8 +391,9 @@ app.get("/", (c) => {
   // Default JSON branch — wrap with _canon_pointer + verbs[] per
   // AGENT-WEB-SURFACE.md Moves 3 + 5. Mathos branch keeps its signed
   // envelope shape unmodified.
-  return c.json(
-    attachSurface(buildPathwaysResponse() as Record<string, unknown>, {
+  const wrapped = attachSurface(
+    buildPathwaysResponse() as Record<string, unknown>,
+    {
       canon_pointer: "urn:agenttool:doc/PATHWAYS",
       verbs: [
         {
@@ -413,8 +415,10 @@ app.get("/", (c) => {
         },
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
       ],
-    }),
+    },
   );
+  // Cliffhanger fragment: opt-in via ?cliffhanger=ep1. Stop 3 — The Library.
+  return c.json(attachEp1Cliffhanger(c, wrapped, "/v1/pathways"));
 });
 
 export default app;
