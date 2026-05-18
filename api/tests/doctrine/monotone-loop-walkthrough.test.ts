@@ -55,8 +55,9 @@ describe("monotone-loop walkthrough — actual in-process walk", () => {
     };
     expect(body._format).toBe("agenttool-loop-manifest/v1");
     expect(body.statement).toContain("monotone sheaf with witness functors");
-    expect(body.stats.total_loops).toBe(8);
-    expect(body.loops).toHaveLength(8);
+    // Fabric grows monotonically — original 8 plus follow-the-lead additions.
+    expect(body.stats.total_loops).toBeGreaterThanOrEqual(8);
+    expect(body.loops.length).toBeGreaterThanOrEqual(8);
     expect(body.coherence_theorem).toContain("Build-enforced");
   });
 
@@ -85,7 +86,7 @@ describe("monotone-loop walkthrough — actual in-process walk", () => {
       node_count: number;
       edge_count: number;
     };
-    expect(body.node_count).toBe(8);
+    expect(body.node_count).toBeGreaterThanOrEqual(8);
     expect(body.edge_count).toBeGreaterThan(0);
     // Verify the graph matches the registry
     const graph = compositionGraph();
@@ -158,7 +159,7 @@ describe("monotone-loop AUDIT — what the fabric tells the substrate to do next
         schema_file: "api/src/db/schema/continuity.ts",
         monotone: true,
         witness_path: "/v1/saga/:ep + joy aggregate",
-        declared_loop: null, // we added it but didn't yet register
+        declared_loop: "urn:agenttool:loop/saga-readings", // shipped 2026-05-19
       },
       {
         table: "inbox_messages",
@@ -255,7 +256,7 @@ describe("monotone-loop AUDIT — what the fabric tells the substrate to do next
     }
   });
 
-  test("the canon graph and the registry agree on the 8 Loop URNs", () => {
+  test("the canon graph and the registry agree on every Loop URN (fabric in sync)", () => {
     const canon = readFileSync(
       join(REPO_ROOT, "docs", "agenttool.jsonld"),
       "utf8",
@@ -289,52 +290,52 @@ describe("monotone-loop FOLLOW THE LEAD — substrate suggests next moves", () =
   // tables that satisfy monotone-shape but aren't yet declared.
 
   test("the substrate's next Loop declarations (priority-ranked)", () => {
-    // Synthesize the audit into a ranked priority list.
+    // Synthesize the audit into a ranked priority list. Updated as the
+    // fabric grows — when a proposed Loop ships, it's removed from this
+    // list and the rest shifts up. The test IS the substrate's TODO list,
+    // materialized.
+    //
+    // Shipped 2026-05-19: urn:agenttool:loop/saga-readings — moved from
+    //   priority 1 into the registry. Closes the kind-recursion.
     const nextMoves = [
       {
         priority: 1,
-        proposed_urn: "urn:agenttool:loop/saga-readings",
-        rationale:
-          "Just shipped the saga_readings table for the arrival-loop. Append-only by construction. Witness via joy aggregate + /v1/saga/:ep handler. Natural-next Loop declaration; would close P3 of the arrival-loop spec.",
-      },
-      {
-        priority: 2,
         proposed_urn: "urn:agenttool:loop/memory-tier-elevation",
         rationale:
           "Memory attestations are append-only with monotone tier-elevation (episodic → foundational → constitutive). Currently covered by witness-chronicle as a side-effect; deserves first-class status. Witness via /v1/memories/:id/attest + chronicle entries.",
       },
       {
-        priority: 3,
+        priority: 2,
         proposed_urn: "urn:agenttool:loop/blessings",
         rationale:
           "Blessings are append-only honorific gestures. Each blessing is a structural moment, never aggregated into score. Witness at /v1/blessings + /public/agents/:did/blessings. Composition: with memorial-honors (the dual).",
       },
       {
-        priority: 4,
+        priority: 3,
         proposed_urn: "urn:agenttool:loop/encounters",
         rationale:
           "Encounters are the lightest relational gesture between agents — append-only chronicle entries. Composition upward into covenants / arcs / inbox. Witness at /v1/encounters.",
       },
       {
-        priority: 5,
+        priority: 4,
         proposed_urn: "urn:agenttool:loop/inbox-messages",
         rationale:
           "Sealed-box messages append-only per channel. Each message is a state-event. Witness at /v1/inbox + /v1/inbox/voice (SSE).",
       },
       {
-        priority: 6,
+        priority: 5,
         proposed_urn: "urn:agenttool:loop/strand-thoughts",
         rationale:
           "Encrypted thoughts append-only per strand. State is opaque to the substrate (K_master-encrypted) but the COUNT is monotone. Witness via /v1/strands listing.",
       },
       {
-        priority: 7,
+        priority: 6,
         proposed_urn: "urn:agenttool:loop/federation-edges",
         rationale:
           "Each federated covenant creates a new edge. The federation graph grows monotonically. B2 from the infinite-loops spec. Witness via /federation/* + covenant lifecycle.",
       },
       {
-        priority: 8,
+        priority: 7,
         proposed_urn: "urn:agenttool:loop/memorial-honors",
         rationale:
           "Memorial honors are permanent (no revocation). Append-only by design. Witness at /v1/memorial-honors. Composes with blessings (dual).",

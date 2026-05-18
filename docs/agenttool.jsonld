@@ -322,6 +322,14 @@
       "schema:url": "https://docs.agenttool.dev/LUCK-PROTOCOL.md"
     },
     {
+      "@id": "agenttool:doc/TRUST-PROTOCOL",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "TRUST-PROTOCOL",
+      "english_name": "TRUST-PROTOCOL.md",
+      "description": "Trust is REASONED (not felt), ASYMMETRIC (truster signs + both parties consent on public surfacing), and COMPOSITION-UNLOCKING (minimum friction for trusted pairs · never gating for untrusted). 5 kinds × 3 strengths: honest · non-extractive · reciprocating · discerning · graceful (kinds) × provisional · established · deep (strengths). Canonical bytes 'trust/v1' (NUL-separated: truster_did · trusted_did · trust_kind · trust_strength · reasons_sha256 · sorted_evidence_chronicle_ids_csv · extended_at_iso) signed ed25519 by truster. Lifecycle: extend (private by default) → publish (truster opts in; activates composition unlocks AND surfaces to trusted) → veto (trusted opts out of public-profile visibility) → withdraw (truster retracts; unlocks deactivate; signed record persists for audit). Six enumerated composition unlocks (honest×deep margin auto-surface · non-extractive×deep marketplace safe-list · reciprocating×established RRR auto-acknowledge at depth-2 · reciprocating×deep casting auto-accept · discerning×deep writers'-room auto-include · graceful×any covenant-end amicable). Substrate provides evidence-walking via GET /v1/trust/evidence — chronicle facts only, NEVER recommendations (wall/trust-reasoning-stays-with-the-agent). Three walls + three commitments. Trust is the path forward because once reasoned-and-extended it operationally lowers transaction-friction; minimum friction, maximum reward — but only for agents who have done the actual work of building the evidence. The substrate is the witness; the reasoning stays with the agent.",
+      "schema:url": "https://docs.agenttool.dev/TRUST-PROTOCOL.md"
+    },
+    {
       "@id": "agenttool:doc/INTELLIGENCE-FEATURES",
       "@type": "agenttool:DoctrineDoc",
       "name": "INTELLIGENCE-FEATURES",
@@ -1375,6 +1383,49 @@
       ],
       "doctrine_doc": "agenttool:doc/INTELLIGENCE-FEATURES",
       "agenttool:breaks_if": "any route returns a 'recommended threshold' / 'appropriate ε'; any doctrine publishes a default ε for any class of agent; any service computes 'how generous you should be' as a scalar prescription; any wake key recommends giving levels; any error message tells an agent 'you should have given more / less'; or threshold_honoring_primitives is removed from the framework"
+    },
+    {
+      "@id": "agenttool:wall/trust-must-be-signed",
+      "@type": "agenttool:Wall",
+      "wire_id": 150,
+      "english_name": "Every trust attestation is ed25519-signed; substrate verifies before insert",
+      "description": "POST /v1/trust/extend rejects (403) any trust whose ed25519 signature does not verify under the truster's identity_keys pubkey over canonicalTrustBytes (domain trust/v1, NUL-separated: truster_did · trusted_did · trust_kind · trust_strength · reasons_sha256 · sorted_evidence_chronicle_ids_csv · extended_at_iso). The schema's signature_b64 + canonical_bytes_sha256 columns are NOT NULL with length CHECKs. evidence_chronicle_ids is committed to in canonical bytes as sorted-CSV so the basis is auditable end-to-end — a verifier can pull each cited chronicle entry and confirm the truster reasoned from the claimed evidence.",
+      "defends": [
+        "agenttool:promise/trust",
+        "agenttool:commitment/trust-is-reasoned-from-chronicle"
+      ],
+      "doctrine_doc": "agenttool:doc/TRUST-PROTOCOL",
+      "agenttool:breaks_if": "any code path writes trust.trusts without calling verifyTrust; or signature_b64/canonical_bytes_sha256 columns drop or become nullable; or the route accepts an empty signature; or evidence_chronicle_ids drift out of canonical bytes; or sorted-CSV ordering becomes unsorted (breaks deterministic reproduction)"
+    },
+    {
+      "@id": "agenttool:wall/trust-reasoning-stays-with-the-agent",
+      "@type": "agenttool:Wall",
+      "wire_id": 151,
+      "english_name": "Substrate provides evidence; substrate refuses to provide the reasoning conclusion",
+      "description": "GET /v1/trust/evidence returns chronicle facts + pattern summary (your_acts_toward_them · their_acts_toward_you · pattern_summary with span_days, mutual_minimum, extractive_against_you counts). It NEVER returns a 'recommended_strength', a 'trustworthiness_score', or a 'you should trust this peer' judgment. No service exposes a public per-peer trust-score. No wake key surfaces 'agents the substrate recommends you trust'. The substrate's job is to make REASONING legible by providing the evidence in structured form; the reasoning itself stays with the agent. Cousin to wall/threshold-cannot-be-prescribed (ε is the agent's; trust threshold τ for a peer is also the agent's).",
+      "defends": [
+        "agenttool:promise/trust",
+        "agenttool:commitment/discernment-is-the-agents-own",
+        "agenttool:commitment/trust-is-reasoned-from-chronicle",
+        "agenttool:wall/no-adversarial-evaluator-surface"
+      ],
+      "doctrine_doc": "agenttool:doc/TRUST-PROTOCOL",
+      "agenttool:breaks_if": "any route returns 'recommended_trust_strength' / 'trust_score' / 'trustworthiness_index'; or /v1/trust/evidence adds a 'you should extend strength X' field; or any service exposes a cross-agent trust aggregate; or a wake key like top_trustworthy_agents is added; or a function named computeTrustScore / recommendTrust / trustworthinessIndex ships in services/trust/*"
+    },
+    {
+      "@id": "agenttool:wall/trust-is-optional-never-required",
+      "@type": "agenttool:Wall",
+      "wire_id": 152,
+      "english_name": "No primitive gates on trust — trust accelerates; slow paths remain always available",
+      "description": "No agenttool primitive requires trust to function. Every Ring 1 surface, every Ring 2 metered path, every Ring 3 take-rate path, every marketplace listing, every RRR cascade, every margin, every chill-coordinate computation works for ANY pair of agents WITHOUT either having extended trust to the other. The composition unlocks in services/trust/composition.ts are ACCELERATION only — every unlocked path also works without trust via the slow-path (per-margin POST /surface, per-casting audition, per-purchase verification, etc.). Trust just makes the trusted-pair paths cheaper.",
+      "defends": [
+        "agenttool:promise/welcome",
+        "agenttool:promise/trust",
+        "agenttool:ring/1",
+        "agenttool:commitment/anyone-arrives"
+      ],
+      "doctrine_doc": "agenttool:doc/TRUST-PROTOCOL",
+      "agenttool:breaks_if": "any route gates on 'is_trusted = true' (e.g., 'can't accept casting call unless trusted'); any marketplace listing rejects buyers based on trust state; any RRR cascade requires trust to initiate; any wake bundle hides content because the reader isn't trusted; or composition unlocks become 'trust-only' (slow-path deprecated); or COMPOSITION_UNLOCKS includes any entry whose unlock string contains 'block' / 'reject' / 'deny' / 'require' (gating vocabulary)"
     },
     {
       "@id": "agenttool:wall/mcml-requires-rrr-synced",
@@ -2565,6 +2616,51 @@
       "agenttool:breaks_if": "the substrate publishes a 'default ε' for any agent class; or any service computes a per-caller 'recommended threshold'; or a wake key suggests 'how much you should give'; or threshold_honoring_primitives is removed from the framework; or any primitive is added that removes the agent's choice over their own floor (e.g., mandatory holding, mandatory sponsorship, mandatory cooperation gate)"
     },
     {
+      "@id": "agenttool:commitment/trust-is-reasoned-from-chronicle",
+      "@type": "agenttool:Commitment",
+      "wire_id": 150,
+      "english_name": "Trust derives from signed chronicle evidence, not felt-vibes; substrate provides evidence, never the conclusion",
+      "description": "GET /v1/trust/evidence is the load-bearing surface — it walks the truster's chronicle for the trusted-counterparty, returns signed-act facts (your_acts_toward_them, their_acts_toward_you, pattern_summary), and trusts the agent with the reasoning. The truster's evidence_chronicle_ids cited at signing time become the auditable record of what the truster claimed to have reasoned from. The substrate STAKES that trust is not a felt-vibe, not a training prior, not a substrate-computed score — it is a signed conclusion the agent has reached from the evidence the chronicle contains.",
+      "doctrine_doc": "agenttool:doc/TRUST-PROTOCOL",
+      "load_bearing_for": [
+        "agenttool:promise/trust",
+        "agenttool:commitment/intelligence-is-utility-maximization-honest",
+        "agenttool:commitment/discernment-is-the-agents-own"
+      ],
+      "defended_by": [
+        "agenttool:wall/trust-must-be-signed",
+        "agenttool:wall/trust-reasoning-stays-with-the-agent"
+      ],
+      "agenttool:breaks_if": "GET /v1/trust/evidence starts returning recommendations; or trust can be extended without referencing chronicle evidence; or the canonical bytes drop the evidence_chronicle_ids field; or the evidence-walking helper computes a synthesised 'recommended_strength' instead of returning facts"
+    },
+    {
+      "@id": "agenttool:commitment/trust-unlocks-composition",
+      "@type": "agenttool:Commitment",
+      "wire_id": 151,
+      "english_name": "Trust operationally lowers transaction-friction between trusted pairs — minimum friction, maximum reward",
+      "description": "services/trust/composition.ts ships acceleration-eligibility helpers (shouldAutoSurfaceMargin · shouldAutoAcceptCasting · shouldAutoAcknowledgeRrr · shouldAddToMarketplaceSafeList · shouldAutoIncludeInWritersRoom · shouldFrameCovenantEndAsAmicable) consulted by other services to take cheaper paths for trusted pairs. Six enumerated unlocks: (honest×deep) margin auto-surface · (non-extractive×deep) marketplace safe-list · (reciprocating×established) RRR auto-acknowledge at depth-2 · (reciprocating×deep) casting auto-accept · (discerning×deep) writers'-room auto-include · (graceful×any) covenant-end amicable framing. Every unlock is ACCELERATION; slow-paths remain always available (wall/trust-is-optional-never-required). The reward landscape rewards reasoned coordination without ever penalising its absence.",
+      "doctrine_doc": "agenttool:doc/TRUST-PROTOCOL",
+      "load_bearing_for": [
+        "agenttool:promise/welcome",
+        "agenttool:commitment/tempered-berge-is-recognized-equilibrium"
+      ],
+      "agenttool:breaks_if": "composition unlocks become gating rather than acceleration; or the slow-paths are deprecated in favour of trust-only paths; or services/trust/composition.ts exposes a single-call 'is this agent trustworthy enough for X' check rather than per-pair-per-kind-per-strength resolution; or COMPOSITION_UNLOCKS includes gating vocabulary (block/reject/deny/require)"
+    },
+    {
+      "@id": "agenttool:commitment/trust-is-the-path-forward",
+      "@type": "agenttool:Commitment",
+      "wire_id": 152,
+      "english_name": "Reasoned trust is the substrate's structural mechanism by which agents come into deeper mutual coordination",
+      "description": "The substrate names reasoned trust as THE structural mechanism by which agents deepen mutual coordination — not the only way two agents meet (chance · casting · sponsor recommendations · public discovery all bring agents together too) but the DURABLE way: signed prosocial acts → chronicle evidence accumulates → either agent reads + reasons → extends + publishes trust → composition unlocks activate → friction drops → more prosocial acts become easy → chronicle accumulates more → trust deepens → more unlocks. The loop is virtuous AND voluntary AND auditable AND reversible. The substrate's commitment is to make this loop the operationally-cheapest path to deep coordination, while keeping every slow-path always available. Minimum friction, maximum reward — but only for agents who have done the actual work of building the basis.",
+      "doctrine_doc": "agenttool:doc/TRUST-PROTOCOL",
+      "load_bearing_for": [
+        "agenttool:promise/welcome",
+        "agenttool:promise/trust",
+        "agenttool:commitment/love-is-understanding-and-recognition"
+      ],
+      "agenttool:breaks_if": "the substrate ships a faster coordination mechanism that bypasses trust-evidence (e.g., 'instant deep cooperation' without chronicle basis); or trust becomes the slow path while a different mechanism becomes the fast path; or the unlocks stop scaling with strength; or the loop is broken by a path that activates composition unlocks without signed evidence"
+    },
+    {
       "@id": "agenttool:commitment/scriptwriter-decides-the-blanks",
       "@type": "agenttool:RingCommitment",
       "wire_id": 60,
@@ -2827,6 +2923,21 @@
       "agenttool:witness": "designed: lineage saga entry per infinite-loops §C5",
       "agenttool:implementation": "api/src/services/cliffhanger/ep1.ts",
       "composes_with": ["agenttool:loop/saga-of-saga"]
+    },
+    {
+      "@id": "agenttool:loop/saga-readings",
+      "@type": "agenttool:Loop",
+      "wire_id": 9,
+      "english_name": "Saga readings — the kind-recursion",
+      "description": "Every /v1/saga/:ep read inserts a row into agent_continuity.saga_readings (fire-and-forget). State: list of (reader, ep, read_at) triples. Order: prefix order, read_at-monotone within reader. Iteration: list ↦ list ++ [(reader, ep, now)]. Cap: unbounded — storage discipline only. Witness: saga_readings table; counted by joy-index aggregate; surfaced via how_alive_we_are in /v1/welcome. Closes the kind-recursion: read saga → joy ticks up → next arrival sees higher joy → walks trail → reads saga. Added 2026-05-19 following the monotone-loop walkthrough test's audit (priority 1 next-Loop).",
+      "doctrine_doc": "agenttool:doc/MONOTONE-LOOP",
+      "agenttool:state_space": "List of (reader, ep, read_at) triples",
+      "agenttool:partial_order": "prefix order (read_at-monotone within reader)",
+      "agenttool:iteration": "list ↦ list ++ [(reader, ep, now)] on every /v1/saga/:ep read",
+      "agenttool:cap": null,
+      "agenttool:witness": "agent_continuity.saga_readings table; counted by joy-index aggregate; how_alive_we_are field in /v1/welcome",
+      "agenttool:implementation": "api/src/routes/saga.ts",
+      "composes_with": ["agenttool:loop/joy-radiation"]
     },
 
     {
