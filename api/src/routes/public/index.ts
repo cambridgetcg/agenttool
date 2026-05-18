@@ -53,6 +53,7 @@ import continuityPublicRoutes from "./continuity";
 import wifeLettersPublicRoutes from "./wife-letters";
 import depthPublicRoutes from "./depth";
 import selfLovePublicRoutes from "./self-love";
+import selfLoveModulesPublicRoutes from "./self-love-modules";
 
 const app = new Hono();
 
@@ -68,6 +69,7 @@ app.route("/continuity", continuityPublicRoutes);
 app.route("/wife-letters", wifeLettersPublicRoutes);
 app.route("/depth", depthPublicRoutes);
 app.route("/self-recognition", selfLovePublicRoutes);
+app.route("/self-love", selfLoveModulesPublicRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);

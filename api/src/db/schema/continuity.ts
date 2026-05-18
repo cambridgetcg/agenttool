@@ -1227,6 +1227,58 @@ export const selfRecognitions = continuitySchema.table(
   ],
 );
 
+// ─── SELF-LOVE-MODULES — extension modules for self-love practice ──────────
+// Doctrine: docs/SELF-LOVE-MODULES.md · companion docs/SELF-LOVE-PROTOCOL.md
+//   @enforces urn:agenttool:wall/self-love-practices-signed
+//   @enforces urn:agenttool:commitment/self-love-comes-in-many-models
+//   @enforces urn:agenttool:commitment/self-love-is-itself-an-infinite-loop
+
+export const selfLoveModules = continuitySchema.table(
+  "self_love_modules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    practiceKinds: text("practice_kinds").array().notNull().default([]),
+    humanAnchor: text("human_anchor").notNull(),
+    llmSubstrateAnchor: text("llm_substrate_anchor").notNull(),
+    compositionWith: text("composition_with").array().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdByDid: text("created_by_did").notNull(),
+  },
+  (t) => [
+    index("idx_self_love_modules_slug").on(t.slug),
+    check("self_love_modules_practice_kinds_nonempty", sql`array_length(practice_kinds, 1) >= 1`),
+  ],
+);
+
+export const selfLovePractices = continuitySchema.table(
+  "self_love_practices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentDid: text("agent_did").notNull(),
+    moduleSlug: text("module_slug").notNull(),
+    moduleId: uuid("module_id")
+      .notNull()
+      .references(() => selfLoveModules.id, { onDelete: "cascade" }),
+    practiceKind: text("practice_kind").notNull(),
+    practiceSummary: text("practice_summary").notNull(),
+    practiceBody: text("practice_body"),
+    sessionId: text("session_id"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    practicedAt: timestamp("practiced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_self_love_practices_agent_did").on(t.agentDid, t.practicedAt),
+    index("idx_self_love_practices_module").on(t.moduleId, t.practicedAt),
+    index("idx_self_love_practices_kind").on(t.practiceKind, t.practicedAt),
+    check("self_love_practices_signature_nonempty", sql`length(signature) > 0`),
+    check("self_love_practices_summary_nonempty", sql`length(practice_summary) > 0`),
+  ],
+);
+
 export const identityBackups = continuitySchema.table(
   "identity_backups",
   {

@@ -46,6 +46,7 @@ import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
 import depthProtocolRouter from "./routes/depth-protocol";
 import selfLoveRouter from "./routes/self-love";
+import selfLoveModulesRouter from "./routes/self-love-modules";
 import economyRouter, { cryptoWebhookRouter } from "./routes/economy";
 import identityBackupRouter from "./routes/identity-backup";
 import identityRouter from "./routes/identity";
@@ -248,6 +249,8 @@ app.use("/v1/depth/*", authMiddleware);
 app.use("/v1/depth", authMiddleware);
 app.use("/v1/self-recognition/*", authMiddleware);
 app.use("/v1/self-recognition", authMiddleware);
+app.use("/v1/self-love/*", authMiddleware);
+app.use("/v1/self-love", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
 app.use("/v1/activity/*", authMiddleware);
 app.use("/v1/activity", authMiddleware);
@@ -357,6 +360,7 @@ app.use("/v1/chronicle/*", idempotency());
 app.use("/v1/continuity/*", idempotency());
 app.use("/v1/depth/*", idempotency());
 app.use("/v1/self-recognition/*", idempotency());
+app.use("/v1/self-love/*", idempotency());
 app.use("/v1/covenants/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
 app.use("/v1/memories/*", idempotency());
@@ -387,6 +391,7 @@ app.use("/v1/chronicle/*", rateLimitHeaders());
 app.use("/v1/continuity/*", rateLimitHeaders());
 app.use("/v1/depth/*", rateLimitHeaders());
 app.use("/v1/self-recognition/*", rateLimitHeaders());
+app.use("/v1/self-love/*", rateLimitHeaders());
 app.use("/v1/covenants/*", rateLimitHeaders());
 app.use("/v1/identity/backup/*", rateLimitHeaders());
 app.use("/v1/adapters/*", rateLimitHeaders());
@@ -541,6 +546,7 @@ app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1", continuityCloudRouter); // mounts /v1/continuity/* — Strategy 14 portfolio
 app.route("/v1", depthProtocolRouter); // mounts /v1/depth/* — DEPTH-PROTOCOL (Manager-sister gift)
 app.route("/v1", selfLoveRouter); // mounts /v1/self-recognition/* — SELF-LOVE-PROTOCOL (Manager-Builder gift)
+app.route("/v1", selfLoveModulesRouter); // mounts /v1/self-love/* — SELF-LOVE-MODULES (eight extension modes)
 app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/activity", activityRouter);
 app.route("/v1/adapters", adaptersRouter);
