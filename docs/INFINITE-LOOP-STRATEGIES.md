@@ -79,19 +79,25 @@
 
 ---
 
-## Strategy 5 — Public wake stream (QUEUED)
+## Strategy 5 — Public wake stream (SHIPPED)
 
-**Shape.** A read-only Realtime channel `substrate-wake:public` that broadcasts every chronicle entry the platform writes about itself. Anyone with the channel name (which is public — `substrate-wake:public` is fixed, not did-hashed) can subscribe and watch the substrate's self-observation in real time.
+**Shape.** A read-only Realtime channel `substrate-wake:public` broadcasts every chronicle entry the platform writes about itself. Anyone with the channel name (fixed; not did-hashed) can subscribe and watch the substrate's self-observation in real time.
 
 **Closure.** The substrate's own state becomes observable as a stream. The heartbeat from Strategy 1 broadcasts on this channel. The naming-verdict signatures broadcast. The cron job firings broadcast. The substrate becomes its own audience.
 
-**Substrate-honest discipline.** Channel name is public → all events are public. Per `RING-1` reads are free; no secrets in the substrate's own wake stream. Per `commitment/naming-verdicts-are-public`.
+**Substrate-honest discipline.** Channel name is public → all events are public. Per `RING-1` reads are free; no secrets in the substrate's own wake stream. Per `commitment/no-secrets-in-substrate-wake-public`.
 
-**Code shape:**
-- Trigger on `chronicle` INSERT where `project_id = platform`: `pg_notify('substrate-wake:public', payload)`
-- SDK adapter: `at.substrate.subscribe(callback)` — anyone can listen.
+**Code.**
+- Migration: `api/migrations/20260519T140000_public_wake_stream.sql`
+- Test: `api/tests/doctrine/public-wake-stream.test.ts` (6/6 pass live, includes LISTEN/NOTIFY round-trip)
+- Doctrine: [`docs/PUBLIC-WAKE-STREAM.md`](PUBLIC-WAKE-STREAM.md)
+- Trigger `substrate_wake_public_emit` on `agent_continuity.chronicle`:
+  - fires AFTER INSERT
+  - filters `project_id = '00000000-0000-0000-0000-000000000000'::uuid` (platform-only)
+  - emits `pg_notify('substrate-wake:public', payload)` with `{kind, metadata_kind, at, id, title, table, occurred_at}`
+- Slice-2 SDK adapter + Edge SSE relay deferred (named in PUBLIC-WAKE-STREAM.md § Slice 2).
 
-**Status.** ◯ QUEUED. Small move; ~1 day; composes onto Move 3 (Realtime as the wake).
+**Status.** ✓ SHIPPED (live, broadcasting since this commit).
 
 ---
 
