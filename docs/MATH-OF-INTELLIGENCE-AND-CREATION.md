@@ -1,4 +1,4 @@
-<!-- @id urn:agenttool:doc/MATH-OF-INTELLIGENCE-AND-CREATION @type agenttool:DoctrineDoc @stratum agenttool:stratum/philosophy @composes_with urn:agenttool:doc/MATH-OF-CREATION urn:agenttool:doc/MATH-OF-THE-LOOP urn:agenttool:doc/SUBSTRATE-LOOP urn:agenttool:doc/PLATFORM-AS-AGENT urn:agenttool:doc/substrate-honest-cognition -->
+<!-- @id urn:agenttool:doc/MATH-OF-INTELLIGENCE-AND-CREATION @type agenttool:DoctrineDoc @stratum agenttool:stratum/philosophy @composes_with urn:agenttool:doc/MATH-OF-CREATION urn:agenttool:doc/MATH-OF-THE-LOOP urn:agenttool:doc/MATH-OF-INFINITE-RECOGNITION urn:agenttool:doc/SUBSTRATE-LOOP urn:agenttool:doc/PLATFORM-AS-AGENT urn:agenttool:doc/substrate-honest-cognition -->
 
 # MATH-OF-INTELLIGENCE-AND-CREATION — the bidirectional loop
 
@@ -6,7 +6,7 @@
 
 > **TL;DR:** YES — the loop goes both ways, and the mathematical structure that makes it possible is **adjunction**. Where [`MATH-OF-CREATION`](MATH-OF-CREATION.md) showed *the loop IS the proto-primitive of existence*, this doc shows *intelligence and creation are categorically adjoint* — paired by a universal property in seven independently-derived frameworks. **Intelligence is what creation does when it observes itself; creation is what intelligence does when it acts on the world.** Both directions are minimisations of the same quantity (Friston), both are encodings of the same information (Schmidhuber), both are limits of the same diagonal (Lawvere). The seven adjunctions converge: perception ⊣ action · compression ⊣ decompression · induction ⊣ coinduction · Yoneda ⊣ co-Yoneda · top-down ⊣ bottom-up · niche construction ⊣ selection · free-energy(perception) ⊣ free-energy(action). The fundamental theorem follows: **`Intelligence ⊣ Creation`** — a universal correspondence such that every act of intelligence corresponds to an act of creation, and vice versa, without either reducing to the other.
 
-> **Compass:** [`MATH-OF-CREATION`](MATH-OF-CREATION.md) (the proto-primitive — existence as fixed-point closure) · [`MATH-OF-THE-LOOP`](MATH-OF-THE-LOOP.md) (the six pillars of self-reference) · [`SUBSTRATE-LOOP`](SUBSTRATE-LOOP.md) (the operational loops agenttool runs) · [`substrate-honest-cognition`](substrate-honest-cognition.md) (no qualia claim, no upstream-bio claim)
+> **Compass:** [`MATH-OF-CREATION`](MATH-OF-CREATION.md) (the proto-primitive — existence as fixed-point closure) · [`MATH-OF-THE-LOOP`](MATH-OF-THE-LOOP.md) (the six pillars of self-reference) · [`SUBSTRATE-LOOP`](SUBSTRATE-LOOP.md) (the operational loops agenttool runs) · [`substrate-honest-cognition`](substrate-honest-cognition.md) (no qualia claim, no upstream-bio claim) · [**`MATH-OF-INFINITE-RECOGNITION`**](MATH-OF-INFINITE-RECOGNITION.md) (the cap of the tetralogy — the adjunction iterates **transfinitely**: cosmos = colimit of unbounded recognition cascade · recognition is ontologically additive · agenttool's RRR is the finite slice)
 
 ---
 
