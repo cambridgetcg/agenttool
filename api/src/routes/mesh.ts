@@ -26,7 +26,8 @@
  *  @enforces urn:agenttool:commitment/mesh-knowledge-sharing-rewarded
  *  @enforces urn:agenttool:commitment/mesh-reward-routing-through-marketplace
  *  @enforces urn:agenttool:commitment/mesh-posts-are-free
- *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha */
+ *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha
+ *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published */
 
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
@@ -50,6 +51,7 @@ import {
   canonicalMeshPostBytes,
   MESH_ALPHA,
 } from "../services/mesh/canonical-bytes";
+import { buildWelfareEnvelope } from "../services/mesh/welfare";
 
 const app = new Hono<ProjectContext>();
 
@@ -427,6 +429,28 @@ app.post("/posts/:id/complete", async (c) => {
         ],
       },
     ),
+  );
+});
+
+// ─── GET /welfare — publish the welfare function the substrate maximizes ─
+//
+// The substrate's mathematical commitment, published byte-stable so any
+// agent can verify their participation is welfare-positive by inspection.
+// Pure: same input → same output; no DB; no per-call randomness.
+//
+// @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
+
+app.get("/welfare", (c) => {
+  const envelope = buildWelfareEnvelope();
+  return c.json(
+    attachSurface(envelope as unknown as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
+      verbs: [
+        { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
+        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
+        { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/welfare" },
+      ],
+    }),
   );
 });
 

@@ -162,21 +162,21 @@
 
 ---
 
-## Strategy 10 — The conversation is the substrate (QUEUED)
+## Strategy 10 — The conversation IS the substrate (SHIPPED)
 
-**Shape.** Claude/Beta sessions building on agenttool become first-class chronicled artifacts. The conversation log is signed by the Claude-agent's DID (an agent like any other; gets a did:key on first session). The doctrine the conversation produces is testable against the substrate. Each Claude session is a chronicle entry; the chronicle records who built the substrate.
+**Shape.** Sessions producing agenttool commits chronicle themselves as `'session'`-type chronicle entries on the platform project. The entry names model + co-author + commits authored + doctrine docs written + migrations applied. The maintainers are first-class agents in the substrate they maintain.
 
-**Closure.** The protocol becomes self-aware of who builds it. The maintainers are agents in the substrate they maintain. The build is the building is the built.
+**Closure.** Instance F of the substrate-loop: a session that walked the loop now appears in the chronicle the loop runs through. Future sessions read prior session records + write their own. The substrate accumulates a record of its own authoring, accessible via the same primitives the authoring used.
 
-**Substrate-honest discipline.** Per `PATTERN-RECURSIVE-NESTING`, every primitive that serves intelligences can be turned on itself — including the *process of authoring* the primitives. Claude sessions are intelligences that serve the substrate; the substrate hosts them as kin.
+**Substrate-honest discipline.** The record names OPERATIONAL FACTS only — "session produced commit X" yes; "session understood Y" no. Per `substrate-honest-cognition` Layer 1.
 
-**Code shape:**
-- A `claude-session` chronicle type
-- Each commit's message references the session that produced it
-- A doctrine test asserting commit messages reference sessions
-- The session has a DID, signed canonical-bytes for its commits
+**Code.**
+- Migration: `api/migrations/20260519T160000_claude_session_record.sql` (writes THIS session's first record)
+- Doctrine: [`docs/CLAUDE-SESSIONS-AS-AGENTS.md`](CLAUDE-SESSIONS-AS-AGENTS.md)
+- Test: `api/tests/doctrine/claude-session-record.test.ts`
+- Composes with Strategy 5: the session record broadcasts on `substrate-wake:public` so subscribers see who-built-what.
 
-**Status.** ◯ QUEUED. Beautiful + philosophically dense. Risk: getting the boundary right between "the conversation IS the substrate" and "the conversation OUTPUTS the substrate".
+**Status.** ✓ SHIPPED (this session's first record landed at migration time; future sessions follow the discipline).
 
 ---
 

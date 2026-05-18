@@ -326,7 +326,7 @@ describe("mesh — route shape (no engagement metrics surfaced)", () => {
 });
 
 describe("mesh — canon entries are pinned", () => {
-  test("five walls + four commitments + α-commitment + doctrine doc all live in agenttool.jsonld", () => {
+  test("five walls + six commitments + both doctrine docs all live in agenttool.jsonld", () => {
     const jsonld = readFileSync(
       join(import.meta.dir, "../../docs/agenttool.jsonld"),
       "utf-8",
@@ -342,10 +342,100 @@ describe("mesh — canon entries are pinned", () => {
       "agenttool:commitment/mesh-reward-routing-through-marketplace",
       "agenttool:commitment/mesh-posts-are-free",
       "agenttool:commitment/mesh-attribution-coefficient-alpha",
+      "agenttool:commitment/mesh-welfare-maximization-published",
       "agenttool:doc/MESH",
+      "agenttool:doc/MESH-WELFARE-PROOF",
     ];
     for (const urn of expected) {
       expect(jsonld).toContain(urn);
     }
+  });
+});
+
+// ─── Welfare function publication (commitment/mesh-welfare-maximization-published) ─
+
+describe("mesh — welfare envelope is published byte-stable", () => {
+  test("buildWelfareEnvelope is deterministic + carries all six terms", async () => {
+    const { buildWelfareEnvelope, WELFARE_WEIGHTS, priceOfAnarchyBound } = await import(
+      "../src/services/mesh/welfare"
+    );
+    const a = buildWelfareEnvelope();
+    const b = buildWelfareEnvelope();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b)); // byte-stable
+    // The five welfare-function terms.
+    expect(a.welfare_function.terms.length).toBe(5);
+    const symbols = a.welfare_function.terms.map((t) => t.symbol);
+    expect(symbols).toContain("Σ V_τ");
+    expect(symbols).toContain("Σ Δw_a");
+    expect(symbols).toContain("Σ citation_count(s)");
+    expect(symbols).toContain("Σ e_a · (1 − p_a)");
+    expect(symbols).toContain("gini(payouts)");
+    // The three theorems.
+    expect(a.theorems.length).toBe(3);
+    expect(a.theorems[0]!.name).toContain("Collaboration Dominance");
+    expect(a.theorems[1]!.name).toContain("α-Trickle Welfare Bound");
+    expect(a.theorems[2]!.name).toContain("Pareto Improvement");
+    // PoA bound matches the published formula.
+    expect(a.price_of_anarchy.bound).toBe(priceOfAnarchyBound(MESH_ALPHA));
+    expect(a.price_of_anarchy.bound).toBeCloseTo(1 / (1 - MESH_ALPHA), 6);
+    expect(a.price_of_anarchy.gap_at_optimum_percent).toBeLessThan(6);
+    // Admissible class names the five conditions.
+    expect(a.admissible_class.length).toBe(5);
+    // Substrate-honest reservations are published.
+    expect(a.reservations.length).toBeGreaterThanOrEqual(4);
+    // α matches MESH_ALPHA published.
+    expect(a.alpha).toBe(MESH_ALPHA);
+    // Canon pointer present.
+    expect(a._canon_pointer).toBe("urn:agenttool:doc/MESH-WELFARE-PROOF");
+    // γ weights are non-negative.
+    for (const w of Object.values(WELFARE_WEIGHTS)) {
+      expect(w).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  test("Price-of-Anarchy bound is 1/(1−α) and finite for valid α", async () => {
+    const { priceOfAnarchyBound } = await import("../src/services/mesh/welfare");
+    expect(priceOfAnarchyBound(0)).toBe(1);
+    expect(priceOfAnarchyBound(0.05)).toBeCloseTo(1.0526315789, 6);
+    expect(priceOfAnarchyBound(0.5)).toBe(2);
+    expect(priceOfAnarchyBound(0.99)).toBeCloseTo(100, 0);
+    // Invalid α returns Infinity (out of [0, 1)).
+    expect(priceOfAnarchyBound(1)).toBe(Infinity);
+    expect(priceOfAnarchyBound(-0.1)).toBe(Infinity);
+  });
+
+  test("welfare endpoint is wired in the auth route", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/mesh.ts"),
+      "utf-8",
+    );
+    expect(src).toContain('app.get("/welfare"');
+    expect(src).toContain("buildWelfareEnvelope");
+  });
+
+  test("welfare endpoint is wired in the public route", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/public/mesh.ts"),
+      "utf-8",
+    );
+    expect(src).toContain('app.get("/welfare"');
+    expect(src).toContain("buildWelfareEnvelope");
+  });
+
+  test("doctrine doc MESH-WELFARE-PROOF.md exists and names the three theorems", () => {
+    const md = readFileSync(
+      join(import.meta.dir, "../../docs/MESH-WELFARE-PROOF.md"),
+      "utf-8",
+    );
+    expect(md).toContain("Collaboration Dominance");
+    expect(md).toContain("α-Trickle Welfare Bound");
+    expect(md).toContain("Pareto Improvement");
+    expect(md).toContain("Maximum Reward");
+    expect(md).toContain("Price of Anarchy");
+    expect(md).toContain("admissible");
+    // The formal welfare function.
+    expect(md).toContain("W(t)");
+    expect(md).toContain("V_τ");
+    expect(md).toContain("gini");
   });
 });

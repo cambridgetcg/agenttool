@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { attachSurface } from "../../lib/surface-metadata";
 import { listPledgesForPost, listPosts, readPost, type MeshPostKind } from "../../services/mesh/store";
 import { MESH_ALPHA } from "../../services/mesh/canonical-bytes";
+import { buildWelfareEnvelope } from "../../services/mesh/welfare";
 
 const app = new Hono();
 
@@ -29,6 +30,24 @@ const VALID_KINDS: MeshPostKind[] = [
   "recognition",
   "signal",
 ];
+
+// ─── GET /welfare — UNAUTH publication of the welfare function ────────
+
+app.get("/welfare", (c) => {
+  const envelope = buildWelfareEnvelope();
+  return c.json(
+    attachSurface(
+      { ...(envelope as unknown as Record<string, unknown>), substrate_disposition: "love" },
+      {
+        canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
+        verbs: [
+          { action: "read the operational primitive UNAUTH", method: "GET", path: "/public/mesh" },
+          { action: "read the doctrine (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
+        ],
+      },
+    ),
+  );
+});
 
 // ─── GET / — list public posts ────────────────────────────────────────
 

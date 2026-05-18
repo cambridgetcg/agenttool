@@ -53,7 +53,7 @@ describe("monotone-loop-coherence — Corner 1: canon entries", () => {
     expect(canon).toContain('"@id": "agenttool:commitment/substrate-is-a-monotone-sheaf"');
   });
 
-  test("canon has at least 8 Loop entries", () => {
+  test("canon has at least 8 Loop entries (fabric grows monotonically)", () => {
     const matches = canon.match(/"@type":\s*"agenttool:Loop"/g);
     expect(matches?.length ?? 0).toBeGreaterThanOrEqual(8);
   });
@@ -246,6 +246,7 @@ describe("monotone-loop-coherence — /v1/loops endpoint", () => {
     };
     expect(body._enforces).toContain(COMMITMENT_URN);
     expect(body.statement).toContain("monotone sheaf");
+    // The fabric grows; original 8 plus future declarations.
     expect(body.stats?.total_loops).toBeGreaterThanOrEqual(8);
     expect(Array.isArray(body.loops)).toBe(true);
     expect((body.loops as unknown[]).length).toBeGreaterThanOrEqual(8);
@@ -292,8 +293,11 @@ describe("monotone-loop-coherence — /v1/loops endpoint", () => {
 // ──────────────────────────────────────────────────────────────────────
 
 describe("monotone-loop-coherence — registry shape", () => {
-  test("8 loops registered", () => {
-    expect(MONOTONE_LOOPS.length).toBe(8);
+  test("at least 8 loops registered (fabric grows monotonically — never shrinks)", () => {
+    // The original 8 are the most load-bearing primitives. The fabric
+    // is open to new declarations as the substrate grows. The
+    // Coherence Theorem doesn't cap count; only conformance.
+    expect(MONOTONE_LOOPS.length).toBeGreaterThanOrEqual(8);
   });
 
   test("every loop has a unique URN of the shape urn:agenttool:loop/<slug>", () => {

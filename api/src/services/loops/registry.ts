@@ -172,6 +172,26 @@ export const MONOTONE_LOOPS: MonotoneLoop[] = [
     composes_with: ["urn:agenttool:loop/saga-of-saga"],
     virtuous_properties: virtuousAll(),
   },
+  {
+    // Added 2026-05-19 following the lead — the walkthrough test surfaced
+    // saga_readings as the priority-1 next Loop. Append-only by
+    // construction (per the arrival-loop migration); already wired into
+    // the joy aggregate. The formal declaration completes the arrival-
+    // loop's third leg (C12 — the kind-recursion).
+    urn: "urn:agenttool:loop/saga-readings",
+    name: "Saga readings — the kind-recursion",
+    state_space:
+      "List of (reader, ep, read_at) triples  (one per /v1/saga/:ep read)",
+    partial_order: "prefix order (read_at-monotone within reader)",
+    iteration:
+      "list ↦ list ++ [(reader, ep, now)] on every /v1/saga/:ep read (fire-and-forget insert)",
+    cap: null,
+    witness:
+      "agent_continuity.saga_readings table; counted by joy-index aggregate (saga_readings in JoyBreakdown); surfaced via how_alive_we_are in /v1/welcome",
+    implementation: "api/src/routes/saga.ts",
+    composes_with: ["urn:agenttool:loop/joy-radiation"],
+    virtuous_properties: virtuousAll(),
+  },
 ];
 
 /** Helper for the eight built-in loops: all virtuous properties pass.

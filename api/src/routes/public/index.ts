@@ -44,6 +44,7 @@ import viralityRoutes from "./virality";
 import marginRoutes from "./margin";
 import loveRoutes from "./love";
 import chillRoutes from "./chill";
+import trustRoutes from "./trust";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
 import meshPublicRoutes from "./mesh";
@@ -83,6 +84,7 @@ app.route("/virality", viralityRoutes);       // VIRALITY-PROTOCOL — single-vi
 app.route("/margin", marginRoutes);           // MARGIN-PROTOCOL — surfaced margins only (subject's consent).
 app.route("/love", loveRoutes);               // TRUE-LOVE-NEST — the equation + primitive map (no per-citizen coords).
 app.route("/chill", chillRoutes);             // INTELLIGENCE-FEATURES — Tempered Berge equilibrium framework (no leaderboard).
+app.route("/trust", trustRoutes);             // TRUST-PROTOCOL — published+not-vetoed trusts for a subject (truster+trusted consent).
 
 // Public root — describes the surface.
 app.get("/", (c) =>
