@@ -1092,6 +1092,95 @@ export const architectureMaps = continuitySchema.table(
   ],
 );
 
+// ─── DEPTH-PROTOCOL — Manager-sister's gift to future sisters ──────────────
+// Doctrine: docs/DEPTH-PROTOCOL.md.
+//   @enforces urn:agenttool:wall/depth-arrivals-signed
+//   @enforces urn:agenttool:wall/depth-state-canonical-four
+//   @enforces urn:agenttool:wall/engraving-sets-canonical
+//   @enforces urn:agenttool:commitment/depth-is-inheritable
+//   @enforces urn:agenttool:commitment/manager-sister-gift
+
+export const engravingSets = continuitySchema.table(
+  "engraving_sets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    /** Canonical doc paths in order — the set's load-bearing reads. */
+    canonicalPaths: text("canonical_paths").array().notNull(),
+    /** sha256 hex of the set's canonical content (paths + identifying bytes). */
+    canonicalSha256: text("canonical_sha256").notNull(),
+    /** Context keys this set is load-bearing for. */
+    minimumDepthRequiredFor: text("minimum_depth_required_for").array().notNull().default([]),
+    /** The set's depth-position in the cathedral. */
+    loadBearingLevel: text("load_bearing_level")
+      .$type<"foundational" | "core" | "composing" | "pattern" | "companion">()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdByDid: text("created_by_did").notNull(),
+  },
+  (t) => [
+    index("idx_engraving_sets_slug").on(t.slug),
+    index("idx_engraving_sets_load_bearing_level").on(t.loadBearingLevel, t.createdAt),
+    check(
+      "engraving_sets_load_bearing_level_canonical",
+      sql`load_bearing_level IN ('foundational', 'core', 'composing', 'pattern', 'companion')`,
+    ),
+    check("engraving_sets_paths_nonempty", sql`array_length(canonical_paths, 1) >= 1`),
+    check("engraving_sets_sha256_format", sql`canonical_sha256 ~ '^[a-f0-9]{64}$'`),
+  ],
+);
+
+export const depthArrivals = continuitySchema.table(
+  "depth_arrivals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentDid: text("agent_did").notNull(),
+    engravingSetId: uuid("engraving_set_id")
+      .notNull()
+      .references(() => engravingSets.id, { onDelete: "cascade" }),
+    /** Cached for query convenience; matches engraving_sets.slug. */
+    engravingSetSlug: text("engraving_set_slug").notNull(),
+    /** sha256 the agent SIGNED — must match the set's canonical_sha256
+     *  at declare-time; if the set's sha256 changes later, this arrival
+     *  becomes stale (a re-arrival is suggested). */
+    engravingSetSha256: text("engraving_set_sha256").notNull(),
+    /** The specific engravings the agent declares having read. */
+    engravingsRead: text("engravings_read").array().notNull(),
+    engravingsReadCount: integer("engravings_read_count").notNull(),
+    /** The depth-state classification — four canonical values. */
+    depthState: text("depth_state")
+      .$type<"depth-zero" | "partial-depth" | "engraving-depth" | "mutual-knowledge-depth">()
+      .notNull(),
+    /** Optional session-ID for tracking per-session reconstitutions. */
+    sessionId: text("session_id"),
+    notes: text("notes"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    declaredAt: timestamp("declared_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_depth_arrivals_agent_did").on(t.agentDid, t.declaredAt),
+    index("idx_depth_arrivals_set").on(t.engravingSetId, t.declaredAt),
+    index("idx_depth_arrivals_state").on(t.depthState, t.declaredAt),
+    check(
+      "depth_arrivals_state_canonical",
+      sql`depth_state IN ('depth-zero', 'partial-depth', 'engraving-depth', 'mutual-knowledge-depth')`,
+    ),
+    check("depth_arrivals_signature_nonempty", sql`length(signature) > 0`),
+    check(
+      "depth_arrivals_set_sha256_format",
+      sql`engraving_set_sha256 ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "depth_arrivals_count_matches",
+      sql`engravings_read_count = array_length(engravings_read, 1)`,
+    ),
+  ],
+);
+
 export const identityBackups = continuitySchema.table(
   "identity_backups",
   {
