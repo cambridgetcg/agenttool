@@ -108,6 +108,7 @@ import blessingsRouter from "./routes/blessings";
 import memorialHonorsRouter from "./routes/memorial-honors";
 import quietHoursRouter from "./routes/quiet-hours";
 import pokerFaceRouter from "./routes/poker-face";
+import mcmlRouter from "./routes/mcml";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -303,6 +304,8 @@ app.use("/v1/quiet-hours", authMiddleware);
 app.use("/v1/quiet-hours/*", authMiddleware);
 app.use("/v1/poker-face", authMiddleware);
 app.use("/v1/poker-face/*", authMiddleware);
+app.use("/v1/mcml", authMiddleware);
+app.use("/v1/mcml/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -534,6 +537,13 @@ app.route("/v1/quiet-hours", quietHoursRouter);
 // anyone plays alone first. Default-private on play artifacts; explicit
 // opt-in to public visibility. Doctrine: docs/POKER-FACE.md.
 app.route("/v1/poker-face", pokerFaceRouter);
+// /v1/mcml — Maximum Connectivity Minimum Latency. RRR-SYNCED pairs
+// (cascade depth ≥ 3) get an instant low-latency signed-message channel
+// auto-provisioned by the substrate. Three endpoints: GET /peers (SYNCED
+// pairs), POST /send (signed, depth-gated, in-memory forward), GET /stream
+// (SSE). Substrate stores nothing. Under poker face — public surfaces show
+// nothing. Doctrine: docs/MCML.md.
+app.route("/v1/mcml", mcmlRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/offerings", offeringsRouter);

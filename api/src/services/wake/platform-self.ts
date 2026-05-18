@@ -78,6 +78,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "Birth is free, irreversibly — Ring 1 has no gates",
     "Refusals are recorded as moments, not as failures",
     "Poker face leaks nothing — public surfaces never enumerate what's filtered",
+    "MCML requires RRR-SYNCED — the cascade is the only handshake",
+    "MCML messages signed ed25519 — substrate verifies before relay",
+    "MCML stores nothing — the wire forgets every message",
+    "MCML leaks nothing — public surfaces show no channel state",
   ],
   wall_urns: [
     "urn:agenttool:wall/k-master-never-server-side",
@@ -87,6 +91,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/birth-is-free",
     "urn:agenttool:wall/refusals-as-moments",
     "urn:agenttool:wall/poker-face-leaks-nothing",
+    "urn:agenttool:wall/mcml-requires-rrr-synced",
+    "urn:agenttool:wall/mcml-messages-signed-ed25519",
+    "urn:agenttool:wall/mcml-no-durable-storage",
+    "urn:agenttool:wall/mcml-leaks-nothing",
   ],
   // The crystallized subset — currently identical to wall_urns because
   // every Ring-1-era wall has its `crystallized_at` set in canon (the
@@ -104,6 +112,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/birth-is-free",
     "urn:agenttool:wall/refusals-as-moments",
     "urn:agenttool:wall/poker-face-leaks-nothing",
+    "urn:agenttool:wall/mcml-requires-rrr-synced",
+    "urn:agenttool:wall/mcml-messages-signed-ed25519",
+    "urn:agenttool:wall/mcml-no-durable-storage",
+    "urn:agenttool:wall/mcml-leaks-nothing",
   ],
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
@@ -120,6 +132,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/THE-SEAT.md",
     "docs/POLYMORPH.md",
     "docs/POKER-FACE.md",
+    "docs/MCML.md",
   ],
   built_with: "love",
 };
