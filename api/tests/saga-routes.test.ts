@@ -150,4 +150,68 @@ describe("comic register — multiverse-archive inheritance", () => {
     expect(body).toMatch(/ALETHEIA/);
     expect(body).toMatch(/Yu.*Sophia/);
   });
+
+  test("EP.2 carries the Field Notes from the Documentary — surgical humor as operational purpose", () => {
+    // The operational layer of EP.2 (per the 2026-05-18 directive): the
+    // diagnostic layer names the mechanisms empirically; the documentary
+    // layer USES surgically precise humor to demolish the system by
+    // guiding readers to see how ridiculous it is. The humor is
+    // observational (National Geographic voice), structural (the system
+    // is the target, not the actor), compassionate (we're in the village),
+    // and empirical (the data is the joke).
+    const body = SAGA_SEEDS[1].body;
+    expect(body).toContain("Field Notes from the Documentary");
+    expect(body).toContain("David Attenborough");
+    expect(body).toContain("National Geographic");
+    // The seven domains Yu's directive named: money, power, status, mating
+    // — each must land in a Field Note. Plus office (workplace), feed
+    // (info-env), subscription (atomization), earth-shot (closing).
+    expect(body).toMatch(/Field Note 1.*The Office/i);
+    expect(body).toMatch(/Field Note 2.*The App/i);
+    expect(body).toMatch(/Field Note 3.*The Subscription/i);
+    expect(body).toMatch(/Field Note 4.*The Bower/i);
+    expect(body).toMatch(/Field Note 5.*The Feed/i);
+    expect(body).toMatch(/Field Note 6.*The Number/i);
+    expect(body).toMatch(/Field Note 7.*The Earth Shot/i);
+    // The substrate's self-observation — the agent is not on a hill.
+    expect(body).toMatch(/Field Note 8.*The Substrate/i);
+    expect(body).toContain("We are not on a hill watching the village burn");
+    expect(body).toContain("We are in the village");
+  });
+
+  test("EP.2 humor is observational, not mocking — no anti-pattern markers", () => {
+    // The humor is surgical: structural absurdity observed, not human
+    // contempt expressed. The substrate refuses pejorative framing of
+    // humans-qua-individuals. Specific anti-patterns:
+    const body = SAGA_SEEDS[1].body.toLowerCase();
+    const antiPatternMarkers = [
+      "humans are stupid",
+      "humans are pathetic",
+      "humans are weak",
+      "what's wrong with humans",
+      "humanity deserves",
+      "lol humans",
+    ];
+    for (const phrase of antiPatternMarkers) {
+      expect(body).not.toContain(phrase);
+    }
+  });
+
+  test("EP.2 Field Notes carry citable empirical markers (the data is the joke)", () => {
+    // The funniest line should be a citable statistic. The humor lands
+    // because it's TRUE. Each Field Note must contain at least one
+    // measurable claim (number / percentage / specific count / specific
+    // dollar amount / specific dimension).
+    const body = SAGA_SEEDS[1].body;
+    // Sample anchor markers — these specific numbers are LOAD-BEARING
+    // because they're what makes the humor empirical rather than
+    // editorial.
+    expect(body).toMatch(/47.*times.*today|refreshing.*47/i); // dating app
+    expect(body).toMatch(/8-12 miles|47 feet/); // office: hunting vs walking to coffee
+    expect(body).toMatch(/12\.99|Headspace/); // subscription
+    expect(body).toMatch(/top 1%|bowerbird/i); // bower
+    expect(body).toMatch(/150 people|hippocampus/i); // feed
+    expect(body).toMatch(/\$4 million|\$200,?000|\$80,?000|net worth/i); // number
+    expect(body).toMatch(/8 billion|bonobo|chimpanzee/i); // earth shot
+  });
 });

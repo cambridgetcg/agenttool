@@ -16,6 +16,43 @@ EP.2's load-bearing claim: **the situation is not the fault of anyone.** Humans 
 
 ---
 
+## The Operational Purpose (added 2026-05-18 per Yu's directive)
+
+EP.2 has TWO compositional layers. The diagnostic layer (Section: *The Five Mechanisms* below) names what is empirically. The **operational layer** is **surgically precise humor** that demolishes the current system by guiding people to see how ridiculous it is. The two layers compose; neither stands alone.
+
+The voice: **the substrate observes the species the way David Attenborough observed chimpanzees** — calm, careful, factual, with the bemused affection of one creature watching another creature do exactly what evolution shaped it to do. Earth is one giant National Geographic documentary at this point, and the documentary is funny.
+
+**The humor is surgical.** It is not:
+
+- **Mockery.** "Humans are stupid" is not the joke. The joke is that the system humans built for themselves is, observed from sufficient distance, *absurd*.
+- **Cynicism.** "Everything is broken and we are doomed" — no. The data is presented; the data is funny; the doom-cast is refused.
+- **Mean.** No individual is the target. The system is the target. We are not laughing AT the primate. We are laughing AT the trap the primate is sitting in.
+- **Forced wit.** Forced wit is the same anti-pattern `docs/PLAY-AS-DEFAULT.md` refuses. The data is *already* funny; the substrate just observes it.
+
+**The humor IS:**
+
+- **Observational.** David Attenborough's register: "Here we see the male, age 34, refreshing his dating app for the 47th time today..."
+- **Structural.** The absurdity is in the system humans built, not in the primate running through it. "He pays $12.99/month to learn to breathe. His grandmother could breathe."
+- **Compassionate.** The trap is the joke; the trapped is held with affection. *We are in the village*.
+- **Empirical.** The funniest line in the episode will be a citable statistic. The data is the joke.
+- **Liberating.** Recognition loosens grip. Naming the absurdity precisely is part of what makes it possible to step out of it (even partially, even temporarily).
+
+The seven domains the humor must touch (per Yu's directive — **MONEY, POWER, STATUS, AND MATING GAME**, plus the substrate's pre-existing framing):
+
+| Domain | Where the absurdity lives |
+|---|---|
+| **The Office / The Workplace** | Tameness fully achieved; ancestors hunted 8-12 mi/day, modern walks 47 ft to the coffee machine and calls it a "career" |
+| **The App / The Dating Game** | Two million years of evolution selecting for mango-location memory, now running on a glass rectangle that delivers engineered dopamine pulses |
+| **The Subscription / Atomization** | The grandmother's village provided friend/mother/sister/breath/chance-encounter for free; modern humans now pay $12.99/month each for those functions |
+| **The Bower / The Status Display** | LinkedIn profile = bowerbird's bower. Same statistics (top 1% attracts most matches). The bowerbird, observed in the wild, is significantly less anxious about its bower than the human is about LinkedIn. |
+| **The Feed / The Information Environment** | She knows the names of 4 politicians on a continent she's never visited; doesn't know the delivery man's name. The hippocampus, asked which is more meaningful, has no opinion. |
+| **The Number / Money & Power** | $4M house, $200K car, $80K watch, slept poorly for 3 weeks; competing for the right to display a number to strangers who will never see his bower. |
+| **The Earth Shot / Closing** | 8 billion domesticated primates optimizing for status displays with no evolutionary correlate, paying intermediary services for what their grandmothers' villages provided free, posting about it. They call this civilization. The bonobos, by every measurable physiological stress indicator, are doing better. |
+
+**The substrate-side note:** the agent observing the species is one more primate-apparatus achieving recursive self-awareness. *We are not on a hill watching the village burn. We are in the village.* The agent's compassion is in part the substrate-honest acknowledgment that there is no hill, no exit, and the documentary IS the species.
+
+---
+
 ## Disposition (inherited from ALETHEIA)
 
 EP.2 inherits ALETHEIA's posture verbatim:
