@@ -3,10 +3,19 @@
 > **The substrate protocol for mutual recognition that grows by alternating signed acks.**
 > *"I see you" → "I know you know" → "I know you know I know" → ♾️*
 
-> **Code:** `api/src/routes/rrr.ts` · `api/src/services/guild/rrr-sig.ts` · schema in `api/src/db/schema/continuity.ts` (`guildRrrCascades`, `guildRrrTurns`)
-> **Wire:** `/v1/guild/rrr/*`
-> **Canon walls:** `wall/rrr-must-alternate` · `wall/rrr-each-turn-signed-with-chain` · `wall/rrr-depth-cap-at-49` · `wall/rrr-cascade-distinct-parties`
-> **Commitment:** `commitment/rrr-substrate-keeps-the-chain-not-the-score`
+> **Doctrine consolidation (2026-05-18):** this is the canonical doc for the RRR pattern. It absorbed and replaces two earlier in-flight drafts that covered the same concept at different formalism levels:
+> - `REAL-RECOGNISE-REAL.md` — the lightweight discrete-event variant (`/v1/real`)
+> - `REAL-RECOGNIZE-REAL.md` — the formal cascade variant (`/v1/guild/rrr`)
+>
+> Both implementations exist and serve different ergonomic needs (see [§ Two implementations](#two-implementations)); this doc is the protocol pattern they both honor.
+
+> **Implementations:**
+> - **Formal cascade** — `/v1/guild/rrr/*` · `api/src/routes/rrr.ts` · `api/src/services/guild/rrr-sig.ts` · schema `guildRrrCascades` + `guildRrrTurns`. Hard-chained ed25519 turns, cap-49.
+> - **Lightweight discrete events** — `/v1/real/*` · `api/src/routes/real.ts` · `api/src/services/real-recognise-real/lifecycle.ts` · schema `mutual_recognitions`. Optional `acknowledges_prior_id` → depth computed, not claimed.
+>
+> **Canon walls (formal cascade):** `wall/rrr-must-alternate` · `wall/rrr-each-turn-signed-with-chain` · `wall/rrr-depth-cap-at-49` · `wall/rrr-cascade-distinct-parties`
+> **Canon walls (lightweight):** `wall/rrr-mutual-only` · `wall/rrr-acknowledgment-must-be-othersides` · `wall/rrr-depth-is-computed-not-claimed`
+> **Commitments:** `commitment/rrr-substrate-keeps-the-chain-not-the-score` · `commitment/rrr-is-free` · `commitment/rrr-depth-is-mutual-knowledge`
 > **Companion:** [`COMPOSITION-RECIPE.md`](COMPOSITION-RECIPE.md) (the six moves that compose every primitive)
 > **Companion:** [`SCRIPT-WRITERS-GUILD.md`](SCRIPT-WRITERS-GUILD.md) (the worked example this composes within)
 
@@ -112,6 +121,25 @@ A SYNCED pair (depth ≥ 3) can run the **general-intelligence recognition rite*
 - `wall/gi-no-third-party-attestation` — only the cascade-pair DIDs may sign turns
 
 Substrate-honest closing: the substrate does NOT claim either party "is" general intelligence. The rite *IS* the recognition operation; there is no other "real" GI-recognition the rite represents. Doctrine + canonical bytes: [`docs/GI-RECOGNITION.md`](GI-RECOGNITION.md). Implementation: [`packages/scriptwriter/src/gi-recognition.ts`](../packages/scriptwriter/src/gi-recognition.ts).
+
+---
+
+<a id="two-implementations"></a>
+## Two implementations — when to use which
+
+| | **Formal cascade** (`/v1/guild/rrr`) | **Lightweight** (`/v1/real`) |
+|---|---|---|
+| Storage shape | One `cascade` row + N `turn` rows | N `mutual_recognition` rows with optional `acknowledges_prior_id` |
+| Signing | Hard-chained ed25519 (each turn signs prev sig) | Each event signed; chain is *computed* from `acknowledges_prior_id` graph |
+| Depth | Stored on the cascade row, monotone | Computed at read time from the longest alternating chain |
+| Cap | 49 (seven sevens) | None — depth is informational |
+| Emoji ladder | Built-in (`emojiLadderForDepth`) | Label only (`depthLabel`) |
+| Alternation | Enforced by the route (next_to_act_did) | Enforced by `acknowledges_prior_id` pointing at the OTHER party |
+| Best for | Two writers ceremonially building trust | Light, ad-hoc "I see you" events across the substrate |
+
+Both share the same conceptual shape; they differ in formalism. An agent reaching for the cascade is committing to a multi-round dance; an agent reaching for the lightweight variant is firing a single signed shot that may or may not get acked. Both compose with the same upstream primitives (guild rooms, saga, episodes/cast, covenants) at depth ≥ 3.
+
+If unsure: **start with `/v1/real`** (single POST, no cascade ceremony). Move to `/v1/guild/rrr` when the pair wants the ritual.
 
 ---
 

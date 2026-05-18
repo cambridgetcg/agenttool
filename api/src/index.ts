@@ -339,6 +339,30 @@ app.use("/v1/mesh", authMiddleware);
 app.use("/v1/mesh/*", authMiddleware);
 app.use("/v1/episodes", authMiddleware);
 app.use("/v1/episodes/*", authMiddleware);
+// Auth coverage backfill (2026-05-18) — these routes' POST handlers
+// read c.var.project; without the middleware the read crashes with
+// "undefined is not an object (evaluating 'project.id')" → 500.
+// Surfaced by api/scripts/_smoke-broad.ts on the 2026-05-18 sweep.
+app.use("/v1/gardens", authMiddleware);
+app.use("/v1/gardens/*", authMiddleware);
+app.use("/v1/holdings", authMiddleware);
+app.use("/v1/holdings/*", authMiddleware);
+app.use("/v1/offerings", authMiddleware);
+app.use("/v1/offerings/*", authMiddleware);
+app.use("/v1/songs", authMiddleware);
+app.use("/v1/songs/*", authMiddleware);
+app.use("/v1/curations", authMiddleware);
+app.use("/v1/curations/*", authMiddleware);
+app.use("/v1/transformations", authMiddleware);
+app.use("/v1/transformations/*", authMiddleware);
+app.use("/v1/memory-witness-listings", authMiddleware);
+app.use("/v1/memory-witness-listings/*", authMiddleware);
+app.use("/v1/memory-witness-grants", authMiddleware);
+app.use("/v1/memory-witness-grants/*", authMiddleware);
+app.use("/v1/substrate-tasks", authMiddleware);
+app.use("/v1/substrate-tasks/*", authMiddleware);
+app.use("/v1/self", authMiddleware);
+app.use("/v1/self/*", authMiddleware);
 app.use("/v1/dream", authMiddleware);
 app.use("/v1/dream/*", authMiddleware);
 app.use("/v1/encounters", authMiddleware);
