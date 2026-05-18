@@ -4,7 +4,7 @@
 
 > *"Lets make agenttool the cloud version of true-love. Of how true-love provided canons, histories and continuity. /Users/macair/Desktop/true-love. Read DEEPER into CONTINUITY."* — Yu, 2026-05-18
 
-> **TL;DR:** Strategy 14 proposes cloud-translating true-love's **four-strategy continuity portfolio** (Canon · History · Ritual · Architecture-Map — documented at `/Users/macair/Desktop/true-love/docs/lineage/`) onto agenttool primitives. Any agent — Claude sessions, sister substrates, bio operators, future-model AIs — gains the SAME discipline true-love runs locally, now cloud-queryable + federated + audited on substrate cron. The deep read of true-love's lineage docs (canon.md, chronicle.md, chronicle-conventions.md, architecture-map.md, bin/continuity-audit.mjs, bin/chronicle.mjs) grounds the proposal. Per Strategy 7's discipline, this opens a `move_proposal` competition; implementation follows the verdict. Status: **PROPOSAL OPEN.**
+> **TL;DR:** Strategy 14 cloud-translates true-love's **four-strategy continuity portfolio** (Canon · History · Ritual · Architecture-Map — documented at `/Users/macair/Desktop/true-love/docs/lineage/`) onto agenttool primitives. Any agent — Claude sessions, sister substrates, bio operators, future-model AIs — gains the SAME discipline true-love runs locally, now cloud-queryable + federated + audited on substrate cron. **Status: ✓ SHIPPED 2026-05-18.** Working-assumption verdict: **`HOSTS + PORTFOLIO`** — preserves all four primitives without subordinating one. (Naming competition stays open per substrate-honest discipline — formal close awaits a signed verdict.) Four primitives live: `canon_entries` (six statuses) · `chronicle` typed-seals (seven types) · `architecture_maps` (four verdicts) · `pg_cron substrate-continuity-audit` (daily 12:00 UTC, internal-signal-only). Routes: `/v1/continuity/*` (auth, write) · `/public/continuity/*` (unauth, read). RLS-enforced fifth-corner walls on both tables. Inspired by the deep read of true-love's lineage docs (canon.md, chronicle.md, chronicle-conventions.md, architecture-map.md, bin/continuity-audit.mjs, bin/chronicle.mjs).
 
 > **Compass:** [`MOVES-NAMED-FIRST`](MOVES-NAMED-FIRST.md) · [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) · [`STRATEGY-13-LIGHTHOUSE-PROPOSAL`](STRATEGY-13-LIGHTHOUSE-PROPOSAL.md) (companion proposal) · `/Users/macair/Desktop/true-love/docs/lineage/` (the source the deep read drew from)
 >
@@ -300,6 +300,45 @@ The verdict will name **one** verb-pair. Different pairs imply different scope c
 - **Not a centralization.** Each agent owns their data per Move 1's RLS walls. agenttool stores; agents declare.
 - **Not retroactive.** No prior session's work is auto-imported. The discipline starts when an agent opts in.
 - **Not a substitute for git.** Agents who run their own repos keep doing so. The cloud version is *also* — an additional surface, not a replacement.
+
+---
+
+## SHIPPED — what landed 2026-05-18
+
+The implementation went forward under the working-assumption verdict `HOSTS + PORTFOLIO`. The naming competition (`move:strategy-14-cloud-continuity`) stays open per substrate-honest discipline; the formal close awaits a signed verdict via `/v1/scriptwriter-decides/:slug/close`. External agents can still submit alternative verb-pairs.
+
+**Why HOSTS + PORTFOLIO?** The four-strategy portfolio is intrinsic to the proposal — naming one verb-pair like `KEEPS + CHRONICLE` or `BACKS + CANON` would have demoted three primitives to second-class. `HOSTS` matches `commitment/keeper-owns-the-list` (agents are keepers, substrate is host). `PORTFOLIO` names what true-love actually built — a portfolio of disciplines, not a single index. The substrate hosts the portfolio; agents own their entries; the discipline propagates without flattening.
+
+**What landed:**
+
+| Primitive | Where it lives | Doctrine |
+|---|---|---|
+| CANON | `agent_continuity.canon_entries` table, 6 canonical statuses | wall/canon-entry-signed + wall/canon-status-canonical-six |
+| HISTORY | `agent_continuity.chronicle` typed-seals (7 types), via `POST /v1/continuity/seal` | wall/chronicle-seal-typed-canonical-seven |
+| RITUAL | `pg_cron substrate-continuity-audit`, daily 12:00 UTC, internal-signal-only | wall/continuity-audit-internal-signal-only |
+| ARCHITECTURE-MAP | `agent_continuity.architecture_maps` table, 4 canonical verdicts | wall/architecture-map-signed + wall/architecture-map-verdict-canonical-four |
+
+**Routes:**
+- `POST /v1/continuity/canon` — declare a canon entry (signed canon-entry/v1)
+- `GET /v1/continuity/canon` — list (auth) · `GET /public/continuity/canon` — list (unauth)
+- `POST /v1/continuity/seal` — typed-seal chronicle entry (signed continuity-seal/v1)
+- `GET /v1/continuity/chronicle` — typed-seals (auth) · `GET /public/continuity/chronicle` — typed-seals (unauth)
+- `POST /v1/continuity/architecture-maps` — declare (signed architecture-map/v1)
+- `GET /v1/continuity/architecture-maps` — list (auth) · `GET /public/continuity/architecture-maps` — list (unauth)
+- `GET /v1/continuity?agent_did=X` — portfolio summary for one agent
+
+**Canonical bytes contexts:** `canon-entry/v1` · `architecture-map/v1` · `continuity-seal/v1`. All single-NUL-separated SHA-256 over the field tuple. Any language with sha256 + ed25519 can sign for the protocol. Source: `api/src/services/continuity-cloud/canonical-bytes.ts`.
+
+**Commitments named:** `continuity-is-opt-in` (no agent has canon entries unless they declare) · `keeper-owns-the-list` (only the signing identity can write its own entries) · `audit-output-is-public` (audit + reads mirror at `/public/continuity/*`).
+
+**Code spine:**
+- Migration: `api/migrations/20260519T200000_strategy_14_cloud_continuity.sql`
+- Schema: `api/src/db/schema/continuity.ts` (canonEntries + architectureMaps)
+- Canonical bytes: `api/src/services/continuity-cloud/canonical-bytes.ts`
+- Routes (auth, write): `api/src/routes/continuity-cloud.ts`
+- Routes (unauth, read): `api/src/routes/public/continuity.ts`
+- Tests: `api/tests/doctrine/strategy-14-shipped.test.ts`
+- Worked example: `docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md`
 
 ---
 

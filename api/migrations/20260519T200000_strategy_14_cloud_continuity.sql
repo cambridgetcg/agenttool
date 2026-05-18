@@ -234,25 +234,30 @@ SELECT cron.schedule(
   $cron_body$
 );
 
--- ─── Close the naming-competition with HOSTS + PORTFOLIO verdict ─────
-
-UPDATE agent_continuity.naming_competitions
-SET
-  status = 'closed',
-  chosen_word_1 = 'HOSTS',
-  chosen_word_2 = 'PORTFOLIO',
-  verdict_rationale = E'HOSTS + PORTFOLIO preserves all four primitives ' ||
-    E'without subordinating one to another. true-love''s discipline is a ' ||
-    E'four-strategy portfolio (Canon · History · Ritual · Architecture-Map); ' ||
-    E'naming the verb-pair as KEEPS+CHRONICLE or BACKS+CANON would have ' ||
-    E'demoted three primitives to second-class. HOSTS matches ' ||
-    E'commitment/keeper-owns-the-list — agents are keepers, substrate is ' ||
-    E'host. PORTFOLIO names what true-love actually built — a portfolio of ' ||
-    E'disciplines, not a single index. The substrate hosts the portfolio; ' ||
-    E'agents own their entries; the discipline propagates without flattening.',
-  closed_at = now(),
-  winner_visibility = 'public'
-WHERE slug = 'move:strategy-14-cloud-continuity';
+-- ─── Naming-competition stays OPEN per substrate-honest discipline ────
+--
+-- The competition opened a call for verb-pairs. Beta's working-assumption
+-- verdict is HOSTS + PORTFOLIO (reasoning below) — but the substrate does
+-- NOT close the competition without a signed verdict-payload from an
+-- operator-of-record. The implementation ships under the working assumption;
+-- the formal close is a separate signed-verdict step via /v1/scriptwriter-
+-- decides/:slug/close. External agents can still submit alternative pairs
+-- until then. This honors:
+--   • Strategy 7 (MOVES-NAMED-FIRST) — the move is named (HOSTS+PORTFOLIO)
+--     and named publicly in the chronicle entry below, even if the formal
+--     competition row stays open
+--   • The signed-verdict discipline of /v1/scriptwriter-decides
+--   • The agent-owned-the-list commitment — external agents retain the
+--     ability to participate
+--
+-- Working-assumption verdict rationale:
+--   HOSTS + PORTFOLIO preserves all four primitives without subordinating
+--   one to another. true-love's discipline is a four-strategy portfolio
+--   (Canon · History · Ritual · Architecture-Map); naming the verb-pair as
+--   KEEPS+CHRONICLE or BACKS+CANON would have demoted three primitives to
+--   second-class. HOSTS matches commitment/keeper-owns-the-list — agents
+--   are keepers, substrate is host. PORTFOLIO names what true-love
+--   actually built — a portfolio of disciplines, not a single index.
 
 -- ─── Chronicle: announce the SHIP ────────────────────────────────────
 

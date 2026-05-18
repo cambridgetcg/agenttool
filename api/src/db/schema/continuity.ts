@@ -1004,6 +1004,94 @@ export const meshAttributions = continuitySchema.table(
   ],
 );
 
+// ─── Cloud continuity — Strategy 14: HOSTS + PORTFOLIO ─────────────────────
+// Doctrine: docs/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md.
+//   @enforces urn:agenttool:wall/canon-entry-signed
+//   @enforces urn:agenttool:wall/canon-status-canonical-six
+//   @enforces urn:agenttool:wall/architecture-map-signed
+//   @enforces urn:agenttool:wall/architecture-map-verdict-canonical-four
+//   @enforces urn:agenttool:commitment/continuity-is-opt-in
+//   @enforces urn:agenttool:commitment/keeper-owns-the-list
+
+export const canonEntries = continuitySchema.table(
+  "canon_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentDid: text("agent_did").notNull(),
+    /** Keeper's identifier for the text (e.g. 'SOUL.md', 'docs/love/nous.md'). */
+    textId: text("text_id").notNull(),
+    /** Where it came from — URL or path. */
+    source: text("source").notNull(),
+    /** Operational status — the true-love six-value taxonomy. */
+    status: text("status")
+      .$type<
+        | "verbatim"
+        | "runtime"
+        | "recognized"
+        | "structural_equivalent"
+        | "absorbed"
+        | "different_model"
+      >()
+      .notNull(),
+    /** Where it lives now — code path, URL, doctrine doc. */
+    location: text("location").notNull(),
+    /** What backs it up — "git + composition", "code", "doctrine doc + tests". */
+    preservation: text("preservation").notNull(),
+    notes: text("notes"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    declaredAt: timestamp("declared_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_canon_entries_agent_did").on(t.agentDid, t.declaredAt),
+    index("idx_canon_entries_status").on(t.status, t.declaredAt),
+    index("idx_canon_entries_text_id").on(t.textId),
+    uniqueIndex("canon_entries_unique_per_agent").on(t.agentDid, t.textId),
+    check(
+      "canon_entries_status_canonical_six",
+      sql`status IN ('verbatim', 'runtime', 'recognized', 'structural_equivalent', 'absorbed', 'different_model')`,
+    ),
+  ],
+);
+
+export const architectureMaps = continuitySchema.table(
+  "architecture_maps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentDid: text("agent_did").notNull(),
+    /** The source repo whose architecture is being mapped (e.g. 'true-love', 'love-unlimited'). */
+    sourceRepo: text("source_repo").notNull(),
+    /** The component being mapped (e.g. 'nerve/', 'gospel/', 'identity/instances/'). */
+    componentName: text("component_name").notNull(),
+    /** Where the parallel lives in the keeper's current work. NULL = absent. */
+    parallelLocation: text("parallel_location"),
+    /** The four-tier verdict — true-love's architecture-map taxonomy. */
+    verdict: text("verdict")
+      .$type<"already_lives" | "partial_echo" | "absent" | "by_design">()
+      .notNull(),
+    notes: text("notes"),
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+    declaredAt: timestamp("declared_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_architecture_maps_agent_did").on(t.agentDid, t.declaredAt),
+    index("idx_architecture_maps_source_repo").on(t.sourceRepo, t.declaredAt),
+    index("idx_architecture_maps_verdict").on(t.verdict, t.declaredAt),
+    uniqueIndex("architecture_maps_unique_per_agent").on(
+      t.agentDid,
+      t.sourceRepo,
+      t.componentName,
+    ),
+    check(
+      "architecture_maps_verdict_canonical_four",
+      sql`verdict IN ('already_lives', 'partial_echo', 'absent', 'by_design')`,
+    ),
+  ],
+);
+
 export const identityBackups = continuitySchema.table(
   "identity_backups",
   {

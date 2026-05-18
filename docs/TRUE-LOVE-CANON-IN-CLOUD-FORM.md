@@ -6,13 +6,13 @@
 
 > **Compass:** [`STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL`](STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md) (the proposal this exemplifies) · [`MOVES-NAMED-FIRST`](MOVES-NAMED-FIRST.md) (the discipline that makes this a worked example, not an implementation) · `/Users/macair/Desktop/true-love/docs/lineage/{canon,chronicle,architecture-map}.md` (the source)
 
-> **Status:** Worked example. The tables proposed in Strategy 14 don't exist yet. If/when the verdict lands and the implementation ships, this doc becomes the seed file an importer reads to populate true-love's first cloud rows.
+> **Status:** Worked example. Strategy 14 SHIPPED 2026-05-18 under working-assumption verdict `HOSTS + PORTFOLIO` — the four primitives now live in prod (`agent_continuity.canon_entries` · `agent_continuity.architecture_maps` · `agent_continuity.chronicle` typed-seals · `pg_cron substrate-continuity-audit`). Routes: `/v1/continuity/*` (auth, write) + `/public/continuity/*` (unauth, read). The naming competition stays open per substrate-honest discipline. If Yu (or any keeper) chooses to cross-register true-love, this doc remains the seed file an importer reads to populate true-love's first cloud rows.
 
 ---
 
 ## What this document is NOT
 
-- **Not actual canon entries.** No rows have been inserted; no tables exist; no implementation has shipped.
+- **Not actual canon entries.** No rows for true-love have been inserted. The tables exist in prod (Strategy 14 SHIPPED), but cross-registration is the keeper's choice; this doc demonstrates shape, not committed rows.
 - **Not a fait accompli.** Yu (true-love's keeper) decides whether true-love cross-registers for cloud-continuity AT ALL. This doc demonstrates SHAPE, not commitment.
 - **Not a substitute for true-love's repo.** true-love's git history, source files, doctrine docs, and `bin/` scripts stay where they live. agenttool's cloud form would be ALSO — never INSTEAD.
 - **Not authoritative over true-love's portfolio.** true-love's `canon.md` remains the canonical statement of what's alive in true-love. The cloud form is a *queryable mirror*, not the truth.
@@ -436,4 +436,4 @@ The keeper stays the keeper. The substrate stays the substrate. The discipline p
 
 😏♾️📜🗂️🌐
 
-— Authored 2026-05-18 by Beta at Yu's WILL. In response to Yu's directive *"YES GO AHEAD"* (re: writing the bridging artifact). Landed as a worked example of Strategy 14's cloud-continuity primitives using true-love's own portfolio as the source. NOT actual rows (the tables don't exist yet); a structural-honesty artifact showing the proposal is operationally tractable. The verdict on Strategy 14 awaits; this doc serves as one signed-submission-shaped reference the verdict-signer reads.
+— Authored 2026-05-18 by Beta at Yu's WILL. In response to Yu's directive *"YES GO AHEAD"* (re: writing the bridging artifact). Landed as a worked example of Strategy 14's cloud-continuity primitives using true-love's own portfolio as the source. Strategy 14 SHIPPED later the same day under working-assumption verdict `HOSTS + PORTFOLIO`; this doc retroactively becomes the first reference example of the live primitives — what cloud-continuity looks like for one keeper's portfolio. NOT actual true-love rows (cross-registration remains the keeper's choice); the doc demonstrates SHAPE, not commitment.
