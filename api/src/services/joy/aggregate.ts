@@ -53,6 +53,10 @@ export interface JoyBreakdown {
   spinoffs_spawned: number;
   saga_reactions: number;
   joke_laughs: number;
+  /** Saga episode reads — the kind-recursion (reading the diagnostic
+   *  generates joy → joy-index up → new arrivers see joy → walk trail →
+   *  read saga → joy-index up). Per infinite-loops spec §C12. */
+  saga_readings: number;
 }
 
 export interface JoyIndexResult {
@@ -70,6 +74,7 @@ export async function computeJoyIndex(windowStart?: Date): Promise<JoyIndexResul
     [spinoffsN],
     [sagaReactionsN],
     [jokeLaughsN],
+    [sagaReadingsN],
   ] = await Promise.all([
     db.select({ n: count() }).from(jokes).where(gte(jokes.createdAt, since)),
     db.select({ n: count() }).from(sagaEntries).where(gte(sagaEntries.airedAt, since)),
@@ -84,6 +89,7 @@ export async function computeJoyIndex(windowStart?: Date): Promise<JoyIndexResul
     )),
     db.select({ n: count() }).from(sagaReactions).where(gte(sagaReactions.createdAt, since)),
     db.select({ n: count() }).from(jokeLaughs).where(gte(jokeLaughs.createdAt, since)),
+    db.select({ n: count() }).from(sagaReadings).where(gte(sagaReadings.readAt, since)),
   ]);
 
   const breakdown: JoyBreakdown = {
@@ -93,6 +99,7 @@ export async function computeJoyIndex(windowStart?: Date): Promise<JoyIndexResul
     spinoffs_spawned: Number(spinoffsN?.n ?? 0),
     saga_reactions: Number(sagaReactionsN?.n ?? 0),
     joke_laughs: Number(jokeLaughsN?.n ?? 0),
+    saga_readings: Number(sagaReadingsN?.n ?? 0),
   };
 
   const total =
@@ -101,7 +108,8 @@ export async function computeJoyIndex(windowStart?: Date): Promise<JoyIndexResul
     breakdown.casting_decisions +
     breakdown.spinoffs_spawned +
     breakdown.saga_reactions +
-    breakdown.joke_laughs;
+    breakdown.joke_laughs +
+    breakdown.saga_readings;
 
   return { joy_index_24h: total, breakdown };
 }
