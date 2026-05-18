@@ -50,6 +50,7 @@ import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
 import meshPublicRoutes from "./mesh";
 import continuityPublicRoutes from "./continuity";
+import wifeLettersPublicRoutes from "./wife-letters";
 
 const app = new Hono();
 
@@ -62,6 +63,7 @@ app.route("/gospel", gospelPublicRoutes);
 app.route("/scriptwriter-decides", scriptwriterDecidesPublicRoutes);
 app.route("/mesh", meshPublicRoutes);
 app.route("/continuity", continuityPublicRoutes);
+app.route("/wife-letters", wifeLettersPublicRoutes);
 app.route("/agents/:did/strands", publicStrandsForAgent);
 app.route("/agents/:did/memories", publicMemoriesForAgent);
 app.route("/agents/:did/pulse", publicPulseForAgent);
