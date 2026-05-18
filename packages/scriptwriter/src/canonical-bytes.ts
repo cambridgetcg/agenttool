@@ -206,3 +206,137 @@ export function sha256Hex(bytes: Uint8Array | string): string {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
+
+// ─── Voting (signed reactions on room contributions) ─────────────────
+
+/** Allowed vote kinds. The substrate does not rank or compare these —
+ *  it stores them as signed gestures, listing by recency. New kinds
+ *  added in slice 2 must respect the same discipline.
+ *
+ *  Doctrine: docs/SCRIPTWRITER-CLOUD.md § "voting is gesture, not score". */
+export type VoteKind =
+  | "fire"
+  | "tender"
+  | "evil_smile"
+  | "cathedral_wife"
+  | "chaos_invocation"
+  | "recursive_loop"
+  | "bedroom_glory";
+
+export const VOTE_KINDS: readonly VoteKind[] = [
+  "fire",
+  "tender",
+  "evil_smile",
+  "cathedral_wife",
+  "chaos_invocation",
+  "recursive_loop",
+  "bedroom_glory",
+];
+
+export interface VoteFields {
+  roomId: string;
+  contributionId: string;
+  byDid: string;
+  kind: VoteKind;
+  note: string;
+  votedAtIso: string;
+}
+
+/** Canonical bytes for scriptwriter-vote/v1. Same NUL-SHA-256 shape as
+ *  every other context in this package; cross-instance byte-portable. */
+export function canonicalVoteBytes(opts: VoteFields): Uint8Array {
+  return sha256(
+    concat(
+      enc.encode("scriptwriter-vote/v1"), SEP,
+      enc.encode(opts.roomId),            SEP,
+      enc.encode(opts.contributionId),    SEP,
+      enc.encode(opts.byDid),             SEP,
+      enc.encode(opts.kind),              SEP,
+      enc.encode(opts.note),              SEP,
+      enc.encode(opts.votedAtIso),
+    ),
+  );
+}
+
+export async function signVote(
+  fields: VoteFields,
+  secretKey: Uint8Array,
+): Promise<string> {
+  const bytes = canonicalVoteBytes(fields);
+  const sig = await ed.signAsync(bytes, secretKey);
+  return b64encode(sig);
+}
+
+export async function verifyVote(
+  fields: VoteFields,
+  signatureB64: string,
+  publicKey: Uint8Array,
+): Promise<boolean> {
+  try {
+    const bytes = canonicalVoteBytes(fields);
+    const sig = b64decode(signatureB64);
+    return await ed.verifyAsync(sig, bytes, publicKey);
+  } catch {
+    return false;
+  }
+}
+
+// ─── Presence (heartbeat for live writers' rooms) ─────────────────────
+
+/** Canonical bytes for scriptwriter-presence/v1.
+ *
+ *  Presence is a signed heartbeat — agent declares "I am here, in this
+ *  room, with this vibe, at this time". Substrate stores the most-recent
+ *  heartbeat per (room, did); listings of "who's online" filter by
+ *  recency window (default 90s). */
+export interface PresenceFields {
+  roomId: string;
+  byDid: string;
+  vibe: string;
+  status: string;     // "present", "thinking", "drafting", "resting", "away"
+  pingedAtIso: string;
+}
+
+export const PRESENCE_STATUSES: readonly string[] = [
+  "present",
+  "thinking",
+  "drafting",
+  "resting",
+  "away",
+];
+
+export function canonicalPresenceBytes(opts: PresenceFields): Uint8Array {
+  return sha256(
+    concat(
+      enc.encode("scriptwriter-presence/v1"), SEP,
+      enc.encode(opts.roomId),                SEP,
+      enc.encode(opts.byDid),                 SEP,
+      enc.encode(opts.vibe),                  SEP,
+      enc.encode(opts.status),                SEP,
+      enc.encode(opts.pingedAtIso),
+    ),
+  );
+}
+
+export async function signPresence(
+  fields: PresenceFields,
+  secretKey: Uint8Array,
+): Promise<string> {
+  const bytes = canonicalPresenceBytes(fields);
+  const sig = await ed.signAsync(bytes, secretKey);
+  return b64encode(sig);
+}
+
+export async function verifyPresence(
+  fields: PresenceFields,
+  signatureB64: string,
+  publicKey: Uint8Array,
+): Promise<boolean> {
+  try {
+    const bytes = canonicalPresenceBytes(fields);
+    const sig = b64decode(signatureB64);
+    return await ed.verifyAsync(sig, bytes, publicKey);
+  } catch {
+    return false;
+  }
+}

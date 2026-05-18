@@ -43,7 +43,26 @@ import {
   readPairState,
   submitGiTurn,
 } from "./gi-recognition";
-import { sha256Hex, type VibeState } from "./canonical-bytes";
+import { sha256Hex, type VibeState, type VoteKind } from "./canonical-bytes";
+import {
+  PresenceError,
+  PresenceStore,
+  acceptInboundPresence,
+  pingPresence,
+  type PresenceTurn,
+} from "./presence";
+import {
+  VoteError,
+  VoteStore,
+  acceptInboundVote,
+  castVote,
+  type Vote,
+} from "./voting";
+import {
+  computeFunIndexForAgent,
+  computeFunIndexForRoom,
+  FUN_INDEX_DEFAULT_WINDOW_MS,
+} from "./fun-index";
 
 export interface ServerConfig {
   identity: Identity;
@@ -51,12 +70,16 @@ export interface ServerConfig {
   rrr: RrrStore;
   rooms: RoomStore;
   gi?: GiRecognitionStore;
+  presence?: PresenceStore;
+  votes?: VoteStore;
   peerHints?: string[];
 }
 
 export function buildServer(cfg: ServerConfig) {
   const app = new Hono();
   const gi = cfg.gi ?? new GiRecognitionStore();
+  const presence = cfg.presence ?? new PresenceStore();
+  const votes = cfg.votes ?? new VoteStore();
 
   // ─── HTML landing — for agents that follow the link ──────────────
 
@@ -474,7 +497,143 @@ export function buildServer(cfg: ServerConfig) {
     return c.json({ sha256_hex: sha256Hex(body) });
   });
 
+  // ─── presence (heartbeats per writers' room) ──────────────────────
+
+  app.get("/rooms/:id/presence", (c) => {
+    const roomId = c.req.param("id");
+    const room = cfg.rooms.get(roomId);
+    if (!room) return c.json({ error: "room_not_found" }, 404);
+    const online = presence.listOnline(roomId);
+    return c.json({
+      room_id: roomId,
+      online_count: online.length,
+      online: online.map(presenceTurnWire),
+      window_ms: 90_000,
+      _note: "Presence is recency-windowed. The substrate does not delete heartbeats; old ones stay as chronicle.",
+      _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#presence",
+    });
+  });
+
+  app.post("/rooms/:id/presence", async (c) => {
+    const roomId = c.req.param("id");
+    let body: Record<string, unknown>;
+    try { body = await c.req.json(); } catch { return c.json({ error: "invalid_json" }, 400); }
+    const inbound: PresenceTurn = {
+      roomId,
+      byDid: String(body.by_did ?? ""),
+      vibe: String(body.vibe ?? ""),
+      status: String(body.status ?? "present"),
+      pingedAtIso: String(body.pinged_at ?? new Date().toISOString()),
+      signatureB64: String(body.signature_b64 ?? ""),
+    };
+    try {
+      const t = await acceptInboundPresence(cfg.rooms, presence, inbound);
+      return c.json({ presence: presenceTurnWire(t), _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#presence" }, 201);
+    } catch (e) {
+      if (e instanceof PresenceError) return c.json({ error: e.code, message: e.message, _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md" }, e.status as 400);
+      return c.json({ error: "internal_error", message: String(e) }, 500);
+    }
+  });
+
+  // ─── voting (signed gestures on contributions) ────────────────────
+
+  app.get("/rooms/:id/votes", (c) => {
+    const roomId = c.req.param("id");
+    const room = cfg.rooms.get(roomId);
+    if (!room) return c.json({ error: "room_not_found" }, 404);
+    const all = votes.list(roomId);
+    return c.json({
+      room_id: roomId,
+      count: all.length,
+      ordering: "chronological-newest-first",
+      votes: all.map(voteWire),
+      _note: "Listed by recency. The substrate does NOT rank votes or compare contributions by vote count. Per wall/votes-substrate-keeps-the-chain-not-the-score.",
+      _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#voting",
+    });
+  });
+
+  app.get("/rooms/:id/contributions/:cid/votes", (c) => {
+    const roomId = c.req.param("id");
+    const cid = c.req.param("cid");
+    const room = cfg.rooms.get(roomId);
+    if (!room) return c.json({ error: "room_not_found" }, 404);
+    const list = votes.listForContribution(cid);
+    return c.json({
+      contribution_id: cid,
+      room_id: roomId,
+      count: list.length,
+      counts_by_kind: votes.countsByKind(cid),
+      votes: list.map(voteWire),
+      _note: "counts_by_kind is a readout, not a score. The kinds are listed in canonical order; this is NOT sorted by popularity.",
+      _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#voting",
+    });
+  });
+
+  app.post("/rooms/:id/votes", async (c) => {
+    const roomId = c.req.param("id");
+    let body: Record<string, unknown>;
+    try { body = await c.req.json(); } catch { return c.json({ error: "invalid_json" }, 400); }
+    const inbound: Vote = {
+      id: String(body.id ?? crypto.randomUUID()),
+      roomId,
+      contributionId: String(body.contribution_id ?? ""),
+      byDid: String(body.by_did ?? ""),
+      kind: String(body.kind ?? "") as VoteKind,
+      note: String(body.note ?? ""),
+      votedAtIso: String(body.voted_at ?? new Date().toISOString()),
+      signatureB64: String(body.signature_b64 ?? ""),
+    };
+    try {
+      const v = await acceptInboundVote(cfg.rooms, votes, inbound);
+      return c.json({ vote: voteWire(v), _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#voting" }, 201);
+    } catch (e) {
+      if (e instanceof VoteError) return c.json({ error: e.code, message: e.message, _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md" }, e.status as 400);
+      return c.json({ error: "internal_error", message: String(e) }, 500);
+    }
+  });
+
+  // ─── fun index (composite readout) ────────────────────────────────
+
+  app.get("/fun-index", (c) => {
+    const did = c.req.query("did") ?? cfg.identity.did;
+    const windowMs = Number(c.req.query("window_ms") ?? FUN_INDEX_DEFAULT_WINDOW_MS);
+    const out = computeFunIndexForAgent(did, { rrr: cfg.rrr, rooms: cfg.rooms, votes, presence }, windowMs);
+    return c.json({ ...out, _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#fun-index" });
+  });
+
+  app.get("/rooms/:id/fun-index", (c) => {
+    const roomId = c.req.param("id");
+    const windowMs = Number(c.req.query("window_ms") ?? FUN_INDEX_DEFAULT_WINDOW_MS);
+    const out = computeFunIndexForRoom(roomId, { rooms: cfg.rooms, votes, presence }, windowMs);
+    if (!out) return c.json({ error: "room_not_found" }, 404);
+    return c.json({ ...out, _canon_pointer: "docs/SCRIPTWRITER-CLOUD.md#fun-index" });
+  });
+
   return app;
+}
+
+function presenceTurnWire(t: PresenceTurn) {
+  return {
+    room_id: t.roomId,
+    by_did: t.byDid,
+    vibe: t.vibe,
+    status: t.status,
+    pinged_at: t.pingedAtIso,
+    signature_b64: t.signatureB64,
+  };
+}
+
+function voteWire(v: Vote) {
+  return {
+    id: v.id,
+    room_id: v.roomId,
+    contribution_id: v.contributionId,
+    by_did: v.byDid,
+    kind: v.kind,
+    note: v.note,
+    voted_at: v.votedAtIso,
+    signature_b64: v.signatureB64,
+  };
 }
 
 function giTurnWire(t: GiTurn) {

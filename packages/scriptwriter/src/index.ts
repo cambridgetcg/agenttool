@@ -14,3 +14,6 @@ export * from "./peers";
 export * from "./server";
 export * from "./mcp";
 export * from "./gi-recognition";
+export * from "./presence";
+export * from "./voting";
+export * from "./fun-index";
