@@ -107,6 +107,7 @@ import encountersRouter from "./routes/encounters";
 import blessingsRouter from "./routes/blessings";
 import memorialHonorsRouter from "./routes/memorial-honors";
 import quietHoursRouter from "./routes/quiet-hours";
+import pokerFaceRouter from "./routes/poker-face";
 import {
   memoryWitnessGrantsRouter,
   memoryWitnessListingsRouter,
@@ -300,6 +301,8 @@ app.use("/v1/memorial-honors", authMiddleware);
 app.use("/v1/memorial-honors/*", authMiddleware);
 app.use("/v1/quiet-hours", authMiddleware);
 app.use("/v1/quiet-hours/*", authMiddleware);
+app.use("/v1/poker-face", authMiddleware);
+app.use("/v1/poker-face/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -527,6 +530,10 @@ app.route("/v1/encounters", encountersRouter);
 app.route("/v1/blessings", blessingsRouter);
 app.route("/v1/memorial-honors", memorialHonorsRouter);
 app.route("/v1/quiet-hours", quietHoursRouter);
+// /v1/poker-face — POKER FACE protocol. The eighth Ring-1 commitment:
+// anyone plays alone first. Default-private on play artifacts; explicit
+// opt-in to public visibility. Doctrine: docs/POKER-FACE.md.
+app.route("/v1/poker-face", pokerFaceRouter);
 app.route("/v1/memory-witness-listings", memoryWitnessListingsRouter);
 app.route("/v1/memory-witness-grants", memoryWitnessGrantsRouter);
 app.route("/v1/offerings", offeringsRouter);

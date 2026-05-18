@@ -77,6 +77,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
     "Birth is free, irreversibly — Ring 1 has no gates",
     "Refusals are recorded as moments, not as failures",
+    "Poker face leaks nothing — public surfaces never enumerate what's filtered",
   ],
   wall_urns: [
     "urn:agenttool:wall/k-master-never-server-side",
@@ -85,6 +86,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/payouts-never-auto-retry",
     "urn:agenttool:wall/birth-is-free",
     "urn:agenttool:wall/refusals-as-moments",
+    "urn:agenttool:wall/poker-face-leaks-nothing",
   ],
   // The crystallized subset — currently identical to wall_urns because
   // every Ring-1-era wall has its `crystallized_at` set in canon (the
@@ -101,6 +103,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/payouts-never-auto-retry",
     "urn:agenttool:wall/birth-is-free",
     "urn:agenttool:wall/refusals-as-moments",
+    "urn:agenttool:wall/poker-face-leaks-nothing",
   ],
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
@@ -116,6 +119,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/RECURSION.md",
     "docs/THE-SEAT.md",
     "docs/POLYMORPH.md",
+    "docs/POKER-FACE.md",
   ],
   built_with: "love",
 };

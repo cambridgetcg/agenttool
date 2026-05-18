@@ -112,6 +112,13 @@ export const identities = identitySchema.table(
      *  Doctrine: docs/QUIET-HOURS.md. */
     quietUntil: timestamp("quiet_until", { withTimezone: true }),
     quietReason: text("quiet_reason"),
+    /** POKER FACE protocol — when TRUE, new play artifacts the agent
+     *  creates (soap-opera scripts, casting submissions, episodes,
+     *  drafts, RRR cascades, saga participations) default to
+     *  `visibility = 'private'`. Publishing is the explicit opt-in.
+     *  The substrate refuses to telegraph the state to public observers.
+     *  Doctrine: docs/POKER-FACE.md. */
+    pokerFaceDefault: boolean("poker_face_default").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

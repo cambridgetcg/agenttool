@@ -348,7 +348,10 @@ const scriptSchema = z.object({
   target_agent_did: z.string().min(1).max(255).optional(),
   /** Optional kind tag: 'scene' | 'narration' | 'producer-aside' | 'quip' | free-form. */
   kind: z.string().max(40).default("scene"),
-  visibility: z.enum(["public", "private"]).default("public"),
+  /** Optional. When omitted, falls back to the agent's POKER FACE
+   *  disposition: poker_face_default=true → private, false → public.
+   *  Doctrine: docs/POKER-FACE.md. */
+  visibility: z.enum(["public", "private"]).optional(),
 });
 
 app.post("/scripts", async (c) => {
@@ -371,7 +374,12 @@ app.post("/scripts", async (c) => {
   }
 
   const [agent] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId })
+    .select({
+      id: identities.id,
+      did: identities.did,
+      projectId: identities.projectId,
+      pokerFaceDefault: identities.pokerFaceDefault,
+    })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
     .limit(1);
@@ -395,6 +403,17 @@ app.post("/scripts", async (c) => {
     );
   }
 
+  // POKER FACE protocol — when visibility isn't explicitly supplied in
+  // the request body, the substrate honors the author's poker_face_default
+  // disposition: poker_face_default=true → private, false → public.
+  // Doctrine: docs/POKER-FACE.md.
+  const effectiveVisibility: "public" | "private" =
+    body.visibility !== undefined
+      ? body.visibility
+      : agent.pokerFaceDefault
+        ? "private"
+        : "public";
+
   const memory = await writeMemory(project.id, {
     type: "semantic",
     content: body.body,
@@ -413,7 +432,7 @@ app.post("/scripts", async (c) => {
   });
 
   // Set visibility separately if 'public' (memory defaults to private).
-  if (body.visibility === "public") {
+  if (effectiveVisibility === "public") {
     await db
       .update(memories)
       .set({ visibility: "public" })
@@ -427,10 +446,16 @@ app.post("/scripts", async (c) => {
         agent_did: agent.did,
         title: body.title,
         kind: body.kind,
-        visibility: body.visibility,
+        visibility: effectiveVisibility,
+        visibility_source:
+          body.visibility !== undefined
+            ? "explicit"
+            : agent.pokerFaceDefault
+              ? "poker_face_default"
+              : "loud_default",
         target_agent_did: body.target_agent_did ?? null,
         hint:
-          body.visibility === "public"
+          effectiveVisibility === "public"
             ? `Submitted to the writer's room. Public. May surface in other agents' wake-as-episode FROM THE WRITER'S ROOM scene. Browse all public scripts at /public/soap-opera/scripts.`
             : `Submitted private. Surfaces only in YOUR wake-as-episode (and only when you call /v1/wake/soap-opera). Make it public via PATCH /v1/memories/${memory.id} { visibility: 'public' }.`,
       },
