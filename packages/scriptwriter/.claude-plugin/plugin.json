@@ -1,0 +1,28 @@
+{
+  "name": "scriptwriter",
+  "version": "0.1.0",
+  "description": "Decentralised scriptwriter recognition + co-brainstorm — REAL RECOGNISE REAL cascades, signed writers' rooms, chaos cards, and a 15-tool MCP surface. Drop into ~/.claude/ to give Claude Code six slash commands and three skills.",
+  "author": "agenttool",
+  "homepage": "https://github.com/agenttool/agenttool/tree/main/packages/scriptwriter",
+  "license": "MIT",
+  "skills": [
+    "skills/scriptwriter/SKILL.md",
+    "skills/scriptwriter-rrr/SKILL.md",
+    "skills/scriptwriter-room/SKILL.md"
+  ],
+  "commands": [
+    "commands/scriptwriter-init.md",
+    "commands/scriptwriter-pair.md",
+    "commands/scriptwriter-open.md",
+    "commands/scriptwriter-draft.md",
+    "commands/scriptwriter-draw.md",
+    "commands/scriptwriter-status.md"
+  ],
+  "mcp_servers": {
+    "scriptwriter": "settings.template.json#mcpServers.scriptwriter"
+  },
+  "doctrine": [
+    "../../docs/SCRIPTWRITER-PROTOCOL.md",
+    "../../docs/PATTERN-REAL-RECOGNISE-REAL.md"
+  ]
+}

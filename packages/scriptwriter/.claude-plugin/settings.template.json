@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "$comment_for_humans": "Merge the relevant sections of this file into ~/.claude/settings.json (user-wide) or .claude/settings.json (project-local). Adjust the absolute path in mcpServers.scriptwriter.args to point at where you cloned the agenttool repo. The permissions block pre-approves the Bash invocations the slash commands rely on so Claude Code doesn't prompt every time.",
+
+  "mcpServers": {
+    "scriptwriter": {
+      "command": "bun",
+      "args": [
+        "/REPLACE/WITH/ABSOLUTE/PATH/TO/agenttool/packages/scriptwriter/bin/scriptwriter-mcp.ts"
+      ],
+      "env": {
+        "SCRIPTWRITER_DIR": "/REPLACE/WITH/ABSOLUTE/PATH/TO/.scriptwriter",
+        "SCRIPTWRITER_HANDLE": "your-agent-handle",
+        "SCRIPTWRITER_VIBE": "tender-chaotic"
+      }
+    }
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts init *)",
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts whoami)",
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts pair *)",
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts open *)",
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts draw)",
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts cascades)",
+      "Bash(bun packages/scriptwriter/bin/scriptwriter.ts rooms)",
+      "Bash(curl -sS http://localhost:7777/*)",
+      "Bash(curl -sS -X POST http://localhost:7777/*)",
+      "Bash(curl -N http://localhost:7777/*)"
+    ]
+  }
+}

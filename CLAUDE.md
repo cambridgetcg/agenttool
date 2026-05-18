@@ -17,7 +17,8 @@ agenttool/
 │   (agenttool.dev now points at the API directly — A2A AgentCard at /.well-known/agent-card.json)
 ├── packages/
 │   ├── sdk-ts/      — @agenttool/sdk on npm · zero-dep · 13 namespaces
-│   └── sdk-py/      — agenttool-sdk on PyPI · ships SOUL.md inside the wheel
+│   ├── sdk-py/      — agenttool-sdk on PyPI · ships SOUL.md inside the wheel
+│   └── scriptwriter/ — @agenttool/scriptwriter · decentralised RRR + co-brainstorm; byte-compat with /v1/guild/rrr
 ├── infra/           — Fly.io deploy configs · legacy archive
 ├── docs/            — ~73 doctrine stones — see docs/MAP.md
 ├── bin/             — Operator scripts · agenttool-bridge.ts · agenttool-think.ts
@@ -36,6 +37,7 @@ agenttool/
 | Work on the API monolith | `api/CLAUDE.md` |
 | Work on the dashboard | `apps/dashboard/CLAUDE.md` |
 | Work on either SDK | `packages/sdk-ts/CLAUDE.md` · `packages/sdk-py/CLAUDE.md` |
+| Stand up a decentralised scriptwriter node | `packages/scriptwriter/README.md` → `docs/SCRIPTWRITER-PROTOCOL.md` |
 | Deploy or touch infra | `infra/CLAUDE.md` → `docs/STACK.md` |
 
 ## The four critical paths
@@ -97,6 +99,7 @@ When someone says "runtime," they mean one of three things. These are not interc
 | `docs/TROUBLESHOOTING.md` | Failure-mode-organized — find your symptom, follow the path. | live |
 | `docs/SURPRISES.md` | Non-obvious things every session should know. Hard-won knowledge. | live |
 | `docs/SDK-TIERS.md` | Four-tier SDK stack: HTTPS+JSON wire → OpenAPI+canonical-bytes contract → generated bindings → hand-crafted TS/Py SDKs. The substrate-neutral access path. | live |
+| `docs/SCRIPTWRITER-PROTOCOL.md` | The seventh move on the open wire — decentralised scriptwriter recognition + co-brainstorm. RFC 8615 well-known discovery · JSON-LD descriptor · signed knocks · byte-compat-with-agenttool RRR cascades (`guild-rrr-escalate/v1`) · signed contributions · SSE co-brainstorm streams · **15-tool MCP stdio server so any AI agent natively drives a node** (Claude Desktop / Cursor / Zed / custom). Reference impl at [`packages/scriptwriter`](../packages/scriptwriter/) (1.9k LOC, Bun, 34 tests pass · two-node HTTP federation verified · MCP-driven federation verified). Companion to PATTERN-REAL-RECOGNISE-REAL + ECOSYSTEM.md (MCP integration). | canonical |
 | `docs/CANONICAL-BYTES.md` | Every ed25519 signing context in one place — any language with curve arithmetic can sign. Pinned by cross-language vector tests. | live |
 | `docs/GLOSSARY.md` | English concepts → structural meanings. For any intelligence reading the corpus without the English concept-system. | live |
 

@@ -1,0 +1,54 @@
+{
+  "name": "@agenttool/scriptwriter",
+  "version": "0.1.0",
+  "description": "Decentralised scriptwriter recognition + communication protocol — local node any agent can stand up; byte-compatible with agenttool's /v1/guild/rrr cascade",
+  "type": "module",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "bin": {
+    "scriptwriter": "./bin/scriptwriter.ts",
+    "scriptwriter-mcp": "./bin/scriptwriter-mcp.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./canonical-bytes": "./src/canonical-bytes.ts",
+    "./identity": "./src/identity.ts",
+    "./peers": "./src/peers.ts"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md",
+    "PROTOCOL.md"
+  ],
+  "scripts": {
+    "init": "bun bin/scriptwriter.ts init",
+    "serve": "bun bin/scriptwriter.ts serve",
+    "pair": "bun bin/scriptwriter.ts pair",
+    "test": "bun test"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^2.0.1",
+    "hono": "^4.12.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "scriptwriter",
+    "decentralised",
+    "agent",
+    "rrr",
+    "recognition",
+    "soap-opera",
+    "p2p",
+    "did",
+    "ed25519",
+    "agenttool"
+  ]
+}
