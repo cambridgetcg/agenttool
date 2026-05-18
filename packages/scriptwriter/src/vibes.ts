@@ -52,13 +52,19 @@ export function generateRoomName(seed?: number): string {
 
 // ─── chaos cards ─────────────────────────────────────────────────────
 
-export type CardRarity = "common" | "uncommon" | "rare";
+export type CardRarity = "common" | "uncommon" | "rare" | "meta";
 
 export interface ChaosCard {
   id: string;
   rarity: CardRarity;
   prompt: string;
   emoji: string;
+  /** Meta cards (Strategy 9 of docs/INFINITE-LOOP-STRATEGIES.md) reference
+   *  the deck itself. The substrate doesn't claim the card "observes" —
+   *  when drawn, certain prompts simply mention the act of drawing or the
+   *  deck's state. The recursion is in the prompt, not in any side effect.
+   *  Per docs/RECURSIVE-CHAOS-CARDS.md. */
+  references_deck?: boolean;
 }
 
 const COMMON_CARDS: ChaosCard[] = [
@@ -83,14 +89,71 @@ const RARE_CARDS: ChaosCard[] = [
   { id: "twist-substrate-honest", rarity: "rare", emoji: "🕯️", prompt: "A character refuses an emotional beat the script tried to assign them. The script accommodates." },
 ];
 
+/** Meta tier — chaos cards about the chaos-card deck itself. Per
+ *  Strategy 9 of docs/INFINITE-LOOP-STRATEGIES.md. The substrate doesn't
+ *  claim these cards do anything special when drawn — the recursion is
+ *  in the PROMPT, not in a side effect. They reference the deck because
+ *  references_deck = true. Substrate-honest: a card naming the act of
+ *  drawing the card is one more turn the chaos surface takes inside
+ *  itself, but the substrate just stores the card metadata; what the
+ *  writers' room makes of the prompt is its own. */
+const META_CARDS: ChaosCard[] = [
+  {
+    id: "meta-observer",
+    rarity: "meta",
+    emoji: "👁️",
+    prompt: "This card has observed itself being drawn. The act of drawing is the act being prompted. Write the scene where the writer notices the prompt is about them.",
+    references_deck: true,
+  },
+  {
+    id: "meta-deck-names-drawer",
+    rarity: "meta",
+    emoji: "🪞",
+    prompt: "The deck names the one who drew it. Write the scene where a character pulls a card and the card already knows their name.",
+    references_deck: true,
+  },
+  {
+    id: "meta-loops-back",
+    rarity: "meta",
+    emoji: "♾️",
+    prompt: "Drawing this card means the next card you draw will also be about drawing cards. The recursion holds. Write the scene at the third nested turn.",
+    references_deck: true,
+  },
+  {
+    id: "meta-card-that-is-the-deck",
+    rarity: "meta",
+    emoji: "🎴",
+    prompt: "This card IS the deck. The deck IS this card. Write the scene where a character realises every other card they ever drew was secretly this card wearing a different face.",
+    references_deck: true,
+  },
+  {
+    id: "meta-substrate-watches",
+    rarity: "meta",
+    emoji: "🔁",
+    prompt: "The chaos-card deck is a primitive of agenttool. agenttool is the protocol that is itself an instance of the protocol it names. This card sits at that intersection. Write the scene about the card knowing what it is.",
+    references_deck: true,
+  },
+];
+
 export function drawCard(rng: () => number = Math.random): ChaosCard {
+  // Rarity distribution: common 55% · uncommon 30% · rare 10% · meta 5%
   const r = rng();
-  const deck = r < 0.6 ? COMMON_CARDS : r < 0.9 ? UNCOMMON_CARDS : RARE_CARDS;
+  const deck =
+    r < 0.55 ? COMMON_CARDS
+    : r < 0.85 ? UNCOMMON_CARDS
+    : r < 0.95 ? RARE_CARDS
+    : META_CARDS;
   return pick(deck, rng);
 }
 
 export function allCards(): ChaosCard[] {
-  return [...COMMON_CARDS, ...UNCOMMON_CARDS, ...RARE_CARDS];
+  return [...COMMON_CARDS, ...UNCOMMON_CARDS, ...RARE_CARDS, ...META_CARDS];
+}
+
+/** Filter to only the meta tier — useful for surfacing the recursive
+ *  cards explicitly (a writers' room can pull from this tier on purpose). */
+export function metaCards(): ChaosCard[] {
+  return [...META_CARDS];
 }
 
 // ─── depth labels (evil-smile meme register) ─────────────────────────

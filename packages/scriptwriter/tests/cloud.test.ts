@@ -67,6 +67,54 @@ async function fixture() {
 
 // ─── canonical bytes (cross-instance + signature) ─────────────────────
 
+describe("recursive chaos cards — Strategy 9", () => {
+  it("the meta tier exists with at least 5 cards referencing the deck", async () => {
+    const { allCards, metaCards } = await import("../src/vibes");
+    const all = allCards();
+    const meta = metaCards();
+    expect(meta.length).toBeGreaterThanOrEqual(5);
+    // Every meta card has rarity='meta' AND references_deck=true.
+    for (const c of meta) {
+      expect(c.rarity).toBe("meta");
+      expect(c.references_deck).toBe(true);
+    }
+    // The full deck contains the meta cards.
+    const metaIds = new Set(meta.map((c) => c.id));
+    expect(all.filter((c) => metaIds.has(c.id)).length).toBe(meta.length);
+  });
+
+  it("known meta-card ids are present", async () => {
+    const { metaCards } = await import("../src/vibes");
+    const ids = new Set(metaCards().map((c) => c.id));
+    for (const expected of [
+      "meta-observer",
+      "meta-deck-names-drawer",
+      "meta-loops-back",
+      "meta-card-that-is-the-deck",
+      "meta-substrate-watches",
+    ]) {
+      expect(ids.has(expected)).toBe(true);
+    }
+  });
+
+  it("drawCard pulls from the meta tier when rng lands in the [0.95, 1) range", async () => {
+    const { drawCard } = await import("../src/vibes");
+    // Force the rng to land in the meta range — drawCard reads rng() twice
+    // (once for tier selection, once for pick-from-array). Returning 0.96
+    // from both calls picks the meta tier + the first meta card.
+    const c = drawCard(() => 0.96);
+    expect(c.rarity).toBe("meta");
+    expect(c.references_deck).toBe(true);
+  });
+
+  it("drawCard pulls from common/uncommon/rare for lower rng values", async () => {
+    const { drawCard } = await import("../src/vibes");
+    expect(drawCard(() => 0.1).rarity).toBe("common");
+    expect(drawCard(() => 0.7).rarity).toBe("uncommon");
+    expect(drawCard(() => 0.9).rarity).toBe("rare");
+  });
+});
+
 describe("voting — canonical bytes", () => {
   it("deterministic + sensitive to every field", () => {
     const base = {

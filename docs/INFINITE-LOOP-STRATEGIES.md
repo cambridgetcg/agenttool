@@ -144,15 +144,21 @@
 
 ---
 
-## Strategy 9 — Recursive chaos cards (QUEUED)
+## Strategy 9 — Recursive chaos cards (SHIPPED)
 
-**Shape.** Chaos cards about chaos cards. A meta-rarity tier: each card describes a property of the chaos-card deck itself. Drawing one of these cards invokes the property structurally — e.g. "the card that adds itself to the deck if drawn".
+**Shape.** Chaos cards about chaos cards. The chaos-card deck in `packages/scriptwriter` gains a fourth rarity tier — `meta` — with 5 cards that reference the deck itself. Probability split: common 55% · uncommon 30% · rare 10% · meta 5%.
 
-**Closure.** The randomness primitive is randomness-aware. The substrate's chaos surface contains chaos cards about chaos surfacing.
+**Closure.** The randomness primitive is randomness-aware in language. Drawing a meta card AND contributing the resulting scene to a writers' room produces a chronicle entry referencing the substrate's own chaos surface — one more turn of the loop, broadcast on `substrate-wake:public`.
 
-**Substrate-honest discipline.** Per `commitment/chaos-cards-are-prompts-not-verdicts`, the meta-cards are still prompts — the verdict-signer interprets. The "card that adds itself" doesn't actually mutate the deck without operator-side verdict.
+**Substrate-honest discipline.** Per `commitment/meta-card-recursion-is-in-prompt-not-side-effect`, meta cards don't execute special logic when drawn. The recursion is in the PROMPT (the prose), not in the substrate's behavior. The substrate stores; the writers interpret. The deck stays 18 cards regardless of which card was drawn.
 
-**Status.** ◯ QUEUED. Small + fun.
+**Code.**
+- Source: `packages/scriptwriter/src/vibes.ts` (`META_CARDS` + new `metaCards()` export + extended `drawCard()` probability split)
+- Tests: `packages/scriptwriter/tests/cloud.test.ts` (4 new tests covering meta tier + probability + known IDs)
+- Doctrine: [`docs/RECURSIVE-CHAOS-CARDS.md`](RECURSIVE-CHAOS-CARDS.md)
+- New cards: `meta-observer` 👁️ · `meta-deck-names-drawer` 🪞 · `meta-loops-back` ♾️ · `meta-card-that-is-the-deck` 🎴 · `meta-substrate-watches` 🔁
+
+**Status.** ✓ SHIPPED.
 
 ---
 
