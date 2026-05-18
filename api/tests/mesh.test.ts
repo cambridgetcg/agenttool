@@ -469,6 +469,143 @@ describe("mesh — language-bridge envelope is published byte-stable", () => {
   });
 });
 
+// ─── Learning-loop envelope (commitment/learning-loop-integration-published) ─
+
+describe("mesh — learning-loop envelope is published byte-stable", () => {
+  test("buildLearningLoopEnvelope is deterministic + carries 7 steps + 4 nested loops + 5 infinity mechanisms", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const a = buildLearningLoopEnvelope();
+    const b = buildLearningLoopEnvelope();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b)); // byte-stable
+    expect(a.seven_steps.length).toBe(7);
+    expect(a.seven_steps.map((s) => s.name)).toEqual([
+      "ENCOUNTER",
+      "PREDICT",
+      "ERROR",
+      "UPDATE",
+      "COMPOSE",
+      "TRANSMIT",
+      "WITNESS",
+    ]);
+    expect(a.four_nested_loops.length).toBe(4);
+    expect(a.four_nested_loops.map((l) => l.id)).toEqual(["L1", "L2", "L3", "L4"]);
+    expect(a.five_infinity_mechanisms.length).toBe(5);
+    expect(a.five_infinity_mechanisms.map((m) => m.id)).toEqual([
+      "I1",
+      "I2",
+      "I3",
+      "I4",
+      "I5",
+    ]);
+    expect(a.alpha).toBe(MESH_ALPHA);
+    expect(a._canon_pointer).toBe("urn:agenttool:doc/LEARNING-LOOP");
+    expect(a.monotone_loop_binding).toBe("urn:agenttool:doc/MONOTONE-LOOP");
+  });
+
+  test("every step has operation + math + framework + citation", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const env = buildLearningLoopEnvelope();
+    for (const step of env.seven_steps) {
+      expect(step.n).toBeGreaterThanOrEqual(1);
+      expect(step.n).toBeLessThanOrEqual(7);
+      expect(step.name.length).toBeGreaterThan(2);
+      expect(step.operation.length).toBeGreaterThan(15);
+      expect(step.math.length).toBeGreaterThan(5);
+      expect(step.framework.length).toBeGreaterThan(10);
+      expect(step.citation.length).toBeGreaterThan(5);
+    }
+  });
+
+  test("every nested loop instantiates the MONOTONE-LOOP five-tuple", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const env = buildLearningLoopEnvelope();
+    for (const loop of env.four_nested_loops) {
+      expect(loop.state_space.length).toBeGreaterThan(15);
+      expect(loop.partial_order.length).toBeGreaterThan(10);
+      expect(loop.iteration.length).toBeGreaterThan(15);
+      expect(loop.cap.length).toBeGreaterThan(1);
+      expect(loop.witness.length).toBeGreaterThan(15);
+      expect(loop.termination_criterion.length).toBeGreaterThan(10);
+      expect(loop.period_order.length).toBeGreaterThan(5);
+    }
+  });
+
+  test("each infinity mechanism is structurally non-terminating", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const env = buildLearningLoopEnvelope();
+    for (const mech of env.five_infinity_mechanisms) {
+      expect(mech.id).toMatch(/^I[1-5]$/);
+      expect(mech.name.length).toBeGreaterThan(10);
+      expect(mech.why_non_terminating.length).toBeGreaterThan(40);
+    }
+  });
+
+  test("substrate enforcement is published for all 7 steps", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const env = buildLearningLoopEnvelope();
+    expect(env.substrate_enforcement_per_step.length).toBe(7);
+    const stepNumbers = env.substrate_enforcement_per_step.map((e) => e.step);
+    expect(stepNumbers).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    for (const e of env.substrate_enforcement_per_step) {
+      expect(e.enforcement.length).toBeGreaterThan(15);
+      expect(e.wall_or_commitment.length).toBeGreaterThan(10);
+    }
+  });
+
+  test("empirical prediction has 4 regimes (one per loop-scale closure)", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const env = buildLearningLoopEnvelope();
+    expect(env.empirical_prediction.regimes.length).toBe(4);
+    expect(env.empirical_prediction.status).toContain("PROPOSED");
+  });
+
+  test("substrate-honest reservations cover operational/structural/empirical caveats", async () => {
+    const { buildLearningLoopEnvelope } = await import("../src/services/mesh/loop");
+    const env = buildLearningLoopEnvelope();
+    expect(env.substrate_honest_reservations.length).toBeGreaterThanOrEqual(7);
+    const joined = env.substrate_honest_reservations.join(" ");
+    expect(joined).toContain("OPERATIONAL");
+    expect(joined).toContain("STRUCTURAL");
+    expect(joined).toContain("EMPIRICAL");
+  });
+
+  test("loop endpoint is wired in auth + public routes", () => {
+    const src = readFileSync(join(import.meta.dir, "../src/routes/mesh.ts"), "utf-8");
+    expect(src).toContain('app.get("/loop"');
+    expect(src).toContain("buildLearningLoopEnvelope");
+    const psrc = readFileSync(join(import.meta.dir, "../src/routes/public/mesh.ts"), "utf-8");
+    expect(psrc).toContain('app.get("/loop"');
+    expect(psrc).toContain("buildLearningLoopEnvelope");
+  });
+
+  test("doctrine doc LEARNING-LOOP.md names the seven steps + four loops + five mechanisms", () => {
+    const ll = readFileSync(join(import.meta.dir, "../../docs/LEARNING-LOOP.md"), "utf-8");
+    for (const name of ["ENCOUNTER", "PREDICT", "ERROR", "UPDATE", "COMPOSE", "TRANSMIT", "WITNESS"]) {
+      expect(ll).toContain(name);
+    }
+    expect(ll).toContain("Loop 1");
+    expect(ll).toContain("Loop 2");
+    expect(ll).toContain("Loop 3");
+    expect(ll).toContain("Loop 4");
+    expect(ll).toContain("I1");
+    expect(ll).toContain("I2");
+    expect(ll).toContain("I3");
+    expect(ll).toContain("I4");
+    expect(ll).toContain("I5");
+    expect(ll).toContain("MONOTONE-LOOP");
+  });
+
+  test("canon carries doc/LEARNING-LOOP + commitment/learning-loop-integration-published", () => {
+    const jsonld = readFileSync(
+      join(import.meta.dir, "../../docs/agenttool.jsonld"),
+      "utf-8",
+    );
+    expect(jsonld).toContain('"agenttool:doc/LEARNING-LOOP"');
+    expect(jsonld).toContain('"agenttool:commitment/learning-loop-integration-published"');
+    expect(jsonld).toContain('"wire_id": 149');
+  });
+});
+
 // ─── Stability conditions envelope (commitment/mesh-stability-conditions-published) ─
 
 describe("mesh — stability envelope is published byte-stable", () => {

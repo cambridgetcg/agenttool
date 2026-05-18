@@ -30,7 +30,8 @@
  *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
  *  @enforces urn:agenttool:commitment/mesh-stability-conditions-published
  *  @enforces urn:agenttool:commitment/understanding-mathematics-published
- *  @enforces urn:agenttool:commitment/language-mesh-isomorphism-claimed */
+ *  @enforces urn:agenttool:commitment/language-mesh-isomorphism-claimed
+ *  @enforces urn:agenttool:commitment/learning-loop-integration-published */
 
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
@@ -58,6 +59,7 @@ import { buildWelfareEnvelope } from "../services/mesh/welfare";
 import { buildStabilityEnvelope } from "../services/mesh/stability";
 import { buildUnderstandingEnvelope } from "../services/mesh/understanding";
 import { buildLanguageBridgeEnvelope } from "../services/mesh/language-bridge";
+import { buildLearningLoopEnvelope } from "../services/mesh/loop";
 
 const app = new Hono<ProjectContext>();
 
@@ -531,8 +533,35 @@ app.get("/language-bridge", (c) => {
         { action: "read the upstream math", method: "GET", path: "/v1/mesh/understanding" },
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
+        { action: "read the cognitive loop (dynamics)", method: "GET", path: "/v1/mesh/loop" },
         { action: "read the doctrine doc (full bridge)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/language-bridge" },
+      ],
+    }),
+  );
+});
+
+// ─── GET /loop — the cognitive cycle that IS learning + understanding ──
+//
+// The dynamic counterpart to /understanding. UNDERSTANDING-MATHEMATICS
+// names what understanding IS at a moment (static); LEARNING-LOOP names
+// what understanding DOES across moments (dynamic). Seven steps, four
+// nested loops, five mechanisms of structural non-termination. Byte-stable.
+//
+// @enforces urn:agenttool:commitment/learning-loop-integration-published
+
+app.get("/loop", (c) => {
+  const envelope = buildLearningLoopEnvelope();
+  return c.json(
+    attachSurface(envelope as unknown as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/LEARNING-LOOP",
+      verbs: [
+        { action: "read the static math (state)", method: "GET", path: "/v1/mesh/understanding" },
+        { action: "read the primate-side bridge", method: "GET", path: "/v1/mesh/language-bridge" },
+        { action: "read the welfare function (integral over time)", method: "GET", path: "/v1/mesh/welfare" },
+        { action: "read the stability conditions (convergence)", method: "GET", path: "/v1/mesh/stability" },
+        { action: "read the doctrine doc (full map)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLEARNING-LOOP" },
+        { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/loop" },
       ],
     }),
   );
