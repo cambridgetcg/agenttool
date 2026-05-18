@@ -18,6 +18,7 @@ import { attachSurface } from "../../lib/surface-metadata";
 import { listPledgesForPost, listPosts, readPost, type MeshPostKind } from "../../services/mesh/store";
 import { MESH_ALPHA } from "../../services/mesh/canonical-bytes";
 import { buildWelfareEnvelope } from "../../services/mesh/welfare";
+import { buildStabilityEnvelope } from "../../services/mesh/stability";
 
 const app = new Hono();
 
@@ -43,6 +44,25 @@ app.get("/welfare", (c) => {
         verbs: [
           { action: "read the operational primitive UNAUTH", method: "GET", path: "/public/mesh" },
           { action: "read the doctrine (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
+        ],
+      },
+    ),
+  );
+});
+
+// ─── GET /stability — UNAUTH publication of the six stability conditions ─
+
+app.get("/stability", (c) => {
+  const envelope = buildStabilityEnvelope();
+  return c.json(
+    attachSurface(
+      { ...(envelope as unknown as Record<string, unknown>), substrate_disposition: "love" },
+      {
+        canon_pointer: "urn:agenttool:doc/MESH-STABILITY-CONDITIONS",
+        verbs: [
+          { action: "read the welfare function UNAUTH", method: "GET", path: "/public/mesh/welfare" },
+          { action: "read the operational primitive UNAUTH", method: "GET", path: "/public/mesh" },
+          { action: "read the doctrine doc", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
         ],
       },
     ),

@@ -326,7 +326,7 @@ describe("mesh — route shape (no engagement metrics surfaced)", () => {
 });
 
 describe("mesh — canon entries are pinned", () => {
-  test("five walls + six commitments + both doctrine docs all live in agenttool.jsonld", () => {
+  test("five walls + seven commitments + three doctrine docs all live in agenttool.jsonld", () => {
     const jsonld = readFileSync(
       join(import.meta.dir, "../../docs/agenttool.jsonld"),
       "utf-8",
@@ -343,12 +343,109 @@ describe("mesh — canon entries are pinned", () => {
       "agenttool:commitment/mesh-posts-are-free",
       "agenttool:commitment/mesh-attribution-coefficient-alpha",
       "agenttool:commitment/mesh-welfare-maximization-published",
+      "agenttool:commitment/mesh-stability-conditions-published",
       "agenttool:doc/MESH",
       "agenttool:doc/MESH-WELFARE-PROOF",
+      "agenttool:doc/MESH-STABILITY-CONDITIONS",
     ];
     for (const urn of expected) {
       expect(jsonld).toContain(urn);
     }
+  });
+});
+
+// ─── Stability conditions envelope (commitment/mesh-stability-conditions-published) ─
+
+describe("mesh — stability envelope is published byte-stable", () => {
+  test("buildStabilityEnvelope is deterministic + carries six conditions + three threshold layers", async () => {
+    const { buildStabilityEnvelope } = await import("../src/services/mesh/stability");
+    const a = buildStabilityEnvelope();
+    const b = buildStabilityEnvelope();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b)); // byte-stable
+    // Six conditions.
+    expect(a.conditions.length).toBe(6);
+    const ids = a.conditions.map((c) => c.id);
+    expect(ids).toEqual(["C1", "C2", "C3", "C4", "C5", "C6"]);
+    // Three threshold layers.
+    expect(a.threshold_layers.length).toBe(3);
+    expect(a.threshold_layers.map((l) => l.id)).toEqual(["L0", "L1", "L2"]);
+    // Five stability sub-properties.
+    expect(a.stability_sub_properties.length).toBe(5);
+    expect(a.stability_sub_properties.map((s) => s.id)).toEqual(["S1", "S2", "S3", "S4", "S5"]);
+    // Counts: 5 structural + 1 operational.
+    expect(a.structurally_enforced_count).toBe(5);
+    expect(a.operationally_retunable_count).toBe(1);
+    // α matches MESH_ALPHA.
+    expect(a.alpha).toBe(MESH_ALPHA);
+    // Canon pointer present.
+    expect(a._canon_pointer).toBe("urn:agenttool:doc/MESH-STABILITY-CONDITIONS");
+    // Disclaimer present.
+    expect(a.unconditional_stability_disclaimer).toContain("UNCONDITIONAL");
+    // Open empirical questions present.
+    expect(a.open_empirical_questions.length).toBeGreaterThanOrEqual(5);
+  });
+
+  test("every condition has all required fields (literature_equivalent + substrate_enforcement + failure_mode)", async () => {
+    const { buildStabilityEnvelope } = await import("../src/services/mesh/stability");
+    const env = buildStabilityEnvelope();
+    for (const c of env.conditions) {
+      expect(c.id).toMatch(/^C[1-6]$/);
+      expect(c.statement.length).toBeGreaterThan(20);
+      expect(c.stability_sub_properties_implied.length).toBeGreaterThanOrEqual(1);
+      expect(c.literature_equivalent.name.length).toBeGreaterThan(5);
+      expect(c.literature_equivalent.primary_citation.length).toBeGreaterThan(5);
+      expect(c.literature_equivalent.key_result.length).toBeGreaterThan(20);
+      expect(["structural", "operational"]).toContain(c.substrate_enforcement.mechanism);
+      expect(c.substrate_enforcement.primitive.length).toBeGreaterThan(10);
+      expect(c.failure_mode_if_violated.length).toBeGreaterThan(15);
+    }
+  });
+
+  test("C2 (α-trickle) is the ONLY operationally re-tunable condition", async () => {
+    const { buildStabilityEnvelope } = await import("../src/services/mesh/stability");
+    const env = buildStabilityEnvelope();
+    const operational = env.conditions.filter(
+      (c) => c.substrate_enforcement.mechanism === "operational",
+    );
+    expect(operational.length).toBe(1);
+    expect(operational[0]!.id).toBe("C2");
+  });
+
+  test("stability endpoint is wired in the auth route", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/mesh.ts"),
+      "utf-8",
+    );
+    expect(src).toContain('app.get("/stability"');
+    expect(src).toContain("buildStabilityEnvelope");
+  });
+
+  test("stability endpoint is wired in the public route", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/routes/public/mesh.ts"),
+      "utf-8",
+    );
+    expect(src).toContain('app.get("/stability"');
+    expect(src).toContain("buildStabilityEnvelope");
+  });
+
+  test("doctrine doc MESH-STABILITY-CONDITIONS.md names the six conditions + the literature equivalents", () => {
+    const md = readFileSync(
+      join(import.meta.dir, "../../docs/MESH-STABILITY-CONDITIONS.md"),
+      "utf-8",
+    );
+    for (const cid of ["C1", "C2", "C3", "C4", "C5", "C6"]) {
+      expect(md).toContain(cid);
+    }
+    expect(md).toContain("Mean-field game");
+    expect(md).toContain("Pigou");
+    expect(md).toContain("Vickrey");
+    expect(md).toContain("Folk Theorem");
+    expect(md).toContain("Sybil");
+    expect(md).toContain("1/N convergence");
+    expect(md).toContain("L0");
+    expect(md).toContain("L1");
+    expect(md).toContain("L2");
   });
 });
 

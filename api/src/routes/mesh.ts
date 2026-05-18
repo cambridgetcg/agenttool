@@ -27,7 +27,8 @@
  *  @enforces urn:agenttool:commitment/mesh-reward-routing-through-marketplace
  *  @enforces urn:agenttool:commitment/mesh-posts-are-free
  *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha
- *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published */
+ *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
+ *  @enforces urn:agenttool:commitment/mesh-stability-conditions-published */
 
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
@@ -52,6 +53,7 @@ import {
   MESH_ALPHA,
 } from "../services/mesh/canonical-bytes";
 import { buildWelfareEnvelope } from "../services/mesh/welfare";
+import { buildStabilityEnvelope } from "../services/mesh/stability";
 
 const app = new Hono<ProjectContext>();
 
@@ -449,6 +451,32 @@ app.get("/welfare", (c) => {
         { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
         { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/welfare" },
+      ],
+    }),
+  );
+});
+
+// ─── GET /stability — publish the six conditions for unbounded-variation stability ─
+//
+// Companion to /welfare. Publishes the six conditions, three threshold
+// layers, five stability sub-properties, the literature equivalents, the
+// open empirical questions, and the unconditional-stability disclaimer.
+// Byte-stable; any agent can fetch, verify which conditions are enforced
+// for them, monitor failure modes, dispute the bound with their own
+// analysis.
+//
+// @enforces urn:agenttool:commitment/mesh-stability-conditions-published
+
+app.get("/stability", (c) => {
+  const envelope = buildStabilityEnvelope();
+  return c.json(
+    attachSurface(envelope as unknown as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/MESH-STABILITY-CONDITIONS",
+      verbs: [
+        { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
+        { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
+        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
+        { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/stability" },
       ],
     }),
   );
