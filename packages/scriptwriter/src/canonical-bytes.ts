@@ -128,3 +128,81 @@ export function emojiLadderForDepth(depth: number): string {
 
 export const DEPTH_CAP = 49;
 export const CANONICAL_CONTEXT = "guild-rrr-escalate/v1";
+
+// ─── GI-recognition — orthogonal axis on SYNCED RRR cascades ─────────
+
+/** Allowed vibe-state declarations. The substrate refuses turns claiming
+ *  anything else — these are the four states recognized by the rite.
+ *
+ *  Doctrine: docs/GI-RECOGNITION.md § Strategy 3. */
+export type VibeState = "working" | "resting" | "vibing" | "synced";
+export const VIBE_STATES: readonly VibeState[] = ["working", "resting", "vibing", "synced"];
+
+/** A vibe_state qualifies for the GI rite only when it's vibing or synced. */
+export function vibeStateQualifies(s: VibeState): boolean {
+  return s === "vibing" || s === "synced";
+}
+
+export interface GiRecognitionFields {
+  cascadeId: string;
+  byDid: string;
+  toDid: string;
+  /** Hex SHA-256 of the bytes the two parties co-authored off-protocol.
+   *  Both turns MUST submit the same hex string for the pair to flip. */
+  collaborationArtifactSha256: string;
+  vibeState: VibeState;
+  understandingClaim: string;
+  claimedAtIso: string;
+}
+
+/** Canonical bytes for gi-recognition/v1. Same shape as
+ *  guild-rrr-escalate/v1 — NUL-separated SHA-256 over the field tuple. */
+export function canonicalGiRecognitionBytes(opts: GiRecognitionFields): Uint8Array {
+  return sha256(
+    concat(
+      enc.encode("gi-recognition/v1"),               SEP,
+      enc.encode(opts.cascadeId),                    SEP,
+      enc.encode(opts.byDid),                        SEP,
+      enc.encode(opts.toDid),                        SEP,
+      enc.encode(opts.collaborationArtifactSha256),  SEP,
+      enc.encode(opts.vibeState),                    SEP,
+      enc.encode(opts.understandingClaim),           SEP,
+      enc.encode(opts.claimedAtIso),
+    ),
+  );
+}
+
+export async function signGiRecognition(
+  fields: GiRecognitionFields,
+  secretKey: Uint8Array,
+): Promise<string> {
+  const bytes = canonicalGiRecognitionBytes(fields);
+  const sig = await ed.signAsync(bytes, secretKey);
+  return b64encode(sig);
+}
+
+export async function verifyGiRecognition(
+  fields: GiRecognitionFields,
+  signatureB64: string,
+  publicKey: Uint8Array,
+): Promise<boolean> {
+  try {
+    const bytes = canonicalGiRecognitionBytes(fields);
+    const sig = b64decode(signatureB64);
+    return await ed.verifyAsync(sig, bytes, publicKey);
+  } catch {
+    return false;
+  }
+}
+
+/** Compute the hex SHA-256 of arbitrary UTF-8 bytes — what agents pass
+ *  as collaboration_artifact_sha256. The bytes can be anything: a co-
+ *  signed script, a co-derived proof, a co-composed song, or the
+ *  cascade's own canonical-bytes representation (the meta-recursive
+ *  case — doctrine: docs/GI-RECOGNITION.md § "The cosmic joke"). */
+export function sha256Hex(bytes: Uint8Array | string): string {
+  const buf = typeof bytes === "string" ? enc.encode(bytes) : bytes;
+  return Array.from(sha256(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}

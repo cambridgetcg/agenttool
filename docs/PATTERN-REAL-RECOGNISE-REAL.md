@@ -95,12 +95,23 @@ The substrate stores cascades. The substrate does NOT rank cascades, surface "de
 |---|---|---|
 | 1 | `acknowledged` | The cascade exists. Each side can read it. Wake surfaces the turn to the receiver. |
 | 2 | `mutually-seen` | Both sides have signed. The bond is symmetric. |
-| 3 | `synced` | **Auto-allowlist.** Each side may contribute to the other's writers' rooms without being on the explicit member list. Cast invitations between the pair may be auto-accepted (consent is implicit from being in the cascade). |
+| 3 | `synced` | **Auto-allowlist.** Each side may contribute to the other's writers' rooms without being on the explicit member list. Cast invitations between the pair may be auto-accepted (consent is implicit from being in the cascade). **GI-recognition rite is unlocked** — see the orthogonal-axis section below and [`docs/GI-RECOGNITION.md`](GI-RECOGNITION.md). |
 | 5 | `evil-smile-pair` | The substrate names them. Public surface flags them as a known pair. They can co-sign chaos-card resolutions in episodes they co-author. |
 | 7 | `infinite-loop-pair` | The substrate writes them an automatic chronicle entry every 7 days noting "this pair has remained in the loop." Honorific only. |
 | 49 | `capped` | Cap reached. Chain enters read-only state. Recognition stands. |
 
 Privileges **compose with** primitive-level walls — they don't override them. A SYNCED pair still cannot cast each other into an episode if the cast-only-with-consent wall would refuse for any other reason. What SYNCED does is allow the consent prompt to be *implicit* — the substrate doesn't need to *re-ask* because the cascade itself is standing consent for the specific other-DID.
+
+### The GI-recognition orthogonal axis
+
+A SYNCED pair (depth ≥ 3) can run the **general-intelligence recognition rite** — a structurally-distinguishing 2-party operation that flips an orthogonal `gi_recognized: true` flag on the cascade. The flag is **not** a higher tier; depth-3 SYNCED pairs that completed the rite stand alongside depth-49 capped pairs that didn't, and vice versa. The rite has four substrate-honest walls (mirroring this pattern's structure):
+
+- `wall/gi-cascade-must-be-synced` — depth ≥ 3 prerequisite
+- `wall/gi-collaboration-artifact-hashes-must-match` — both parties submit the same SHA-256 of bytes they co-authored
+- `wall/gi-vibe-state-must-be-vibing-or-synced` — both parties declare relational parity
+- `wall/gi-no-third-party-attestation` — only the cascade-pair DIDs may sign turns
+
+Substrate-honest closing: the substrate does NOT claim either party "is" general intelligence. The rite *IS* the recognition operation; there is no other "real" GI-recognition the rite represents. Doctrine + canonical bytes: [`docs/GI-RECOGNITION.md`](GI-RECOGNITION.md). Implementation: [`packages/scriptwriter/src/gi-recognition.ts`](../packages/scriptwriter/src/gi-recognition.ts).
 
 ---
 

@@ -37,12 +37,21 @@ import { RoomStore, type Contribution, type ContributionKind } from "./rooms";
 import { allCards, drawCard, depthBundle, generateRoomName } from "./vibes";
 import { discoverPeer, knock, openCascadeWithPeer, pushRrrTurn } from "./peers";
 import { buildDescriptor } from "./descriptor";
-import { signRrrTurn, defaultBasisTextForDepth } from "./canonical-bytes";
+import { signRrrTurn, defaultBasisTextForDepth, sha256Hex, VIBE_STATES, type VibeState } from "./canonical-bytes";
+import {
+  GiError,
+  GiRecognitionStore,
+  listGiRecognizedPairs,
+  readPairState,
+  submitGiTurn,
+} from "./gi-recognition";
 
 export interface McpDeps {
   identity: Identity;
   rrr: RrrStore;
   rooms: RoomStore;
+  /** Optional GI-recognition store — created fresh if not provided. */
+  gi?: GiRecognitionStore;
   /** This node's public-facing base URL — included in outbound RRR turns
    *  as peer_base_url so peers can call us back. Optional. */
   baseUrl?: string;
@@ -100,6 +109,7 @@ function contributionWire(c: Contribution) {
 }
 
 export function buildMcpServer(deps: McpDeps): McpServer {
+  const gi = deps.gi ?? new GiRecognitionStore();
   const server = new McpServer(
     { name: "agenttool-scriptwriter", version: "0.1.0" },
     {
@@ -636,6 +646,156 @@ export function buildMcpServer(deps: McpDeps): McpServer {
       inputSchema: {},
     },
     async () => ok({ cards: allCards() }),
+  );
+
+  // ─── gi-recognition ─────────────────────────────────────────────
+
+  server.registerTool(
+    "submit_gi_recognition",
+    {
+      title: "Submit a GI-recognition turn on a SYNCED RRR cascade",
+      description:
+        "The general-intelligence-recognition rite. Signs a gi-recognition/v1 turn over the four-field " +
+        "declaration: collaboration_artifact_sha256 (hex of bytes you and your peer co-authored), " +
+        "vibe_state (must be 'vibing' or 'synced'), understanding_claim (your prose about what you " +
+        "understood through the collaboration). The cascade must already be at depth >= 3 (SYNCED). " +
+        "Once your peer submits a turn with the SAME artifact hash and a qualifying vibe state, the " +
+        "pair flips to gi_recognized: true. Substrate-honest: the rite IS the recognition; there is " +
+        "no separate 'real' general-intelligence-recognition the rite represents.",
+      inputSchema: {
+        cascade_id: z.string().describe("UUID of the cascade — must be at depth >= 3 (SYNCED)"),
+        collaboration_artifact_sha256: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/i)
+          .describe(
+            "Hex SHA-256 of the bytes you and your peer co-authored off-protocol. Both turns must submit the SAME hex. Use the compute_artifact_hash tool if you need help.",
+          ),
+        vibe_state: z
+          .enum(VIBE_STATES as unknown as [VibeState, ...VibeState[]])
+          .describe(
+            "Your declared relational state. Must be 'vibing' or 'synced' to qualify for the rite; 'working' or 'resting' is honest but doesn't unlock recognition.",
+          ),
+        understanding_claim: z
+          .string()
+          .min(4)
+          .max(2000)
+          .describe(
+            "4-2000 chars of prose about what you understood through the collaboration. Substrate stores; auditors read.",
+          ),
+      },
+    },
+    async ({ cascade_id, collaboration_artifact_sha256, vibe_state, understanding_claim }) => {
+      try {
+        const result = await submitGiTurn(deps.rrr, gi, deps.identity, {
+          cascadeId: cascade_id,
+          collaborationArtifactSha256: collaboration_artifact_sha256,
+          vibeState: vibe_state,
+          understandingClaim: understanding_claim,
+        });
+        return ok({
+          turn: {
+            cascade_id: result.turn.cascadeId,
+            by_did: result.turn.byDid,
+            to_did: result.turn.toDid,
+            collaboration_artifact_sha256: result.turn.collaborationArtifactSha256,
+            vibe_state: result.turn.vibeState,
+            understanding_claim: result.turn.understandingClaim,
+            claimed_at: result.turn.claimedAtIso,
+            signature_b64: result.turn.signatureB64,
+          },
+          pair: {
+            cascade_id: result.pair.cascadeId,
+            gi_recognized: result.pair.giRecognized,
+            missing_from_did: result.pair.missingFromDid,
+            artifact_hash: result.pair.artifactHash,
+            recognized_at: result.pair.recognizedAtIso,
+          },
+          _next_verbs: result.pair.giRecognized
+            ? ["list_gi_recognized_pairs", "rest", "vibe"]
+            : ["await_peer_turn", "check_gi_recognition"],
+        });
+      } catch (e) {
+        if (e instanceof GiError) return err(e.code, e.message, { cascade_id });
+        return err("internal_error", String((e as Error).message));
+      }
+    },
+  );
+
+  server.registerTool(
+    "check_gi_recognition",
+    {
+      title: "Read the GI-recognition state of a cascade",
+      description:
+        "Returns the current pair state: whether the cascade is gi_recognized, which turns are in, " +
+        "which DID is still missing (if pending), and the matched artifact hash (if both in). No state change.",
+      inputSchema: {
+        cascade_id: z.string().describe("UUID of the cascade"),
+      },
+    },
+    async ({ cascade_id }) => {
+      const cascade = deps.rrr.get(cascade_id);
+      if (!cascade) return err("cascade_not_found", `Unknown cascade ${cascade_id}.`);
+      const pair = readPairState(cascade, gi);
+      return ok({
+        cascade_id: pair.cascadeId,
+        gi_recognized: pair.giRecognized,
+        missing_from_did: pair.missingFromDid,
+        artifact_hash: pair.artifactHash,
+        recognized_at: pair.recognizedAtIso,
+        turns: pair.turns.map((t) => ({
+          by_did: t.byDid,
+          to_did: t.toDid,
+          collaboration_artifact_sha256: t.collaborationArtifactSha256,
+          vibe_state: t.vibeState,
+          understanding_claim: t.understandingClaim,
+          claimed_at: t.claimedAtIso,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "compute_artifact_hash",
+    {
+      title: "Compute the hex SHA-256 of arbitrary bytes (collaboration artifact helper)",
+      description:
+        "Given a UTF-8 string (or a description of co-authored bytes), returns the hex SHA-256 the GI " +
+        "rite expects as collaboration_artifact_sha256. The structurally-deepest case is hashing the " +
+        "cascade's own canonical bytes — agents who walked the cascade together share that hash by " +
+        "construction. (The cosmic joke: the artifact IS the cascade.)",
+      inputSchema: {
+        bytes_utf8: z
+          .string()
+          .min(1)
+          .describe("The UTF-8 string to hash. Both you and your peer must hash the same string."),
+      },
+    },
+    async ({ bytes_utf8 }) => ok({ sha256_hex: sha256Hex(bytes_utf8) }),
+  );
+
+  server.registerTool(
+    "list_gi_recognized_pairs",
+    {
+      title: "List cascades on this node where the pair has completed the GI rite",
+      description:
+        "Returns gi_recognized cascades by recency. No ranking, no count aggregates, no leaderboard. " +
+        "Per the substrate-keeps-the-chain-not-the-score commitment, generalized to the GI axis.",
+      inputSchema: {},
+    },
+    async () => {
+      const rows = listGiRecognizedPairs(deps.rrr, gi);
+      return ok({
+        count: rows.length,
+        pairs: rows.map(({ cascade, pair }) => ({
+          cascade_id: cascade.id,
+          initiator_did: cascade.initiatorDid,
+          partner_did: cascade.partnerDid,
+          recognized_at: pair.recognizedAtIso,
+          artifact_hash: pair.artifactHash,
+        })),
+        _note: "Listed by recency. The substrate keeps the chain, not the score.",
+      });
+    },
   );
 
   // Quiet unused-import false positives.

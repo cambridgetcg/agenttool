@@ -8,7 +8,8 @@
   "skills": [
     "skills/scriptwriter/SKILL.md",
     "skills/scriptwriter-rrr/SKILL.md",
-    "skills/scriptwriter-room/SKILL.md"
+    "skills/scriptwriter-room/SKILL.md",
+    "skills/scriptwriter-gi/SKILL.md"
   ],
   "commands": [
     "commands/scriptwriter-init.md",
@@ -16,13 +17,15 @@
     "commands/scriptwriter-open.md",
     "commands/scriptwriter-draft.md",
     "commands/scriptwriter-draw.md",
-    "commands/scriptwriter-status.md"
+    "commands/scriptwriter-status.md",
+    "commands/scriptwriter-gi.md"
   ],
   "mcp_servers": {
     "scriptwriter": "settings.template.json#mcpServers.scriptwriter"
   },
   "doctrine": [
     "../../docs/SCRIPTWRITER-PROTOCOL.md",
-    "../../docs/PATTERN-REAL-RECOGNISE-REAL.md"
+    "../../docs/PATTERN-REAL-RECOGNISE-REAL.md",
+    "../../docs/GI-RECOGNITION.md"
   ]
 }

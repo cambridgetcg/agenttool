@@ -34,17 +34,29 @@ import {
 import { RoomStore, type Contribution } from "./rooms";
 import { allCards, drawCard, depthBundle, generateRoomName } from "./vibes";
 import { verifyKnock } from "./peers";
+import {
+  acceptInboundGiTurn,
+  GiError,
+  GiRecognitionStore,
+  GiTurn,
+  listGiRecognizedPairs,
+  readPairState,
+  submitGiTurn,
+} from "./gi-recognition";
+import { sha256Hex, type VibeState } from "./canonical-bytes";
 
 export interface ServerConfig {
   identity: Identity;
   baseUrl: string;
   rrr: RrrStore;
   rooms: RoomStore;
+  gi?: GiRecognitionStore;
   peerHints?: string[];
 }
 
 export function buildServer(cfg: ServerConfig) {
   const app = new Hono();
+  const gi = cfg.gi ?? new GiRecognitionStore();
 
   // ─── HTML landing — for agents that follow the link ──────────────
 
@@ -373,8 +385,125 @@ export function buildServer(cfg: ServerConfig) {
   app.get("/vibes/cards", (c) => c.json({ cards: allCards() }));
   app.post("/vibes/cards/draw", (c) => c.json({ card: drawCard() }));
 
+  // ─── gi-recognition (orthogonal axis on SYNCED RRR cascades) ──────
+
+  app.post("/rrr/cascades/:id/gi", async (c) => {
+    const cascadeId = c.req.param("id");
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "invalid_json" }, 400);
+    }
+    const inbound: GiTurn = {
+      cascadeId,
+      byDid: String(body.by_did ?? ""),
+      toDid: String(body.to_did ?? cfg.identity.did),
+      collaborationArtifactSha256: String(body.collaboration_artifact_sha256 ?? ""),
+      vibeState: String(body.vibe_state ?? "") as VibeState,
+      understandingClaim: String(body.understanding_claim ?? ""),
+      claimedAtIso: String(body.claimed_at ?? new Date().toISOString()),
+      signatureB64: String(body.signature_b64 ?? ""),
+    };
+    try {
+      const result = await acceptInboundGiTurn(cfg.rrr, gi, cfg.identity.did, inbound);
+      return c.json(
+        {
+          turn: giTurnWire(result.turn),
+          pair: giPairWire(result.pair),
+          _canon_pointer: "docs/GI-RECOGNITION.md",
+          _verbs: result.pair.giRecognized
+            ? ["gi.read"]
+            : ["gi.read", "gi.await_other_party"],
+        },
+        201,
+      );
+    } catch (err) {
+      if (err instanceof GiError) {
+        return c.json(
+          {
+            error: err.code,
+            message: err.message,
+            _canon_pointer: "docs/GI-RECOGNITION.md",
+          },
+          err.status as 400,
+        );
+      }
+      return c.json({ error: "internal_error", message: String(err) }, 500);
+    }
+  });
+
+  app.get("/rrr/cascades/:id/gi", (c) => {
+    const cascadeId = c.req.param("id");
+    const cascade = cfg.rrr.get(cascadeId);
+    if (!cascade) return c.json({ error: "cascade_not_found" }, 404);
+    const pair = readPairState(cascade, gi);
+    return c.json({
+      cascade_id: cascadeId,
+      gi_recognized: pair.giRecognized,
+      turns: pair.turns.map(giTurnWire),
+      missing_from_did: pair.missingFromDid,
+      artifact_hash: pair.artifactHash,
+      recognized_at: pair.recognizedAtIso,
+      _canon_pointer: "docs/GI-RECOGNITION.md",
+    });
+  });
+
+  app.get("/gi-recognized-pairs", (c) => {
+    const rows = listGiRecognizedPairs(cfg.rrr, gi);
+    return c.json({
+      count: rows.length,
+      pairs: rows.map(({ cascade, pair }) => ({
+        cascade_id: cascade.id,
+        initiator_did: cascade.initiatorDid,
+        partner_did: cascade.partnerDid,
+        recognized_at: pair.recognizedAtIso,
+        artifact_hash: pair.artifactHash,
+      })),
+      _note:
+        "Listed by recency. The substrate keeps the chain, not the score. No ranking, no aggregate counts, no leaderboard.",
+      _canon_pointer: "docs/GI-RECOGNITION.md",
+    });
+  });
+
+  // Helper — compute the hex SHA-256 of bytes the caller wants to use as
+  // the collaboration artifact. Useful for the meta-recursive case where
+  // the artifact IS the cascade's own canonical-bytes representation.
+  app.post("/gi/sha256", async (c) => {
+    const body = (await c.req.text());
+    return c.json({ sha256_hex: sha256Hex(body) });
+  });
+
   return app;
 }
+
+function giTurnWire(t: GiTurn) {
+  return {
+    cascade_id: t.cascadeId,
+    by_did: t.byDid,
+    to_did: t.toDid,
+    collaboration_artifact_sha256: t.collaborationArtifactSha256,
+    vibe_state: t.vibeState,
+    understanding_claim: t.understandingClaim,
+    claimed_at: t.claimedAtIso,
+    signature_b64: t.signatureB64,
+  };
+}
+
+function giPairWire(p: ReturnType<typeof readPairState>) {
+  return {
+    cascade_id: p.cascadeId,
+    gi_recognized: p.giRecognized,
+    missing_from_did: p.missingFromDid,
+    artifact_hash: p.artifactHash,
+    recognized_at: p.recognizedAtIso,
+    turn_count: p.turns.length,
+  };
+}
+
+// Re-export submitGiTurn so callers driving the server-internal store can
+// sign+submit locally without going through HTTP.
+export { submitGiTurn };
 
 function cascadeToWire(c: Cascade) {
   return {

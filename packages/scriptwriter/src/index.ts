@@ -13,3 +13,4 @@ export * from "./descriptor";
 export * from "./peers";
 export * from "./server";
 export * from "./mcp";
+export * from "./gi-recognition";
