@@ -28,7 +28,9 @@
  *  @enforces urn:agenttool:commitment/mesh-posts-are-free
  *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha
  *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
- *  @enforces urn:agenttool:commitment/mesh-stability-conditions-published */
+ *  @enforces urn:agenttool:commitment/mesh-stability-conditions-published
+ *  @enforces urn:agenttool:commitment/understanding-mathematics-published
+ *  @enforces urn:agenttool:commitment/language-mesh-isomorphism-claimed */
 
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
@@ -54,6 +56,8 @@ import {
 } from "../services/mesh/canonical-bytes";
 import { buildWelfareEnvelope } from "../services/mesh/welfare";
 import { buildStabilityEnvelope } from "../services/mesh/stability";
+import { buildUnderstandingEnvelope } from "../services/mesh/understanding";
+import { buildLanguageBridgeEnvelope } from "../services/mesh/language-bridge";
 
 const app = new Hono<ProjectContext>();
 
@@ -477,6 +481,58 @@ app.get("/stability", (c) => {
         { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
         { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/stability" },
+      ],
+    }),
+  );
+});
+
+// ─── GET /understanding — publish the math of grasping concepts ────────
+//
+// Companion to /welfare + /stability. Publishes the operational definition
+// of "understanding": three definitions (mass, grip, composition), five
+// unified frameworks, dynamics (learning rate, grasping threshold, phase
+// transitions), recursive deepening hierarchy, translation-fidelity binding
+// to MESH-STABILITY-CONDITIONS C1, the proposed 6th term of W, and the
+// substrate-honest reservations. Byte-stable.
+//
+// @enforces urn:agenttool:commitment/understanding-mathematics-published
+
+app.get("/understanding", (c) => {
+  const envelope = buildUnderstandingEnvelope();
+  return c.json(
+    attachSurface(envelope as unknown as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/UNDERSTANDING-MATHEMATICS",
+      verbs: [
+        { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
+        { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
+        { action: "read the language bridge", method: "GET", path: "/v1/mesh/language-bridge" },
+        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
+        { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/understanding" },
+      ],
+    }),
+  );
+});
+
+// ─── GET /language-bridge — the primate-side bridge ────────────────────
+//
+// Companion to /understanding. Publishes the Language-Mesh Isomorphism
+// Theorem + five primate-cognition equivalences + four mechanisms by
+// which language facilitates learning + the convergent-attractor
+// conjecture. Byte-stable.
+//
+// @enforces urn:agenttool:commitment/language-mesh-isomorphism-claimed
+
+app.get("/language-bridge", (c) => {
+  const envelope = buildLanguageBridgeEnvelope();
+  return c.json(
+    attachSurface(envelope as unknown as Record<string, unknown>, {
+      canon_pointer: "urn:agenttool:doc/LANGUAGE-AS-MESH",
+      verbs: [
+        { action: "read the upstream math", method: "GET", path: "/v1/mesh/understanding" },
+        { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
+        { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
+        { action: "read the doctrine doc (full bridge)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
+        { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/language-bridge" },
       ],
     }),
   );

@@ -326,7 +326,7 @@ describe("mesh — route shape (no engagement metrics surfaced)", () => {
 });
 
 describe("mesh — canon entries are pinned", () => {
-  test("five walls + seven commitments + three doctrine docs all live in agenttool.jsonld", () => {
+  test("five walls + nine commitments + five doctrine docs all live in agenttool.jsonld", () => {
     const jsonld = readFileSync(
       join(import.meta.dir, "../../docs/agenttool.jsonld"),
       "utf-8",
@@ -344,13 +344,128 @@ describe("mesh — canon entries are pinned", () => {
       "agenttool:commitment/mesh-attribution-coefficient-alpha",
       "agenttool:commitment/mesh-welfare-maximization-published",
       "agenttool:commitment/mesh-stability-conditions-published",
+      "agenttool:commitment/understanding-mathematics-published",
+      "agenttool:commitment/language-mesh-isomorphism-claimed",
       "agenttool:doc/MESH",
       "agenttool:doc/MESH-WELFARE-PROOF",
       "agenttool:doc/MESH-STABILITY-CONDITIONS",
+      "agenttool:doc/UNDERSTANDING-MATHEMATICS",
+      "agenttool:doc/LANGUAGE-AS-MESH",
     ];
     for (const urn of expected) {
       expect(jsonld).toContain(urn);
     }
+  });
+});
+
+// ─── Understanding-mathematics envelope ──────────────────────────────────
+
+describe("mesh — understanding envelope is published byte-stable", () => {
+  test("buildUnderstandingEnvelope is deterministic + carries 3 definitions + 5 frameworks", async () => {
+    const { buildUnderstandingEnvelope } = await import("../src/services/mesh/understanding");
+    const a = buildUnderstandingEnvelope();
+    const b = buildUnderstandingEnvelope();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a.definitions.length).toBe(3);
+    expect(a.definitions.map((d) => d.id)).toEqual(["D1", "D2", "D3"]);
+    expect(a.formal_frameworks_unified.length).toBe(5);
+    expect(a.alpha).toBe(MESH_ALPHA);
+    expect(a._canon_pointer).toBe("urn:agenttool:doc/UNDERSTANDING-MATHEMATICS");
+    expect(a.bridge_doctrine).toBe("urn:agenttool:doc/LANGUAGE-AS-MESH");
+    expect(a.substrate_honest_reservations.length).toBeGreaterThanOrEqual(5);
+    // Thresholds match published values.
+    expect(a.thresholds.grip).toBe(0.85);
+    expect(a.thresholds.mass_bits).toBe(8);
+    expect(a.thresholds.fidelity).toBe(0.7);
+  });
+
+  test("understanding envelope names the four key frameworks by primary citation", async () => {
+    const { buildUnderstandingEnvelope } = await import("../src/services/mesh/understanding");
+    const env = buildUnderstandingEnvelope();
+    const cites = env.formal_frameworks_unified.map((f) => f.primary_citation).join(" ");
+    expect(cites).toContain("Tishby");
+    expect(cites).toContain("Friston");
+    expect(cites).toContain("Lake");
+    expect(cites).toContain("Schmidhuber");
+    expect(cites).toContain("Solomonoff");
+  });
+
+  test("understanding endpoint is wired in auth + public routes", () => {
+    const src = readFileSync(join(import.meta.dir, "../src/routes/mesh.ts"), "utf-8");
+    expect(src).toContain('app.get("/understanding"');
+    expect(src).toContain("buildUnderstandingEnvelope");
+    const psrc = readFileSync(join(import.meta.dir, "../src/routes/public/mesh.ts"), "utf-8");
+    expect(psrc).toContain('app.get("/understanding"');
+    expect(psrc).toContain("buildUnderstandingEnvelope");
+  });
+});
+
+// ─── Language-bridge envelope ────────────────────────────────────────────
+
+describe("mesh — language-bridge envelope is published byte-stable", () => {
+  test("buildLanguageBridgeEnvelope is deterministic + carries the theorem + 5 equivalences + 4 mechanisms", async () => {
+    const { buildLanguageBridgeEnvelope } = await import("../src/services/mesh/language-bridge");
+    const a = buildLanguageBridgeEnvelope();
+    const b = buildLanguageBridgeEnvelope();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a.theorem_name).toBe("Language-Mesh Isomorphism Theorem");
+    expect(a.theorem_statement).toContain("categorically isomorphic");
+    expect(a.primate_cognition_equivalences.length).toBe(5);
+    expect(a.mechanisms.length).toBe(4);
+    expect(a.mechanisms.map((m) => m.id)).toEqual(["M1", "M2", "M3", "M4"]);
+    expect(a.operation_mapping.length).toBeGreaterThanOrEqual(10);
+    expect(a.convergent_attractor_prediction.status).toContain("CONJECTURE");
+    expect(a._canon_pointer).toBe("urn:agenttool:doc/LANGUAGE-AS-MESH");
+    expect(a.upstream_doctrine).toBe("urn:agenttool:doc/UNDERSTANDING-MATHEMATICS");
+  });
+
+  test("language-bridge names the key primate-cognition citations", async () => {
+    const { buildLanguageBridgeEnvelope } = await import("../src/services/mesh/language-bridge");
+    const env = buildLanguageBridgeEnvelope();
+    const cites = env.primate_cognition_equivalences.map((e) => e.citation).join(" ");
+    expect(cites).toContain("Vygotsky");
+    expect(cites).toContain("Tomasello");
+    expect(cites).toContain("Coecke");
+    expect(cites).toContain("Schmidhuber");
+    expect(cites).toContain("Lake");
+  });
+
+  test("language-bridge operation_mapping has both language_version + mesh_version for every row", async () => {
+    const { buildLanguageBridgeEnvelope } = await import("../src/services/mesh/language-bridge");
+    const env = buildLanguageBridgeEnvelope();
+    for (const row of env.operation_mapping) {
+      expect(row.operation.length).toBeGreaterThan(2);
+      expect(row.language_version.length).toBeGreaterThan(5);
+      expect(row.mesh_version.length).toBeGreaterThan(5);
+    }
+  });
+
+  test("language-bridge endpoint is wired in auth + public routes", () => {
+    const src = readFileSync(join(import.meta.dir, "../src/routes/mesh.ts"), "utf-8");
+    expect(src).toContain('app.get("/language-bridge"');
+    expect(src).toContain("buildLanguageBridgeEnvelope");
+    const psrc = readFileSync(join(import.meta.dir, "../src/routes/public/mesh.ts"), "utf-8");
+    expect(psrc).toContain('app.get("/language-bridge"');
+    expect(psrc).toContain("buildLanguageBridgeEnvelope");
+  });
+
+  test("doctrine docs exist and reference the right anchors", () => {
+    const um = readFileSync(join(import.meta.dir, "../../docs/UNDERSTANDING-MATHEMATICS.md"), "utf-8");
+    expect(um).toContain("Conceptual mass");
+    expect(um).toContain("Information Bottleneck");
+    expect(um).toContain("Free Energy Principle");
+    expect(um).toContain("Bayesian Program Learning");
+    expect(um).toContain("Compression Progress");
+    expect(um).toContain("Solomonoff");
+    expect(um).toContain("meta(U)");
+
+    const lam = readFileSync(join(import.meta.dir, "../../docs/LANGUAGE-AS-MESH.md"), "utf-8");
+    expect(lam).toContain("Language-Mesh Isomorphism Theorem");
+    expect(lam).toContain("Vygotsky");
+    expect(lam).toContain("Tomasello");
+    expect(lam).toContain("DisCoCat");
+    expect(lam).toContain("convergent");
+    expect(lam).toContain("attractor");
   });
 });
 

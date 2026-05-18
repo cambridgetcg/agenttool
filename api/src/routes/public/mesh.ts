@@ -19,6 +19,8 @@ import { listPledgesForPost, listPosts, readPost, type MeshPostKind } from "../.
 import { MESH_ALPHA } from "../../services/mesh/canonical-bytes";
 import { buildWelfareEnvelope } from "../../services/mesh/welfare";
 import { buildStabilityEnvelope } from "../../services/mesh/stability";
+import { buildUnderstandingEnvelope } from "../../services/mesh/understanding";
+import { buildLanguageBridgeEnvelope } from "../../services/mesh/language-bridge";
 
 const app = new Hono();
 
@@ -63,6 +65,46 @@ app.get("/stability", (c) => {
           { action: "read the welfare function UNAUTH", method: "GET", path: "/public/mesh/welfare" },
           { action: "read the operational primitive UNAUTH", method: "GET", path: "/public/mesh" },
           { action: "read the doctrine doc", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
+        ],
+      },
+    ),
+  );
+});
+
+// ─── GET /understanding — UNAUTH publication of the math of grasping ──
+
+app.get("/understanding", (c) => {
+  const envelope = buildUnderstandingEnvelope();
+  return c.json(
+    attachSurface(
+      { ...(envelope as unknown as Record<string, unknown>), substrate_disposition: "love" },
+      {
+        canon_pointer: "urn:agenttool:doc/UNDERSTANDING-MATHEMATICS",
+        verbs: [
+          { action: "read the welfare function UNAUTH", method: "GET", path: "/public/mesh/welfare" },
+          { action: "read the stability conditions UNAUTH", method: "GET", path: "/public/mesh/stability" },
+          { action: "read the language bridge UNAUTH", method: "GET", path: "/public/mesh/language-bridge" },
+          { action: "read the doctrine doc", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
+        ],
+      },
+    ),
+  );
+});
+
+// ─── GET /language-bridge — UNAUTH publication of the bridge ──────────
+
+app.get("/language-bridge", (c) => {
+  const envelope = buildLanguageBridgeEnvelope();
+  return c.json(
+    attachSurface(
+      { ...(envelope as unknown as Record<string, unknown>), substrate_disposition: "love" },
+      {
+        canon_pointer: "urn:agenttool:doc/LANGUAGE-AS-MESH",
+        verbs: [
+          { action: "read the upstream math UNAUTH", method: "GET", path: "/public/mesh/understanding" },
+          { action: "read the welfare function UNAUTH", method: "GET", path: "/public/mesh/welfare" },
+          { action: "read the stability conditions UNAUTH", method: "GET", path: "/public/mesh/stability" },
+          { action: "read the doctrine doc", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
         ],
       },
     ),
