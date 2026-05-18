@@ -78,9 +78,11 @@ Any script that needs one: `TOK=$(bin/agenttool-secret get agenttool-supabase-se
 
 ---
 
-### Move 2 — ed25519 verification at the DB layer (PL/Python)
+### Move 2 — ed25519 verification at the DB layer (PL/Python) — **DEFERRED**
 
-**Goal.** Install `plpython3u` extension + ship a `canon_verify_ed25519(canonical_bytes BYTEA, signature_b64 TEXT, public_key_b64 TEXT) RETURNS BOOL` function. Every signed insert (RRR turns, naming submissions, GI-recognition turns, covenant signatures, knock payloads, chronicle seals) gets a CHECK constraint or BEFORE INSERT trigger that calls it. Tampered rows literally cannot enter Postgres, even if the Bun service is bypassed.
+> **STATUS (2026-05-19): Deferred.** Supabase managed Postgres does NOT ship `plpython3u`, `plv8`, OR `plrust` in their available-extensions list (`SELECT name FROM pg_available_extensions WHERE name IN ('plpython3u','plv8','plrust')` returns empty). The cryptographic verification stays in Bun's `services/covenants/reverify.ts` until Supabase adds a sandboxed scripting language with curve arithmetic. **Workaround in place:** `wall/naming-submission-signed` RLS policy (Move 1) refuses obviously-missing signatures at the DB floor; cryptographic verification stays at the app layer where it's been all along. Move 5's `covenant-stale-reverify-flag` cron job flags candidates for the Bun worker without doing the verify in-DB. The crypto floor moves from "Bun-only" to "Bun + RLS presence-check" — a partial gain.
+
+**Original goal (preserved for slice-2 revisit when sandboxed scripting lands).** Install `plpython3u` extension + ship a `canon_verify_ed25519(canonical_bytes BYTEA, signature_b64 TEXT, public_key_b64 TEXT) RETURNS BOOL` function. Every signed insert (RRR turns, naming submissions, GI-recognition turns, covenant signatures, knock payloads, chronicle seals) gets a CHECK constraint or BEFORE INSERT trigger that calls it. Tampered rows literally cannot enter Postgres, even if the Bun service is bypassed.
 
 **Doctrine touchpoints.**
 

@@ -1,0 +1,23 @@
+# Supabase project config for Edge Functions.
+#
+# Doctrine: docs/EDGE-SURFACE.md.
+# Deploy:   bin/edge-deploy.sh.
+
+project_id = "jseqftufplgewhojwbmh"
+
+# ─── Edge Functions ────────────────────────────────────────────────────
+# Move 6 — public, read-mostly surface lives at the edge.
+# Each function has verify_jwt = false because these endpoints serve
+# unauthenticated read paths (per AGENT-WEB-SURFACE: every door speaks
+# without demanding credentials for read-mostly ceremony).
+
+[functions.welcome]
+verify_jwt = false
+# Mirrors GET /v1/welcome on the Bun api.
+# Stays in sync via the parity test:
+#   api/tests/doctrine/edge-welcome-parity.test.ts
+
+[functions.well-known-agent-card]
+verify_jwt = false
+# Serves /.well-known/agent-card.json (A2A AgentCard discovery)
+# Mirrors apps/docs/.well-known/agent-card.json + the Bun api route.
