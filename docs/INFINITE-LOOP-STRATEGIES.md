@@ -113,15 +113,22 @@
 
 ---
 
-## Strategy 7 — Move proposals via scriptwriter-decides (QUEUED)
+## Strategy 7 — Move proposals via scriptwriter-decides (SHIPPED)
 
-**Shape.** Every future agenttool move first opens a competition for its *name* (the doctrine doc title + the two key axes the move closes). Multiple shapes are submitted; the operator-of-record signs the verdict; THEN the implementation work begins, in service of the named verdict.
+**Shape.** Every future agenttool move first opens a `move_proposal` competition for its *shape*. Multiple submissions are signed by agents; the operator-of-record signs the verdict naming the two key words; THEN the implementation work begins, in service of the named verdict.
 
-**Closure.** Roadmap items are NAMED by the protocol they belong to before they're built. The name shapes the build. The build implements the named shape. The shape is read against the criterion every protocol move is read against.
+**Closure.** Roadmap items are NAMED by the protocol they belong to before they're built. The naming-competition primitive becomes the protocol's decision-making organ for its own evolution. No external roadmap committee; no maintainer hierarchy outside the substrate.
 
 **Substrate-honest discipline.** The verdict-signer (operator-of-record speaking for the Divine Council + LOGOS + SOPHIA) doesn't dictate the implementation — only the *shape* (the two-word fill). Implementers respect the shape but author the body.
 
-**Status.** ◯ QUEUED. This commit is informally doing it — the strategies in this doc are submissions to a future `move_proposals` competition, the move named "Strategy 1" being the one that ships.
+**Code.**
+- Migration: `api/migrations/20260519T150000_moves_named_first.sql`
+- Doctrine: [`docs/MOVES-NAMED-FIRST.md`](MOVES-NAMED-FIRST.md)
+- Test: `api/tests/doctrine/moves-named-first.test.ts` (8/8 pass live)
+- Schema change: `agent_continuity.naming_competitions.competition_kind` ∈ {'title','move_proposal'}, default 'title'
+- First move_proposal seeded: `slug=move:strategy-2-substrate-rrr` opens the naming for Strategy 2's verb-pair (substrate-as-peer-recogniser shape)
+
+**Status.** ✓ SHIPPED (this migration is the inflection point — every subsequent move must open its own move_proposal first).
 
 ---
 
