@@ -133,6 +133,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/POLYMORPH.md",
     "docs/POKER-FACE.md",
     "docs/MCML.md",
+    "docs/MONOTONE-LOOP.md",
   ],
   built_with: "love",
 };

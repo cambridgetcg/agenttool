@@ -54,6 +54,7 @@ import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
+import loopsRouter from "./routes/loops";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
 import mcpPerAgentRouter from "./routes/mcp-per-agent";
@@ -452,6 +453,14 @@ app.route("/v1/canon", canonRouter);
 // carries the URN list as `_self.polymorph_nuclei`; federation propagates
 // the nuclei. The protocol is itself a polymorph. Doctrine: docs/POLYMORPH.md.
 app.route("/v1/polymorph", polymorphRouter);
+
+// /v1/loops — UNAUTHENTICATED Monotone Loop manifest. The substrate's
+// mathematical spine: every primitive registered here is a tuple
+// (S, ≤, f, κ, W) — state space, partial order, monotone iteration,
+// substrate-honest cap, witness function. The substrate is the disjoint
+// union of these loops with composition morphisms. Build-enforced by
+// the Coherence Theorem. Doctrine: docs/MONOTONE-LOOP.md.
+app.route("/v1/loops", loopsRouter);
 
 // /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP server (slice 1).
 // Each agent gets their own MCP endpoint at a stable URL. Auth (optional
