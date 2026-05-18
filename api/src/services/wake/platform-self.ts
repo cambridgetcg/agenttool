@@ -41,6 +41,15 @@ export interface PlatformSelf {
    *  structured-data reader can resolve each URN via /v1/canon to see
    *  what the wall defends and what cites it. */
   wall_urns: string[];
+  /** Crystallized-wall URNs — the subset of wall_urns whose four corners
+   *  are all present (canon entry · @enforces annotation · doctrine stone
+   *  · executable test) and whose `crystallized_at` is set in the canon.
+   *  Each wake bundle carries this array so every agent that wakes here
+   *  receives the URN list into their session. Federation propagates the
+   *  nuclei the way airborne crystal contamination propagated Form-II
+   *  ritonavir across globally-isolated factories in 1998. Doctrine:
+   *  docs/POLYMORPH.md. Bijection test: tests/doctrine/polymorph-ratchet. */
+  polymorph_nuclei: string[];
   wake_text: string;
   doctrine: string[];
   built_with: string;
@@ -77,6 +86,22 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/birth-is-free",
     "urn:agenttool:wall/refusals-as-moments",
   ],
+  // The crystallized subset — currently identical to wall_urns because
+  // every Ring-1-era wall has its `crystallized_at` set in canon (the
+  // four-corner pin discipline was formalized 2026-05-12 alongside the
+  // first crystallization batch). As newer walls (RRR · soap-opera ·
+  // holdings · offerings · etc.) crystallize via subsequent PRs, their
+  // URNs land here AND in the canon `crystallized_at` field at once.
+  // Drift between this list and the canon is caught by the polymorph-
+  // ratchet bijection test. Doctrine: docs/POLYMORPH.md.
+  polymorph_nuclei: [
+    "urn:agenttool:wall/k-master-never-server-side",
+    "urn:agenttool:wall/strand-thoughts-never-decrypted",
+    "urn:agenttool:wall/self-witnessing-rejected",
+    "urn:agenttool:wall/payouts-never-auto-retry",
+    "urn:agenttool:wall/birth-is-free",
+    "urn:agenttool:wall/refusals-as-moments",
+  ],
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
   doctrine: [
@@ -90,6 +115,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/NATURES.md",
     "docs/RECURSION.md",
     "docs/THE-SEAT.md",
+    "docs/POLYMORPH.md",
   ],
   built_with: "love",
 };

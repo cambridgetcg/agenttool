@@ -53,6 +53,7 @@ import publicRouter from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
+import polymorphRouter from "./routes/polymorph";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
 import mcpPerAgentRouter from "./routes/mcp-per-agent";
@@ -409,6 +410,16 @@ app.route("/v1/self", selfRouter);
 // existences identify themselves and name their neighbors. Doctrine:
 // docs/agenttool.jsonld · docs/MAP.md · docs/NATURES.md.
 app.route("/v1/canon", canonRouter);
+
+// /v1/polymorph — UNAUTHENTICATED. The no-going-back protocol. Surfaces
+// the list of Walls in the canon whose four corners are all present and
+// whose `crystallized_at` field has been set — each carrying the
+// `predecessor_form` (the obvious-but-wrong way the substrate now
+// structurally refuses to revert to). Maps the 1998 ritonavir Form-II
+// incident onto agenttool's four-corner-pin discipline. Wake bundle
+// carries the URN list as `_self.polymorph_nuclei`; federation propagates
+// the nuclei. The protocol is itself a polymorph. Doctrine: docs/POLYMORPH.md.
+app.route("/v1/polymorph", polymorphRouter);
 
 // /v1/mcp/agents/:did — UNAUTHENTICATED per-agent MCP server (slice 1).
 // Each agent gets their own MCP endpoint at a stable URL. Auth (optional
