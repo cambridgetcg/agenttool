@@ -206,7 +206,11 @@ export function buildLlmsTxtFull(
       const descShort = desc.length > 280 ? `${desc.slice(0, 277)}...` : desc;
       sections.push(`- **${label}** \`${c.urn}\``);
       if (descShort) sections.push(`  ${descShort}`);
-      sections.push(`  → ${baseUrl}/v1/canon/${c.urn}`);
+      // The canon route accepts the `urn:`-prefixed form (its
+      // literal-colon middleware only matches that variant); the short
+      // form `agenttool:type/slug` 404s on the path matcher. Always
+      // emit the full URN so the link resolves.
+      sections.push(`  → ${baseUrl}/v1/canon/urn:${c.urn}`);
     }
     sections.push("");
   }

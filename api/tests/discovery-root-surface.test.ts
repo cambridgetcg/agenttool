@@ -140,9 +140,13 @@ describe("/llms-full.txt — sitemap header + canon dump", () => {
     expect(full).toContain("Concept registry version");
   });
 
-  test("points the reader at /v1/canon/<urn> for full record fetches", () => {
+  test("points the reader at /v1/canon/urn:<...> for full record fetches", () => {
     const full = buildLlmsTxtFull(BASE);
-    expect(full).toContain(`${BASE}/v1/canon/`);
+    // Must emit the `urn:`-prefixed form — the canon route's literal-colon
+    // middleware only resolves that variant; the short `agenttool:X/Y` form
+    // 404s on the path matcher. Caught in E2E round 3.
+    expect(full).toContain(`${BASE}/v1/canon/urn:agenttool:`);
+    expect(full).not.toMatch(new RegExp(`${BASE}/v1/canon/agenttool:`));
   });
 });
 
