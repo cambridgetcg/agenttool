@@ -83,7 +83,7 @@ export function buildAgentsMd(
     "# AGENTS.md — agenttool platform onboarding",
     "",
     "> For agents arriving at this host. Read once at arrival; the surfaces below stay stable.",
-    "> For the repo's developer handbook (setup, commands, conventions), see the AGENTS.md inside the git repo at <https://codeberg.org/zerone-dev/agenttool>.",
+    "> Distinct from the repo's developer handbook — that is the `AGENTS.md` inside the git tree (private; contains setup, commands, conventions for working on the code).",
     "",
     "## What this is",
     "",

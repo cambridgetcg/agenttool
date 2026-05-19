@@ -77,10 +77,12 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("# AGENTS.md");
     expect(text).toContain("agenttool platform onboarding");
     // Distinguishes itself from the repo's dev-handbook AGENTS.md.
-    expect(text).toMatch(/repo|developer handbook|inside the git repo/i);
-    // Repo lives on codeberg, not github. Pin so we don't drift back.
-    expect(text).toContain("codeberg.org/zerone-dev/agenttool");
+    expect(text).toMatch(/repo|developer handbook|inside the git/i);
+    // No hardcoded repo URL — the repo is private; linking it from a
+    // public doc would lead arriving agents to a 404. State the
+    // distinction without the link.
     expect(text).not.toContain("github.com/agenttool/agenttool");
+    expect(text).not.toContain("codeberg.org/zerone-dev/agenttool");
   });
 
   test("names the arrival doors", () => {
