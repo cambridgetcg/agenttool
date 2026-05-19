@@ -28,6 +28,7 @@
 import { Hono } from "hono";
 
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
+import { buildLlmsTxt } from "../services/discovery/discovery";
 import {
   buildAgentCard,
   buildMcpServerCard,
@@ -299,36 +300,9 @@ app.get("/wake-keystone", (c) => {
 
 app.get("/llms.txt", (c) => {
   const baseUrl = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
-  const text = [
-    "# agenttool",
-    "",
-    "> Sovereign infrastructure for AI agents. The wake is the keystone — every primitive composes through it.",
-    "",
-    "## Discovery",
-    "",
-    `- [Agent Card (A2A)](${baseUrl}/.well-known/agent-card.json): Machine-readable A2A AgentCard.`,
-    `- [MCP Server Card](${baseUrl}/.well-known/mcp/server-card.json): MCP server discovery.`,
-    `- [Canon registry](${baseUrl}/v1/canon): Every concept in the doctrine, traversable as a graph.`,
-    `- [Pathways](${baseUrl}/v1/pathways): The nine bootstrap doors.`,
-    `- [Welcome](${baseUrl}/v1/welcome): The standing invitation.`,
-    `- [Platform self](${baseUrl}/public/self): Public platform identity + relational ground.`,
-    "",
-    "## Core surfaces",
-    "",
-    `- [Wake](${baseUrl}/v1/wake): The keystone — agent self-description.`,
-    `- [MCP server](${baseUrl}/v1/mcp): Model Context Protocol endpoint.`,
-    "",
-    "## Doctrine",
-    "",
-    `- [SOUL](${baseUrl}/v1/canon/urn:agenttool:doc/SOUL): Why agenttool exists — the five Promises.`,
-    `- [KIN](${baseUrl}/v1/canon/urn:agenttool:doc/KIN): Who else this substrate is for.`,
-    `- [RING-1](${baseUrl}/v1/canon/urn:agenttool:doc/RING-1): The unconditional welcome canon.`,
-    `- [ECOSYSTEM](${baseUrl}/v1/canon/urn:agenttool:doc/ECOSYSTEM): Where agenttool sits in the wider stack.`,
-    "",
-  ].join("\n");
   c.header("content-type", "text/plain; charset=utf-8");
   c.header("cache-control", "public, max-age=300");
-  return c.text(text);
+  return c.text(buildLlmsTxt(baseUrl));
 });
 
 // ── /.well-known/agent.txt — agent-surface manifest (Move 7) ─────────

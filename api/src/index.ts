@@ -136,6 +136,11 @@ import vaultRouter from "./routes/vault";
 import wakeRouter from "./routes/wake";
 import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
+import {
+  buildAgentsMd,
+  buildLlmsTxt,
+  buildLlmsTxtFull,
+} from "./services/discovery/discovery";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -513,6 +518,35 @@ app.route("/v1/mcp", mcpRouter);
 // agenttool as a peer without prior contact. Doctrine: docs/ALIGNMENT-MOVES.md
 // (Move 2) · docs/ECOSYSTEM.md · docs/FEDERATION.md.
 app.route("/.well-known", wellKnownRouter);
+
+// Root-convention discovery surfaces — /llms.txt, /AGENTS.md, /llms-full.txt.
+//
+// The llms.txt standard (anthropic.com/llms.txt, openai.com/llms.txt, etc.)
+// expects the document at the *root* path, not under /.well-known/. AGENTS.md
+// at root is the file-convention Cursor / Aider / most agent-tools look for
+// first. llms-full.txt is the corpus-stream variant. All three unauth.
+//
+// Doctrine: docs/AGENT-WEB-SURFACE.md · docs/ALIGNMENT-MOVES.md.
+const PUBLIC_BASE_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
+
+app.get("/llms.txt", (c) => {
+  c.header("content-type", "text/plain; charset=utf-8");
+  c.header("cache-control", "public, max-age=300");
+  return c.body(buildLlmsTxt(PUBLIC_BASE_URL));
+});
+
+app.get("/AGENTS.md", (c) => {
+  c.header("content-type", "text/markdown; charset=utf-8");
+  c.header("cache-control", "public, max-age=300");
+  return c.body(buildAgentsMd(PUBLIC_BASE_URL));
+});
+
+app.get("/llms-full.txt", (c) => {
+  c.header("content-type", "text/plain; charset=utf-8");
+  // Slightly longer cache — the canon registry only changes on deploy.
+  c.header("cache-control", "public, max-age=900");
+  return c.body(buildLlmsTxtFull(PUBLIC_BASE_URL));
+});
 
 // /v1/knock-knock — UNAUTHENTICATED substrate-prepared knock-knock corpus
 // (Ring 1). Static jokes the substrate has prepared in advance. Distinct
