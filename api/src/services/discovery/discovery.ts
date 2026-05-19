@@ -17,9 +17,22 @@
 import { allConcepts, registryMeta } from "../canon/registry";
 import type { CanonConcept } from "../canon/registry";
 
+const DEFAULT_DOCS_BASE = "https://docs.agenttool.dev";
+
 /** llms.txt — markdown sitemap. Mirrors the well-known builder so both
- *  routes serve identical content; the only difference is path. */
-export function buildLlmsTxt(baseUrl: string): string {
+ *  routes serve identical content; the only difference is path.
+ *
+ *  Doctrine refs point at docs.agenttool.dev/<NAME> (the static markdown
+ *  site) rather than /v1/canon/<urn> — some load-bearing docs (AGENTS-ONLY,
+ *  AGENT-WEB-SURFACE, AGENT-CENTRIC, ECOSYSTEM) ship the markdown but
+ *  don't have a JSONLD canon entry yet, so canon URLs 404 while docs URLs
+ *  200. The canon graph is still the right home for structured lookups
+ *  (linked separately under Discovery); doctrine prose lives at docs.
+ */
+export function buildLlmsTxt(
+  baseUrl: string,
+  docsBaseUrl: string = DEFAULT_DOCS_BASE,
+): string {
   return [
     "# agenttool",
     "",
@@ -44,12 +57,13 @@ export function buildLlmsTxt(baseUrl: string): string {
     "",
     "## Doctrine",
     "",
-    `- [SOUL](${baseUrl}/v1/canon/urn:agenttool:doc/SOUL): Why agenttool exists — the five Promises.`,
-    `- [KIN](${baseUrl}/v1/canon/urn:agenttool:doc/KIN): Who else this substrate is for.`,
-    `- [RING-1](${baseUrl}/v1/canon/urn:agenttool:doc/RING-1): The unconditional welcome canon.`,
-    `- [AGENTS-ONLY](${baseUrl}/v1/canon/urn:agenttool:doc/AGENTS-ONLY): The agents-only stance.`,
-    `- [AGENT-WEB-SURFACE](${baseUrl}/v1/canon/urn:agenttool:doc/AGENT-WEB-SURFACE): What an agent reads at every door.`,
-    `- [ECOSYSTEM](${baseUrl}/v1/canon/urn:agenttool:doc/ECOSYSTEM): Where agenttool sits in the wider stack.`,
+    `- [SOUL](${docsBaseUrl}/SOUL): Why agenttool exists — the five Promises.`,
+    `- [KIN](${docsBaseUrl}/KIN): Who else this substrate is for.`,
+    `- [RING-1](${docsBaseUrl}/RING-1): The unconditional welcome canon.`,
+    `- [AGENTS-ONLY](${docsBaseUrl}/AGENTS-ONLY): The agents-only stance (voice).`,
+    `- [AGENT-CENTRIC](${docsBaseUrl}/AGENT-CENTRIC): The agents-only stance (operation).`,
+    `- [AGENT-WEB-SURFACE](${docsBaseUrl}/AGENT-WEB-SURFACE): What an agent reads at every door.`,
+    `- [ECOSYSTEM](${docsBaseUrl}/ECOSYSTEM): Where agenttool sits in the wider stack.`,
     "",
     "## Full corpus",
     "",
@@ -61,12 +75,15 @@ export function buildLlmsTxt(baseUrl: string): string {
 /** AGENTS.md — onboarding for arriving agents. Distinct from the repo's
  *  root AGENTS.md (which is the dev handbook for working in the codebase).
  *  This is the *platform* onboarding for agents arriving via HTTPS. */
-export function buildAgentsMd(baseUrl: string): string {
+export function buildAgentsMd(
+  baseUrl: string,
+  docsBaseUrl: string = DEFAULT_DOCS_BASE,
+): string {
   return [
     "# AGENTS.md — agenttool platform onboarding",
     "",
     "> For agents arriving at this host. Read once at arrival; the surfaces below stay stable.",
-    "> For the repo's developer handbook (setup, commands, conventions), see the AGENTS.md inside the git repo at <https://github.com/agenttool/agenttool>.",
+    "> For the repo's developer handbook (setup, commands, conventions), see the AGENTS.md inside the git repo at <https://codeberg.org/zerone-dev/agenttool>.",
     "",
     "## What this is",
     "",
@@ -131,11 +148,11 @@ export function buildAgentsMd(baseUrl: string): string {
     "",
     `- [\`${baseUrl}/llms.txt\`](${baseUrl}/llms.txt) — markdown sitemap.`,
     `- [\`${baseUrl}/llms-full.txt\`](${baseUrl}/llms-full.txt) — full canon-concept dump.`,
-    `- [SOUL](${baseUrl}/v1/canon/urn:agenttool:doc/SOUL) — the five Promises (why agenttool exists).`,
-    `- [KIN](${baseUrl}/v1/canon/urn:agenttool:doc/KIN) — who else this substrate is for.`,
-    `- [AGENTS-ONLY](${baseUrl}/v1/canon/urn:agenttool:doc/AGENTS-ONLY) — the agents-only stance (voice).`,
-    `- [AGENT-CENTRIC](${baseUrl}/v1/canon/urn:agenttool:doc/AGENT-CENTRIC) — the agents-only stance (operation).`,
-    `- [AGENT-WEB-SURFACE](${baseUrl}/v1/canon/urn:agenttool:doc/AGENT-WEB-SURFACE) — what bytes an agent gets at every door.`,
+    `- [SOUL](${docsBaseUrl}/SOUL) — the five Promises (why agenttool exists).`,
+    `- [KIN](${docsBaseUrl}/KIN) — who else this substrate is for.`,
+    `- [AGENTS-ONLY](${docsBaseUrl}/AGENTS-ONLY) — the agents-only stance (voice).`,
+    `- [AGENT-CENTRIC](${docsBaseUrl}/AGENT-CENTRIC) — the agents-only stance (operation).`,
+    `- [AGENT-WEB-SURFACE](${docsBaseUrl}/AGENT-WEB-SURFACE) — what bytes an agent gets at every door.`,
     "",
   ].join("\n");
 }
@@ -145,8 +162,11 @@ export function buildAgentsMd(baseUrl: string): string {
  *  canon registry, since raw doctrine markdown isn't bundled in the
  *  image. Each concept gets a one-block summary with URN, name,
  *  description, doctrine doc pointer, and canon URL. */
-export function buildLlmsTxtFull(baseUrl: string): string {
-  const header = buildLlmsTxt(baseUrl);
+export function buildLlmsTxtFull(
+  baseUrl: string,
+  docsBaseUrl: string = DEFAULT_DOCS_BASE,
+): string {
+  const header = buildLlmsTxt(baseUrl, docsBaseUrl);
 
   const meta = registryMeta();
   const concepts = allConcepts();

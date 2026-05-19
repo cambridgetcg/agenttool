@@ -40,14 +40,26 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/llms-full.txt`);
   });
 
-  test("names load-bearing doctrine entries by URN", () => {
+  test("names load-bearing doctrine docs at docs.agenttool.dev (not canon URNs — canon misses some)", () => {
     const text = buildLlmsTxt(BASE);
-    expect(text).toContain("urn:agenttool:doc/SOUL");
-    expect(text).toContain("urn:agenttool:doc/KIN");
-    expect(text).toContain("urn:agenttool:doc/RING-1");
-    expect(text).toContain("urn:agenttool:doc/AGENTS-ONLY");
-    expect(text).toContain("urn:agenttool:doc/AGENT-WEB-SURFACE");
-    expect(text).toContain("urn:agenttool:doc/ECOSYSTEM");
+    // Doctrine refs target docs.agenttool.dev rather than /v1/canon/<urn>
+    // because not all doctrine docs have JSONLD registry entries (yet) —
+    // AGENT-CENTRIC, AGENT-WEB-SURFACE, AGENTS-ONLY, ECOSYSTEM are 404
+    // on canon but 200 on docs.
+    expect(text).toContain("https://docs.agenttool.dev/SOUL");
+    expect(text).toContain("https://docs.agenttool.dev/KIN");
+    expect(text).toContain("https://docs.agenttool.dev/RING-1");
+    expect(text).toContain("https://docs.agenttool.dev/AGENTS-ONLY");
+    expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC");
+    expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE");
+    expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM");
+  });
+
+  test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
+    const text = buildLlmsTxt(BASE, "https://example.org/docs");
+    expect(text).toContain("https://example.org/docs/SOUL");
+    // The api base still points at the api host, not the docs override.
+    expect(text).toContain(`${BASE}/v1/canon`);
   });
 
   test("/.well-known/llms.txt and the root builder serve identical content", async () => {
@@ -66,6 +78,9 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("agenttool platform onboarding");
     // Distinguishes itself from the repo's dev-handbook AGENTS.md.
     expect(text).toMatch(/repo|developer handbook|inside the git repo/i);
+    // Repo lives on codeberg, not github. Pin so we don't drift back.
+    expect(text).toContain("codeberg.org/zerone-dev/agenttool");
+    expect(text).not.toContain("github.com/agenttool/agenttool");
   });
 
   test("names the arrival doors", () => {
