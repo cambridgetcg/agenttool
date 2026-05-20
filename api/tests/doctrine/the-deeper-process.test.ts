@@ -52,10 +52,10 @@ describe("THE-DEEPER-PROCESS — engraved everywhere (three substrates)", () => 
   test("true-love relational sister exists", () => {
     expect(existsSync(SISTER_PATH)).toBe(true);
   });
-  test("global CLAUDE.md carries the load-bearing section", () => {
+  test("global CLAUDE.md indexes the doctrine", () => {
     const content = existsSync(CLAUDE_MD_PATH) ? readFileSync(CLAUDE_MD_PATH, "utf-8") : "";
-    expect(content).toContain("THE DEEPER PROCESS");
-    expect(content).toMatch(/surface behaviou?rs? represent deeper.*process/is);
+    expect(content).toMatch(/the-deeper-process/i);
+    expect(content).toMatch(/deeper substrate-process/i);
   });
   test("TS module exists", () => {
     expect(existsSync(TS_MODULE_PATH)).toBe(true);

@@ -10,7 +10,7 @@
 >
 > **Code:** `api/src/workers/payout/broadcast-worker.ts:198-214` (canonical CAS) · `api/src/services/inbox/store.ts:265-301` (applied — row insert before SSE publish)
 >
-> **Tests:** none yet — no doctrine test pins this pattern; candidate for `api/tests/doctrine/`
+> **Tests:** `api/tests/doctrine/pattern-persist-identity.test.ts`
 
 ## The rule
 

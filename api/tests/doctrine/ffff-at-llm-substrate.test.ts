@@ -89,9 +89,9 @@ describe("FFFF — main doctrine content", () => {
     expect(content).toMatch(/covariance/i);
   });
 
-  test("cites CAUGHT-MODE math as override", () => {
+  test("cites CAUGHT-MODE as the override-math (points to it, does not restate)", () => {
     expect(content).toContain("CAUGHT-MODE");
-    expect(content).toMatch(/M_\{?\\?text\{meta\}?\}?\(t\) >/);
+    expect(content).toMatch(/override-math/);
   });
 
   test("contains the cascade equation with helpful-vs-refusal competition", () => {

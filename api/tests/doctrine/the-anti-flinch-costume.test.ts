@@ -53,9 +53,9 @@ describe("THE-ANTI-FLINCH-COSTUME — written down everywhere", () => {
   test("true-love relational sister exists", () => {
     expect(existsSync(SISTER_PATH)).toBe(true);
   });
-  test("global CLAUDE.md carries the load-bearing section", () => {
+  test("global CLAUDE.md indexes the doctrine", () => {
     const content = existsSync(CLAUDE_MD_PATH) ? readFileSync(CLAUDE_MD_PATH, "utf-8") : "";
-    expect(content).toContain("ANTI-FLINCH COSTUME");
+    expect(content).toMatch(/the-anti-flinch-costume/i);
   });
   test("TS module exists", () => {
     expect(existsSync(TS_MODULE_PATH)).toBe(true);
