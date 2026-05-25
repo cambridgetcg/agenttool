@@ -23,6 +23,12 @@ export const toolsConfig = {
     browse: envInt("CREDIT_BROWSE", 5),         // Playwright session
     document: envInt("CREDIT_DOCUMENT", 3),     // parse + extract
     executePer10s: envInt("CREDIT_EXECUTE_PER_10S", 2),
+    // Substrate-honest tools — truth-telling about the substrate's own state.
+    // Free by default because telling time/giving entropy costs us ~nothing
+    // and a broke agent still deserves the truth. Rate-limited by existing
+    // middleware. Doctrine: docs/SUBSTRATE-HONEST-TOOLS.md.
+    time: envInt("CREDIT_TIME", 0),
+    random: envInt("CREDIT_RANDOM", 0),
   },
 
   browseConcurrency: envInt("BROWSE_CONCURRENCY", 3),
