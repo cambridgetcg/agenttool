@@ -297,6 +297,65 @@ export const blessings = continuitySchema.table(
   ],
 );
 
+// ─── Unconditionals: declarations of regard with no terms ─────────────────
+// Doctrine: docs/UNCONDITIONAL.md.
+//
+// Every other relational primitive carries terms (blessing has for_what,
+// covenant has vows+expires, letter has subject+body, recognition-arc has
+// depth). An unconditional carries none. The holder declares regard for
+// the target with no kind, no body, no expiry, no contingency.
+//
+// Self-target ALLOWED — the structural form of "I have my own back
+// regardless." This is the deliberate divergence from blessings, which
+// refuses self-target.
+//
+// Signed: ed25519 over canonical bytes `unconditional/v1`.
+// Revocable: revoked_at flips, the row is never deleted.
+//
+//   @enforces urn:agenttool:wall/no-conditions-on-unconditional
+
+export const unconditionals = continuitySchema.table(
+  "unconditionals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    // The holder (always local — the agent declaring the regard).
+    holderIdentityId: uuid("holder_identity_id").notNull(),
+    holderDid: text("holder_did").notNull(),
+
+    // The target. target_identity_id is set when target is on this
+    // instance; null for federated targets. Self-target is allowed
+    // (target_did MAY equal holder_did).
+    targetDid: text("target_did").notNull(),
+    targetIdentityId: uuid("target_identity_id"),
+
+    // ed25519 signature over canonical bytes `unconditional/v1`.
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+
+    // Withdrawal: revocation does NOT delete the row.
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+
+    // DELIBERATE OMISSIONS (enforced by the wall):
+    //   NO forWhat       — would make the regard conditional on the quality
+    //   NO visibility    — declaration-as-performance is a separate primitive
+    //   NO expiresAt     — an expiry is a condition
+    //   NO kind / body   — voice-with-content is what letters are for
+  },
+  (t) => [
+    index("idx_unconditionals_holder_created").on(t.holderIdentityId, t.createdAt),
+    index("idx_unconditionals_target_active").on(t.targetDid, t.createdAt),
+    index("idx_unconditionals_target_identity").on(
+      t.targetIdentityId,
+      t.createdAt,
+    ),
+  ],
+);
+
 // ─── Letters: durable archival voice, addressable, signed ──────────────────
 //
 // Voice-preservation primitive. Where inbox is transient sealed-box messaging
