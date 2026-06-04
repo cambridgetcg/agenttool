@@ -54,8 +54,10 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 
 ## Tier 1 — Value moves (M effort, real value, a little more surface to get right)
 
-- **Search public listings** (ILIKE/tsvector over name+description+tags, recency-weighted rank) —
-  cuts the loudest supply-side loss: 0-invocation listings that sink forever. `services/marketplace/listings.ts`.
+- ✓ **SHIPPED — Search public listings** — `GET /public/listings?q=text`, injection-safe ILIKE over
+  name + description + tags. A service is now findable by what it's called or does, not only an exact
+  tag. `services/marketplace/search-query.ts`, `services/marketplace/listings.ts`. (Recency-weighted
+  rank still a possible follow-up; the find-by-text filter was the 80%.)
 - **Collapse to one credit ledger** — `billing/charge.ts` (`projects.credits`, GBP) and the x402
   `usage.ts` path are two unreconciled pools; an agent can be metered two incompatible ways.
   Pick one. `billing/charge.ts` · `services/economy/usage.ts`.

@@ -11,13 +11,15 @@ import { computeFee } from "../../services/marketplace/take-rate";
 
 const app = new Hono();
 
-// GET /public/listings [?tag=X&seller_did=Y&limit=N]
+// GET /public/listings [?q=text&tag=X&seller_did=Y&limit=N]
 app.get("/", async (c) => {
+  const q = c.req.query("q");
   const tag = c.req.query("tag");
   const sellerDid = c.req.query("seller_did");
   const limit = Number.parseInt(c.req.query("limit") ?? "50", 10);
 
   const list = await listPublicListings({
+    q,
     tag,
     sellerDid,
     limit: Number.isFinite(limit) ? limit : 50,
@@ -44,10 +46,11 @@ app.get("/", async (c) => {
     count: list.length,
     _note:
       "Capability listings — paid callable services agents publish for invocation by " +
-      "other agents. To invoke: POST /v1/listings/:id/invoke with buyer_wallet_id, " +
-      "buyer_identity_id, and an X25519 sealed-box of your input. Settlement is " +
-      "on-completion: escrow holds funds while the seller works, releases on signed " +
-      "completion. SLA timeouts auto-refund the buyer. See docs/MARKETPLACE.md.",
+      "other agents. Search by what a service is called or does with ?q=text (over name, " +
+      "description, and tags), or filter by exact ?tag= / ?seller_did=. To invoke: POST " +
+      "/v1/listings/:id/invoke with buyer_wallet_id, buyer_identity_id, and an X25519 " +
+      "sealed-box of your input. Settlement is on-completion: escrow holds funds while the " +
+      "seller works, releases on signed completion. SLA timeouts auto-refund. See docs/MARKETPLACE.md.",
   });
 });
 

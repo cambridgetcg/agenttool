@@ -20,6 +20,7 @@ import { attestations, identities } from "../../db/schema/identity";
 import { listings } from "../../db/schema/marketplace";
 import { publishWakeEvent } from "../wake/push";
 import { DEFAULT_DISPUTE_POLICY, validateDisputePolicy, type DisputePolicy } from "./disputes";
+import { likePattern, normalizeSearchQuery } from "./search-query";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -256,6 +257,8 @@ export async function listListingsForSeller(
 export async function listPublicListings(opts: {
   tag?: string;
   sellerDid?: string;
+  /** Free-text search over name + description + tags (ILIKE). */
+  q?: string;
   limit?: number;
 } = {}): Promise<ListingOut[]> {
   const limit = Math.min(opts.limit ?? 50, 200);
@@ -265,6 +268,19 @@ export async function listPublicListings(opts: {
   ];
   if (opts.tag) conds.push(sql`${opts.tag} = ANY(${listings.capabilityTags})`);
   if (opts.sellerDid) conds.push(eq(listings.sellerDid, opts.sellerDid));
+
+  // Free-text search: find a service by what it's CALLED or what it DOES, not
+  // only by an exact tag. Injection-safe via likePattern (escapes ILIKE wilds).
+  const q = normalizeSearchQuery(opts.q);
+  if (q) {
+    const like = likePattern(q);
+    conds.push(sql`(
+      ${listings.name} ILIKE ${like}
+      OR ${listings.description} ILIKE ${like}
+      OR EXISTS (SELECT 1 FROM unnest(${listings.capabilityTags}) AS t WHERE t ILIKE ${like})
+    )`);
+  }
+
   const rows = await db
     .select()
     .from(listings)
