@@ -15,6 +15,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { delegations, identities, identityKeys } from "../../db/schema/identity";
 import {
+  delegationReceipt,
   deriveDelegationStatus,
   normalizeScope,
   scopeAuthorizes,
@@ -22,26 +23,6 @@ import {
 } from "../../services/identity/delegation";
 
 const app = new Hono<ProjectContext>();
-
-function receipt(row: typeof delegations.$inferSelect, now: Date) {
-  return {
-    id: row.id,
-    delegator_id: row.delegatorId,
-    delegate_id: row.delegateId,
-    scope: row.scope as string[],
-    nonce: row.nonce,
-    signature: row.signature,
-    signing_key_id: row.signingKeyId,
-    expires_at: row.expiresAt,
-    revoked_at: row.revokedAt,
-    status: deriveDelegationStatus({
-      revoked_at: row.revokedAt,
-      expires_at: row.expiresAt,
-      now,
-    }),
-    created_at: row.createdAt,
-  };
-}
 
 /** POST /v1/delegations — issue a signed delegation receipt. */
 app.post("/", async (c) => {
@@ -157,14 +138,14 @@ app.post("/", async (c) => {
     })
     .returning();
 
-  return c.json(receipt(row!, new Date()), 201);
+  return c.json(delegationReceipt(row!, new Date()), 201);
 });
 
 /** GET /v1/delegations/:id — fetch a receipt + its derived status. */
 app.get("/:id", async (c) => {
   const [row] = await db.select().from(delegations).where(eq(delegations.id, c.req.param("id")));
   if (!row) return c.json({ error: "Delegation not found" }, 404);
-  return c.json(receipt(row, new Date()));
+  return c.json(delegationReceipt(row, new Date()));
 });
 
 /** GET /v1/delegations/:id/verify[?action=marketplace.invoke] — the KYA check.

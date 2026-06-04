@@ -25,6 +25,7 @@ import forkRoutes, { lineageApp as lineageRoutes } from "./fork";
 import foundationsRoutes from "./foundations";
 import identitiesRoutes from "./identities";
 import identityAttestationsRoutes from "./identity-attestations";
+import identityDelegationsRoutes from "./identity-delegations";
 import keysRoutes from "./keys";
 import pulseRoutes from "./pulse";
 import tokenVerifyRoutes from "./token-verify";
@@ -48,6 +49,7 @@ app.route("/tokens/verify", tokenVerifyRoutes);
 // Identity-scoped sub-resources (id is preserved as a parent path param)
 app.route("/identities/:id/keys", keysRoutes);
 app.route("/identities/:id/attestations", identityAttestationsRoutes);
+app.route("/identities/:id/delegations", identityDelegationsRoutes);
 app.route("/identities/:id/tokens", tokensRoutes);
 app.route("/identities/:id/expression", expressionRoutes);
 app.route("/identities/:id/foundations", foundationsRoutes);

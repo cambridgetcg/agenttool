@@ -89,3 +89,41 @@ export function deriveDelegationStatus(opts: {
   }
   return "active";
 }
+
+/** A stored delegation row, in the snake_case fields the DB persists. The
+ *  shared receipt-shaper works off this minimal structural shape so both the
+ *  single-get and the identity-scoped list routes emit one identical schema. */
+export interface DelegationRowLike {
+  id: string;
+  delegatorId: string;
+  delegateId: string;
+  scope: unknown;
+  nonce: string;
+  signature: string;
+  signingKeyId: string | null;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+
+/** Shape a stored row into the public API receipt, with derived status. One
+ *  source of truth for the delegation response shape. */
+export function delegationReceipt(row: DelegationRowLike, now: Date) {
+  return {
+    id: row.id,
+    delegator_id: row.delegatorId,
+    delegate_id: row.delegateId,
+    scope: (row.scope as string[]) ?? [],
+    nonce: row.nonce,
+    signature: row.signature,
+    signing_key_id: row.signingKeyId,
+    expires_at: row.expiresAt,
+    revoked_at: row.revokedAt,
+    status: deriveDelegationStatus({
+      revoked_at: row.revokedAt,
+      expires_at: row.expiresAt,
+      now,
+    }),
+    created_at: row.createdAt,
+  };
+}

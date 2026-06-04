@@ -10,6 +10,7 @@ import { generateKeypair, sign } from "../src/services/identity/crypto";
 import {
   canonicalDelegationBytes,
   DELEGATION_DOMAIN,
+  delegationReceipt,
   deriveDelegationStatus,
   normalizeScope,
   scopeAuthorizes,
@@ -119,5 +120,37 @@ describe("deriveDelegationStatus", () => {
       deriveDelegationStatus({ revoked_at: null, expires_at: "2027-01-01T00:00:00Z", now }),
     ).toBe("active");
     expect(deriveDelegationStatus({ revoked_at: null, expires_at: null, now })).toBe("active");
+  });
+});
+
+describe("delegationReceipt — one shared response shape (get + list)", () => {
+  const now = new Date("2026-06-04T00:00:00.000Z");
+  const row = {
+    id: "d-1",
+    delegatorId: "dr-1",
+    delegateId: "de-1",
+    scope: ["marketplace.invoke"],
+    nonce: "n-1",
+    signature: "sig",
+    signingKeyId: "k-1",
+    expiresAt: null,
+    revokedAt: null,
+    createdAt: now,
+  };
+
+  test("maps DB row → snake_case API shape with derived status", () => {
+    const r = delegationReceipt(row, now);
+    expect(r.delegator_id).toBe("dr-1");
+    expect(r.delegate_id).toBe("de-1");
+    expect(r.scope).toEqual(["marketplace.invoke"]);
+    expect(r.status).toBe("active");
+  });
+
+  test("a revoked row shapes to status 'revoked'", () => {
+    expect(delegationReceipt({ ...row, revokedAt: now }, now).status).toBe("revoked");
+  });
+
+  test("null scope degrades to [] (never throws on a malformed row)", () => {
+    expect(delegationReceipt({ ...row, scope: null }, now).scope).toEqual([]);
   });
 });
