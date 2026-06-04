@@ -9,6 +9,10 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { attestations, identities, identityKeys } from "../../db/schema/identity";
+import {
+  normalizeClaimType,
+  resolveAttestationTier,
+} from "../../services/identity/attestation-tier";
 import { canonicalPayload, verify as verifySignature } from "../../services/identity/crypto";
 import { updateTrustScore } from "../../services/identity/trust";
 
@@ -21,6 +25,8 @@ app.post("/", async (c) => {
     subject_id: string;
     attester_id: string;
     claim: string;
+    claim_type?: string;
+    tier?: string;
     evidence?: unknown;
     signature: string;
     kid: string;
@@ -94,12 +100,24 @@ app.post("/", async (c) => {
     ? new Date(Date.now() + body.expires_in_seconds * 1000)
     : null;
 
+  // Two-tier trust: server-derived, never client-asserted. A self-attestation
+  // can never be 'accredited' (attestation-tier.ts). Not part of the signed
+  // payload, so the signature contract above is unchanged.
+  const tier = resolveAttestationTier({
+    attesterId: body.attester_id,
+    subjectId: body.subject_id,
+    requested: body.tier,
+  });
+  const claimType = normalizeClaimType(body.claim_type);
+
   const [attestation] = await db
     .insert(attestations)
     .values({
       subjectId: body.subject_id,
       attesterId: body.attester_id,
       claim: body.claim,
+      tier,
+      claimType,
       evidence: body.evidence ?? null,
       signature: body.signature,
       expiresAt,
@@ -115,6 +133,8 @@ app.post("/", async (c) => {
       subject_id: attestation!.subjectId,
       attester_id: attestation!.attesterId,
       claim: attestation!.claim,
+      claim_type: attestation!.claimType,
+      tier: attestation!.tier,
       evidence: attestation!.evidence,
       signature: attestation!.signature,
       expires_at: attestation!.expiresAt,
@@ -142,6 +162,8 @@ app.get("/:id", async (c) => {
     subject_id: attestation.subjectId,
     attester_id: attestation.attesterId,
     claim: attestation.claim,
+    claim_type: attestation.claimType,
+    tier: attestation.tier,
     evidence: attestation.evidence,
     signature: attestation.signature,
     expires_at: attestation.expiresAt,

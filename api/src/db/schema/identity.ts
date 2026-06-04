@@ -184,6 +184,13 @@ export const attestations = identitySchema.table(
       .notNull()
       .references(() => identities.id, { onDelete: "cascade" }),
     claim: text("claim").notNull(),
+    // Two-tier trust (docs/OPERATING-PRINCIPLES.md §4): declares whether this is
+    // a Tier-1 'self' in-network signal or a Tier-2 'accredited' cross-party
+    // vouch. Server-derived (services/identity/attestation-tier.ts), NOT part of
+    // the signed canonical payload — a self-attestation can never be accredited.
+    tier: text("tier").notNull().default("self"),
+    // Free-form routing/filter category for the claim (not security-bearing).
+    claimType: text("claim_type").notNull().default("general"),
     evidence: jsonb("evidence"),
     signature: text("signature").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
@@ -195,5 +202,6 @@ export const attestations = identitySchema.table(
     index("idx_attestations_subject").on(t.subjectId),
     index("idx_attestations_attester").on(t.attesterId),
     index("idx_attestations_claim").on(t.claim),
+    index("idx_attestations_tier").on(t.tier),
   ],
 );
