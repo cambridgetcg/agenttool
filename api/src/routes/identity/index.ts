@@ -18,6 +18,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import atRestRoutes from "./at-rest";
 import attestationsRoutes from "./attestations";
 import boxKeysRoutes from "./box-keys";
+import delegationsRoutes from "./delegations";
 import discoverRoutes from "./discover";
 import expressionRoutes from "./expression";
 import forkRoutes, { lineageApp as lineageRoutes } from "./fork";
@@ -40,6 +41,7 @@ const app = new Hono<ProjectContext>();
 // Standalone resource roots
 app.route("/identities", identitiesRoutes);
 app.route("/attestations", attestationsRoutes);
+app.route("/delegations", delegationsRoutes);
 app.route("/discover", discoverRoutes);
 app.route("/tokens/verify", tokenVerifyRoutes);
 

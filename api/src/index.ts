@@ -241,6 +241,7 @@ app.get("/v1/bootstrap", (c) => c.json(buildPathwaysResponse()));
 
 app.use("/v1/identities/*", authMiddleware);
 app.use("/v1/attestations/*", authMiddleware);
+app.use("/v1/delegations/*", authMiddleware);
 app.use("/v1/discover/*", authMiddleware);
 app.use("/v1/tokens/*", authMiddleware);
 app.use("/v1/wallets/*", authMiddleware);

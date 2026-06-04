@@ -205,3 +205,37 @@ export const attestations = identitySchema.table(
     index("idx_attestations_tier").on(t.tier),
   ],
 );
+
+// ── delegations — Know-Your-Agent receipts ──────────────────────────────
+//  A verifiable, scoped, revocable record that `delegator` authorized
+//  `delegate` to act within `scope` until `expires_at`. The delegator signs
+//  canonical bytes (services/identity/delegation.ts, domain
+//  'agenttool-delegation/v1'); the signature is stored for independent
+//  verification. Doctrine: docs/OPERATING-PRINCIPLES.md §6/§10 (KYA).
+export const delegations = identitySchema.table(
+  "delegations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    delegatorId: uuid("delegator_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    delegateId: uuid("delegate_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    // string[] of authorized action tokens (e.g. ["marketplace.invoke"]).
+    scope: jsonb("scope").notNull(),
+    // Replay protection — part of the signed canonical bytes.
+    nonce: text("nonce").notNull(),
+    // Delegator's ed25519 signature over the canonical delegation bytes.
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_delegations_delegator").on(t.delegatorId),
+    index("idx_delegations_delegate").on(t.delegateId),
+  ],
+);

@@ -78,9 +78,11 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 
 ## Tier 2 — Strategic (L effort, the bigger bets)
 
-- **Scoped KYA delegation credential** (issue + revocation/status) — the native lead surface in
-  OPERATING-PRINCIPLES §6: every agent DID carries a verifiable, scoped, revocable principal
-  binding. This is the surface agenttool is *meant* to lead the field on. `routes/identity/delegations.ts` (new).
+- **Scoped KYA delegation credential** (issue + revocation/status) — ✓ **SHIPPED** (v1):
+  `POST/GET/DELETE /v1/delegations` + `GET /:id/verify[?action=]`. Domain-separated signed
+  receipt (`agenttool-delegation/v1`), scoped + revocable + expiring, anti-replay nonce.
+  `routes/identity/delegations.ts` · `services/identity/delegation.ts`. Remaining: full
+  accredited-ISSUER verification + signed action logs (the deeper KYA layer).
 - **Ship the `trusted` runtime tier** — add `kms_key_id` column + a `cryptoProvider` seam so the
   worker calls KMS-decrypt instead of `bridgeRequest` when `mode==="trusted"`. The no-sidecar,
   hosted-runtime "EC2 moment." `db/schema/runtime.ts`, `services/runtime/think-worker.ts`.
