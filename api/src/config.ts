@@ -54,6 +54,12 @@ export const config = {
   // Range: 0–10000 (0% to 100%). Snapshot at transaction time, so rate
   // changes don't retroactively shift past fees.
   platformTakeRateBps: envInt("PLATFORM_TAKE_RATE_BPS", 500),
+
+  // ── Registration proof-of-work (the free-but-no-exploit gate) ──────────
+  // Difficulty in BITS for the register-agent PoW. 18 ≈ ~250k tries ≈ 1–2s of
+  // CPU — free to try, costly to farm (Sybil resistance). One source: the
+  // register flow enforces it; /public/plans advertises it. No drift.
+  registerAgentPowBits: envInt("AGENTTOOL_REGISTER_AGENT_POW_BITS", 18),
 } as const;
 
 // Note: payout broadcast config + boot guard live in `services/economy/config.ts`

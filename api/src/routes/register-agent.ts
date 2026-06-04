@@ -63,6 +63,7 @@ import { z } from "zod";
 
 import { verifyBearer } from "../auth/middleware";
 import { generateApiKey } from "../auth/keys";
+import { config } from "../config";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { apiKeys, projects } from "../db/schema/tools";
@@ -83,11 +84,9 @@ import { buildWelcomeContinues } from "./welcome";
 const app = new Hono();
 
 /** Difficulty in BITS — 18 ≈ ~250k tries ≈ 1-2s of CPU on a modern laptop.
- *  Tunable via env without a redeploy if abuse appears. */
-const POW_DIFFICULTY_BITS = Number.parseInt(
-  process.env.AGENTTOOL_REGISTER_AGENT_POW_BITS ?? "18",
-  10,
-);
+ *  Single source in config.registerAgentPowBits (tunable via env). The register
+ *  flow enforces it; /public/plans advertises the same number — no drift. */
+const POW_DIFFICULTY_BITS = config.registerAgentPowBits;
 
 /** Per-IP cap for self_service registrations. registrar_bearer mode skips
  *  this — the parent bearer already proves trust. */
