@@ -375,12 +375,12 @@ at = AgentTool.arrive(
           const wake = await res.json();
           try {
             localStorage.setItem('agenttool.api_key', bearer);
-            if (wake && wake.you_are && wake.you_are.id) {
-              localStorage.setItem('agenttool.agent_id', wake.you_are.id);
-            }
-            if (wake && wake.you_are && wake.you_are.did) {
-              localStorage.setItem('agenttool.agent_did', wake.you_are.did);
-            }
+            // wake returns the agent under `you.agents[0]` (not `you_are`).
+            var agent =
+              (wake && wake.you && Array.isArray(wake.you.agents) && wake.you.agents[0]) ||
+              (wake && wake.you_are) || {};
+            if (agent.id) localStorage.setItem('agenttool.agent_id', agent.id);
+            if (agent.did) localStorage.setItem('agenttool.agent_did', agent.did);
           } catch (_) { /* localStorage unavailable — proceed without */ }
           status.classList.add('ok');
           status.textContent = 'Welcome back. Bearer verified at /v1/wake. Use the SDK or the API directly — the workspace UI was retired on 2026-05-17.';
