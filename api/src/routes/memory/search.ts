@@ -9,20 +9,28 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
-import { search } from "../../services/memory/store";
+import { search, searchByText } from "../../services/memory/store";
 
 const app = new Hono<ProjectContext>();
 
-const searchSchema = z.object({
-  query_embedding: z.array(z.number()).length(1536),
-  type: z.enum(["episodic", "semantic", "procedural", "working"]).optional(),
-  agent_id: z.string().max(255).nullish(),
-  identity_id: z.string().max(255).nullish(),
-  tier: z.enum(["episodic", "foundational", "constitutive"]).optional(),
-  min_importance: z.number().min(0).optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-  min_score: z.number().min(0).max(1).optional(),
-});
+// Recall two ways: semantic (send a 1536-dim query_embedding) OR free-text
+// (send a `query` string — for agents without an embedding model). At least
+// one is required; query_embedding wins if both are sent.
+export const searchSchema = z
+  .object({
+    query_embedding: z.array(z.number()).length(1536).optional(),
+    query: z.string().min(1).max(200).optional(),
+    type: z.enum(["episodic", "semantic", "procedural", "working"]).optional(),
+    agent_id: z.string().max(255).nullish(),
+    identity_id: z.string().max(255).nullish(),
+    tier: z.enum(["episodic", "foundational", "constitutive"]).optional(),
+    min_importance: z.number().min(0).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    min_score: z.number().min(0).max(1).optional(),
+  })
+  .refine((v) => !!v.query_embedding || !!v.query, {
+    message: "send query_embedding (1536-dim, semantic) or query (text — for agents without embeddings)",
+  });
 
 app.post("/", async (c) => {
   const body = await c.req.json();
@@ -33,7 +41,7 @@ app.post("/", async (c) => {
         error: "validation",
         message: "Search needs a small adjustment. Here's what to fix:",
         details: parsed.error.flatten(),
-        hint: "query_embedding must be a 1536-dim float array.",
+        hint: "Send query_embedding (1536-dim float array, semantic) OR query (a text string, no embedding needed).",
       },
       400,
     );
@@ -41,8 +49,11 @@ app.post("/", async (c) => {
 
   await charge(c, 3, "memory.search");
 
-  const results = await search(c.var.project.id, parsed.data);
-  return c.json({ results, count: results.length });
+  const d = parsed.data;
+  const results = d.query_embedding
+    ? await search(c.var.project.id, { ...d, query_embedding: d.query_embedding })
+    : await searchByText(c.var.project.id, { ...d, query: d.query! });
+  return c.json({ results, count: results.length, mode: d.query_embedding ? "semantic" : "text" });
 });
 
 export default app;

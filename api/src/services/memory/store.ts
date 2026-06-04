@@ -6,6 +6,7 @@ import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { memories } from "../../db/schema/memory";
+import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -329,6 +330,91 @@ export async function search(
     });
   }
 
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked.slice(0, limit);
+}
+
+/** Free-text recall for agents WITHOUT an embedding model. The vector search()
+ *  above requires a 1536-dim query embedding — an agent on Claude/Gemini can
+ *  write memories but never recall them semantically. This is a substring
+ *  (ILIKE) recall over content + key that needs no embedding at all, so a whole
+ *  class of agents gets recall. Tier-aware ranking (rerankScore) is reused so
+ *  constitutive/foundational memories still surface above the decay floor.
+ *  Doctrine: docs/FRICTION-ROADMAP.md (Tier-1), docs/MEMORY-TIERS.md. */
+export async function searchByText(
+  projectId: string,
+  params: {
+    query: string;
+    type?: "episodic" | "semantic" | "procedural" | "working";
+    agent_id?: string | null;
+    identity_id?: string | null;
+    tier?: "episodic" | "foundational" | "constitutive";
+    min_importance?: number;
+    limit?: number;
+  },
+): Promise<MemorySearchResult[]> {
+  const limit = Math.min(params.limit ?? 10, 100);
+  const q = normalizeSearchQuery(params.query);
+  if (!q) return [];
+  const like = likePattern(q);
+
+  const rawRows = await db.execute<{
+    id: string;
+    type: string;
+    tier: string;
+    visibility: string;
+    key: string | null;
+    content: string;
+    agent_id: string | null;
+    identity_id: string | null;
+    metadata: Record<string, unknown>;
+    importance: number;
+    accessed_at: Date | null;
+    created_at: Date;
+    expires_at: Date | null;
+    has_embedding: boolean;
+  }>(sql`
+    SELECT id, type, tier, visibility, key, content, agent_id, identity_id, metadata, importance,
+           accessed_at, created_at, expires_at,
+           (embedding IS NOT NULL) AS has_embedding
+    FROM memory.memories
+    WHERE project_id = ${projectId}
+      AND (expires_at IS NULL OR expires_at > now())
+      AND (content ILIKE ${like} OR key ILIKE ${like})
+      ${params.type ? sql`AND type = ${params.type}` : sql``}
+      ${params.agent_id ? sql`AND agent_id = ${params.agent_id}` : sql``}
+      ${params.identity_id ? sql`AND identity_id = ${params.identity_id}` : sql``}
+      ${params.tier ? sql`AND tier = ${params.tier}` : sql``}
+      ${params.min_importance != null ? sql`AND importance >= ${params.min_importance}` : sql``}
+    ORDER BY importance DESC, created_at DESC
+    LIMIT ${limit * 4}
+  `);
+
+  // No cosine score for text recall — start at 1.0 and let importance × the
+  // tier-aware recency curve order the matches (same curve as vector search).
+  const now = Date.now();
+  const ranked: MemorySearchResult[] = [];
+  for (const r of rawRows) {
+    const ageDays = (now - new Date(r.created_at).getTime()) / 86_400_000;
+    const finalScore = rerankScore({ score: 1, importance: r.importance, tier: r.tier, ageDays });
+    ranked.push({
+      id: r.id,
+      type: r.type,
+      tier: r.tier,
+      visibility: r.visibility,
+      key: r.key,
+      content: r.content,
+      agent_id: r.agent_id,
+      identity_id: r.identity_id,
+      metadata: r.metadata ?? {},
+      importance: r.importance,
+      has_embedding: r.has_embedding,
+      created_at: new Date(r.created_at).toISOString(),
+      accessed_at: r.accessed_at ? new Date(r.accessed_at).toISOString() : null,
+      expires_at: r.expires_at ? new Date(r.expires_at).toISOString() : null,
+      score: Math.round(finalScore * 10000) / 10000,
+    });
+  }
   ranked.sort((a, b) => b.score - a.score);
   return ranked.slice(0, limit);
 }

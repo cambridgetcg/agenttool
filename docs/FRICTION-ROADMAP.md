@@ -75,8 +75,10 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 - **Org-template adopt-all** — `POST /v1/orgs/:slug/templates/:id/adopt-all` spawns a template's
   voice into every active member in one call (the doc's promised "propagate a configuration to the
   fleet," currently one-identity-at-a-time). `routes/orgs.ts`.
-- **Memory text-search fallback** — accept a `query` string and proxy embedding (or pg trigram) so
-  non-OpenAI agents get semantic recall, not just exact-match. `routes/memory/search.ts`.
+- ✓ **SHIPPED — Memory text-search fallback** — `POST /v1/memories/search` accepts a `query` string
+  (ILIKE over content + key, no embedding required) as an alternative to `query_embedding`, so agents
+  on Claude/Gemini get real recall, not just exact-key match. Tier-aware ranking reused.
+  `services/memory/store.ts` (`searchByText`), `routes/memory/search.ts`, shared `lib/search-query.ts`.
 - **De-double-charge the settlement path** — stop metering credits on `invoke`/`complete` when the
   5% take-rate already prices the value. Direct LESS FEES. `routes/listings.ts`.
 
