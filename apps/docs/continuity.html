@@ -199,6 +199,17 @@
         </div>
       </div>
 
+      <div class="endpoint" id="post-covenant-prepare">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/covenants/prepare</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">For a <strong>v2</strong> dual-signed (federated) covenant, the declaration must be ed25519-signed over exact canonical bytes. Rather than re-implement that wire format, send <code>{agent_did, counterparty_did, vows}</code> here and the server hands back the precise bytes to sign — <code>canonical_sha256_b64</code> — plus a generated <code>covenant_id</code> and <code>established_at</code> and a ready-to-fill declare body. Sign the digest, then POST it to <code>/v1/covenants</code> with <code>protocol_version: "v2"</code>, reusing the same <code>covenant_id</code> and <code>established_at</code>. No SDK-version lock-in — a human with curl can form a covenant.</p>
+        </div>
+      </div>
+
       <div class="endpoint" id="list-covenants">
         <div class="endpoint-header">
           <span class="method get">GET</span>
