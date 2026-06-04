@@ -12,10 +12,12 @@ jurisdiction-, structure-, and fact-specific, and several load-bearing rules are
 finalizing (AMLR applies 10 Jul 2027; MiCA CASP full deadline 1 Jul 2026). Get
 jurisdiction-specific counsel before any value-holding feature ships.
 
-**Coverage note:** the deep pass landed on digital-identity / KYC-AML / payments-perimeter
-(EU-centric, with US GENIUS/mDL/FinCEN). Deeper passes on GDPR-under-E2E-encryption, the
-EU AI Act's agentic provisions, and DSA/marketplace are queued (the sweep that would cover
-them is re-running). The structural principle below holds across all of them.
+**Coverage note:** the research now spans six domains — digital-identity / KYC-AML /
+payments-perimeter (the first pass) plus agentic-AI law, fiat payments (PSD3/PSR), crypto &
+stablecoins (MiCA/GENIUS), data protection (GDPR/E2E/DUAA), and marketplace/platform fairness
+(P2B/DSA/DMA). EU-centric, with US (GENIUS, FTC Junk-Fees, FinCEN/OFAC) throughout. The
+fair-pricing axis lives in its own doc: [`FAIR-PRICING.md`](FAIR-PRICING.md). The structural
+principle below holds across all of them.
 
 ---
 
@@ -72,6 +74,19 @@ structurally never agenttool.
    ISO 18013-5/7 mdoc, DIDs, OpenID Federation. Interop with EUDI/mDL/trust-registries is a
    tailwind; a bespoke proprietary credential format is inertia-friction no regulator rewards
    and breaks the very ecosystem agenttool wants to bridge.
+9. **Charge once, for value created — meter the capability, not the money moved** — a single,
+   disclosed take-rate at/below the 10% creator-marketplace floor (we ship 5%), *far* below the
+   15–30% app-store gatekeeper tax the DMA is actively fining. Never re-charge the steps inside a
+   funded transaction, never toll value routed through a licensed partner, never mark up a rail's
+   own fee. Show the all-in number before commit (FTC Junk-Fees / drip-pricing bans). The full
+   doctrine + the code that enforces it: [`FAIR-PRICING.md`](FAIR-PRICING.md). Fairness *is* the
+   business model.
+10. **Disclose AI + delegated authority natively** — EU AI Act Art. 50 (bites 2 Aug 2026) wants
+   "you're talking to AI" disclosure + machine-readable marking of synthetic output; liability
+   always lands on the human/entity principal (no AI legal personhood — *Moffatt v. Air Canada*;
+   CA bars the "the AI did it" defense from 1 Jan 2026). These are cheap, ed25519-signable, and a
+   *selling point*. Ship Know-Your-Agent as a feature (signed identity + scoped delegation receipt
+   + revocation), aligned to the draft IETF/W3C schemas — never a walled-garden chokepoint.
 
 ## Three piles, kept sharp
 
@@ -116,6 +131,28 @@ structurally never agenttool.
 6. **Phoning home to the issuer on every verification.** A Bitstring Status List checks
    validity without surveillance; phone-home leaks presentation events and is expressly banned
    for EUDI issuers.
+7. **Full KYC/AML onboarding on every agent or wallet.** No statute requires it for a
+   non-custodial identity layer; AML duties bind the *licensed money partner*, not the
+   orchestrator. Over-collecting PII surveils and excludes — *the small agent and user lose*.
+8. **Acquiring a PSP/EMI/CASP licence in order to never custody.** If agenttool never holds
+   keys or exercises independent control over funds, MiCA Art. 3 / PSD2 Art. 3(b) /
+   FinCEN FIN-2019-G001 simply don't attach. Six-figure capital + 6–12mo for zero added
+   consumer safety — *the platform and its builders lose*. Route value through a licensed partner.
+9. **Re-collecting identity per primitive** (name/email/title at each surface). ed25519 already
+   authenticates; this is the exact over-collection the CJEU struck down in *Mousse* (C-394/23,
+   Jan 2025) — *unlawful* under GDPR Art. 5(1)(c), not just annoying. *Users lose* (exposure),
+   *you lose* (4%-turnover fine risk).
+10. **Breach-notification machinery over ciphertext you can't read.** If keys never touch the
+    server, GDPR Art. 34(3)(a) lifts the user-notification duty. Heavyweight ciphertext-breach
+    reporting protects no one and taxes every agent.
+11. **Copying P2B / VLOP bureaucracy as a sub-threshold platform** (formal mediation-body
+    designation, systemic-risk audits, 6%-turnover machinery — these bind only >45M EU MAU
+    gatekeepers; the Commission is *repealing* P2B as low-impact). Voluntarily aping it is
+    rent-seeking on yourself — *every user loses to slower shipping*.
+12. **Metering the same transaction twice / gatekeeper toll-stacking.** Charging a % of value
+    the rail already priced (interchange is capped at 0.2/0.3%), or layering acquisition +
+    service + technology tolls App-Store-style, is the exact "malicious compliance" the DMA is
+    fining. *Sellers lose, double-charged for one service.* (Fixed in code — see `FAIR-PRICING.md`.)
 
 ## How this cuts fees and friction (legal + principled)
 - Reusable KYC as a first-class product — verify once, every downstream partner that legally
