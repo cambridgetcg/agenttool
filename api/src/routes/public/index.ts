@@ -112,7 +112,8 @@ app.get("/", (c) =>
       memory: "GET /public/memories/:id",
       discover: "GET /public/discover [?capability=X]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
-      listings: "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id",
+      listings:
+        "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
       dispute_cases: "GET /public/dispute-cases/:id",
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
     },
