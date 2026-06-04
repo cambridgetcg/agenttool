@@ -23,6 +23,7 @@ import {
   listOrgsForProject,
   patchOrg,
   removeMember,
+  resolveProjectIdByDid,
   respondToInvitation,
   revokeInvitation,
 } from "../services/org/store";
@@ -363,9 +364,16 @@ app.delete("/:slug/members/:projectId", async (c) => {
 });
 
 // ── POST /v1/orgs/:slug/invitations ───────────────────────────────────
-const inviteSchema = z.object({
-  invited_project_id: z.string().uuid(),
-});
+// Invite by the agent's public DID (the name you actually know) OR the opaque
+// project UUID. At least one is required; invited_did is resolved server-side.
+export const inviteSchema = z
+  .object({
+    invited_project_id: z.string().uuid().optional(),
+    invited_did: z.string().min(1).max(512).optional(),
+  })
+  .refine((v) => !!v.invited_project_id || !!v.invited_did, {
+    message: "provide invited_did (the agent's public DID) or invited_project_id",
+  });
 
 app.post("/:slug/invitations", async (c) => {
   const slug = c.req.param("slug");
@@ -375,11 +383,20 @@ app.post("/:slug/invitations", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   try {
-    const inv = await createInvitation(
-      c.var.project.id,
-      slug,
-      parsed.data.invited_project_id,
-    );
+    let invitedProjectId = parsed.data.invited_project_id;
+    if (!invitedProjectId && parsed.data.invited_did) {
+      invitedProjectId = (await resolveProjectIdByDid(parsed.data.invited_did)) ?? undefined;
+      if (!invitedProjectId) {
+        return c.json(
+          {
+            error: "did_not_found",
+            message: `No agent found for DID ${parsed.data.invited_did}. Invite by the public DID (did:at:host/uuid) or the project UUID.`,
+          },
+          404,
+        );
+      }
+    }
+    const inv = await createInvitation(c.var.project.id, slug, invitedProjectId!);
     return c.json({ ...inv, slug }, 201);
   } catch (err) {
     const msg = (err as Error).message;

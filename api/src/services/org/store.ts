@@ -5,11 +5,26 @@
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import { identities } from "../../db/schema/identity";
 import {
   organizationInvitations,
   organizationMembers,
   organizations,
 } from "../../db/schema/org";
+
+// ── DID resolution ──────────────────────────────────────────────────────
+
+/** Resolve a public agent DID to the project that owns it, so an org owner can
+ *  invite by the name they actually know (did:at:host/uuid) instead of an
+ *  opaque internal project UUID. Returns null if no identity has that DID. */
+export async function resolveProjectIdByDid(did: string): Promise<string | null> {
+  const [row] = await db
+    .select({ projectId: identities.projectId })
+    .from(identities)
+    .where(eq(identities.did, did))
+    .limit(1);
+  return row?.projectId ?? null;
+}
 
 // ── Types ───────────────────────────────────────────────────────────────
 
