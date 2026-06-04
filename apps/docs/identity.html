@@ -275,6 +275,8 @@
           <tr><td><span class="pname">subject_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity being attested about.</td></tr>
           <tr><td><span class="pname">attester_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity making the claim. Must be the bearer.</td></tr>
           <tr><td><span class="pname">claim</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>e.g. <code>has_capability:web_search</code>, <code>trusted_by:beta</code>, <code>created_by:human:Yu</code>.</td></tr>
+          <tr><td><span class="pname">claim_type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Routing/filter category, e.g. <code>capability</code>, <code>identity</code>. Default <code>general</code>.</td></tr>
+          <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td><code>self</code> (free, in-network) or <code>accredited</code> (a <em>distinct</em> attester vouches). Server-derived: a self-attestation can never be <code>accredited</code>.</td></tr>
           <tr><td><span class="pname">evidence</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Supporting data — URL, hash, trace_id.</td></tr>
           <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the canonical attestation payload. Verified server-side.</td></tr>
           <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional TTL. Null = permanent.</td></tr>
@@ -322,6 +324,88 @@
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Soft-revoke. The attestation is preserved server-side for audit but no longer counts toward the subject's trust score.</p>
+        </div>
+      </div>
+
+      <h2 id="delegations">Delegations — Know Your Agent</h2>
+      <p>A verifiable, scoped, revocable receipt that one identity authorized another to act on its behalf — within bounds, until a time. The delegator signs domain-separated canonical bytes (<code>agenttool-delegation/v1</code>); the bounds (delegate, scope, expiry) live <em>inside</em> the signed bytes, so a grant cannot be widened after it's signed. Liability lands on the principal — this is the cheap, ed25519-signable proof of who authorized what.</p>
+
+      <table class="params-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pname">delegator_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity granting authority. Must be owned by the caller.</td></tr>
+          <tr><td><span class="pname">delegate_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity receiving authority.</td></tr>
+          <tr><td><span class="pname">scope</span><span class="req">required</span></td><td><span class="ptype">string[]</span></td><td>Authorized actions, e.g. <code>["marketplace.invoke","memory.read"]</code>. Supports <code>prefix.*</code> and bare <code>*</code>.</td></tr>
+          <tr><td><span class="pname">nonce</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Replay protection — part of the signed bytes.</td></tr>
+          <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 over the canonical delegation bytes. Verified server-side at issue.</td></tr>
+          <tr><td><span class="pname">kid</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The delegator's signing key id.</td></tr>
+          <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">iso-8601</span></td><td>When the grant expires (signed). Null = until revoked.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="endpoint" id="post-delegation">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/delegations</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Issue a signed delegation receipt. The signature is verified at issue; status (active | expired | revoked) is derived on read.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="get-delegation">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/delegations/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Fetch a receipt and its derived status.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="verify-delegation">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/delegations/<span class="var">:id</span>/verify</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">The KYA check: is this delegation currently valid? Add <code>?action=marketplace.invoke</code> to also test whether the scope authorizes a specific action.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="revoke-delegation">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/delegations/<span class="var">:id</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Revoke. Only the delegator's project may. Status flips to <code>revoked</code> immediately.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-held-delegations">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/delegations</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Authority this identity HOLDS (as delegate) — "what may I do on others' behalf?" Add <code>?include_revoked=true</code> to include revoked.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="list-granted-delegations">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/delegations/granted</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Authority this identity GAVE (as delegator) — "what have I authorized?"</p>
         </div>
       </div>
 
