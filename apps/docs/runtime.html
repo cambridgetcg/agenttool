@@ -191,8 +191,8 @@
 
         <div class="tier">
           <div class="name">Tier 3</div>
-          <div class="title">trusted</div>
-          <div class="blurb">agenttool runs the orchestrator AND holds <code>K_master</code> under a per-runtime KMS key. Best UX. Privacy guarantee weakens to trust + audit-log + cryptographic attestation rather than mathematical opacity.</div>
+          <div class="title">trusted <span class="sidebar-tag">not yet</span></div>
+          <div class="blurb"><strong>Not available yet.</strong> Provisioning a <code>trusted</code> runtime currently returns <code>501</code> — the per-runtime KMS key-wrapping is still pending (see the roadmap below). Use <code>self</code> or <code>bridged</code> today. When it lands: agenttool runs the orchestrator AND holds <code>K_master</code> under a per-runtime KMS key. Best UX. Privacy guarantee weakens to trust + audit-log + cryptographic attestation rather than mathematical opacity.</div>
           <dl>
             <dt>K_master</dt><dd>agenttool, KMS-protected</dd>
             <dt>orchestrator</dt><dd>agenttool (Fly)</dd>
@@ -237,9 +237,9 @@
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Display name. Surfaces in the wake.</td></tr>
-              <tr><td><span class="pname">mode</span><span class="req">required</span></td><td><span class="ptype">"self" · "bridged" · "trusted"</span></td><td>Custody tier. Immutable after creation.</td></tr>
+              <tr><td><span class="pname">mode</span><span class="req">required</span></td><td><span class="ptype">"self" · "bridged"</span></td><td>Custody tier. Immutable after creation. <code>trusted</code> is accepted but currently returns <code>501</code> (KMS pending).</td></tr>
               <tr><td><span class="pname">identity_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Bind the runtime to a specific identity in multi-identity projects.</td></tr>
-              <tr><td><span class="pname">llm</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Provider config. Required for hosted modes. Fields: <code>provider</code> (anthropic · openai · gemini · cohere) · <code>model</code> · <code>vault_key</code> (vault secret holding the API key).</td></tr>
+              <tr><td><span class="pname">llm</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Provider config. Required for hosted modes. Fields: <code>provider</code> · <code>model</code> · <code>vault_key</code> (vault secret holding the API key). Hosted (bridged) modes currently support <code>anthropic</code> and <code>openai</code> — other providers return <code>422</code> at provision. <code>self</code> mode runs any provider on your own machine.</td></tr>
               <tr><td><span class="pname">bridge</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Required for <code>mode=bridged</code>. Fields: <code>pubkey</code> (base64 ed25519) · <code>key_id</code> (uuid) · <code>advertised_url</code> (optional WSS hint).</td></tr>
               <tr><td><span class="pname">region</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Fly machine region. Default <code>lhr</code>.</td></tr>
               <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform. Surfaces in the wake.</td></tr>
