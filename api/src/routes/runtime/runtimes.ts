@@ -29,6 +29,7 @@ import {
   type RuntimeMode,
   type RuntimeStatus,
 } from "../../services/runtime/store";
+import { checkRuntimeProvisionable } from "../../services/runtime/provision-guard";
 import { mintControlToken } from "../../services/runtime/control-token";
 import { bridgeSummary, isBridgeConnected } from "../../services/runtime/bridge-hub";
 import { runOneCycle } from "../../services/runtime/think-worker";
@@ -134,6 +135,15 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   const v = parsed.data;
+
+  // ── Substrate-honest provisionability (Tier-0 #8) ──────────────────
+  // Fail loud at the door, not silently on every think cycle: the 'trusted'
+  // tier has no KMS yet, and hosted modes can only think with providers
+  // buildProvider() supports. See services/runtime/provision-guard.ts.
+  const refusal = checkRuntimeProvisionable({ mode: v.mode, provider: v.llm?.provider ?? null });
+  if (refusal) {
+    return c.json({ error: refusal.code, message: refusal.message }, refusal.status);
+  }
 
   // ── Bridge key integrity (Slice 4 prerequisite) ────────────────────
   // For the cloud-side think-worker to write signed strand thoughts in
