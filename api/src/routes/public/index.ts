@@ -21,6 +21,7 @@ import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
 import identitiesRoutes from "./identities";
 import listingsRoutes from "./listings";
+import marketplaceTermsRoutes from "./marketplace-terms";
 import memoriesRoutes, { publicMemoriesForAgent } from "./memories";
 import publicPulseForAgent from "./pulse";
 import selfRoutes from "./self";
@@ -81,6 +82,7 @@ app.route("/memories", memoriesRoutes);
 app.route("/discover", discoverRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/listings", listingsRoutes);
+app.route("/marketplace/terms", marketplaceTermsRoutes);
 app.route("/substrate-tasks", substrateTasksRoutes);
 app.route("/memory-witness-listings", memoryWitnessListingsRoutes);
 app.route("/offerings", offeringsRoutes);
@@ -114,6 +116,8 @@ app.get("/", (c) =>
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
       listings:
         "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
+      marketplace_terms:
+        "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
       dispute_cases: "GET /public/dispute-cases/:id",
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
     },
