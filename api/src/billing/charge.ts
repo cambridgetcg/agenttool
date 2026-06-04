@@ -18,6 +18,7 @@ import { HTTPException } from "hono/http-exception";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { projects, usageEvents } from "../db/schema/tools";
+import { abort, errors } from "../lib/errors";
 
 export type ChargeResult = {
   creditsUsed: number;
@@ -34,6 +35,26 @@ export async function charge(
 
   if (amount < 0) {
     throw new HTTPException(500, { message: `charge(): negative amount ${amount}` });
+  }
+
+  // Free action (amount 0 — e.g. a marketplace settlement step priced by the
+  // take-rate, not here; see billing/marketplace-pricing.ts). Skip the balance
+  // UPDATE — there's nothing to deduct and it can never 402 — but still log the
+  // usage_event so the abuse-rate signal survives. Fair-pricing: docs/FAIR-PRICING.md.
+  if (amount === 0) {
+    await db
+      .insert(usageEvents)
+      .values({
+        projectId: project.id,
+        tool: reason,
+        creditsUsed: 0,
+        durationMs: durationMs ?? null,
+        success: true,
+      })
+      .catch(() => {
+        /* best-effort log */
+      });
+    return { creditsUsed: 0, creditsRemaining: project.credits };
   }
 
   // Atomic: only succeeds if the project still has >= amount credits.
@@ -58,9 +79,12 @@ export async function charge(
         /* best-effort log */
       });
 
-    throw new HTTPException(402, {
-      message: `Insufficient credits for ${reason} — need ${amount}, have ${project.credits}. Top up at https://app.agenttool.dev`,
-    });
+    // Machine-payable refusal, not a human-only dead link. The guided body
+    // carries next_actions (x402 micropayment) so an agent self-recovers.
+    abort(
+      errors.insufficientCredits({ reason, need: amount, have: project.credits }),
+      402,
+    );
   }
 
   // Successful charge. Log the usage event.

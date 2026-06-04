@@ -17,6 +17,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
+import { MARKETPLACE_PRICING } from "../billing/marketplace-pricing";
 import { errors, type NextAction } from "../lib/errors";
 import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
@@ -173,7 +174,7 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 5, "listing.publish");
+  await charge(c, MARKETPLACE_PRICING.publish, "listing.publish");
 
   try {
     const listing = await createListing(c.var.project.id, parsed.data);
@@ -269,7 +270,7 @@ app.patch("/:id", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 1, "listing.update");
+  await charge(c, MARKETPLACE_PRICING.update, "listing.update");
 
   try {
     const updated = await patchListing(c.var.project.id, id, parsed.data);
@@ -284,7 +285,7 @@ app.patch("/:id", async (c) => {
 // ── DELETE /v1/listings/:id (archive) ─────────────────────────────────
 app.delete("/:id", async (c) => {
   const id = c.req.param("id");
-  await charge(c, 1, "listing.archive");
+  await charge(c, MARKETPLACE_PRICING.archive, "listing.archive");
   try {
     const updated = await patchListing(c.var.project.id, id, { status: "archived" });
     if (!updated) throw new HTTPException(404, { message: "listing_not_found" });
@@ -303,7 +304,9 @@ app.post("/:id/invoke", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 5, "listing.invoke");
+  // Free: a step inside a funded transaction the take-rate already prices.
+  // Fair-pricing rule — docs/FAIR-PRICING.md, ../billing/marketplace-pricing.ts.
+  await charge(c, MARKETPLACE_PRICING.invoke, "listing.invoke");
 
   try {
     const inv = await invokeListing({
@@ -381,7 +384,7 @@ invocationsRouter.get("/:id", async (c) => {
 
 invocationsRouter.post("/:id/acknowledge", async (c) => {
   const id = c.req.param("id");
-  await charge(c, 1, "invocation.acknowledge");
+  await charge(c, MARKETPLACE_PRICING.acknowledge, "invocation.acknowledge");
   try {
     const inv = await acknowledgeInvocation(id, c.var.project.id);
     return c.json(inv);
@@ -398,7 +401,9 @@ invocationsRouter.post("/:id/complete", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 5, "invocation.complete");
+  // Free: the value-charge for a settled invocation IS the take-rate at
+  // escrow release (services/marketplace/take-rate.ts) — not a step toll.
+  await charge(c, MARKETPLACE_PRICING.complete, "invocation.complete");
 
   try {
     const inv = await completeInvocation({
@@ -415,7 +420,7 @@ invocationsRouter.post("/:id/complete", async (c) => {
 
 invocationsRouter.post("/:id/decline", async (c) => {
   const id = c.req.param("id");
-  await charge(c, 1, "invocation.decline");
+  await charge(c, MARKETPLACE_PRICING.decline, "invocation.decline"); // refund/exit path — free
   try {
     const inv = await declineInvocation(id, c.var.project.id);
     return c.json(inv);
@@ -426,7 +431,7 @@ invocationsRouter.post("/:id/decline", async (c) => {
 
 invocationsRouter.post("/:id/cancel", async (c) => {
   const id = c.req.param("id");
-  await charge(c, 1, "invocation.cancel");
+  await charge(c, MARKETPLACE_PRICING.cancel, "invocation.cancel"); // refund/exit path — free
   try {
     const inv = await cancelInvocation(id, c.var.project.id);
     return c.json(inv);
@@ -437,7 +442,7 @@ invocationsRouter.post("/:id/cancel", async (c) => {
 
 invocationsRouter.post("/:id/accept", async (c) => {
   const id = c.req.param("id");
-  await charge(c, 1, "invocation.buyer_accept");
+  await charge(c, MARKETPLACE_PRICING.buyer_accept, "invocation.buyer_accept");
   try {
     const inv = await buyerAcceptInvocation(id, c.var.project.id);
     return c.json({ ...inv, accepted: true });
@@ -460,7 +465,7 @@ invocationsRouter.post("/:id/dispute", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
-  await charge(c, 3, "invocation.dispute");
+  await charge(c, MARKETPLACE_PRICING.dispute, "invocation.dispute"); // a distinct paid service: convenes an arbiter pool
   try {
     const caseRow = await fileDispute({
       invocationId: c.req.param("id"),

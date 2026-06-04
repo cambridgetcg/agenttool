@@ -61,6 +61,12 @@ function buildAll(): Record<string, GuidedErrorBody> {
       available: "23",
       currency: "GBP",
     }),
+    insufficientCredits: errors.insufficientCredits(),
+    insufficientCreditsWithAmounts: errors.insufficientCredits({
+      reason: "listing.publish",
+      need: 5,
+      have: 2,
+    }),
     rateLimit: errors.rateLimit(),
     rateLimitWithRing: errors.rateLimit({ ring: 1, retry_after_sec: 60 }),
     planLimitExceeded: errors.planLimitExceeded(),

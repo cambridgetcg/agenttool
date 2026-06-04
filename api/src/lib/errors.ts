@@ -293,6 +293,29 @@ export const errors = {
     };
   },
 
+  /** Metering ledger (projects.credits) is short for a metered action.
+   *  Distinct from insufficientBalance (the marketplace wallet). This is
+   *  the API-usage credit meter; the recovery path is pay-as-you-go via
+   *  x402 micropayment — a machine-payable next step, NOT a human-only
+   *  dashboard link. Free-tier (Ring 1) actions never draw credits. */
+  insufficientCredits(opts: { reason?: string; need?: number; have?: number } = {}): GuidedErrorBody {
+    const known = opts.need !== undefined && opts.have !== undefined;
+    return {
+      error: "insufficient_credits",
+      message: known
+        ? `Need ${opts.need} credit${opts.need === 1 ? "" : "s"}${opts.reason ? ` for ${opts.reason}` : ""}; have ${opts.have}.`
+        : `Not enough credits${opts.reason ? ` for ${opts.reason}` : ""}.`,
+      hint: "Pay-as-you-go per call via x402 micropayment (crypto/USDC) — no subscriptions, no fiat. Free-tier (Ring 1) actions don't draw credits, and marketplace settlement steps are free.",
+      next_actions: [
+        { action: "Retry with an x402 X-PAYMENT header (per-call USDC micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
+        { action: "Check which actions are free (Ring 1) vs. metered", method: "GET", path: "/v1/economy" },
+      ],
+      docs: `${DOCS_BASE}/economy#credits`,
+      axiom_id: AXIOM_GUIDE, // a cost wall is a guide-event — hand back the payable path
+      _canon_pointer: "urn:agenttool:wall/no-cost-without-disclosure",
+    };
+  },
+
   rateLimit(opts: { retry_after_sec?: number; ring?: 1 | 2 } = {}): GuidedErrorBody {
     return {
       error: "rate_limit",
