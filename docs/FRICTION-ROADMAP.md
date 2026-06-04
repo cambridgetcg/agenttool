@@ -61,8 +61,10 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 - **Collapse to one credit ledger** — `billing/charge.ts` (`projects.credits`, GBP) and the x402
   `usage.ts` path are two unreconciled pools; an agent can be metered two incompatible ways.
   Pick one. `billing/charge.ts` · `services/economy/usage.ts`.
-- **`POST /v1/covenants/prepare`** — return canonical bytes + a `covenant_id` to sign, killing the
-  SDK-version lock-in where the canonical-bytes recipe is the only contract. `routes/continuity.ts`.
+- ✓ **SHIPPED — `POST /v1/covenants/prepare`** — returns the exact `canonical_sha256_b64` to sign +
+  a generated `covenant_id`/`established_at` + a declare `body_hint`, killing the SDK-version lock-in
+  where re-implementing the canonical-bytes recipe was the only way in. Uses `canonicalDeclareBytes`
+  read-only (invariant intact). `services/covenants/prepare.ts`, `routes/continuity.ts`.
 - **Predicate / selective-disclosure attestations** — atomic claims (over-18, jurisdiction=EU)
   presentable without the full bundle; meets the eIDAS Art. 5a over-identification ban head-on.
   `routes/identity/attestations.ts`, `services/identity/crypto.ts`.

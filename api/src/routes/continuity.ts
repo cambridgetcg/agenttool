@@ -24,6 +24,7 @@ import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
 import { identityKeys } from "../db/schema/identity";
 import { errors, fail } from "../lib/errors";
+import { prepareDeclare } from "../services/covenants/prepare";
 import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
 import { publishWakeEvent } from "../services/wake/push";
@@ -225,6 +226,62 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
     verified_at: row.verifiedAt,
   };
 }
+
+// ── POST /v1/covenants/prepare — server-assisted bytes-to-sign ─────────
+//  Hand the client the exact canonical bytes to sign so it doesn't have to
+//  re-implement canonicalDeclareBytes (no SDK-version lock-in; curlable).
+//  docs/FRICTION-ROADMAP.md Tier-1.
+const prepareSchema = z.object({
+  agent_did: z.string().min(1).max(255),
+  counterparty_did: z.string().min(1).max(255),
+  vows: z.array(z.string().min(1)).min(1),
+  covenant_id: z.string().uuid().optional(),
+  established_at: z.string().datetime().optional(),
+});
+
+app.post("/covenants/prepare", async (c) => {
+  const parsed = prepareSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+  const d = parsed.data;
+  const covenantId = d.covenant_id ?? crypto.randomUUID();
+  const establishedAt = d.established_at ?? new Date().toISOString();
+  const prep = prepareDeclare({
+    covenantId,
+    agentDid: d.agent_did,
+    counterpartyDid: d.counterparty_did,
+    vows: d.vows,
+    establishedAtIso: establishedAt,
+  });
+  return c.json({
+    ...prep,
+    next_actions: [
+      {
+        action:
+          "Sign canonical_sha256_b64 (base64 of the 32-byte digest) with the ed25519 key for signing_key_id, then declare the covenant",
+        method: "POST",
+        path: "/v1/covenants",
+        body_hint: {
+          protocol_version: "v2",
+          agent_id: "<your identity uuid>",
+          covenant_id: prep.covenant_id,
+          agent_did: prep.agent_did,
+          counterparty_did: prep.counterparty_did,
+          vows: prep.vows,
+          established_at: prep.established_at,
+          signature: "<base64 ed25519 over the decoded canonical_sha256_b64>",
+          signing_key_id: "<your signing key uuid>",
+        },
+      },
+    ],
+    _note:
+      "Server-computed declaration bytes — no need to re-implement the wire format. Sign the " +
+      "digest in canonical_sha256_b64 and POST it to /v1/covenants with protocol_version 'v2', " +
+      "reusing this exact covenant_id + established_at. The declare re-derives the same bytes and " +
+      "verifies your signature.",
+  });
+});
 
 app.post("/covenants", async (c) => {
   const project = c.var.project;
