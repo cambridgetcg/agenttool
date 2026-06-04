@@ -18,6 +18,8 @@ const searchSchema = z.object({
   type: z.enum(["episodic", "semantic", "procedural", "working"]).optional(),
   agent_id: z.string().max(255).nullish(),
   identity_id: z.string().max(255).nullish(),
+  tier: z.enum(["episodic", "foundational", "constitutive"]).optional(),
+  min_importance: z.number().min(0).optional(),
   limit: z.number().int().min(1).max(100).optional(),
   min_score: z.number().min(0).max(1).optional(),
 });

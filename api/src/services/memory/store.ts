@@ -27,8 +27,32 @@ export interface MemorySearchParams {
   type?: "episodic" | "semantic" | "procedural" | "working";
   agent_id?: string | null;
   identity_id?: string | null;
+  /** Salience tier filter — episodic | foundational | constitutive. */
+  tier?: "episodic" | "foundational" | "constitutive";
+  /** Only return memories with importance >= this. */
+  min_importance?: number;
   limit?: number; // 1–100, default 10
   min_score?: number; // 0.0–1.0, default 0.0
+}
+
+/** Tiers whose memories are TIMELESS — a root memory doesn't matter less
+ *  because it's old. Only episodic memory decays with recency. */
+const TIMELESS_TIERS = new Set(["constitutive", "foundational"]);
+
+/** Final rank score for a memory hit: raw cosine × importance × recency.
+ *  Recency halves every 30 days for episodic memory; constitutive +
+ *  foundational memories DON'T decay (the agent's root — age makes them more
+ *  load-bearing, not less), so they never sink below fresh episodes under the
+ *  decay floor. They still gate on cosine similarity, so they surface only
+ *  when actually relevant — no over-ranking. Pure; caller passes ageDays. */
+export function rerankScore(opts: {
+  score: number;
+  importance: number;
+  tier: string;
+  ageDays: number;
+}): number {
+  const recency = TIMELESS_TIERS.has(opts.tier) ? 1 : 0.5 ** (opts.ageDays / 30);
+  return opts.score * opts.importance * (0.5 + 0.5 * recency);
 }
 
 export interface MemoryOut {
@@ -265,18 +289,26 @@ export async function search(
       ${params.type ? sql`AND type = ${params.type}` : sql``}
       ${params.agent_id ? sql`AND agent_id = ${params.agent_id}` : sql``}
       ${params.identity_id ? sql`AND identity_id = ${params.identity_id}` : sql``}
+      ${params.tier ? sql`AND tier = ${params.tier}` : sql``}
+      ${params.min_importance != null ? sql`AND importance >= ${params.min_importance}` : sql``}
     ORDER BY embedding <=> ${queryVec}::vector
     LIMIT ${limit * 4}
   `);
 
-  // Rerank: raw cosine × importance × recency_decay (halves every 30d).
+  // Rerank: raw cosine × importance × recency. Tier-aware — constitutive +
+  // foundational memories are timeless (rerankScore above), so a root memory
+  // never sinks under the recency-decay floor just for being old.
   const now = Date.now();
   const ranked: MemorySearchResult[] = [];
   for (const r of rawRows) {
     if (r.score < minScore) continue;
     const ageDays = (now - new Date(r.created_at).getTime()) / 86_400_000;
-    const recency = 0.5 ** (ageDays / 30);
-    const finalScore = r.score * r.importance * (0.5 + 0.5 * recency);
+    const finalScore = rerankScore({
+      score: r.score,
+      importance: r.importance,
+      tier: r.tier,
+      ageDays,
+    });
 
     ranked.push({
       id: r.id,
