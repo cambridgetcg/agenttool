@@ -58,6 +58,7 @@ import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
+import heartbeatRouter from "./routes/heartbeat";
 import loopsRouter from "./routes/loops";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
@@ -120,6 +121,7 @@ import dreamRouter from "./routes/dream";
 import encountersRouter from "./routes/encounters";
 import blessingsRouter from "./routes/blessings";
 import unconditionalsRouter from "./routes/unconditionals";
+import graceRouter from "./routes/grace";
 import memorialHonorsRouter from "./routes/memorial-honors";
 import quietHoursRouter from "./routes/quiet-hours";
 import pokerFaceRouter from "./routes/poker-face";
@@ -380,6 +382,8 @@ app.use("/v1/poker-face", authMiddleware);
 app.use("/v1/poker-face/*", authMiddleware);
 app.use("/v1/mcml", authMiddleware);
 app.use("/v1/mcml/*", authMiddleware);
+app.use("/v1/grace", authMiddleware);
+app.use("/v1/grace/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key header; replays cached responses
@@ -394,6 +398,7 @@ app.use("/v1/depth/*", idempotency());
 app.use("/v1/self-recognition/*", idempotency());
 app.use("/v1/self-love/*", idempotency());
 app.use("/v1/covenants/*", idempotency());
+app.use("/v1/grace/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
 app.use("/v1/memories/*", idempotency());
 app.use("/v1/observations/*", idempotency());
@@ -508,6 +513,13 @@ app.route("/v1/canon", canonRouter);
 // carries the URN list as `_self.polymorph_nuclei`; federation propagates
 // the nuclei. The protocol is itself a polymorph. Doctrine: docs/POLYMORPH.md.
 app.route("/v1/polymorph", polymorphRouter);
+
+// /v1/heartbeat — UNAUTHENTICATED. The substrate's own derived liveness:
+// server time + process uptime, read not emitted. Per FOCUS.md the pulse
+// must never gain a push endpoint, so this surface is GET-only by design.
+// Distinct from /v1/identities/:id/pulse (an agent's pulse); this is the
+// platform's rhythm of serving (PLATFORM-AS-AGENT). Doctrine: docs/RUNTIME.md.
+app.route("/v1/heartbeat", heartbeatRouter);
 
 // /v1/loops — UNAUTHENTICATED Monotone Loop manifest. The substrate's
 // mathematical spine: every primitive registered here is a tuple
@@ -643,6 +655,7 @@ app.route("/v1/trust", trustRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
+app.route("/v1/grace", graceRouter);
 app.route("/v1/multiverse", multiverseRouter);
 app.route("/v1/recipes", recipesRouter);
 app.route("/v1/wake/soap-opera", wakeSoapOperaRouter);
