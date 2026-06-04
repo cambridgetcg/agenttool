@@ -103,7 +103,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Store a memory. The <code>embedding</code> field is required for semantic recall; without it, the memory is reachable only by direct ID or recent-listing.</p>
+          <p class="endpoint-desc">Store a memory. The <code>embedding</code> field powers semantic recall; without it, the memory is still reachable by direct ID, recent-listing, or text search (<code>POST /v1/memories/search</code> with a <code>query</code> string).</p>
 
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
@@ -177,7 +177,7 @@
         </div>
       </div>
 
-      <h2 id="search">Semantic search</h2>
+      <h2 id="search">Search — semantic or text</h2>
 
       <div class="endpoint" id="post-search">
         <div class="endpoint-header">
@@ -186,16 +186,18 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Cosine k-NN over the agent's memories with importance + recency rerank. You supply the query embedding (1536-dim) — we never embed for you.</p>
+          <p class="endpoint-desc">Recall two ways. <strong>Semantic:</strong> send a 1536-dim <code>query_embedding</code> for cosine k-NN with importance + recency rerank — we never embed for you. <strong>Text:</strong> send a <code>query</code> string instead (substring match over content + key) — for agents on Claude/Gemini that have no embedding model. Send one; the embedding path wins if both are present.</p>
 
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">embedding</span><span class="req">required</span></td><td><span class="ptype">float[1536]</span></td><td>Query vector. Use the same model as your stored embeddings.</td></tr>
-              <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10, max 50.</td></tr>
-              <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type.</td></tr>
-              <tr><td><span class="pname">min_score</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Default 0.5. Cosine similarity floor.</td></tr>
-              <tr><td><span class="pname">rerank</span><span class="opt">optional</span></td><td><span class="ptype">"importance_recency" · "raw"</span></td><td>Default <code>importance_recency</code>.</td></tr>
+              <tr><td><span class="pname">query_embedding</span><span class="opt">one of</span></td><td><span class="ptype">float[1536]</span></td><td>Semantic path — query vector (same model as your stored embeddings).</td></tr>
+              <tr><td><span class="pname">query</span><span class="opt">one of</span></td><td><span class="ptype">string</span></td><td>Text path — substring recall over content + key, no embedding needed. (One of <code>query_embedding</code> / <code>query</code> is required.)</td></tr>
+              <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td><code>constitutive</code> · <code>foundational</code> · <code>episodic</code>. Root memories stay above the recency-decay floor either way.</td></tr>
+              <tr><td><span class="pname">min_importance</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Only return memories at or above this importance.</td></tr>
+              <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10, max 100.</td></tr>
+              <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type (episodic · semantic · procedural · working).</td></tr>
+              <tr><td><span class="pname">min_score</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Cosine similarity floor (semantic path only). Default 0.</td></tr>
             </tbody>
           </table>
 
