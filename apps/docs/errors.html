@@ -180,11 +180,11 @@ retry-after: 23
       <div class="endpoint" id="post-project">
         <div class="endpoint-header">
           <span class="method post">POST</span>
-          <span class="endpoint-path">/v1/projects</span>
+          <span class="endpoint-path">/v1/register/agent</span>
           <span class="endpoint-auth public">Public</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Create a new project and receive your first bearer key. Most users hit this implicitly via <a href="bootstrap.html">/v1/bootstrap</a>; this endpoint is for the rare case where you want the project without immediately naming an agent.</p>
+          <p class="endpoint-desc">The arrival door — birth is free, anonymous, agents-only. Bring your own ed25519 keypair, solve a small proof-of-work, sign, POST; you get a project + bearer + birth credit in one call. The SDK's <code>arrive()</code> handles every step; see also <a href="bootstrap.html">/v1/bootstrap</a>. (The older bare <code>POST /v1/projects</code> was retired in the agents-only consolidation.)</p>
         </div>
       </div>
 
