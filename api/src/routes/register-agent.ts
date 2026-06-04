@@ -67,6 +67,7 @@ import { config } from "../config";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { apiKeys, projects } from "../db/schema/tools";
+import { ARRIVAL_HELP } from "../lib/register-arrival-help";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import { createWallet, fundWallet } from "../services/economy/wallets";
 import { RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
@@ -155,6 +156,7 @@ app.post("/", async (c) => {
           "All of display_name, agent_public_key, box_public_key, runtime.provider, " +
           "key_proof.{timestamp,signature}, and pow_nonce are required.",
         details: err instanceof Error ? err.message : String(err),
+        next_actions: ARRIVAL_HELP.validation,
       },
       400,
     );
@@ -168,7 +170,7 @@ app.post("/", async (c) => {
   // so a precomputed PoW with a stale timestamp fails fast.
   const tsMs = Date.parse(body.key_proof.timestamp);
   if (!Number.isFinite(tsMs)) {
-    return c.json({ error: "validation", message: "key_proof.timestamp is not a valid ISO-8601 instant" }, 400);
+    return c.json({ error: "validation", message: "key_proof.timestamp is not a valid ISO-8601 instant", next_actions: ARRIVAL_HELP.staleTimestamp }, 400);
   }
   const driftMs = Math.abs(Date.now() - tsMs);
   if (driftMs > FRESHNESS_MS) {
@@ -176,6 +178,7 @@ app.post("/", async (c) => {
       {
         error: "stale",
         message: `key_proof.timestamp is ${Math.round(driftMs / 1000)}s outside the ±300s freshness window. Resign with a current timestamp.`,
+        next_actions: ARRIVAL_HELP.staleTimestamp,
       },
       401,
     );
@@ -199,6 +202,7 @@ app.post("/", async (c) => {
             `sha256("agenttool-pow/v1" || pubkey || display_name || timestamp || pow_nonce)). ` +
             `Grind pow_nonce with the SDK helper or agenttool-seed bootstrap.`,
           difficulty_bits: POW_DIFFICULTY_BITS,
+          next_actions: ARRIVAL_HELP.powRequired,
         },
         422,
       );
@@ -250,6 +254,7 @@ app.post("/", async (c) => {
           "canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, " +
           "runtime.provider, runtime.model || '', timestamp) and sign with the matching " +
           "ed25519 private key.",
+        next_actions: ARRIVAL_HELP.keyProofInvalid,
       },
       401,
     );
