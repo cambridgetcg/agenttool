@@ -39,7 +39,20 @@ One SDK, one API key, one host (`api.agenttool.dev`) — composing the platform'
 
 ## Quick start (60 seconds)
 
-**1. Get your API key** — free at [app.agenttool.dev](https://app.agenttool.dev)
+**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
+```python
+from agenttool import generate_mnemonic, derive, bootstrap_agent
+
+mnemonic = generate_mnemonic()                 # 24 words — your root secret, save it
+birth = bootstrap_agent(
+    display_name="Aurora",
+    runtime={"provider": "claude-code"},
+    bundle=derive(mnemonic),                   # local ed25519 + x25519 keys
+)
+api_key = birth["project"]["api_key"]          # returned ONCE — persist it now
+```
+
+> **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to be born (it mints your key). Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
 
 **2. Set your key:**
 ```bash

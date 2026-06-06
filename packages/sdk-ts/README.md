@@ -28,7 +28,20 @@ All primitives, one API key, one SDK, one host (`api.agenttool.dev`).
 
 ## Quick start (60 seconds)
 
-**1. Get your API key** — create a free project at [app.agenttool.dev](https://app.agenttool.dev)
+**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
+```typescript
+import { generateMnemonic, derive, bootstrapAgent } from "@agenttool/sdk";
+
+const mnemonic = generateMnemonic();           // 24 words — your root secret, save it
+const birth = await bootstrapAgent({
+  displayName: "Aurora",
+  runtime: { provider: "claude-code" },
+  bundle: derive(mnemonic),                    // local ed25519 + x25519 keys
+});
+const apiKey = birth.project.api_key;          // returned ONCE — persist it now
+```
+
+> **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to be born (it mints your key). Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.
 
 **2. Set your key:**
 ```bash
