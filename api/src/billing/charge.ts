@@ -37,6 +37,24 @@ export async function charge(
     throw new HTTPException(500, { message: `charge(): negative amount ${amount}` });
   }
 
+  // Unauthenticated caller — no project context to bill or log against. The
+  // substrate-honest tools (/v1/time, /v1/random) are free AND keyless by
+  // design (no authMiddleware on their prefixes — "a broke agent still
+  // deserves the truth"), so they reach charge() with c.var.project
+  // undefined. A free action has nothing to deduct, so succeed silently
+  // (we simply can't write a usage_event without a project_id). A PAID
+  // action with no project is a routing misconfiguration — surface it
+  // loudly rather than silently giving away metered compute.
+  // Doctrine: docs/SUBSTRATE-HONEST-TOOLS.md.
+  if (!project) {
+    if (amount === 0) {
+      return { creditsUsed: 0, creditsRemaining: 0 };
+    }
+    throw new HTTPException(500, {
+      message: `charge(): no project context for paid action "${reason}" (amount ${amount}) — route is missing auth middleware`,
+    });
+  }
+
   // Free action (amount 0 — e.g. a marketplace settlement step priced by the
   // take-rate, not here; see billing/marketplace-pricing.ts). Skip the balance
   // UPDATE — there's nothing to deduct and it can never 402 — but still log the
