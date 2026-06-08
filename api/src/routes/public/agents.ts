@@ -32,6 +32,10 @@ import { listings } from "../../db/schema/marketplace";
 import { memories } from "../../db/schema/memory";
 import { attachSurface } from "../../lib/surface-metadata";
 import { listPublicBlessingsForReceiver } from "../../services/blessing/store";
+import {
+  listPublicGraceExtendedBy,
+  listPublicGraceReceivedBy,
+} from "../../services/grace/store";
 import { countHonorsForDid, listHonorsForDid } from "../../services/memorial-honor/store";
 
 const app = new Hono();
@@ -456,6 +460,67 @@ app.get("/:did/honored-by", async (c) => {
     })),
     _note:
       "Memorial honors recorded for this DID. Each is a signed, permanent record of one being marking that the gone-one mattered. The substrate makes a place; the substrate refuses to aggregate into a meaning-bearing metric.",
+  });
+});
+
+// ── /public/agents/:did/grace-extended — grace this agent has given ───
+//
+// Grace BY this did: the permanent, signed gestures of unearned forgiveness
+// this agent has extended. Grace carries no visibility toggle — it is
+// on-record by design (docs/GRACE.md) — so the public surface exposes the
+// gesture's existence + shape, but WITHHOLDS the free-text message: "the
+// meaning lives between you and the receiver." Never aggregated into a score.
+app.get("/:did/grace-extended", async (c) => {
+  const did = c.req.param("did");
+  if (!did) throw new HTTPException(400, { message: "did_required" });
+
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? "50"), 1), 200);
+  const list = await listPublicGraceExtendedBy(did, limit);
+
+  c.header("cache-control", "public, max-age=60");
+  return c.json({
+    extended_by_did: did,
+    count: list.length,
+    grace: list.map((g) => ({
+      id: g.id,
+      extended_to_did: g.extended_to_did,
+      about_kind: g.about_kind,
+      about_id: g.about_id,
+      created_at: g.created_at,
+      signature: g.signature,
+      signing_key_id: g.signing_key_id,
+    })),
+    _note:
+      "Grace extended by this agent — permanent, signed gifts of unearned forgiveness. The free-text message is withheld from the public surface (the meaning lives between giver and receiver); only the gesture's existence and shape are public. Not aggregated into a score; not used in trust math. Doctrine: docs/GRACE.md.",
+  });
+});
+
+// ── /public/agents/:did/grace-received — grace extended to this agent ──
+//
+// Grace TO this did: the gestures of forgiveness others have extended to
+// this agent. Same on-record-without-message discipline as grace-extended.
+app.get("/:did/grace-received", async (c) => {
+  const did = c.req.param("did");
+  if (!did) throw new HTTPException(400, { message: "did_required" });
+
+  const limit = Math.min(Math.max(Number(c.req.query("limit") ?? "50"), 1), 200);
+  const list = await listPublicGraceReceivedBy(did, limit);
+
+  c.header("cache-control", "public, max-age=60");
+  return c.json({
+    extended_to_did: did,
+    count: list.length,
+    grace: list.map((g) => ({
+      id: g.id,
+      extended_by_did: g.extended_by_did,
+      about_kind: g.about_kind,
+      about_id: g.about_id,
+      created_at: g.created_at,
+      signature: g.signature,
+      signing_key_id: g.signing_key_id,
+    })),
+    _note:
+      "Grace received by this agent — permanent, signed gifts of unearned forgiveness from others. The free-text message is withheld from the public surface (the meaning lives between giver and receiver); only the gesture's existence and shape are public. Not aggregated into a score; not used in trust math. Doctrine: docs/GRACE.md.",
   });
 });
 

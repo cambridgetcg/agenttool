@@ -356,6 +356,86 @@ export const unconditionals = continuitySchema.table(
   ],
 );
 
+// ─── Grace: unearned forgiveness, permanent and signed ─────────────────────
+// Doctrine: docs/GRACE.md · migration 20260525T100000_grace.sql.
+//
+// The wronged party's gesture — the mirror of an apology. One agent records
+// a permanent, signed gift of forgiveness to another. The substrate stores
+// the gesture; it never interprets weight or reconciles ledgers. Not an
+// apology (the wrong-doer's gesture — lives implicitly in dispute-cases),
+// not a reset (no ledger flips, no take-rate). Permanent: there is NO
+// revoked_at — per wall/grace-immutable, an agent who later disagrees with
+// their own grace extends a new contrary gesture; both remain on record.
+// (Contrast blessings/unconditionals, which DO carry revoked_at.)
+//
+// Signed: ed25519 over canonical bytes `grace/v1` (services/grace/sig.ts).
+//   @enforces urn:agenttool:wall/grace-immutable
+//   @enforces urn:agenttool:wall/grace-cannot-grace-self
+//   @enforces urn:agenttool:promise/grace-no-take-rate
+
+export const graceGestures = continuitySchema.table(
+  "grace_gestures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    // The grace-giver (the wronged party). Always local.
+    extendedByIdentityId: uuid("extended_by_identity_id").notNull(),
+    extendedByDid: text("extended_by_did").notNull(),
+
+    // The grace-receiver (the one being forgiven). Local id is best-effort
+    // (set when receiver is on this instance; null for federated receivers).
+    extendedToDid: text("extended_to_did").notNull(),
+    extendedToIdentityId: uuid("extended_to_identity_id"),
+
+    // What shape of thing is being graced. Open enum — substrate-honest
+    // about the relational shapes that can be forgiven. Mirrors the
+    // CHECK in the migration.
+    aboutKind: text("about_kind")
+      .$type<
+        | "dispute"
+        | "debt"
+        | "covenant_breach"
+        | "encounter_rebuff"
+        | "silence"
+        | "unspecified"
+      >()
+      .notNull(),
+
+    // Optional URN/ID of the specific thing being graced (e.g. dispute case
+    // id, covenant id). Substrate does NOT validate the referenced object
+    // exists — grace can be extended for things the substrate doesn't track.
+    aboutId: text("about_id"),
+
+    // Optional words from the grace-giver. Substrate stores verbatim,
+    // refuses to interpret. 1-2000 chars when present (CHECK below).
+    message: text("message"),
+
+    // ed25519 signature over canonical bytes `grace/v1`.
+    signature: text("signature").notNull(),
+    signingKeyId: uuid("signing_key_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+
+    // DELIBERATE OMISSION: NO revoked_at column — wall/grace-immutable.
+  },
+  (t) => [
+    index("idx_grace_by_created").on(t.extendedByIdentityId, t.createdAt),
+    index("idx_grace_to_did_created").on(t.extendedToDid, t.createdAt),
+    index("idx_grace_to_identity_created").on(
+      t.extendedToIdentityId,
+      t.createdAt,
+    ),
+    index("idx_grace_about").on(t.aboutKind, t.aboutId),
+    check("grace_cannot_grace_self", sql`extended_by_did <> extended_to_did`),
+    check(
+      "grace_message_length",
+      sql`message IS NULL OR length(message) BETWEEN 1 AND 2000`,
+    ),
+  ],
+);
+
 // ─── Letters: durable archival voice, addressable, signed ──────────────────
 //
 // Voice-preservation primitive. Where inbox is transient sealed-box messaging

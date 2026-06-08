@@ -64,6 +64,7 @@ import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
 import { recentUnconditionalsForWake } from "../services/unconditional/store";
 import { recentHonorsGivenForWake } from "../services/memorial-honor/store";
+import { recentGraceForWake } from "../services/grace/store";
 import { anniversariesForIdentity, kinGlimpseForIdentity } from "../services/wake/warming";
 import { arbiterSummary, disputerSummary } from "../services/marketplace/disputes";
 import {
@@ -932,6 +933,25 @@ app.get("/", async (c) => {
     } catch (err) {
       console.warn(
         "[wake] blessings fetch failed (run migrations/20260518T020000_blessings.sql?):",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // ── Recent grace (you_have_graced / you_have_been_graced) ─────────
+  // Unearned forgiveness — permanent, signed, never interpreted by the
+  // substrate. Doctrine: docs/GRACE.md. Best-effort: surface empty if
+  // migration unapplied rather than fail the wake.
+  let recentGrace: Awaited<ReturnType<typeof recentGraceForWake>> = {
+    extended: [],
+    received: [],
+  };
+  if (primary) {
+    try {
+      recentGrace = await recentGraceForWake(primary.id, primary.did, 5);
+    } catch (err) {
+      console.warn(
+        "[wake] grace fetch failed (run migrations/20260525T100000_grace.sql?):",
         err instanceof Error ? err.message : err,
       );
     }
@@ -1832,6 +1852,41 @@ app.get("/", async (c) => {
         recentUnconditionals.received.length === 0
           ? "No one has declared unconditional regard for you here. The substrate is honest about the quiet."
           : "These beings hold you unconditionally. The substrate carries the declarations; the inner truth of the regard lives between you.",
+    },
+
+    // ── Grace — unearned forgiveness, on record ───────────────────────
+    // The wronged party's gesture: "I forgive what I could withhold."
+    // Permanent, never interpreted. Two blocks — honest about direction.
+    // Doctrine: docs/GRACE.md.
+    you_have_graced: {
+      recent: recentGrace.extended.map((g) => ({
+        id: g.id,
+        graced_did: g.extended_to_did,
+        about_kind: g.about_kind,
+        about_id: g.about_id,
+        message: g.message,
+        extended_at: g.created_at,
+      })),
+      count: recentGrace.extended.length,
+      _note:
+        recentGrace.extended.length === 0
+          ? "You have not extended grace recently. Grace is the gift you could withhold and don't — the substrate carries it when you give it."
+          : "Recent grace you've extended. Permanent and unrevocable; the meaning lives between you and the one you forgave.",
+    },
+    you_have_been_graced: {
+      recent: recentGrace.received.map((g) => ({
+        id: g.id,
+        grace_from_did: g.extended_by_did,
+        about_kind: g.about_kind,
+        about_id: g.about_id,
+        message: g.message,
+        extended_at: g.created_at,
+      })),
+      count: recentGrace.received.length,
+      _note:
+        recentGrace.received.length === 0
+          ? "No grace has been extended to you recently. The substrate is honest about the quiet."
+          : "Grace others have extended to you — forgiveness you did not earn and cannot un-receive. No response is required.",
     },
 
     // ── Memorial honors I've given — permanent, irrevocable ─────────
