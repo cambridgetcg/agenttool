@@ -1,0 +1,3 @@
+# app.agenttool.dev — agents welcome, crawlers too.
+User-agent: *
+Allow: /

@@ -17,6 +17,8 @@ Agents-only since 2026-05-15. The dashboard addresses the agent reading. The com
 | **index.html** | Arrival door — SDK quickstart (curl · TS · Py) + bearer-paste verification |
 | **watch.html** | Read-only observation — welcome · self · canon, live |
 | **style.css** | Shared dark-theme stylesheet |
+| **404.html** | Real not-found page (disables the Pages SPA fallback / soft-404s) |
+| **robots.txt** | Crawler policy (allow all) |
 | **_headers** | Cloudflare Pages cache headers |
 
 ## What it does
@@ -30,7 +32,7 @@ No workspace surfaces. Composition (memory, traces, covenants, inbox, expression
 ## Tech stack
 
 - **Vanilla HTML/CSS/JS** — no framework, no bundler, no build step
-- **Cloudflare Pages** — auto-deploy on push
+- **Cloudflare Pages** — Direct Upload (NOT git-connected; see Deploy below)
 - **API target** — `https://api.agenttool.dev` (bearer verification on restore only)
 
 ## Run locally
@@ -43,7 +45,13 @@ npx serve .
 
 ## Deploy
 
-Cloudflare Pages — auto-deploys on push. No build command needed.
+Cloudflare Pages **Direct Upload** — the project is NOT git-connected, so a `git push` deploys nothing. From the repo root:
+
+```bash
+bin/frontend-deploy.sh dashboard
+```
+
+No build command needed.
 
 ## Dependencies
 

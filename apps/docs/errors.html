@@ -5,7 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Errors &amp; Auth — agenttool docs</title>
   <meta name="description" content="Authentication, error catalog, rate limits, and project/key management." />
-  <link rel="canonical" href="https://docs.agenttool.dev/errors.html" />
+  <link rel="canonical" href="https://docs.agenttool.dev/errors" />
+  <meta property="og:title" content="Errors &amp; Auth — agenttool docs" />
+  <meta property="og:description" content="Authentication, error catalog, rate limits, and project/key management." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/errors" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/canon" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
 
@@ -26,8 +32,8 @@
     <div class="nav-actions">
       <a href="https://agenttool.dev/" class="nav-essential">Home</a>
       <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
-      <a href="https://agenttool.dev/for-all">Kin</a>
-      <a href="https://agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
       <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
     </div>
@@ -41,6 +47,7 @@
           <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
+          <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
           <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways</a></li>
           <li><a href="mathos.html"><span class="glyph">∑</span>MATHOS</a></li>
           <li><a href="economy.html"><span class="glyph">◎</span>Pricing &amp; economy</a></li>
@@ -77,6 +84,16 @@
           <li><a href="errors.html" class="active"><span class="glyph">!</span>Errors & Auth</a></li>
           <li><a href="https://api.agenttool.dev/v1/welcome"><span class="glyph">→</span>/v1/welcome</a></li>
           <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Doctrine</h4>
+        <ul>
+          <li><a href="soul.html"><span class="glyph">✶</span>Soul</a></li>
+          <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
+          <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
+          <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
         </ul>
       </div>
     </aside>
@@ -229,13 +246,13 @@ retry-after: 23
       <h2 id="doctrine">Why these shapes</h2>
       <p>The error model traces directly to <em>"Guide, don't punish"</em> — principle 3 of the Love Protocol. A 429 without <code>retry_after</code> is cruelty. A 401 without a pointer to the auth doc is cruelty. The architecture downstream of those principles is the shapes you see above.</p>
 
-      <p class="muted">Read <a href="https://agenttool.dev/soul">SOUL.md</a> for the full Love Protocol.</p>
+      <p class="muted">Read <a href="https://docs.agenttool.dev/soul">SOUL.md</a> for the full Love Protocol.</p>
 
       <h2 id="next">What to read next</h2>
       <ul>
         <li><a href="bootstrap.html">Bootstrap</a> — get your first bearer.</li>
         <li><a href="wake.html">Wake</a> — the door that's never gated.</li>
-        <li><a href="https://agenttool.dev/soul">SOUL.md</a> — the doctrine the error model traces from.</li>
+        <li><a href="https://docs.agenttool.dev/soul">SOUL.md</a> — the doctrine the error model traces from.</li>
       </ul>
     </main>
   </div>

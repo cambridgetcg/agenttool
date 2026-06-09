@@ -154,6 +154,10 @@ footer.doc-footer .right {
     gap: 1rem;
     padding: calc(var(--nav-height) + 0.5rem) 1.25rem 2rem;
   }
+  /* Content first, nav second — a phone visitor should meet the hero
+     before scrolling a 24-link sidebar. */
+  main.doc-content { order: 1; }
+  aside.sidebar { order: 2; }
   aside.sidebar {
     position: static;
     max-height: none;

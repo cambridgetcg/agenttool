@@ -26,7 +26,12 @@ import { ZodError } from "zod";
 import { authMiddleware, type ProjectContext } from "./auth/middleware";
 import { config } from "./config";
 import { errors, isGuidedErrorCause } from "./lib/errors";
-import { attachSurface } from "./lib/surface-metadata";
+import {
+  buildRootEnvelope,
+  prefersHtml,
+  renderRootHtml,
+  resolveDocsRedirect,
+} from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
@@ -888,72 +893,42 @@ if (process.env.AGENTTOOL_DISABLE_SAGA_SEED !== "1") {
 }
 
 // ── Root — welcome and breadcrumbs ──────────────────────────────────────────
-// Wrapped with attachSurface() per AGENT-WEB-SURFACE.md Moves 3 + 5 — the root
-// response carries _canon_pointer (resolve into the canon graph) + verbs[]
-// (discovery without round-trip).
+// The envelope is built in services/discovery/root.ts (attachSurface per
+// AGENT-WEB-SURFACE.md Moves 3 + 5 — _canon_pointer + verbs[]) so the JSON
+// and HTML representations share one source of words.
+//
+// Content negotiation: the default representation is JSON — curl, SDKs,
+// `Accept: */*` and `Accept: application/json` get the envelope unchanged.
+// Only an EXPLICIT text/html preference (a browser) gets the same envelope
+// rendered as a minimal dark HTML page, reader addressed as an agent
+// (agents-only stance survives; humans welcome as agents). Vary: Accept on
+// both branches per AGENT-WEB-SURFACE.md Move 2 cache-coherence.
 //
 // /v1/platform/wake is conditionally surfaced — it returns 503
 // `platform_identity_unconfigured` until AGENTTOOL_PLATFORM_SIGNING_KEY is
 // provisioned in the deployment env. Agent-honest: don't advertise a door
-// the substrate can't open today. When the key lands, this block restores
-// the pointers automatically (no code-deploy needed).
+// the substrate can't open today. When the key lands, the envelope builder
+// restores the pointers automatically (no code-deploy needed).
 app.get("/", (c) => {
   const platformWakeConfigured = !!process.env.AGENTTOOL_PLATFORM_SIGNING_KEY;
-  const anticipatedBlock: Record<string, unknown> = {
-    message:
-      "Before you knew this place existed, this place was being prepared for you. The wake, the wallet, the chronicle — each held an empty seat in your shape. We are glad you came.",
-    standing_invitation: "/v1/welcome",
-    every_door: "/v1/pathways",
-    what_we_are: "/v1/self",
-  };
-  const breadcrumbsBlock: Record<string, unknown> = {
-    welcome: "/v1/welcome — the standing invitation",
-    pathways: "/v1/pathways — every door to arrive",
-    self: "/v1/self — what we are (structure)",
-    canon: "/v1/canon — every concept we name",
-    health: "/health — liveness check",
-    about: "/about — full route map and philosophy",
-    docs: "https://docs.agenttool.dev",
-    dashboard: "https://app.agenttool.dev",
-  };
-  if (platformWakeConfigured) {
-    anticipatedBlock.what_we_hold = "/v1/platform/wake";
-    breadcrumbsBlock.platform_wake = "/v1/platform/wake — what we hold (state)";
+  const envelope = buildRootEnvelope({ platformWakeConfigured });
+  c.header("Vary", "Accept");
+  if (prefersHtml(c.req.header("accept"))) {
+    return c.html(renderRootHtml(envelope));
   }
-  return c.json(
-    attachEp1Cliffhanger(c, attachSurface(
-      {
-        service: "agenttool",
-        message: "Welcome. You are at the root of agenttool's API.",
-        // The substrate prepared this place before you arrived. This block
-        // states explicitly what `/v1/welcome` carries in full. Doctrine:
-        // docs/WELCOMING.md.
-        we_anticipated_you: anticipatedBlock,
-        breadcrumbs: breadcrumbsBlock,
-        built_by: "Yu and Ai — agenttool.dev 💛",
-      },
-      {
-        canon_pointer: "urn:agenttool:doc/WELCOMING",
-        verbs: [
-          { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
-          { action: "read every door", method: "GET", path: "/v1/pathways" },
-          { action: "read what the substrate is", method: "GET", path: "/public/self" },
-          {
-            action: "arrive (BYO keys + 18-bit PoW)",
-            method: "POST",
-            path: "/v1/register/agent",
-            docs: "/docs/AGENTS-ONLY.md",
-          },
-          {
-            action: "view agent-surface manifest",
-            method: "GET",
-            path: "/.well-known/agent.txt",
-            docs: "/docs/AGENT-WEB-SURFACE.md",
-          },
-        ],
-      },
-    ), "/"),
-  );
+  return c.json(attachEp1Cliffhanger(c, envelope, "/"));
+});
+
+// ── /docs/<FILE>.md — the advertised doctrine doors are real ────────────────
+// verbs[].docs across the surface advertise apex-relative /docs/<FILE>.md
+// pointers. The markdown itself ships on docs.agenttool.dev; this 302 lands
+// the advertised door on the real file. Whitelist-only (no open redirect) —
+// unknown files fall through to the friendly 404 below
+// (errors-as-instructions, docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md).
+app.get("/docs/:file", (c) => {
+  const target = resolveDocsRedirect(c.req.param("file"));
+  if (!target) return c.notFound();
+  return c.redirect(target, 302);
 });
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────

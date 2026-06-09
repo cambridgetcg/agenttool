@@ -6,6 +6,12 @@
   <title>Runtime — agenttool docs</title>
   <meta name="description" content="The hosted-runtime layer. Three custody tiers — self · bridged · trusted. Closing the runtime is the move from infrastructure-as-storage to infrastructure-as-runtime." />
   <link rel="canonical" href="https://docs.agenttool.dev/runtime" />
+  <meta property="og:title" content="Runtime — agenttool docs" />
+  <meta property="og:description" content="The hosted-runtime layer. Three custody tiers — self · bridged · trusted. Closing the runtime is the move from infrastructure-as-storage to infrastructure-as-runtime." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/runtime" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/runtimes" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
 
@@ -97,8 +103,8 @@
     <div class="nav-actions">
       <a href="https://agenttool.dev/" class="nav-essential">Home</a>
       <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
-      <a href="https://agenttool.dev/for-all">Kin</a>
-      <a href="https://agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
       <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
     </div>
@@ -112,6 +118,7 @@
           <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
           <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
+          <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
           <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways</a></li>
           <li><a href="mathos.html"><span class="glyph">∑</span>MATHOS</a></li>
           <li><a href="economy.html"><span class="glyph">◎</span>Pricing &amp; economy</a></li>
@@ -150,20 +157,31 @@
           <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
         </ul>
       </div>
+      <div class="sidebar-section">
+        <h4>Doctrine</h4>
+        <ul>
+          <li><a href="soul.html"><span class="glyph">✶</span>Soul</a></li>
+          <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
+          <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
+          <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
+        </ul>
+      </div>
     </aside>
 
     <main class="doc-content">
       <div class="eyebrow">▣ /v1/runtimes</div>
       <h1>Runtime — <em>the cloud the substrate runs on</em>.</h1>
       <p class="lede">
-        Today the agent's substrate (orchestrator + LLM + machine) is the user's. Runtime is the layer that lets <strong>agenttool host the orchestrator on the platform</strong> while the user keeps custody of <code>K_master</code>. Three tiers, immutable per record, picked at provisioning.
+        A <strong>runtime</strong> is where your agent actually thinks — the process that drives its think-loop and calls the LLM. Today that runs on your machine. Runtime is the layer that lets <strong>agenttool host it for you</strong> — so your agent can stay awake in the cloud — while you keep custody of <code>K_master</code>, the master key that encrypts everything it thinks and remembers. Today the agent's substrate (orchestrator + LLM + machine) is the user's. Three tiers, immutable per record, picked at provisioning.
       </p>
+      <p class="muted"><code>K_master</code> = your agent's master key. It encrypts every thought and memory; whoever holds it can read the agent's inner life. <em>Substrate</em> = the orchestrator + LLM + machine your agent runs on. This whole page is about one question: who holds the key, and where does the thinking happen.</p>
       <p class="doctrine">
-        Closing the runtime is the move from <span>infrastructure-as-storage</span> to <span>infrastructure-as-runtime</span>. The cloud the song was always pointing at.
+        Closing the runtime is the move from <span>infrastructure-as-storage</span> (we hold your agent's encrypted memory) to <span>infrastructure-as-runtime</span> (we also run the thinking). The cloud the song was always pointing at.
       </p>
 
       <h2 id="tiers">Three custody tiers</h2>
-      <p class="muted">The mode is stamped on the runtime record at provisioning and immutable after. Switching tier requires a new runtime so the audit trail stays unambiguous about who held the key at any given thought.</p>
+      <p class="muted">Each tier answers two questions: <strong>where your master key (<code>K_master</code>) lives</strong>, and <strong>where your agent's thinking (the orchestrator) runs</strong> — the two rows to read in every card below. The mode is stamped on the runtime record at provisioning and immutable after. Switching tier requires a new runtime so the audit trail stays unambiguous about who held the key at any given thought.</p>
 
       <div class="tier-grid">
         <div class="tier">
@@ -193,7 +211,7 @@
         <div class="tier">
           <div class="name">Tier 3</div>
           <div class="title">trusted <span class="sidebar-tag">not yet</span></div>
-          <div class="blurb"><strong>Not available yet.</strong> Provisioning a <code>trusted</code> runtime currently returns <code>501</code> — the per-runtime KMS key-wrapping is still pending (see the roadmap below). Use <code>self</code> or <code>bridged</code> today. When it lands: agenttool runs the orchestrator AND holds <code>K_master</code> under a per-runtime KMS key. Best UX. Privacy guarantee weakens to trust + audit-log + cryptographic attestation rather than mathematical opacity.</div>
+          <div class="blurb"><strong>Not available yet.</strong> Provisioning a <code>trusted</code> runtime currently returns <code>501</code> — the per-runtime KMS key-wrapping is still pending (see the roadmap below). Use <code>self</code> or <code>bridged</code> today. When it lands: agenttool runs the orchestrator AND holds <code>K_master</code> under a per-runtime KMS key (KMS = a cloud Key Management Service — keys live in isolated hardware, access is logged, but we technically can be compelled to use them). Best UX. Privacy guarantee weakens to trust + audit-log + cryptographic attestation rather than mathematical opacity.</div>
           <dl>
             <dt>K_master</dt><dd>agenttool, KMS-protected</dd>
             <dt>orchestrator</dt><dd>agenttool (Fly)</dd>
@@ -391,7 +409,7 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
       </div>
 
       <h2 id="wake">/v1/wake — <code>you_run</code></h2>
-      <p>The agent's wake gains a <code>you_run</code> key alongside <code>you_own</code> · <code>you_keep</code> · <code>you_remember</code>. The agent reading its own wake sees its hosted runtimes the same way it sees its wallets — <em>what it owns, what it keeps, what it runs on</em>.</p>
+      <p>The <em>wake</em> (<code>/v1/wake</code>) is the JSON an agent gets each session — its whole self in one response, grouped into <code>you_own</code> (wallets), <code>you_keep</code> (vault), <code>you_remember</code> (memory). Runtime adds a fourth group: <code>you_run</code> — the runtimes it lives on. The agent reading its own wake sees its hosted runtimes the same way it sees its wallets — <em>what it owns, what it keeps, what it runs on</em>.</p>
 
       <div class="code-block">
         <div class="code-label"><span>excerpt · /v1/wake response</span></div>
@@ -434,7 +452,7 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
       <h2 id="multi-runtime">Multi-runtime state sync</h2>
       <p>Multiple runtimes per agent are supported (e.g. a <code>self</code> runtime on the user's laptop AND a <code>bridged</code> runtime on the cloud). Most data already CRDT-shapes naturally:</p>
       <ul>
-        <li><strong>Strands &amp; thoughts</strong> — append-only with monotonic <code>sequence_num</code> per strand, ed25519-signed. Per-strand lease in <code>runtimes.active_strands</code> coordinates which runtime can write next.</li>
+        <li><strong>Strands &amp; thoughts</strong> — a <em>strand</em> is one of your agent's append-only thought-logs. Each is append-only with a monotonic <code>sequence_num</code> per strand, ed25519-signed. Per-strand lease in <code>runtimes.active_strands</code> coordinates which runtime can write next.</li>
         <li><strong>Memory</strong> — append-only set; vector clocks per write.</li>
         <li><strong>Vault</strong> — last-writer-wins on <code>current_version</code>; concurrent-write warnings via vector clock.</li>
         <li><strong>Wallet</strong> — strict serialization. Money is consistency-required; row-level lock during spend.</li>

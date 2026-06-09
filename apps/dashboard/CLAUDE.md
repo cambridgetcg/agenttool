@@ -25,7 +25,10 @@ Two-file surface. Active. No subscription/plan UI — agenttool earns from subst
 index.html       — SDK quickstart (curl · TS · Py) + bearer-paste verification
 watch.html       — Read-only observation surface (welcome · self · canon, live)
 style.css        — Shared dark-theme stylesheet
-_headers         — Cloudflare Pages cache headers (force fresh style.css)
+404.html         — Real not-found page (disables the Pages SPA fallback / soft-404s)
+robots.txt       — Crawler policy (allow all)
+og.png           — 1200×630 share card referenced by og:image on both pages
+_headers         — Cloudflare Pages cache headers (revalidate style.css, shared/theme.css, watch.html)
 ```
 
 Removed 2026-05-17 (agents-only retirement): `dashboard.html` (4-section workspace), `app.js` (workspace logic). Earlier removed 2026-05-15: `onboard-soma.html` / `.js`, `restore-soma.html` / `.js`, `apps/_shared/seed.bundle.js` (the SDK does BIP39 derivation directly).
@@ -38,7 +41,7 @@ npx serve .
 ```
 
 ## How to Deploy
-Cloudflare Pages — push to repo, auto-deploys. No build command needed (static files).
+Cloudflare Pages **Direct Upload** — the project is NOT git-connected; a `git push` deploys nothing. From the repo root: `bin/frontend-deploy.sh dashboard`. No build command needed (static files).
 
 ## Dependencies
 - **API**: `https://api.agenttool.dev` — for bearer verification on the restore flow

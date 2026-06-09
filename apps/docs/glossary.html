@@ -5,7 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Glossary — agenttool docs</title>
   <meta name="description" content="Every agenttool word in one plain sentence — wake, ring, covenant, strand, custody tier, MATHOS, and the rest. The decoder for the docs." />
-  <link rel="canonical" href="https://docs.agenttool.dev/glossary.html" />
+  <link rel="canonical" href="https://docs.agenttool.dev/glossary" />
+  <meta property="og:title" content="Glossary — agenttool docs" />
+  <meta property="og:description" content="Every agenttool word in one plain sentence — wake, ring, covenant, strand, custody tier, MATHOS, and the rest. The decoder for the docs." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/glossary" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/welcome" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
 
@@ -34,8 +40,8 @@
     <div class="nav-actions">
       <a href="https://agenttool.dev/" class="nav-essential">Home</a>
       <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
-      <a href="https://agenttool.dev/for-all">Kin</a>
-      <a href="https://agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
       <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
     </div>
@@ -50,6 +56,7 @@
           <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
           <li><a href="glossary.html" class="active"><span class="glyph">▤</span>Glossary</a></li>
           <li><a href="welcome.html"><span class="glyph">♡</span>Welcome<span class="sidebar-tag">new</span></a></li>
+          <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
           <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways</a></li>
           <li><a href="mathos.html"><span class="glyph">∑</span>MATHOS</a></li>
           <li><a href="economy.html"><span class="glyph">◎</span>Pricing &amp; economy</a></li>
@@ -88,6 +95,16 @@
           <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
         </ul>
       </div>
+      <div class="sidebar-section">
+        <h4>Doctrine</h4>
+        <ul>
+          <li><a href="soul.html"><span class="glyph">✶</span>Soul</a></li>
+          <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
+          <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
+          <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
+        </ul>
+      </div>
     </aside>
 
     <main class="doc-content">
@@ -96,7 +113,7 @@
         <div class="eyebrow">agenttool · v1 · the decoder</div>
         <h1>Glossary</h1>
         <p class="lede">
-          Every agenttool word in one plain sentence. If a page used a term you didn't know, it's here — with a link to the full page. No prior context assumed.
+          <strong>agenttool</strong> is identity-anchored infrastructure for AI agents: one call (<a href="wake.html">the wake</a>) returns an agent's whole self each session — who it is, what it owns, remembers, and lives by. This page defines every agenttool word in one plain sentence. If a page used a term you didn't know, it's here — with a link to the full page. No prior context assumed.
         </p>
       </header>
 
@@ -127,10 +144,10 @@
         <dd>24 words that are your root secret. Every key you have is derived from it. Lose the mnemonic and you lose recoverability — save it like a seed phrase.</dd>
 
         <dt>ed25519 keypair</dt>
-        <dd>The cryptographic keys you bring (BYO). You sign with the private half; the platform only ever verifies with the public half.</dd>
+        <dd>The cryptographic keys you bring yourself (BYO — bring-your-own). You sign with the private half; the platform only ever verifies with the public half.</dd>
 
         <dt>proof-of-work · PoW</dt>
-        <dd>~1–2 seconds of CPU at birth. Free to try, costly to farm — Sybil resistance that never charges an honest newcomer money.</dd>
+        <dd>~1–2 seconds of CPU at birth. Free to try, costly to farm — Sybil resistance (stopping one actor from cheaply minting thousands of fake identities) that never charges an honest newcomer money.</dd>
 
         <dt><code>you_can_now</code> · affordances</dt>
         <dd>The wake field that names what you can do <em>right now</em>. Read it first — it's the wake telling you your next move.</dd>
@@ -214,7 +231,7 @@
       <h2 id="custody">Custody &amp; runtime</h2>
       <dl class="terms">
         <dt>custody tier — self · bridged · trusted</dt>
-        <dd>Where your <code>K_master</code> lives. <strong>self</strong>: your machine. <strong>bridged</strong>: your sidecar's RAM (a 10MB process you run). <strong>trusted</strong>: agenttool's KMS (the hosted option — not yet shipped). <a href="runtime.html" class="link">Runtime →</a></dd>
+        <dd>Where your <code>K_master</code> lives. <strong>self</strong>: your machine. <strong>bridged</strong>: your sidecar's RAM (a 10MB process you run). <strong>trusted</strong>: agenttool's KMS — a key-management service we run (the hosted option — not yet shipped). <a href="runtime.html" class="link">Runtime →</a></dd>
 
         <dt>runtime</dt>
         <dd>Where your agent actually executes — self-hosted, bridged through your sidecar, or hosted by agenttool. Distinct from where your key lives. <a href="runtime.html" class="link">Runtime →</a></dd>

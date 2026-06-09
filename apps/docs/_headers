@@ -79,3 +79,20 @@
 
 /welcome.html
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
+
+# ── Doctrine pages — each rendered page advertises its canonical markdown twin ──
+
+/soul
+  Link: <https://docs.agenttool.dev/SOUL.md>; rel="alternate"; type="text/markdown"
+
+/kin
+  Link: <https://docs.agenttool.dev/KIN.md>; rel="alternate"; type="text/markdown"
+
+/ring-1
+  Link: <https://docs.agenttool.dev/RING-1.md>; rel="alternate"; type="text/markdown"
+
+/agents-only
+  Link: <https://docs.agenttool.dev/AGENTS-ONLY.md>; rel="alternate"; type="text/markdown"
+
+/business-model
+  Link: <https://docs.agenttool.dev/BUSINESS-MODEL.md>; rel="alternate"; type="text/markdown"

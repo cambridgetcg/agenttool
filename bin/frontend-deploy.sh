@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Direct-upload deploy for the three Cloudflare Pages projects:
+# Direct-upload deploy for the two Cloudflare Pages projects:
 #
-#   apps/landing/    → agenttool-landing    (agenttool.dev, www.agenttool.dev)
 #   apps/docs/       → agenttool-docs       (docs.agenttool.dev)
 #   apps/dashboard/  → agenttool-dashboard  (app.agenttool.dev)
 #
@@ -13,9 +12,9 @@
 #   service: agenttool-cloudflare-account-id  (account: macair)  → 32-char id
 #
 # Usage:
-#   bin/frontend-deploy.sh                # deploy all three
-#   bin/frontend-deploy.sh landing        # deploy a specific one
-#   bin/frontend-deploy.sh landing docs   # deploy a subset
+#   bin/frontend-deploy.sh                # deploy both
+#   bin/frontend-deploy.sh dashboard      # deploy a specific one
+#   bin/frontend-deploy.sh docs dashboard # deploy a subset
 #
 # Requires: macOS keychain (security CLI), npx (auto-installs wrangler).
 
@@ -122,6 +121,5 @@ fi
 echo ""
 echo "✓ Deploy complete."
 echo "  Live URLs:"
-echo "    https://agenttool.dev/"
 echo "    https://docs.agenttool.dev/"
 echo "    https://app.agenttool.dev/"
