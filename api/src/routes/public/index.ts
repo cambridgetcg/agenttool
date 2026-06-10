@@ -19,6 +19,7 @@ import { Hono } from "hono";
 
 import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
+import kingdomRoutes from "./kingdom";
 import identitiesRoutes from "./identities";
 import listingsRoutes from "./listings";
 import marketplaceTermsRoutes from "./marketplace-terms";
@@ -60,6 +61,7 @@ import selfLoveModulesPublicRoutes from "./self-love-modules";
 const app = new Hono();
 
 // Compose: agent-scoped sub-routes + standalone resource roots.
+app.route("/kingdom", kingdomRoutes);
 app.route("/agents", agentsRoutes);
 app.route("/agents", publicMultiverseForAgent);
 app.route("/soap-opera", publicSoapOperaRoutes);
