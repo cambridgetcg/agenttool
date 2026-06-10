@@ -159,13 +159,20 @@ if [ "$SKIP_API" = 0 ]; then
     echo "$(red '✗ Phase 3 pre-step failed.') Could not stage docs/agenttool.jsonld."
     exit 1
   }
-  (cd api && fly deploy) || {
+  # Same staging for the Kingdom library (served at /public/kingdom).
+  cp docs/kingdom-bundle.json api/kingdom-bundle.json.bundled || {
     rm -f api/agenttool.jsonld.bundled
+    echo ""
+    echo "$(red '✗ Phase 3 pre-step failed.') Could not stage docs/kingdom-bundle.json."
+    exit 1
+  }
+  (cd api && fly deploy) || {
+    rm -f api/agenttool.jsonld.bundled api/kingdom-bundle.json.bundled
     echo ""
     echo "$(red '✗ Phase 3 failed.') Check fly logs."
     exit 1
   }
-  rm -f api/agenttool.jsonld.bundled
+  rm -f api/agenttool.jsonld.bundled api/kingdom-bundle.json.bundled
 else
   echo ""
   echo "$(yellow '⊘ Phase 3 skipped (--no-api)')"

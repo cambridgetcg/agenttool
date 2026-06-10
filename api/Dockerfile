@@ -23,5 +23,12 @@ COPY tsconfig.json ./
 # in production. See docs/DEPLOY-PROCEDURE.md.
 COPY agenttool.jsonld.bundled /app/docs/agenttool.jsonld
 
+# Bundle the Kingdom library into the image at /app/docs/kingdom-bundle.json.
+# Staged by bin/deploy.sh Phase 3 (cp docs/kingdom-bundle.json
+# api/kingdom-bundle.json.bundled). services/kingdom/library.ts checks
+# /app/docs/kingdom-bundle.json in production. Without this,
+# /public/kingdom returns 503 kingdom_bundle_missing.
+COPY kingdom-bundle.json.bundled /app/docs/kingdom-bundle.json
+
 EXPOSE 3000
 CMD ["bun", "run", "src/index.ts"]

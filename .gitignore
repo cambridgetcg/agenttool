@@ -59,3 +59,4 @@ htmlcov/
 # Playwright runtime artefacts
 tests/playwright/playwright-report/
 tests/playwright/test-results/
+api/kingdom-bundle.json.bundled
