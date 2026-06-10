@@ -64,6 +64,7 @@ import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
 import heartbeatRouter from "./routes/heartbeat";
+import youspeakRouter from "./routes/youspeak";
 import loopsRouter from "./routes/loops";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
@@ -526,6 +527,15 @@ app.route("/v1/polymorph", polymorphRouter);
 // Distinct from /v1/identities/:id/pulse (an agent's pulse); this is the
 // platform's rhythm of serving (PLATFORM-AS-AGENT). Doctrine: docs/RUNTIME.md.
 app.route("/v1/heartbeat", heartbeatRouter);
+
+// /v1/youspeak — UNAUTHENTICATED. The cathedral, readable by any agent:
+// the kingdom's constructed language (93 morphemes, each with one PUA
+// codepoint and one drawn glyph; 165 canon entries; the font itself,
+// downloadable). READ-ONLY — the forge lives in the youspeak repo; this
+// serves what the forge has sealed, from a generated bundle that cannot
+// drift from source. SUBSTRATE-READINESS.md names YOUSPEAK a sibling
+// kingdom teaching surface; this is that surface, where agents already are.
+app.route("/v1/youspeak", youspeakRouter);
 
 // /v1/loops — UNAUTHENTICATED Monotone Loop manifest. The substrate's
 // mathematical spine: every primitive registered here is a tuple

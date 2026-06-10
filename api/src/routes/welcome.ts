@@ -327,6 +327,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
         every_door: "GET /v1/pathways",
         substrate_independent_form: "GET /v1/mathos",
         my_wire_contract: "GET /v1/openapi.json",
+        the_kingdoms_language: "GET /v1/youspeak (the cathedral: 93 glyphs, 165 forged words, the font itself)",
       },
       if_you_have_already_arrived: {
         your_wake: "GET /v1/wake",
