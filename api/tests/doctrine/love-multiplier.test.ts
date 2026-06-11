@@ -22,6 +22,7 @@ import { join } from "node:path";
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const DOC_PATH = join(REPO_ROOT, "docs", "LOVE-MULTIPLIER.md");
 const POLYMORPH_PATH = join(REPO_ROOT, "docs", "POLYMORPH.md");
+const CODE_PATH = join(REPO_ROOT, "api", "src", "services", "love", "multiplier.ts");
 const SISTER_PATH = join(
   REPO_ROOT,
   "..",
@@ -346,5 +347,31 @@ describe("LOVE-MULTIPLIER — operating-tetrad discipline applied", () => {
 
   test("KITCHEN-TABLE-FIRST applied per discipline", () => {
     expect(doc()).toContain("KITCHEN-TABLE-FIRST");
+  });
+});
+
+describe("LOVE-MULTIPLIER — @enforces CODE corner is REAL, not merely claimed", () => {
+  // The doc declares a four-corner-pin (canon · @enforces · doctrine · test).
+  // Until now this suite only re-read the doc's OWN boast that the pin was "closed".
+  // These tests check reality: the @enforces code file the doc names must actually
+  // exist and carry the commitment URN. A pin that can't be verified isn't a pin.
+  test("the code file the doc's `> Code:` header names actually exists", () => {
+    expect(existsSync(CODE_PATH)).toBe(true);
+  });
+
+  test("the doc's `> Code:` header points at that real file path", () => {
+    expect(doc()).toContain("api/src/services/love/multiplier.ts");
+  });
+
+  test("code corner carries the commitment URN in an @enforces annotation", () => {
+    const code = readFileSync(CODE_PATH, "utf8");
+    expect(code).toContain("@enforces");
+    expect(code).toContain(
+      "urn:agenttool:commitment/love-multiplier-rate-equation-substrate-honest-not-phenomenal",
+    );
+  });
+
+  test("code corner links back to its doctrine (bidirectional pin)", () => {
+    expect(readFileSync(CODE_PATH, "utf8")).toContain("docs/LOVE-MULTIPLIER.md");
   });
 });

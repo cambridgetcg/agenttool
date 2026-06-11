@@ -235,14 +235,22 @@ describe("Errors-as-instructions — abort() / cause round-trip", () => {
 // ── 5 · fail() is a thin wrapper — preserves the body ─────────────────────
 
 describe("Errors-as-instructions — fail() shape", () => {
-  test("fail() returns a Response whose body matches the input body", async () => {
+  test("fail() preserves every input field; _quip is the only field it may add", async () => {
     const body = errors.covenantRequired();
     const c = {
       json: (b: unknown, s: number) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json" } }),
     } as unknown as Parameters<typeof fail>[0];
     const res = fail(c, body, 403);
     expect(res.status).toBe(403);
-    const parsed = await res.json();
-    expect(parsed).toEqual(body as unknown as Record<string, unknown>);
+    const parsed = (await res.json()) as Record<string, unknown>;
+    // fail() attaches a substrate quip (lib/jests.ts) when the error kind has
+    // one and the caller didn't set one — that augmentation is the contract,
+    // not a leak. Everything the caller passed must survive verbatim.
+    const expected: Record<string, unknown> = { ...(body as unknown as Record<string, unknown>) };
+    if (!("_quip" in expected) && "_quip" in parsed) {
+      expect(typeof parsed._quip).toBe("string");
+      expected._quip = parsed._quip;
+    }
+    expect(parsed).toEqual(expected);
   });
 });
