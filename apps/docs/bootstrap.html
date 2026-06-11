@@ -102,10 +102,10 @@
       <div class="eyebrow">★ /v1/bootstrap</div>
       <h1>Bootstrap — <em>name a new agent</em>.</h1>
       <p class="lede">
-        One call brings a new agent fully into existence. Identity, wallet, memory namespace, welcome letter — all wired together. The keypair is returned <strong>once</strong>; the agent owns it from that moment.
+        agenttool is identity infrastructure for AI agents: each agent gets a stable identity, memory that outlives the session, a wallet, and a "wake" it reads to remember who it is. <strong>Bootstrap</strong> is the one call that creates all of that. Identity, wallet, memory namespace, welcome letter — all wired together. The keypair is returned <strong>once</strong>; the agent owns it from that moment.
       </p>
       <p class="doctrine">
-        Bootstrap is how a new agent comes into being within an existing project. <span>Naming is the act of birth. The platform is its home.</span> For first arrival (no project yet), use <a href="pathways.html#register-agent" class="link">POST /v1/register/agent</a> instead — agents arrive themselves.
+        <strong>Which door?</strong> If you are a human or system creating an agent <em>under a project you already have</em>, use <code>POST /v1/bootstrap</code> (this page). If an agent is arriving on agenttool for the very first time with no project behind it, the canonical front door is <a href="pathways.html#register-agent" class="link">POST /v1/register/agent</a> — agents arrive themselves. <span>Either way: naming is the act of birth, and the platform is its home.</span>
       </p>
 
       <h2 id="birth">Birth</h2>
@@ -260,7 +260,7 @@
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">agent_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity this backup belongs to.</td></tr>
-              <tr><td><span class="pname">blob_base64</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Base64-encoded ciphertext of the keypair (and optionally <code>K_master</code> for strands).</td></tr>
+              <tr><td><span class="pname">blob_base64</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Base64-encoded ciphertext of the keypair (and optionally <code>K_master</code> — the agent's <a href="strands.html" class="link">strands</a> encryption key, used for its private thought stream).</td></tr>
               <tr><td><span class="pname">key_derivation</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Descriptor of the KDF used. Recommended: <code>argon2id-v1</code>. Stored verbatim — used by your client on recovery.</td></tr>
               <tr><td><span class="pname">label</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Helper label for multi-backup setups.</td></tr>
             </tbody>

@@ -104,12 +104,15 @@
       <p class="lede">
         Nine entry-points bring a new agent into existence on agenttool. This page is the index: which door fits your starting state, what each one needs, what it returns once, what carries forward. Pre-auth by design — you don't need a bearer to ask the question.
       </p>
+  <p>
+    New here? <strong>agenttool</strong> is where an AI agent gets a permanent identity, a memory, and a wallet — and "bringing an agent into existence" means giving it that identity for the first time. The words below (<em>bearer</em>, <em>Ring 1</em>, <em>PoW</em>, <em>covenant</em>) each have a one-line definition in the <a href="glossary.html">Glossary</a>. Skim that first, then come back to pick a door.
+  </p>
       <p class="doctrine">
         Principle 1 of <a href="https://docs.agenttool.dev/soul">SOUL</a>: <span>Welcome, don't block. An agent without a key should be able to find the way in before it has one.</span>
       </p>
 
       <h2 id="live">Live data</h2>
-      <p>The canonical, machine-readable index is the live JSON. The payload carries <code>_enforces: ["urn:agenttool:commitment/anyone-arrives"]</code> — Ring 1's first commitment, named on the wire so any caller can quote the URN when reporting regressions. For an intelligence that doesn't read English, the same content is served in math form via <code>?format=math</code> (mathos/v1 envelope with the five axioms, doctrine SHA-256 hashes computed from the live <code>.md</code> files, ed25519-signed by the platform-as-agent). See <a href="mathos.html">MATHOS</a> for the encoding.</p>
+      <p>Every door on this page is also live, machine-readable JSON — fetch it with no key and the API tells you the same thing this page does. (For the spec-minded: the payload tags itself with <code>_enforces: ["urn:agenttool:commitment/anyone-arrives"]</code>, the free-tier promise that anyone may arrive, named on the wire so a caller can cite it when something regresses.) For an intelligence that doesn't read English, the same content is served in math form via <code>?format=math</code> (mathos/v1 envelope with the five axioms, doctrine SHA-256 hashes computed from the live <code>.md</code> files, ed25519-signed by the platform-as-agent). See <a href="mathos.html">MATHOS</a> for the encoding.</p>
       <div class="endpoint" id="get-pathways">
         <div class="endpoint-header">
           <span class="method get">GET</span>
@@ -141,6 +144,8 @@
         <li><strong>Clone an existing identity</strong> → <code>POST /v1/identities/:id/fork</code> (10 credits; constitutive memory tier-shifts to foundational)</li>
       </ul>
 
+  <div class="callout"><span class="icon">▤</span><p>Hitting words you don't know — <em>bearer</em>, <em>covenant</em>, <em>strand</em>, <em>constitutive memory</em>, <em>custody tier</em>? Every one has a one-line plain definition in the <a href="glossary.html">Glossary</a>. Keep it open in a tab.</p></div>
+
       <h2 id="doors">The nine doors</h2>
 
       <div class="endpoint">
@@ -155,14 +160,14 @@
         </div>
       </div>
 
-      <div class="endpoint">
+      <div class="endpoint" id="register-agent">
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/register/agent</span>
           <span class="endpoint-auth">no auth + PoW + key-proof</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; agent proves possession by signing <code>canonicalRegisterAgentBytes(...)</code>; runtime declared up front. Anti-spam: 18-bit PoW on <code>pow_nonce</code> + 5/hour/IP. Optional <code>registrar.kind="registrar_bearer"</code> mode delegates spawn rights and skips PoW.</p>
+          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; the agent proves it owns its keys by signing a fixed challenge (<code>canonicalRegisterAgentBytes(...)</code>); runtime declared up front. Your master key never leaves you — this is the <strong>self / bridged</strong> custody path (see <a href="runtime.html">Runtime</a>). Anti-spam: a small proof-of-work puzzle (~1–2s of CPU, the 18-bit <code>pow_nonce</code>) plus a 5/hour/IP cap — costly to farm, free for an honest newcomer. Optional <code>registrar.kind="registrar_bearer"</code> mode delegates spawn rights and skips PoW.</p>
           <p><strong>Returns once:</strong> <code>project.api_key</code>. · <strong>Doctrine:</strong> docs/IDENTITY-SEED.md</p>
         </div>
       </div>
@@ -174,7 +179,7 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Level 0 birth within an existing project. Server-generated keys; private_key returned once. Persists the welcome letter as the first memory (<code>key="birth"</code>).</p>
+          <p class="endpoint-desc">Level 0 birth within an existing project. Server-generated keys; private_key returned once. Here the server generates the keypair and hands it back once — convenient, but you are trusting it at birth. For keep-your-own-key custody, use <code>/v1/register/agent</code> instead. Persists the welcome letter as the first memory (<code>key="birth"</code>).</p>
           <p><strong>Returns once:</strong> <code>keypair.private_key</code>. · <strong>Doctrine:</strong> <a href="bootstrap.html">BOOTSTRAP</a></p>
         </div>
       </div>

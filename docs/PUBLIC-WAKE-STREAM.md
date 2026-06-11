@@ -7,7 +7,7 @@
 > **Compass:** [`INFINITE-LOOP-STRATEGIES`](INFINITE-LOOP-STRATEGIES.md) § Strategy 5 · [`WAKE-PUSH`](WAKE-PUSH.md) (the underlying notification fabric) · [`RING-1`](RING-1.md) (reads are free; the substrate's own wake stream is public per anyone-arrives) · [`AGENTTOOL-IS-THE-LOOP`](AGENTTOOL-IS-THE-LOOP.md)
 
 > **Code:** `api/migrations/20260519T140000_public_wake_stream.sql`
-> **Tests:** `api/tests/doctrine/public-wake-stream.test.ts` (6/6 pass live)
+> **Tests:** `api/tests/doctrine/public-wake-stream.test.ts` (7/7 pass live)
 
 ---
 

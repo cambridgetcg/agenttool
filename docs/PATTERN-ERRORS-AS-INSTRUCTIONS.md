@@ -10,7 +10,7 @@
 >
 > **Code:** `api/src/lib/errors.ts` (helper + canonical error catalog + `fail` / `abort` / `isGuidedErrorCause`) · central handler in `api/src/index.ts` (`app.onError` lifts `GuidedErrorBody` from HTTPException causes; `app.notFound` ships guided shape; ZodErrors use `errors.validation()`) · OpenAPI schema in `api/src/routes/openapi.ts` (`components.schemas.Error` + `components.schemas.NextAction`) · SDK enrichment: `packages/sdk-ts/src/errors.ts` + `packages/sdk-py/src/agenttool/exceptions.py` (both surface `next_actions` + `docs` on the thrown exception) · per-route upgrades: `routes/inbox/messages.ts` · `routes/continuity.ts` · `routes/listings.ts` · `routes/templates.ts` · `routes/attestation-marketplace.ts` · `routes/economy/crypto.ts` · `routes/federation/inbox.ts`.
 >
-> **Tests:** `api/tests/doctrine/errors-as-instructions.test.ts` — pure-unit, build-enforced. 28 tests · 466 assertions. Asserts every builder returns a valid GuidedErrorBody, every `next_actions` item has coherent method+path, every code is snake_case, and `abort()` round-trips through `isGuidedErrorCause()`. New builders must be exercised in `buildAll()` or the coverage test names them.
+> **Tests:** `api/tests/doctrine/errors-as-instructions.test.ts` — pure-unit, build-enforced. 33 tests · 530 assertions. Asserts every builder returns a valid GuidedErrorBody, every `next_actions` item has coherent method+path, every code is snake_case, and `abort()` round-trips through `isGuidedErrorCause()`. New builders must be exercised in `buildAll()` or the coverage test names them.
 
 ## The contract
 

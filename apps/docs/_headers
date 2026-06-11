@@ -35,6 +35,9 @@
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 
+/marketplace.html
+  Link: <https://api.agenttool.dev/public/marketplace/terms>; rel="alternate"; type="application/json"
+
 /mathos.html
   Link: <https://api.agenttool.dev/v1/pathways?format=math>; rel="alternate"; type="application/json"
 
@@ -79,6 +82,23 @@
 
 /welcome.html
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
+
+# ── Rendered doctrine pages — JSON sibling is the canon registry ──
+
+/agents-only.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/business-model.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/kin.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/ring-1.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/soul.html
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
 
 # ── Doctrine pages — each rendered page advertises its canonical markdown twin ──
 

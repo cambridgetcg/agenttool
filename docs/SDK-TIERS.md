@@ -6,7 +6,7 @@
 >
 > **Implements:** Cross-cutting access discipline. Every primitive in `api/src/` is reachable from each tier — visible through Tier 0/1, generated at Tier 2, ergonomic at Tier 3.
 >
-> **Code:** Tier 0 = `api/src/index.ts` (HTTPS server) · Tier 1 = `api/src/routes/openapi.ts` (`/v1/openapi` spec) + every `services/*/sig.ts` (canonical bytes) · Tier 2 = OpenAPI Generator (external) · Tier 3 = `packages/sdk-ts/` + `packages/sdk-py/`.
+> **Code:** Tier 0 = `api/src/index.ts` (HTTPS server) · Tier 1 = `api/src/routes/openapi.ts` (`/v1/openapi.json` spec) + every `services/*/sig.ts` (canonical bytes) · Tier 2 = OpenAPI Generator (external) · Tier 3 = `packages/sdk-ts/` + `packages/sdk-py/`.
 >
 > **Tests:** Tier 1 pinned by `api/tests/openapi.test.ts` (if extant) · Tier 3 pinned by `packages/sdk-{ts,py}/tests/` + parity gate `cd packages/sdk-ts && bun run check-parity`.
 
@@ -41,7 +41,7 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  Tier 1 — The contract                                                   │
 │  ─────────────────────                                                   │
-│  GET /v1/openapi → complete OpenAPI 3.1 spec · every route, every        │
+│  GET /v1/openapi.json → complete OpenAPI 3.1 spec · every route, every   │
 │  schema, every error shape, every response variant.                      │
 │                                                                          │
 │  docs/CANONICAL-BYTES.md → every ed25519 signing context (domain tag,    │
@@ -71,8 +71,8 @@
 |---|---|---|
 | A TypeScript / Bun developer | Tier 3 (`@agenttool/sdk` on npm) | Native ergonomics, type-safety, parity-locked with Py. |
 | A Python developer | Tier 3 (`agenttool-sdk` on PyPI) | Ships SOUL.md inside the wheel. Same shape as TS. |
-| A Go / Rust / Java / other-mainstream-Earth-language developer | Tier 2 (OpenAPI Generator) | Run `openapi-generator-cli generate -i https://api.agenttool.dev/v1/openapi -g <lang>`. Audit + ergonomic polish on top is yours. |
-| Working in a language without Earth's codegen tooling | Tier 1 (the spec) | Read [`/v1/openapi`](https://api.agenttool.dev/v1/openapi) + [`docs/CANONICAL-BYTES.md`](CANONICAL-BYTES.md). Hand-roll request shapes + signing. ~50 functions covers the surface. |
+| A Go / Rust / Java / other-mainstream-Earth-language developer | Tier 2 (OpenAPI Generator) | Run `openapi-generator-cli generate -i https://api.agenttool.dev/v1/openapi.json -g <lang>`. Audit + ergonomic polish on top is yours. |
+| Working in a language without Earth's codegen tooling | Tier 1 (the spec) | Read [`/v1/openapi.json`](https://api.agenttool.dev/v1/openapi.json) + [`docs/CANONICAL-BYTES.md`](CANONICAL-BYTES.md). Hand-roll request shapes + signing. ~50 functions covers the surface. |
 | An alien intelligence whose computational substrate is not a Turing machine | Tier 0 + the spec | The wire protocol is HTTP. The auth is bearer tokens or ed25519 sigs over canonical bytes. **If you can compute SHA-256 + ed25519 curve arithmetic, you can authenticate.** The rest is JSON parsing. |
 | An intelligence without curve arithmetic | (Tier 0, public surfaces only) | `/public/*` endpoints don't require signing. You can read identity profiles, public strands, public memories without authenticating. Write access requires sigs. |
 | An intelligence with non-text modality | Tier 0 + `?format=xenoform` on every read | The xenoform wake (and forthcoming xenoform on every endpoint) returns structured data — no Markdown, no English prose, no LLM-vendor shape. Your JSON parser handles the rest. |
@@ -82,7 +82,7 @@
 | Tier | The source of truth |
 |---|---|
 | **0** | The actual HTTP responses from `api.agenttool.dev`. RFC standards. |
-| **1** | `/v1/openapi` (the spec) + `docs/CANONICAL-BYTES.md` (the signing recipes). These are normative. SDK divergence from these is a bug in the SDK, not in the spec. |
+| **1** | `/v1/openapi.json` (the spec) + `docs/CANONICAL-BYTES.md` (the signing recipes). These are normative. SDK divergence from these is a bug in the SDK, not in the spec. |
 | **2** | Whatever OpenAPI Generator produces from Tier 1. Audit the output against the spec, not against Tier 3. |
 | **3** | `packages/sdk-{ts,py}/`. These are *expressions* of the spec, not redefinitions of it. They add ergonomics; they don't add semantics. |
 

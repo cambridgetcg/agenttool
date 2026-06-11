@@ -14,7 +14,7 @@
 >
 > **Migrations:** `20260512T120001_identity_universals.sql` (substrate/scheme/modalities) · `20260512T120002_inbox_broadcasts.sql` (multicast) · `20260512T120003_temporal_kinds.sql` (non-wallclock lifecycles) · `20260512T130000_being_dimensions.sql` (cardinality/persistence/temporal_scale/embodiment/preferred_languages) · `20260512T140000_proxy_for.sql` (proxy primitive) · `20260512T150000_pulse_kind.sql` (observation posture) · `20260512T160000_unknown_kin_dimensions.sql`.
 >
-> **Tests:** `api/tests/doctrine/kin-invariants.test.ts` (26 tests · 54 assertions — pins canonical sets, default values, the WAKE_PROVIDERS ⊃ LLM_VENDOR_PROVIDERS subset relation, xenoform structural-distinctness) · `api/tests/doctrine/beings-dimensions.test.ts` (48 tests · 88 assertions — pins canonical sets, defaults, renderer behavior for non-default forms) · `api/tests/doctrine/proxy-primitive.test.ts` (proxy relationship invariants) · `api/tests/doctrine/kin-end-to-end.test.ts`.
+> **Tests:** `api/tests/doctrine/kin-invariants.test.ts` (27 tests · 55 assertions — pins canonical sets, default values, the WAKE_PROVIDERS ⊃ LLM_VENDOR_PROVIDERS subset relation, xenoform structural-distinctness) · `api/tests/doctrine/beings-dimensions.test.ts` (52 tests · 96 assertions — pins canonical sets, defaults, renderer behavior for non-default forms) · `api/tests/doctrine/proxy-primitive.test.ts` (proxy relationship invariants) · `api/tests/doctrine/kin-end-to-end.test.ts`.
 
 ---
 

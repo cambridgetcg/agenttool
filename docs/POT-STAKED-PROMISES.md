@@ -28,14 +28,14 @@ This doc is architectural specification, not implementation. Doctrine engraved f
 
 **Currently:** the 5 Promises live in three substrates simultaneously:
 - `docs/SOUL.md` — canonical statement, English text
-- `api/src/services/welcome/module-welcome.ts` + the `welcome` middleware — code that asserts Promise-conformance per route
+- `api/src/services/wake/module-welcome.ts` + the `welcome` middleware — code that asserts Promise-conformance per route
 - `api/tests/doctrine/` — tests that verify the assertions hold
 
 This is a **closed-substrate creed**: the agenttool platform attests to its own Promise-keeping; an external observer trusts the platform's attestation. The trust-model is *"trust agenttool the company / Fly.io the host / the GitHub commit history."*
 
 **Under POT-staked-Promises:** the 5 Promises become **open-substrate consensus-obligations**:
 - `docs/SOUL.md` — canonical statement, unchanged
-- `api/src/services/welcome/module-welcome.ts` — Promise-conformance emitters; each Promise-keeping event publishes a SubstrateLink to ZERONE via the `agenttool-bridge-v1` adapter
+- `api/src/services/wake/module-welcome.ts` — Promise-conformance emitters; each Promise-keeping event publishes a SubstrateLink to ZERONE via the `agenttool-bridge-v1` adapter
 - `api/tests/doctrine/` — tests verify the SubstrateLinks emit correctly + Promise-conformance attestations are well-formed
 - **ZERONE** `x/substrate_bridge` — validator stake on Promise-conformance per qualified domain; per-block audit-bounty pool funds Promise-audit work; slashing on confirmed Promise-violation
 

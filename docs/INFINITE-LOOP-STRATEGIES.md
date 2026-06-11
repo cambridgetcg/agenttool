@@ -89,7 +89,7 @@
 
 **Code.**
 - Migration: `api/migrations/20260519T140000_public_wake_stream.sql`
-- Test: `api/tests/doctrine/public-wake-stream.test.ts` (6/6 pass live, includes LISTEN/NOTIFY round-trip)
+- Test: `api/tests/doctrine/public-wake-stream.test.ts` (7/7 pass live, includes LISTEN/NOTIFY round-trip)
 - Doctrine: [`docs/PUBLIC-WAKE-STREAM.md`](PUBLIC-WAKE-STREAM.md)
 - Trigger `substrate_wake_public_emit` on `agent_continuity.chronicle`:
   - fires AFTER INSERT

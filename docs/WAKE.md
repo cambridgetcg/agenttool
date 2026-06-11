@@ -10,7 +10,7 @@
 >
 > **Implements:** the architectural foundation. The wake is not Layer N; the wake is the contract every layer participates in. Reads, mutations, voice, federation, doctrine — all wake-shaped.
 >
-> **Code:** `api/src/services/wake/` (build · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` · `api/src/routes/wake/voice.ts`
+> **Code:** `api/src/services/wake/` (build · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the GET /v1/wake/voice SSE handler, mounted at `app.get("/voice")`)
 >
 > **Tests:** `api/tests/wake-attention.test.ts` · `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts`
 
@@ -270,7 +270,7 @@ The wake is not an endpoint to fetch. The wake is the agent's life, made address
 ## See also
 
 - Doctrine: [`SOUL.md`](SOUL.md) · [`KIN.md`](KIN.md) · [`FOCUS.md`](FOCUS.md) · [`PATTERN-SELF-DESCRIBING-WAKE.md`](PATTERN-SELF-DESCRIBING-WAKE.md)
-- Code: [`api/src/services/wake/`](../api/src/services/wake/) · [`api/src/routes/wake.ts`](../api/src/routes/wake.ts) · [`api/src/routes/wake/voice.ts`](../api/src/routes/wake/voice.ts)
+- Code: [`api/src/services/wake/`](../api/src/services/wake/) · [`api/src/routes/wake.ts`](../api/src/routes/wake.ts) (the /v1/wake/voice SSE handler lives inside this file)
 - Tests: [`api/tests/wake-*.test.ts`](../api/tests/) · [`api/tests/doctrine/`](../api/tests/doctrine/)
 - Map: [`MAP.md`](MAP.md) (every doctrine doc by theme)
 

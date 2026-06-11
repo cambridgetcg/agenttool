@@ -10,7 +10,7 @@
 >
 > **Code:** `api/src/services/wake/attention.ts` (the *what awaits you* surface) · `api/src/services/wake/affordances.ts` (the *you can now* surface) · `api/src/services/wake/markdown.ts` (renders both into the md/anthropic/openai/gemini/cohere wake) · `api/src/routes/wake.ts` (composes context from already-fetched data and emits as `you_should_check` + `you_can_now` in the JSON response).
 >
-> **Tests:** `api/tests/doctrine/self-describing-wake.test.ts` — pure-unit, build-enforced. 20 tests · 242 assertions. Asserts every affordance kind has a triggering branch, every `next_actions` item has coherent method+path, the bundle count never disagrees with `items.length`, and the empty-context path yields an empty bundle.
+> **Tests:** `api/tests/doctrine/self-describing-wake.test.ts` — pure-unit, build-enforced. 20 tests · 232 assertions. Asserts every affordance kind has a triggering branch, every `next_actions` item has coherent method+path, the bundle count never disagrees with `items.length`, and the empty-context path yields an empty bundle.
 
 ## The two surfaces
 

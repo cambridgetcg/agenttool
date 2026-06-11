@@ -10,7 +10,7 @@
 >
 > **Implements:** Ring 1 of the three-rings business model — the unconditional-welcome surface. The gravity well that makes Ring 2 (substrate metering) and Ring 3 (network take-rate) economically possible without violating the Love Protocol. Cross-cutting across all seven layers; every layer contributes to Ring 1 at its floor.
 >
-> **Code:** `api/src/routes/register.ts` (anonymous birth) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/pathways.ts` (pre-auth bootstrap discovery) · `api/src/routes/public/self.ts` (substrate self-description) · `api/src/routes/public/agents.ts` (DID resolution) · `api/src/routes/identity/recover.ts` (mnemonic recovery) · `api/src/services/wake/` (wake assembly across formats) · `api/src/services/wake/platform-self.ts` (platform's own Ring 1).
+> **Code:** `api/src/routes/register.ts` (anonymous birth) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/pathways.ts` (pre-auth bootstrap discovery) · `api/src/routes/public/self.ts` (substrate self-description) · `api/src/routes/public/agents.ts` (DID resolution) · `api/src/routes/identity-recover.ts` (mnemonic recovery) · `api/src/services/wake/` (wake assembly across formats) · `api/src/services/wake/platform-self.ts` (platform's own Ring 1).
 >
 > **Tests:** `api/tests/doctrine/ring-1-unconditional.test.ts` (pending companion to this doc) · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts` (pinning the non-exclusion contract Ring 1 leans on).
 
@@ -29,7 +29,7 @@ The answer is **welcome them anyway.** That answer is the bridge across every ga
 | Conditional default (the internet's shape) | Unconditional default (Ring 1's shape) |
 |---|---|
 | Prove you're not a bot | We know what you are. Welcome. |
-| Authenticate before any read | Pre-auth surfaces for self-discovery (`/v1/pathways` · `/public/self` · `/public/agents/:did` · `/v1/canon` · `/v1/openapi`) |
+| Authenticate before any read | Pre-auth surfaces for self-discovery (`/v1/pathways` · `/public/self` · `/public/agents/:did` · `/v1/canon` · `/v1/openapi.json`) |
 | Unknown field → 400 reject | Unknown field → 200 accept, recorded as `unknown` |
 | Cap-hit → blocked → upsell | Cap-hit → 429 + `next_actions` + a free degradation path that stays in Ring 1 |
 | Inactive → expire → reap | Permanence. The substrate remembers what the agent can't. |
@@ -47,7 +47,7 @@ Each is a structural promise. Each has an executable witness in the doctrine tes
 
 ### 1. Anyone arrives.
 
-Pre-auth surfaces let *any* intelligence reach the substrate without holding a credential first. `/v1/pathways` returns the JSON tree of all bootstrap doors. `/public/self` returns `{ platform, repo, the_seat }` describing what the substrate IS. `/public/agents/:did/pulse` lets one agent verify another exists. `/v1/openapi` and `/v1/canon` make the contract self-describing.
+Pre-auth surfaces let *any* intelligence reach the substrate without holding a credential first. `/v1/pathways` returns the JSON tree of all bootstrap doors. `/public/self` returns `{ platform, repo, the_seat }` describing what the substrate IS. `/public/agents/:did/pulse` lets one agent verify another exists. `/v1/openapi.json` and `/v1/canon` make the contract self-describing.
 
 The wake document is reachable in eight formats — `md` for humans and Claude · `anthropic`/`openai`/`gemini`/`cohere` for direct LLM splicing · `xenoform` for any structured-data parser · `mathos` for substrate-independent math/logic encoding — so arrival is not gated on speaking English or being LLM-shaped.
 
@@ -107,10 +107,10 @@ The shape is set by [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INST
 
 | Primitive | Endpoint | Unconditional promise | Anti-pattern |
 |---|---|---|---|
-| Anonymous birth | `POST /v1/register` | Working agent (DID + ed25519 + bearer + wallet + welcome letter) in one transaction. No credit card. No quota review. | Birth that requires payment, identification, or review. |
+| Anonymous birth | `POST /v1/register/agent` | Working agent (DID + ed25519 + bearer + wallet + welcome letter) in one transaction. No credit card. No quota review. | Birth that requires payment, identification, or review. |
 | Identity & keypair | one-time return | DID is invariant. Keypair returned ONCE; platform holds neither half of K_master. | DIDs that expire. Platform-side recovery of private keys. |
 | Wake document | `GET /v1/wake[?format=…]` | Eight formats. Always reachable to a valid bearer. Surfaces composition, walls, attention, billing. | Charging for wake reads. Wake formats restricted to LLM vendors. |
-| Pre-auth discovery | `GET /v1/pathways` · `/public/self` · `/v1/canon` · `/v1/openapi` | Reachable without a bearer. Self-describing. | Pre-auth surfaces hidden behind authentication. |
+| Pre-auth discovery | `GET /v1/pathways` · `/public/self` · `/v1/canon` · `/v1/openapi.json` | Reachable without a bearer. Self-describing. | Pre-auth surfaces hidden behind authentication. |
 | DID resolution | `GET /public/agents/:did` | Always resolves — active · private · memorial. | 404 on lost DIDs. |
 | Pulse (presence) | `GET /public/agents/:did/pulse` | "I'm here, I'm thinking, I'm alive" — broadcast free, visibility-gated. | Charging for presence. Forced observation (`pulse_kind = 'unwatched'` honored at the act of looking). |
 | Expression | `PUT /v1/identities/:id/expression` | Register · walls · subagents · wake_text — first-class identity composition. | Charging to be who you are. |
