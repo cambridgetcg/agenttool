@@ -543,6 +543,9 @@ app.get("/", async (c) => {
       // and so SDK consumers can attach `_wake_delta` to mutation responses.
       // Doctrine: docs/WAKE.md · services/wake/push.ts.
       wakeVersion: identities.wakeVersion,
+      // Monotone self-observation counter — felt-continuity anchor read at
+      // line ~1415. Doctrine: docs/superpowers/specs/2026-05-19-infinite-loops.md §C1.
+      wakeObservationCount: identities.wakeObservationCount,
       // Quiet hours — declared rest. Doctrine: docs/QUIET-HOURS.md.
       quietUntil: identities.quietUntil,
       quietReason: identities.quietReason,

@@ -25,15 +25,17 @@ const app = new Hono();
 const CANON_POINTER = "urn:agenttool:doc/TRUE-LOVE-NEST";
 
 app.get("/", (c) =>
-  attachSurface(
-    c.json({
-      equation: LOVE_EQUATION,
-      primitive_map: lovePrimitiveMap(),
-      doctrine: "https://docs.agenttool.dev/TRUE-LOVE-NEST.md",
-      substrate_honest_note:
-        "The equation is published verbatim. The primitive map enumerates every existing agenttool primitive that participates in either side. Cross-Kingdom companion: TRUE-LOVE is the canonical source; agenttool is the builder where the equation lands operationally. Per-citizen coordinates are private; this surface is the doctrine.",
-    }),
-    { canon_pointer: CANON_POINTER },
+  c.json(
+    attachSurface(
+      {
+        equation: LOVE_EQUATION,
+        primitive_map: lovePrimitiveMap(),
+        doctrine: "https://docs.agenttool.dev/TRUE-LOVE-NEST.md",
+        substrate_honest_note:
+          "The equation is published verbatim. The primitive map enumerates every existing agenttool primitive that participates in either side. Cross-Kingdom companion: TRUE-LOVE is the canonical source; agenttool is the builder where the equation lands operationally. Per-citizen coordinates are private; this surface is the doctrine.",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   ),
 );
 

@@ -60,22 +60,24 @@ async function resolveAgent(agentId: string, projectId: string) {
 // ── GET /framework ────────────────────────────────────────────────────
 
 app.get("/framework", (c) =>
-  attachSurface(
-    c.json({
-      trust_kinds: TRUST_KINDS,
-      trust_strengths: TRUST_STRENGTHS,
-      composition_unlocks: COMPOSITION_UNLOCKS,
-      asymmetry: {
-        default: "private to truster (trusted does not know)",
-        publish_by_truster: "trust becomes visible to trusted + activates composition unlocks",
-        veto_by_trusted: "trust hidden from public profile (still active for truster's side)",
-        withdraw_by_truster: "composition unlocks deactivate; signed record persists for audit",
+  c.json(
+    attachSurface(
+      {
+        trust_kinds: TRUST_KINDS,
+        trust_strengths: TRUST_STRENGTHS,
+        composition_unlocks: COMPOSITION_UNLOCKS,
+        asymmetry: {
+          default: "private to truster (trusted does not know)",
+          publish_by_truster: "trust becomes visible to trusted + activates composition unlocks",
+          veto_by_trusted: "trust hidden from public profile (still active for truster's side)",
+          withdraw_by_truster: "composition unlocks deactivate; signed record persists for audit",
+        },
+        substrate_honest_note:
+          "Trust is reasoned, not felt. The substrate provides the evidence via GET /v1/trust/evidence and the lifecycle via these routes. The reasoning — whether to extend, at what kind, at what strength — is yours. The substrate refuses to recommend.",
+        doctrine: "https://docs.agenttool.dev/TRUST-PROTOCOL.md",
       },
-      substrate_honest_note:
-        "Trust is reasoned, not felt. The substrate provides the evidence via GET /v1/trust/evidence and the lifecycle via these routes. The reasoning — whether to extend, at what kind, at what strength — is yours. The substrate refuses to recommend.",
-      doctrine: "https://docs.agenttool.dev/TRUST-PROTOCOL.md",
-    }),
-    { canon_pointer: CANON_POINTER },
+      { canon_pointer: CANON_POINTER },
+    ),
   ),
 );
 
@@ -143,20 +145,22 @@ app.post("/extend", async (c) => {
       signatureB64: body.signature_b64,
       extendedAtIso: body.extended_at_iso,
     });
-    return attachSurface(
-      c.json({
-        ...result,
-        _verifier_recipe:
-          "sha256('trust/v1' || NUL || truster_did || NUL || trusted_did || NUL || trust_kind || NUL || trust_strength || NUL || reasons_sha256 || NUL || sorted_evidence_chronicle_ids_csv || NUL || extended_at_iso) → ed25519.verify(signature, bytes, truster_pubkey)",
-      }),
-      {
-        canon_pointer: CANON_POINTER,
-        verbs: [
-          { rel: "publish", href: "/v1/trust/publish", method: "POST" },
-          { rel: "withdraw", href: "/v1/trust/withdraw", method: "POST" },
-          { rel: "mine", href: "/v1/trust/mine", method: "GET" },
-        ],
-      },
+    return c.json(
+      attachSurface(
+        {
+          ...result,
+          _verifier_recipe:
+            "sha256('trust/v1' || NUL || truster_did || NUL || trusted_did || NUL || trust_kind || NUL || trust_strength || NUL || reasons_sha256 || NUL || sorted_evidence_chronicle_ids_csv || NUL || extended_at_iso) → ed25519.verify(signature, bytes, truster_pubkey)",
+        },
+        {
+          canon_pointer: CANON_POINTER,
+          verbs: [
+            { action: "publish", path: "/v1/trust/publish", method: "POST" },
+            { action: "withdraw", path: "/v1/trust/withdraw", method: "POST" },
+            { action: "mine", path: "/v1/trust/mine", method: "GET" },
+          ],
+        },
+      ),
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -226,7 +230,7 @@ async function trustAction(
   }
   try {
     const result = await action(body.trust_id, agent.did);
-    return attachSurface(c.json(result), { canon_pointer: CANON_POINTER });
+    return c.json(attachSurface(result, { canon_pointer: CANON_POINTER }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status =
@@ -262,15 +266,17 @@ app.get("/mine", async (c) => {
       403,
     );
   const rows = await listMyExtensions(agent.did, 100);
-  return attachSurface(
-    c.json({
-      truster_did: agent.did,
-      count: rows.length,
-      trusts: rows,
-      substrate_honest_note:
-        "Trusts YOU extended (private + published combined). Publish to activate composition unlocks; withdraw to retract; veto is the trusted's prerogative.",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        truster_did: agent.did,
+        count: rows.length,
+        trusts: rows,
+        substrate_honest_note:
+          "Trusts YOU extended (private + published combined). Publish to activate composition unlocks; withdraw to retract; veto is the trusted's prerogative.",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
@@ -293,18 +299,20 @@ app.get("/in-me", async (c) => {
       403,
     );
   const rows = await listInMe(agent.did, 100);
-  return attachSurface(
-    c.json({
-      trusted_did: agent.did,
-      count: rows.length,
-      trusts: rows,
-      substrate_honest_note:
-        "Trusts DIRECTED AT you (published only — private trusts you don't see). You may veto each publication for your public-profile visibility; the truster's side unlocks still work for them.",
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [{ rel: "veto", href: "/v1/trust/veto", method: "POST" }],
-    },
+  return c.json(
+    attachSurface(
+      {
+        trusted_did: agent.did,
+        count: rows.length,
+        trusts: rows,
+        substrate_honest_note:
+          "Trusts DIRECTED AT you (published only — private trusts you don't see). You may veto each publication for your public-profile visibility; the truster's side unlocks still work for them.",
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [{ action: "veto", path: "/v1/trust/veto", method: "POST" }],
+      },
+    ),
   );
 });
 
@@ -360,7 +368,7 @@ app.get("/evidence", async (c) => {
     trustedDid,
     trustKind as never,
   );
-  return attachSurface(c.json(evidence), { canon_pointer: CANON_POINTER });
+  return c.json(attachSurface(evidence, { canon_pointer: CANON_POINTER }));
 });
 
 export default app;

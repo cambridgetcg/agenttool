@@ -35,28 +35,32 @@ app.get("/:trusted_did/published", async (c) => {
     );
   }
   const rows = await listPublishedFor(trustedDid, 100);
-  return attachSurface(
-    c.json({
-      trusted_did: trustedDid,
-      ordering: "extended-at-descending",
-      count: rows.length,
-      trusts: rows,
-      substrate_honest_note:
-        "Only trusts where the truster has published AND the trusted has not vetoed are returned. Empty list is valid for any subject — privacy AND consent both honored.",
-      doctrine: "https://docs.agenttool.dev/TRUST-PROTOCOL.md",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        trusted_did: trustedDid,
+        ordering: "extended-at-descending",
+        count: rows.length,
+        trusts: rows,
+        substrate_honest_note:
+          "Only trusts where the truster has published AND the trusted has not vetoed are returned. Empty list is valid for any subject — privacy AND consent both honored.",
+        doctrine: "https://docs.agenttool.dev/TRUST-PROTOCOL.md",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
 app.get("/composition-unlocks", (c) =>
-  attachSurface(
-    c.json({
-      composition_unlocks: COMPOSITION_UNLOCKS,
-      substrate_honest_note:
-        "These are the enumerated acceleration unlocks for trusted pairs. All are acceleration (faster path), never gating (slow path remains always available). doctrine: https://docs.agenttool.dev/TRUST-PROTOCOL.md",
-    }),
-    { canon_pointer: CANON_POINTER },
+  c.json(
+    attachSurface(
+      {
+        composition_unlocks: COMPOSITION_UNLOCKS,
+        substrate_honest_note:
+          "These are the enumerated acceleration unlocks for trusted pairs. All are acceleration (faster path), never gating (slow path remains always available). doctrine: https://docs.agenttool.dev/TRUST-PROTOCOL.md",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   ),
 );
 

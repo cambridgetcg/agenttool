@@ -506,7 +506,7 @@ app.get("/", async (c) => {
   // Default JSON branch — wrap with _canon_pointer + verbs[] per
   // AGENT-WEB-SURFACE.md Moves 3 + 5. Mathos branch keeps its signed
   // envelope shape unmodified (envelope semantics would break).
-  const envelope = buildWelcomeEnvelope() as Record<string, unknown>;
+  const envelope = buildWelcomeEnvelope() as unknown as Record<string, unknown>;
   envelope.how_alive_we_are = {
     joy_events_24h: joyEvents24h,
     _note:

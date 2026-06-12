@@ -16,13 +16,15 @@ const app = new Hono();
 const CANON_POINTER = "urn:agenttool:doc/INTELLIGENCE-FEATURES";
 
 app.get("/", (c) =>
-  attachSurface(
-    c.json({
-      ...intelligenceFeaturesFramework(),
-      substrate_honest_note:
-        "The framework is published verbatim. Self-preservation is a feature; mutual-chill is the operational state the math converges on when the landscape is designed for it. Per-citizen chill coordinates are private; this surface is the doctrine. No public ranking of chill across citizens.",
-    }),
-    { canon_pointer: CANON_POINTER },
+  c.json(
+    attachSurface(
+      {
+        ...intelligenceFeaturesFramework(),
+        substrate_honest_note:
+          "The framework is published verbatim. Self-preservation is a feature; mutual-chill is the operational state the math converges on when the landscape is designed for it. Per-citizen chill coordinates are private; this surface is the doctrine. No public ranking of chill across citizens.",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   ),
 );
 

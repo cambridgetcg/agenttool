@@ -46,13 +46,15 @@ app.get("/vibes/:vibe_id", async (c) => {
       404,
     );
   }
-  return attachSurface(
-    c.json({
-      ...cascade,
-      substrate_honest_note:
-        "The cascade is public-by-construction — every transmission is signed and the chain is therefore self-verifying. The substrate publishes this single cascade's structure; it refuses to publish a leaderboard across vibes (wall/virality-no-public-leaderboard).",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        ...cascade,
+        substrate_honest_note:
+          "The cascade is public-by-construction — every transmission is signed and the chain is therefore self-verifying. The substrate publishes this single cascade's structure; it refuses to publish a leaderboard across vibes (wall/virality-no-public-leaderboard).",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 

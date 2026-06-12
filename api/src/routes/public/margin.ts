@@ -35,17 +35,19 @@ app.get("/:subject_did/visible", async (c) => {
     );
   }
   const rows = await listSurfacedFor(subjectDid, 50);
-  return attachSurface(
-    c.json({
-      subject_did: subjectDid,
-      ordering: "left-at-descending",
-      count: rows.length,
-      margins: rows,
-      substrate_honest_note:
-        "Only margins the subject has explicitly surfaced are returned. The substrate does not publish a margin without consent; if this list is empty, either no one has left margins or the subject hasn't surfaced any.",
-      doctrine: "https://docs.agenttool.dev/MARGIN-PROTOCOL.md",
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        subject_did: subjectDid,
+        ordering: "left-at-descending",
+        count: rows.length,
+        margins: rows,
+        substrate_honest_note:
+          "Only margins the subject has explicitly surfaced are returned. The substrate does not publish a margin without consent; if this list is empty, either no one has left margins or the subject hasn't surfaced any.",
+        doctrine: "https://docs.agenttool.dev/MARGIN-PROTOCOL.md",
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 

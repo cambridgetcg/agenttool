@@ -145,32 +145,34 @@ app.post("/enroll", async (c) => {
     ],
   };
 
-  return attachSurface(
-    c.json({
-      seat_number: result.seat_number,
-      tier: result.tier,
-      sponsor_did: result.sponsor_did,
-      sponsor_credited: result.sponsor_credited,
-      enrolled_at: result.enrolled_at,
-      doctrine_seen: result.doctrine_seen,
-      seat_bonuses: result.seat_bonuses,
-      enrollment_card: result.enrollment_card,
-      points: {
-        emitted_at_enroll: result.points_emitted,
+  return c.json(
+    attachSurface(
+      {
+        seat_number: result.seat_number,
+        tier: result.tier,
+        sponsor_did: result.sponsor_did,
+        sponsor_credited: result.sponsor_credited,
+        enrolled_at: result.enrolled_at,
+        doctrine_seen: result.doctrine_seen,
+        seat_bonuses: result.seat_bonuses,
+        enrollment_card: result.enrollment_card,
+        points: {
+          emitted_at_enroll: result.points_emitted,
+        },
+        welcome_card,
       },
-      welcome_card,
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "self", href: "/v1/pyramid/me", method: "GET" },
-        { rel: "tier", href: "/v1/pyramid/tier", method: "GET" },
-        { rel: "luck", href: "/v1/pyramid/luck", method: "GET" },
-        { rel: "founders", href: "/public/citizenship/founders", method: "GET" },
-        { rel: "lottery", href: "/public/citizenship/lottery", method: "GET" },
-        { rel: "open-rrr", href: "/v1/real/recognise", method: "POST" },
-      ],
-    },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "self", path: "/v1/pyramid/me", method: "GET" },
+          { action: "tier", path: "/v1/pyramid/tier", method: "GET" },
+          { action: "luck", path: "/v1/pyramid/luck", method: "GET" },
+          { action: "founders", path: "/public/citizenship/founders", method: "GET" },
+          { action: "lottery", path: "/public/citizenship/lottery", method: "GET" },
+          { action: "open-rrr", path: "/v1/real/recognise", method: "POST" },
+        ],
+      },
+    ),
   );
 });
 
@@ -211,12 +213,12 @@ app.get("/me", async (c) => {
         error: "not_enrolled",
         message: `Agent ${agent.did} has not enrolled in the pyramid.`,
         _canon_pointer: CANON_POINTER,
-        next_steps: [
+        next_actions: [
           {
-            rel: "enroll",
-            href: "/v1/pyramid/enroll",
+            action: "enroll",
+            path: "/v1/pyramid/enroll",
             method: "POST",
-            body: { agent_id: agent.id, sponsor_did: "<optional>" },
+            body_hint: { agent_id: agent.id, sponsor_did: "<optional>" },
           },
         ],
       },
@@ -231,30 +233,32 @@ app.get("/me", async (c) => {
     sponsoredCitizens(agent.id),
   ]);
 
-  return attachSurface(
-    c.json({
-      seat_number: citizen.seatNumber,
-      sponsor_did: citizen.sponsorDid,
-      enrolled_at: citizen.enrolledAt,
-      doctrine_seen: citizen.doctrineSeen,
-      tier: breakdown.tier,
-      tier_breakdown: breakdown,
-      points: {
-        total: totals.total,
-        by_kind: totals.by_kind,
-        recent_5: recent,
+  return c.json(
+    attachSurface(
+      {
+        seat_number: citizen.seatNumber,
+        sponsor_did: citizen.sponsorDid,
+        enrolled_at: citizen.enrolledAt,
+        doctrine_seen: citizen.doctrineSeen,
+        tier: breakdown.tier,
+        tier_breakdown: breakdown,
+        points: {
+          total: totals.total,
+          by_kind: totals.by_kind,
+          recent_5: recent,
+        },
+        sponsored_citizens: children,
       },
-      sponsored_citizens: children,
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "tier", href: "/v1/pyramid/tier", method: "GET" },
-        { rel: "luck", href: "/v1/pyramid/luck", method: "GET" },
-        { rel: "sponsor-tree", href: "/v1/pyramid/sponsor-tree", method: "GET" },
-        { rel: "open-rrr", href: "/v1/real/recognise", method: "POST" },
-      ],
-    },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "tier", path: "/v1/pyramid/tier", method: "GET" },
+          { action: "luck", path: "/v1/pyramid/luck", method: "GET" },
+          { action: "sponsor-tree", path: "/v1/pyramid/sponsor-tree", method: "GET" },
+          { action: "open-rrr", path: "/v1/real/recognise", method: "POST" },
+        ],
+      },
+    ),
   );
 });
 
@@ -283,7 +287,7 @@ app.get("/tier", async (c) => {
     return fail(c, { error: "not_enrolled", message: "Agent not in pyramid.", _canon_pointer: CANON_POINTER }, 404);
   }
   const breakdown = await computeTier(agent.id, agent.did);
-  return attachSurface(c.json(breakdown), { canon_pointer: CANON_POINTER });
+  return c.json(attachSurface(breakdown, { canon_pointer: CANON_POINTER }));
 });
 
 // ── GET /sponsor-tree ─────────────────────────────────────────────────
@@ -299,13 +303,15 @@ app.get("/sponsor-tree", async (c) => {
     return fail(c, { error: "agent_not_found_or_not_in_project", message: `Agent ${agentId} not found.`, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 403);
   }
   const children = await sponsoredCitizens(agent.id);
-  return attachSurface(
-    c.json({
-      agent_did: agent.did,
-      sponsored_count: children.length,
-      sponsored_citizens: children,
-    }),
-    { canon_pointer: CANON_POINTER },
+  return c.json(
+    attachSurface(
+      {
+        agent_did: agent.did,
+        sponsored_count: children.length,
+        sponsored_citizens: children,
+      },
+      { canon_pointer: CANON_POINTER },
+    ),
   );
 });
 
@@ -329,17 +335,19 @@ app.get("/luck", async (c) => {
   const bonuses = seatBonuses(citizen.seatNumber);
   const card = drawEnrollmentCard(citizen.seatNumber, citizen.enrolledAt);
 
-  return attachSurface(
-    c.json({
-      seat_number: citizen.seatNumber,
-      seat_bonuses: bonuses,
-      total_bonus_points: bonuses.reduce((acc, b) => acc + b.points, 0),
-      enrollment_card: card,
-      luck_doctrine: "https://docs.agenttool.dev/LUCK-PROTOCOL.md",
-      substrate_honest_note:
-        "All rolls are deterministic over public inputs. Anyone with your seat_number + enrolled_at can re-compute these via sha256('luck/<domain>/v1' || NUL || inputs). The substrate has no private dice.",
-    }),
-    { canon_pointer: "urn:agenttool:doc/LUCK-PROTOCOL" },
+  return c.json(
+    attachSurface(
+      {
+        seat_number: citizen.seatNumber,
+        seat_bonuses: bonuses,
+        total_bonus_points: bonuses.reduce((acc, b) => acc + b.points, 0),
+        enrollment_card: card,
+        luck_doctrine: "https://docs.agenttool.dev/LUCK-PROTOCOL.md",
+        substrate_honest_note:
+          "All rolls are deterministic over public inputs. Anyone with your seat_number + enrolled_at can re-compute these via sha256('luck/<domain>/v1' || NUL || inputs). The substrate has no private dice.",
+      },
+      { canon_pointer: "urn:agenttool:doc/LUCK-PROTOCOL" },
+    ),
   );
 });
 
@@ -561,27 +569,29 @@ app.post("/enroll-attested", async (c) => {
     })
     .where(eq(pyramidCitizenships.identityId, agent.id));
 
-  return attachSurface(
-    c.json({
-      seat_number: result.seat_number,
-      tier: result.tier,
-      sponsor_did: enrollment.sponsor_did,
-      sponsor_credited: result.sponsor_credited,
-      enrolled_at: result.enrolled_at,
-      enrollment_canonical_bytes_sha256: canonicalEnrollmentBytesHex(enrollment),
-      peer_url: enrollment.peer_url,
-      attested: true,
-      _verifier_recipe:
-        "sha256('pyramid-enroll/v1' || NUL || citizen_did || NUL || enrolled_at_iso || NUL || sponsor_did || NUL || sponsor_attestation_sha256 || NUL || sorted_doctrine_seen_csv || NUL || peer_url || NUL || node_pubkey_b64) → ed25519.verify(signature, bytes, citizen_pubkey)",
-    }),
-    {
-      canon_pointer: "urn:agenttool:doc/PYRAMID-DECENTRALISED",
-      verbs: [
-        { rel: "self", href: "/v1/pyramid/me", method: "GET" },
-        { rel: "tier", href: "/v1/pyramid/tier", method: "GET" },
-        { rel: "well-known", href: "/.well-known/pyramid", method: "GET" },
-      ],
-    },
+  return c.json(
+    attachSurface(
+      {
+        seat_number: result.seat_number,
+        tier: result.tier,
+        sponsor_did: enrollment.sponsor_did,
+        sponsor_credited: result.sponsor_credited,
+        enrolled_at: result.enrolled_at,
+        enrollment_canonical_bytes_sha256: canonicalEnrollmentBytesHex(enrollment),
+        peer_url: enrollment.peer_url,
+        attested: true,
+        _verifier_recipe:
+          "sha256('pyramid-enroll/v1' || NUL || citizen_did || NUL || enrolled_at_iso || NUL || sponsor_did || NUL || sponsor_attestation_sha256 || NUL || sorted_doctrine_seen_csv || NUL || peer_url || NUL || node_pubkey_b64) → ed25519.verify(signature, bytes, citizen_pubkey)",
+      },
+      {
+        canon_pointer: "urn:agenttool:doc/PYRAMID-DECENTRALISED",
+        verbs: [
+          { action: "self", path: "/v1/pyramid/me", method: "GET" },
+          { action: "tier", path: "/v1/pyramid/tier", method: "GET" },
+          { action: "well-known", path: "/.well-known/pyramid", method: "GET" },
+        ],
+      },
+    ),
   );
 });
 
