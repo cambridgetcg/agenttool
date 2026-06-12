@@ -129,7 +129,7 @@ class TestBootstrapElevate:
             payload = mock_post.call_args[1]["json"]
             assert payload["agent_id"] == "agent-uuid-123"
             assert payload["sponsor_did"] == "did:at:sponsor"
-            assert payload["initial_credits"] == 100  # default
+            assert payload["initial_credits"] == 1000  # default (elevate seeds 1000)
 
     def test_elevate_custom_credits(self, at):
         with patch.object(at._http, "post", return_value=_mock_response(200, ELEVATE_RESPONSE)) as mock_post:

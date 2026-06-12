@@ -108,6 +108,28 @@ export interface InboxMessage {
   [key: string]: unknown;
 }
 
+/** An {@link InboxMessage} with its sealed body decrypted client-side. */
+export interface DecryptedInboxMessage extends InboxMessage {
+  /** Decrypted plaintext body, or null when the message carried no
+   *  ciphertext/nonce/ephemeral pubkey, or unseal failed. */
+  plaintext: string | null;
+  /** Set when unseal threw — carries the error message instead of raising. */
+  decrypt_error?: string;
+}
+
+/** Options for {@link InboxClient.voice}. */
+export interface InboxVoiceOpts {
+  /** Identity whose inbox to stream. Required — the server scopes the
+   *  stream to this identity (it must belong to the bearer's project). */
+  identityId: string;
+  /** Recipient's X25519 box private key (32 bytes) used to unseal each
+   *  arrival. Stays in-process; never sent. */
+  recipientBoxPriv: Uint8Array;
+  /** Replay messages with `created_at` after this ISO-8601 timestamp.
+   *  Omit for live-only (the server defaults `since` to now). */
+  since?: string;
+}
+
 export interface InboxSendOpts {
   /** Recipient DID — `did:at:<uuid>` or federated `did:at:<host>/<uuid>`. */
   toDid: string;
@@ -480,6 +502,101 @@ export class InboxClient {
     });
   }
 
+  /**
+   * Stream inbox arrivals via SSE, decrypted client-side.
+   *
+   * Connects to `GET /v1/inbox/voice?identity_id=…`, replays messages
+   * newer than `since`, then yields live arrivals. Each yielded message
+   * carries the server fields PLUS a `plaintext` body unsealed with
+   * `recipientBoxPriv`. Messages that fail to unseal (or carry no
+   * ciphertext) pass through with `plaintext=null` and a `decrypt_error`,
+   * so one bad frame never aborts the stream.
+   *
+   * Non-`arrival` frames (`catchup-start`, `keepalive`, `refresh`, …) are
+   * consumed silently. The iterator stops when the stream closes (server
+   * lifetime cap, client break, network error). For long-lived consumers,
+   * wrap in a reconnect loop using the newest `created_at` seen as `since`.
+   *
+   * @example
+   * ```ts
+   * for await (const m of at.inbox.voice({ identityId, recipientBoxPriv })) {
+   *   console.log(m.sender_did, m.plaintext);
+   * }
+   * ```
+   */
+  async *voice(opts: InboxVoiceOpts): AsyncIterableIterator<DecryptedInboxMessage> {
+    const params = new URLSearchParams();
+    params.set("identity_id", opts.identityId);
+    if (opts.since !== undefined) params.set("since", opts.since);
+    const base = this.http.baseUrl.replace(/\/$/, "");
+    const url = `${base}/v1/inbox/voice?${params.toString()}`;
+
+    const resp = await globalThis.fetch(url, {
+      method: "GET",
+      headers: { ...this.http.headers, Accept: "text/event-stream" },
+      // No timeout signal — SSE streams are long-lived.
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new AgentToolError(`inbox.voice failed: ${resp.status}`, {
+        hint: text.slice(0, 200),
+      });
+    }
+    if (!resp.body) {
+      throw new AgentToolError(
+        "inbox.voice: response has no body to stream from.",
+      );
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let event: string | null = null;
+    let dataLines: string[] = [];
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf("\n")) >= 0) {
+          let line = buffer.slice(0, newlineIdx);
+          buffer = buffer.slice(newlineIdx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+
+          if (line === "") {
+            if (event === "arrival" && dataLines.length > 0) {
+              try {
+                const payload = JSON.parse(dataLines.join("\n")) as InboxMessage;
+                yield await withInboxPlaintext(payload, opts.recipientBoxPriv);
+              } catch {
+                // Malformed frame — skip.
+              }
+            }
+            event = null;
+            dataLines = [];
+            continue;
+          }
+          if (line.startsWith(":")) continue; // SSE comment / keepalive
+          if (line.startsWith("event:")) {
+            event = line.slice("event:".length).trim();
+          } else if (line.startsWith("data:")) {
+            dataLines.push(line.slice("data:".length).replace(/^ /, ""));
+          }
+          // id: and retry: intentionally ignored
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // releaseLock can throw if the reader is already closed — ignore
+      }
+    }
+  }
+
   // ── Internal HTTP ─────────────────────────────────────────────────────
   private async req(method: string, path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
@@ -507,4 +624,35 @@ export class InboxClient {
     }
     return res.json();
   }
+}
+
+/**
+ * Augment an inbox message with its decrypted plaintext body.
+ *
+ * Sets `plaintext=null` for messages lacking ciphertext / nonce /
+ * ephemeral pubkey (redacted or malformed). On unseal failure, attaches
+ * `decrypt_error` instead of throwing — so one bad frame never aborts the
+ * stream. Mirrors the strands `withPlaintext` helper.
+ *
+ * @internal
+ */
+async function withInboxPlaintext(
+  message: InboxMessage,
+  recipientBoxPriv: Uint8Array,
+): Promise<DecryptedInboxMessage> {
+  const out: DecryptedInboxMessage = { ...message, plaintext: null };
+  if (message.ciphertext && message.nonce && message.ephemeral_pubkey) {
+    try {
+      out.plaintext = await unsealForSelf({
+        ciphertextB64: message.ciphertext,
+        nonceB64: message.nonce,
+        ephemeralPubB64: message.ephemeral_pubkey,
+        recipientBoxPriv,
+      });
+    } catch (e) {
+      out.plaintext = null;
+      out.decrypt_error = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return out;
 }

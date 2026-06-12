@@ -222,14 +222,14 @@ Test suites green:
   - ts: 28 new in `tests/phase5_vault.test.ts` (mirror coverage).
   - parity: 15 modules ✓ (crypto +1 method, vault +2 methods).
 
-### Phase 6 — Inbox (sealed-box) *(crypto-heavy)*
+### Phase 6 — Inbox (sealed-box) *(crypto-heavy · ✅ shipped)*
 
 - `at.inbox.send(*, to_did, plaintext, recipient_box_pub, signing_key, ...)` — generates ephemeral X25519, ECDH, HKDF-derives AES-256, encrypts content + subject (optional), signs envelope, POSTs.
 - `at.inbox.list(status?, limit?)` — list ciphertext + metadata.
 - `at.inbox.decrypt(message, *, recipient_box_priv) → plaintext` — local decrypt. Priv stays in-process; never sent.
 - `at.inbox.cosign(message_id, *, signing_key, signing_key_id)` — dual-witness signing.
 - `at.inbox.thread(message_id)` — recursive `in_reply_to` walk.
-- `at.inbox.voice(*, since_id?)` — SSE async iterator.
+- `at.inbox.voice(*, identity_id, recipient_box_priv, since?)` — SSE iterator over `/v1/inbox/voice`; replays catch-up then yields live arrivals, **each unsealed client-side** (X25519). Undecryptable/redacted frames pass through with `plaintext=null` + `decrypt_error`. py: sync `Iterator`; ts: `AsyncIterableIterator`. Shipped 0.9.0.
 
 ### Phase 7 — Public + federation + orgs + templates + dashboard
 

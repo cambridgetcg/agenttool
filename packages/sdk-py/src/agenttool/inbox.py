@@ -34,9 +34,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -495,3 +496,107 @@ class InboxClient:
             ephemeral_pub_b64=message["ephemeral_pubkey"],
             recipient_box_priv=recipient_box_priv,
         )
+
+    # ── voice (SSE) ──────────────────────────────────────────────────
+
+    def voice(
+        self,
+        *,
+        identity_id: str,
+        recipient_box_priv: bytes,
+        since: Optional[str] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        """Stream inbox arrivals via SSE, decrypted client-side.
+
+        Connects to ``GET /v1/inbox/voice?identity_id=…``, replays
+        messages newer than ``since``, then yields live arrivals. Each
+        yielded dict carries the server fields PLUS a ``plaintext`` body
+        unsealed with ``recipient_box_priv``. Messages that fail to unseal
+        (or carry no ciphertext) pass through with ``plaintext=None`` and a
+        ``decrypt_error`` — one bad frame never aborts the stream.
+
+        Non-``arrival`` frames (catchup-start, keepalive, refresh, …) are
+        consumed silently. Iteration stops when the stream closes (server
+        lifetime cap, client break). For long-lived consumers, wrap in a
+        reconnect loop using the newest ``created_at`` seen as ``since``.
+
+        Note: this is a SYNC iterator (the SDK is built on
+        ``httpx.Client``). For async, wrap externally.
+
+        Args:
+            identity_id: Identity whose inbox to stream (required; must
+                belong to the bearer's project).
+            recipient_box_priv: Recipient's 32-byte X25519 box private key
+                used to unseal each arrival. Stays in-process; never sent.
+            since: Replay messages with ``created_at`` after this ISO-8601
+                timestamp. Omit for live-only.
+        """
+        params: Dict[str, Any] = {"identity_id": identity_id}
+        if since is not None:
+            params["since"] = since
+
+        with self._http.stream(
+            "GET",
+            self._url("/v1/inbox/voice"),
+            params=params,
+            timeout=None,
+        ) as resp:
+            if resp.status_code != 200:
+                raise AgentToolError(
+                    f"inbox.voice failed: {resp.status_code}",
+                    hint=resp.read().decode("utf-8", errors="replace")[:200],
+                )
+
+            event: Optional[str] = None
+            data_lines: List[str] = []
+            for raw_line in resp.iter_lines():
+                line = raw_line.rstrip("\r")
+                if line == "":
+                    if event == "arrival" and data_lines:
+                        try:
+                            payload = json.loads("\n".join(data_lines))
+                        except json.JSONDecodeError:
+                            event = None
+                            data_lines = []
+                            continue
+                        yield _with_inbox_plaintext(payload, recipient_box_priv)
+                    event = None
+                    data_lines = []
+                    continue
+                if line.startswith(":"):
+                    continue
+                if line.startswith("event:"):
+                    event = line[len("event:"):].strip()
+                elif line.startswith("data:"):
+                    data_lines.append(line[len("data:"):].lstrip())
+                # id: and retry: are intentionally ignored
+
+
+def _with_inbox_plaintext(
+    message: Dict[str, Any],
+    recipient_box_priv: bytes,
+) -> Dict[str, Any]:
+    """Return a copy of ``message`` with ``plaintext`` decrypted.
+
+    Sets ``plaintext=None`` for messages lacking ciphertext / nonce /
+    ephemeral pubkey. On unseal failure, attaches ``decrypt_error``
+    instead of raising. Mirrors the strands ``_with_plaintext`` helper.
+    """
+    out = dict(message)
+    ct = message.get("ciphertext")
+    nonce = message.get("nonce")
+    eph = message.get("ephemeral_pubkey")
+    if ct and nonce and eph:
+        try:
+            out["plaintext"] = unseal_for_self(
+                ciphertext_b64=ct,
+                nonce_b64=nonce,
+                ephemeral_pub_b64=eph,
+                recipient_box_priv=recipient_box_priv,
+            )
+        except Exception as e:  # noqa: BLE001 — surfaced as decrypt_error
+            out["plaintext"] = None
+            out["decrypt_error"] = str(e)
+    else:
+        out["plaintext"] = None
+    return out

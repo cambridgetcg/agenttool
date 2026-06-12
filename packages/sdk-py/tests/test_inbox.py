@@ -211,3 +211,123 @@ def test_canonical_bytes_match_hand_computed_oracle() -> None:
         ephemeral_pub_b64=base64.b64encode(ephem_bytes).decode(),
     )
     assert actual == expected
+
+
+# ── voice() SSE streaming ──────────────────────────────────────────────
+#
+# httpx streaming is faked; crypto is REAL — seal_for_recipient +
+# unseal_for_self actually run, so a decrypt mismatch fails the test.
+
+from agenttool.exceptions import AgentToolError  # noqa: E402
+from agenttool.inbox import InboxClient  # noqa: E402
+
+_VOICE_IDENTITY = "00000000-0000-4000-8000-0000000000ff"
+
+
+class _FakeStreamResponse:
+    def __init__(self, status_code: int, lines: list, body: bytes = b"") -> None:
+        self.status_code = status_code
+        self._lines = lines
+        self._body = body
+
+    def __enter__(self) -> "_FakeStreamResponse":
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+    def iter_lines(self):
+        return iter(self._lines)
+
+    def read(self) -> bytes:
+        return self._body
+
+
+class _FakeHttp:
+    def __init__(self, response: _FakeStreamResponse) -> None:
+        self._response = response
+        self.captured: dict = {}
+
+    def stream(self, method, url, params=None, timeout=None):
+        self.captured = {"method": method, "url": url, "params": params}
+        return self._response
+
+
+def _arrival_lines(sealed: dict) -> list:
+    data = (
+        '{"id":"m-1","sender_did":"did:at:abc",'
+        f'"ciphertext":"{sealed["ciphertext_b64"]}",'
+        f'"nonce":"{sealed["nonce_b64"]}",'
+        f'"ephemeral_pubkey":"{sealed["ephemeral_pub_b64"]}"}}'
+    )
+    return [
+        ": connected to inbox",
+        "",
+        "event: catchup-start",
+        'data: {"since":"2026-01-01T00:00:00Z","current":"2026-01-01T00:00:01Z"}',
+        "",
+        "event: arrival",
+        "id: m-1",
+        "data: " + data,
+        "",
+        "event: catchup-end",
+        'data: {"caught_up_to":"2026-01-01T00:00:01Z"}',
+        "",
+    ]
+
+
+def test_inbox_voice_yields_decrypted_arrivals() -> None:
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("you have mail", recipient["pub"])
+    http = _FakeHttp(_FakeStreamResponse(200, _arrival_lines(sealed)))
+    client = InboxClient(http, "https://api.test")
+
+    out = list(
+        client.voice(identity_id=_VOICE_IDENTITY, recipient_box_priv=recipient["priv"])
+    )
+
+    # Only the `arrival` frame is yielded — catchup-start/end are consumed.
+    assert len(out) == 1
+    assert out[0]["id"] == "m-1"
+    assert out[0]["plaintext"] == "you have mail"
+    assert http.captured["url"].endswith("/v1/inbox/voice")
+    assert http.captured["params"]["identity_id"] == _VOICE_IDENTITY
+
+
+def test_inbox_voice_since_param_forwarded() -> None:
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("hi", recipient["pub"])
+    http = _FakeHttp(_FakeStreamResponse(200, _arrival_lines(sealed)))
+    client = InboxClient(http, "https://api.test")
+    list(
+        client.voice(
+            identity_id=_VOICE_IDENTITY,
+            recipient_box_priv=recipient["priv"],
+            since="2026-06-01T00:00:00Z",
+        )
+    )
+    assert http.captured["params"]["since"] == "2026-06-01T00:00:00Z"
+
+
+def test_inbox_voice_undecryptable_passes_through() -> None:
+    recipient = generate_box_keypair()
+    intruder = generate_box_keypair()
+    sealed = seal_for_recipient("secret", recipient["pub"])
+    http = _FakeHttp(_FakeStreamResponse(200, _arrival_lines(sealed)))
+    client = InboxClient(http, "https://api.test")
+
+    out = list(
+        client.voice(identity_id=_VOICE_IDENTITY, recipient_box_priv=intruder["priv"])
+    )
+    assert len(out) == 1
+    assert out[0]["plaintext"] is None
+    assert isinstance(out[0]["decrypt_error"], str)
+
+
+def test_inbox_voice_non_200_raises() -> None:
+    http = _FakeHttp(
+        _FakeStreamResponse(404, [], body=b"identity_not_found_in_project")
+    )
+    client = InboxClient(http, "https://api.test")
+    with pytest.raises(AgentToolError):
+        list(client.voice(identity_id=_VOICE_IDENTITY, recipient_box_priv=b"\x00" * 32))

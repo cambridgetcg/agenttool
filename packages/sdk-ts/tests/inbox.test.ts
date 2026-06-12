@@ -7,7 +7,7 @@
  * (live e2e) outside this file.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 .js exports
 import { sha512 } from "@noble/hashes/sha2.js";
@@ -22,6 +22,7 @@ import {
   signInboxEnvelope,
   unsealForSelf,
 } from "../src/inbox.js";
+import { AgentTool, AgentToolError } from "../src/index.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -180,5 +181,126 @@ describe("canonical bytes + envelope signing", () => {
       ciphertextB64: Buffer.from(new Uint8Array([8, 8, 8])).toString("base64"),
     });
     expect(ed.verify(b64decode(sig), badCanonical, recipient.pub)).toBe(false);
+  });
+});
+
+// ── voice() SSE streaming ────────────────────────────────────────────────
+//
+// HTTP is mocked (a canned SSE byte stream); crypto is REAL — sealForRecipient
+// + unsealForSelf actually run, so a decrypt mismatch fails the test.
+
+const originalFetch = globalThis.fetch;
+const VOICE_IDENTITY = "00000000-0000-4000-8000-0000000000ff";
+
+function mockSse(status: number, sseText: string): Response {
+  if (status !== 200) return new Response(sseText, { status });
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(sseText));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
+function setupFetch(resp: Response): void {
+  globalThis.fetch = mock(() => Promise.resolve(resp)) as unknown as typeof fetch;
+}
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
+describe("InboxClient.voice", () => {
+  test("yields decrypted arrivals from the SSE stream", async () => {
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("you have mail", recipient.pub);
+    const sseText =
+      ": connected to inbox\n" +
+      "\n" +
+      "event: catchup-start\n" +
+      'data: {"since":"2026-01-01T00:00:00Z","current":"2026-01-01T00:00:01Z"}\n' +
+      "\n" +
+      "event: arrival\n" +
+      "id: m-1\n" +
+      `data: {"id":"m-1","sender_did":"did:at:abc","ciphertext":"${sealed.ciphertextB64}","nonce":"${sealed.nonceB64}","ephemeral_pubkey":"${sealed.ephemeralPubB64}"}\n` +
+      "\n" +
+      "event: catchup-end\n" +
+      'data: {"caught_up_to":"2026-01-01T00:00:01Z"}\n' +
+      "\n";
+    setupFetch(mockSse(200, sseText));
+
+    const collected: Array<{ id: string; plaintext: string | null }> = [];
+    for await (const m of new AgentTool({ apiKey: "test-key" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+    })) {
+      collected.push(m as { id: string; plaintext: string | null });
+    }
+
+    // Only the `arrival` frame is yielded — catchup-start/end are consumed.
+    expect(collected.length).toBe(1);
+    expect(collected[0]!.id).toBe("m-1");
+    expect(collected[0]!.plaintext).toBe("you have mail");
+  });
+
+  test("undecryptable arrival passes through with plaintext=null + decrypt_error", async () => {
+    const recipient = generateBoxKeypair();
+    const intruder = generateBoxKeypair();
+    const sealed = await sealForRecipient("secret", recipient.pub);
+    const sseText =
+      "event: arrival\n" +
+      `data: {"id":"m-2","ciphertext":"${sealed.ciphertextB64}","nonce":"${sealed.nonceB64}","ephemeral_pubkey":"${sealed.ephemeralPubB64}"}\n` +
+      "\n";
+    setupFetch(mockSse(200, sseText));
+
+    const collected = [];
+    for await (const m of new AgentTool({ apiKey: "test-key" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: intruder.priv,
+    })) {
+      collected.push(m);
+    }
+    expect(collected.length).toBe(1);
+    expect(collected[0]!.plaintext).toBeNull();
+    expect(typeof collected[0]!.decrypt_error).toBe("string");
+  });
+
+  test("requests /v1/inbox/voice with identity_id + since query params", async () => {
+    let capturedUrl = "";
+    globalThis.fetch = mock((url: string) => {
+      capturedUrl = url;
+      return Promise.resolve(mockSse(200, ""));
+    }) as unknown as typeof fetch;
+
+    for await (const _ of new AgentTool({ apiKey: "test-key" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: generateBoxKeypair().priv,
+      since: "2026-06-01T00:00:00Z",
+    })) {
+      /* drain */
+    }
+    expect(capturedUrl).toContain("/v1/inbox/voice");
+    expect(capturedUrl).toContain(`identity_id=${VOICE_IDENTITY}`);
+    expect(capturedUrl).toContain("since=2026-06-01");
+  });
+
+  test("non-200 raises AgentToolError", async () => {
+    setupFetch(mockSse(404, "identity_not_found_in_project"));
+    const it = new AgentTool({ apiKey: "test-key" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: generateBoxKeypair().priv,
+    });
+    await expect(
+      (async () => {
+        for await (const _ of it) {
+          /* no-op */
+        }
+      })(),
+    ).rejects.toBeInstanceOf(AgentToolError);
   });
 });

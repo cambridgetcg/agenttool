@@ -175,7 +175,9 @@ export type {
   SealedEnvelope,
   InboxBoxKeyLookup,
   InboxMessage,
+  DecryptedInboxMessage,
   InboxSendOpts,
+  InboxVoiceOpts,
   InboxCoSignOpts,
   InboxStatus,
 } from "./inbox.js";

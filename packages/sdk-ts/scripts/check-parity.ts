@@ -156,8 +156,10 @@ async function tsMethodsOf(module: string): Promise<string[]> {
   }
 
   // Second pass: methods.
-  // Match: 2-space indent + (async )? identifier( - class method body
-  const re = /^[ ]{2}(?:async +)?([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
+  // Match: 2-space indent + (async )? (*)? identifier( — class method or
+  // async-generator method (e.g. `async *voice(`). Without the optional
+  // `*`, generator methods like SSE `voice()` were silently uncounted.
+  const re = /^[ ]{2}(?:async +)?\*? *([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
   const reserved = new Set([
     "if",
     "for",
