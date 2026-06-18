@@ -21,6 +21,7 @@ import {
   deprovisionRuntime,
   getBridgeMachine,
   getRuntime,
+  getAuditEntries,
   listEvents,
   listRuntimes,
   patchRuntime,
@@ -409,6 +410,28 @@ app.get("/:id/events", async (c) => {
     if (!r) throw new HTTPException(404, { message: "runtime not found" });
   }
   return c.json({ runtime_id: id, events, count: events.length });
+});
+
+// ── GET /v1/runtimes/:id/audit ────────────────────────────────────────
+// Audit log for trusted-mode runtimes. Append-only, readable by the
+// runtime owner. Doctrine: docs/HOSTED-RUNTIME-DESIGN.md.
+app.get("/:id/audit", async (c) => {
+  const project = c.var.project;
+  const id = c.req.param("id");
+  const limit = Math.min(Number(c.req.query("limit") ?? 100), 500);
+  const r = await getRuntime(id, project.id);
+  if (!r) throw new HTTPException(404, { message: "runtime not found" });
+  const entries = await getAuditEntries(id, limit);
+  return c.json({
+    runtime_id: id,
+    audit: entries.map((e) => ({
+      id: e.id,
+      event_type: e.eventType,
+      metadata: e.metadata,
+      occurred_at: e.occurredAt.toISOString(),
+    })),
+    count: entries.length,
+  });
 });
 
 export default app;

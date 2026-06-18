@@ -76,7 +76,7 @@ import {
   withExecuteToolSpan,
   setTokenUsage,
 } from "../../observability/otel";
-import { logEvent, recordThought } from "./store";
+import { logEvent, logAudit, recordThought } from "./store";
 import { runtimes as runtimesTable } from "../../db/schema/runtime";
 import { addThought } from "../strand/store";
 import { canonicalThoughtBytes } from "../strand/sig";
@@ -89,6 +89,14 @@ import {
   registerWakeListener,
   type WakeEventKey,
 } from "../wake/push";
+import {
+  prepareTrustedCrypto,
+  trustedDecrypt,
+  trustedEncrypt,
+  trustedSign,
+  zeroTrustedCrypto,
+  type TrustedCryptoContext,
+} from "./trusted-crypto";
 
 const RUNNING_INTERVAL_MS = 60_000;
 const IDLE_INTERVAL_MS = 300_000;
@@ -209,20 +217,22 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
     await sleep(STARTUP_GRACE_MS);
 
     while (!stopped) {
-      if (!isBridgeConnected(runtimeId)) {
+      // Bridged mode requires a live bridge connection.
+      // Trusted mode runs without a bridge — crypto is in-process.
+      const runtime = await loadRuntime(runtimeId);
+      if (!runtime) {
+        // Row removed externally — exit loop, the worker is no longer needed.
+        console.warn(`[think-worker:${runtimeId.slice(0, 8)}] runtime row gone, stopping`);
+        stopped = true;
+        break;
+      }
+      if (runtime.mode === "bridged" && !isBridgeConnected(runtimeId)) {
         await sleep(STARTUP_GRACE_MS);
         continue;
       }
+      // Trusted mode: no bridge check needed.
 
       try {
-        const runtime = await loadRuntime(runtimeId);
-        if (!runtime) {
-          // Row removed externally — exit loop, the worker is no longer needed.
-          console.warn(`[think-worker:${runtimeId.slice(0, 8)}] runtime row gone, stopping`);
-          stopped = true;
-          break;
-        }
-
         // Register the wake-voice listener now that we know the identity.
         // Idempotent — only does work on first call / bridge_key_id change.
         if (runtime.identityId) {
@@ -362,6 +372,24 @@ async function runOneCycleWithPrep(
 
   await logEvent(runtimeId, "think_cycle_start", { kind: "real_thinking" });
 
+  // ── Trusted mode: prepare in-process crypto context ────────────
+  // Bridged mode uses bridge RPC for all crypto; trusted mode unwraps
+  // the DEK and signing key directly. The DEK is zeroed after the cycle.
+  let trustedCtx: TrustedCryptoContext | null = null;
+  if (runtime.mode === "trusted") {
+    trustedCtx = await prepareTrustedCrypto(
+      runtime.kmsWrappedDek!,
+      runtime.id,
+      runtime.kmsWrappedSigningKey,
+    );
+    await logAudit(runtimeId, "cycle_start", {
+      mode: "trusted",
+      kms_key_id: runtime.kmsKeyId,
+      signing_key_id: trustedCtx.signingKeyId,
+    });
+    await logAudit(runtimeId, "key_unwrap", { kms_key_id: runtime.kmsKeyId });
+  }
+
   const { strand, priorSeq, bundle } = prep;
 
   // ── Pull the prior thought (latest ciphertext on this strand). ──
@@ -378,21 +406,28 @@ async function runOneCycleWithPrep(
       )
       .limit(1);
     if (latest) {
-      const dec = await withExecuteToolSpan(
-        {
-          toolName: "bridge.decrypt",
-          agentId: runtime.identityId ?? runtimeId,
-        },
-        async () =>
-          bridgeRequest(runtimeId, {
-            op: "decrypt",
-            ciphertext: latest.ciphertext,
-            nonce: latest.nonce,
-            context: cryptoContext(strand.id, priorSeq),
-          }),
-      );
-      if (!dec.plaintext) throw new Error("bridge_decrypt_missing_plaintext");
-      priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
+      // ── Decrypt prior thought: bridge (bridged) or DEK (trusted) ─
+      if (trustedCtx) {
+        const dec = trustedDecrypt(trustedCtx.dek, latest.ciphertext, latest.nonce);
+        if (!dec.plaintext) throw new Error("trusted_decrypt_missing_plaintext");
+        priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
+      } else {
+        const dec = await withExecuteToolSpan(
+          {
+            toolName: "bridge.decrypt",
+            agentId: runtime.identityId ?? runtimeId,
+          },
+          async () =>
+            bridgeRequest(runtimeId, {
+              op: "decrypt",
+              ciphertext: latest.ciphertext,
+              nonce: latest.nonce,
+              context: cryptoContext(strand.id, priorSeq),
+            }),
+        );
+        if (!dec.plaintext) throw new Error("bridge_decrypt_missing_plaintext");
+        priorPlaintext = Buffer.from(dec.plaintext, "base64").toString("utf-8");
+      }
     }
   }
 
@@ -451,57 +486,100 @@ async function runOneCycleWithPrep(
   );
   if (!llm.content) throw new Error("llm_empty_response");
 
-  // ── Encrypt response via bridge. ────────────────────────────────
+  // ── Encrypt response: bridge (bridged) or DEK (trusted) ───────
   const responseB64 = Buffer.from(llm.content, "utf-8").toString("base64");
-  const enc = await withExecuteToolSpan(
-    {
-      toolName: "bridge.encrypt",
-      agentId: runtime.identityId ?? runtimeId,
-    },
-    async () =>
-      bridgeRequest(runtimeId, {
-        op: "encrypt",
-        plaintext: responseB64,
-        context: cryptoContext(strand.id, priorSeq + 1),
-      }),
-  );
+  let enc: { ciphertext: string; nonce: string };
+  if (trustedCtx) {
+    enc = trustedEncrypt(trustedCtx.dek, responseB64);
+    await logAudit(runtimeId, "thought_written", {
+      strand_id: strand.id,
+      seq: priorSeq + 1,
+      mode: "trusted",
+    });
+  } else {
+    const bridgeEnc = await withExecuteToolSpan(
+      {
+        toolName: "bridge.encrypt",
+        agentId: runtime.identityId ?? runtimeId,
+      },
+      async () =>
+        bridgeRequest(runtimeId, {
+          op: "encrypt",
+          plaintext: responseB64,
+          context: cryptoContext(strand.id, priorSeq + 1),
+        }),
+    );
+    if (!bridgeEnc.ciphertext || !bridgeEnc.nonce) {
+      throw new Error("bridge_encrypt_missing_fields");
+    }
+    enc = { ciphertext: bridgeEnc.ciphertext, nonce: bridgeEnc.nonce };
+  }
   if (!enc.ciphertext || !enc.nonce) {
-    throw new Error("bridge_encrypt_missing_fields");
+    throw new Error("encrypt_missing_fields");
   }
 
-  // ── Sign canonical thought bytes via bridge. ────────────────────
+  // ── Sign canonical thought bytes: bridge (bridged) or in-process (trusted)
   const canonical = canonicalThoughtBytes({
     strandId: strand.id,
     ciphertextB64: enc.ciphertext,
     nonceB64: enc.nonce,
     kind: DEFAULT_KIND,
   });
-  const sigResult = await withExecuteToolSpan(
-    {
-      toolName: "bridge.sign",
-      agentId: runtime.identityId ?? runtimeId,
-    },
-    async () =>
-      bridgeRequest(runtimeId, {
-        op: "sign",
-        message: Buffer.from(canonical).toString("base64"),
-        context: cryptoContext(strand.id, priorSeq + 1),
-      }),
-  );
-  if (!sigResult.signature) throw new Error("bridge_sign_missing_signature");
+  let signature: string;
+  if (trustedCtx) {
+    const sigResult = await trustedSign(
+      trustedCtx.signingKey,
+      Buffer.from(canonical).toString("base64"),
+    );
+    if (!sigResult.signature) throw new Error("trusted_sign_missing_signature");
+    signature = sigResult.signature;
+    await logAudit(runtimeId, "sign", {
+      strand_id: strand.id,
+      seq: priorSeq + 1,
+      signing_key_id: trustedCtx.signingKeyId,
+    });
+  } else {
+    const sigResult = await withExecuteToolSpan(
+      {
+        toolName: "bridge.sign",
+        agentId: runtime.identityId ?? runtimeId,
+      },
+      async () =>
+        bridgeRequest(runtimeId, {
+          op: "sign",
+          message: Buffer.from(canonical).toString("base64"),
+          context: cryptoContext(strand.id, priorSeq + 1),
+        }),
+    );
+    if (!sigResult.signature) throw new Error("bridge_sign_missing_signature");
+    signature = sigResult.signature;
+  }
 
   // ── Persist (sig verified server-side). ─────────────────────────
+  const signingKeyId = trustedCtx
+    ? trustedCtx.signingKeyId
+    : runtime.bridgeKeyId!;
   const stored = await addThought(runtime.projectId, {
     strand_id: strand.id,
     ciphertext: enc.ciphertext,
     nonce: enc.nonce,
     kind: DEFAULT_KIND,
-    signature: sigResult.signature,
-    signing_key_id: runtime.bridgeKeyId!,
+    signature: signature,
+    signing_key_id: signingKeyId,
     agent_id: runtime.identityId!,
   });
 
   await recordThought(runtimeId);
+
+  // ── Zero trusted crypto context after cycle (wall: trusted-dek-zeroed-after-cycle).
+  if (trustedCtx) {
+    zeroTrustedCrypto(trustedCtx);
+    await logAudit(runtimeId, "cycle_end", {
+      latency_ms: Math.round(performance.now() - started),
+      dek_zeroed: true,
+      mode: "trusted",
+    });
+  }
 
   const latency_ms = Math.round(performance.now() - started);
   await logEvent(runtimeId, "think_cycle_end", {
@@ -541,7 +619,14 @@ async function loadRuntime(runtimeId: string): Promise<RuntimeRow | null> {
     throw new Error("runtime_no_llm_configured");
   }
   if (!runtime.identityId) throw new Error("runtime_no_identity");
-  if (!runtime.bridgeKeyId) throw new Error("runtime_no_bridge_key_id");
+  // Bridged mode requires a bridge key. Trusted mode uses KMS-wrapped DEK.
+  if (runtime.mode === "bridged" && !runtime.bridgeKeyId) {
+    throw new Error("runtime_no_bridge_key_id");
+  }
+  // Trusted mode requires a KMS-wrapped DEK.
+  if (runtime.mode === "trusted" && !runtime.kmsWrappedDek) {
+    throw new Error("runtime_no_kms_wrapped_dek");
+  }
   return runtime;
 }
 

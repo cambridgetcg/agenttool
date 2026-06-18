@@ -8,6 +8,7 @@
  *  See docs/RUNTIME.md for the full doctrine + threat model. */
 
 import {
+  bigint,
   index,
   integer,
   jsonb,
@@ -67,6 +68,13 @@ export const runtimes = runtimeSchema.table(
     activeStrands: jsonb("active_strands").notNull().default({}),
     metadata: jsonb("metadata").notNull().default({}),
 
+    // Trusted tier — KMS-wrapped DEK + signing key + metering.
+    // Null for self/bridged; populated for trusted mode at provisioning.
+    kmsKeyId: text("kms_key_id"),
+    kmsWrappedDek: text("kms_wrapped_dek"),
+    kmsWrappedSigningKey: text("kms_wrapped_signing_key"),
+    runtimeHoursMs: bigint("runtime_hours_ms", { mode: "number" }).notNull().default(0),
+
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -116,5 +124,25 @@ export const llmRequests = runtimeSchema.table(
   },
   (t) => [
     index("idx_llm_requests_provider_time").on(t.provider, t.createdAt),
+  ],
+);
+
+/** Audit log for trusted-mode runtimes. Append-only, readable by the runtime
+ *  owner via GET /v1/runtimes/:id/audit. Every think-cycle writes entries.
+ *  Doctrine: docs/HOSTED-RUNTIME-DESIGN.md. */
+export const auditEntries = runtimeSchema.table(
+  "audit_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runtimeId: uuid("runtime_id")
+      .notNull()
+      .references(() => runtimes.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_audit_runtime_time").on(t.runtimeId, t.occurredAt),
+    index("idx_audit_event_type").on(t.eventType),
   ],
 );

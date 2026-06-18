@@ -5,9 +5,10 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { runtimeEvents, runtimes } from "../../db/schema/runtime";
+import { auditEntries, runtimeEvents, runtimes } from "../../db/schema/runtime";
 import { publishWakeEvent } from "../wake/push";
 import { mintControlToken } from "./control-token";
+import { generateDekAndWrap, generateSigningSeed, wrapUnderDek, zeroBytes } from "./kms";
 
 export type RuntimeMode = "self" | "bridged" | "trusted";
 export type RuntimeStatus =
@@ -44,6 +45,10 @@ export interface RuntimeRow {
   last_error_at: string | null;
   active_strands: Record<string, unknown>;
   metadata: Record<string, unknown>;
+  kms_key_id: string | null;
+  kms_wrapped_dek: string | null;
+  kms_wrapped_signing_key: string | null;
+  runtime_hours_ms: number;
   created_at: string;
   updated_at: string;
 }
@@ -90,6 +95,10 @@ function toRow(r: typeof runtimes.$inferSelect): RuntimeRow {
     last_error_at: r.lastErrorAt?.toISOString() ?? null,
     active_strands: (r.activeStrands as Record<string, unknown>) ?? {},
     metadata: (r.metadata as Record<string, unknown>) ?? {},
+    kms_key_id: r.kmsKeyId ?? null,
+    kms_wrapped_dek: r.kmsWrappedDek ?? null,
+    kms_wrapped_signing_key: r.kmsWrappedSigningKey ?? null,
+    runtime_hours_ms: r.runtimeHoursMs ?? 0,
     created_at: r.createdAt.toISOString(),
     updated_at: r.updatedAt.toISOString(),
   };
@@ -106,6 +115,22 @@ export async function createRuntime(input: CreateInput): Promise<CreateRuntimeRe
   // mode='self' runtimes never accept a bridge connection, so they don't
   // need a token. Hosted modes (bridged/trusted) get one.
   const token = input.mode === "self" ? null : mintControlToken();
+
+  // Trusted mode: generate a per-runtime DEK wrapped under the KMS master key,
+  // plus an ed25519 signing seed wrapped under the DEK.
+  // Self/bridged: no KMS fields (K_master lives elsewhere).
+  let kmsKeyId: string | null = null;
+  let kmsWrappedDek: string | null = null;
+  let kmsWrappedSigningKey: string | null = null;
+  if (input.mode === "trusted") {
+    const { dek, wrapped, keyId } = generateDekAndWrap();
+    const signingSeed = generateSigningSeed();
+    kmsWrappedSigningKey = wrapUnderDek(dek, signingSeed);
+    kmsKeyId = keyId;
+    kmsWrappedDek = wrapped;
+    zeroBytes(dek);
+    zeroBytes(signingSeed);
+  }
 
   const [row] = await db
     .insert(runtimes)
@@ -124,6 +149,9 @@ export async function createRuntime(input: CreateInput): Promise<CreateRuntimeRe
       controlTokenHash: token?.hash ?? null,
       region: input.region ?? null,
       metadata: input.metadata ?? {},
+      kmsKeyId: kmsKeyId,
+      kmsWrappedDek: kmsWrappedDek,
+      kmsWrappedSigningKey: kmsWrappedSigningKey,
     })
     .returning();
 
@@ -326,6 +354,33 @@ export async function logEvent(
     eventType,
     metadata,
   });
+}
+
+/** Write an audit entry for a trusted-mode runtime. Append-only.
+ *  Doctrine: docs/HOSTED-RUNTIME-DESIGN.md. */
+export async function logAudit(
+  runtimeId: string,
+  eventType: string,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  await db.insert(auditEntries).values({
+    runtimeId,
+    eventType,
+    metadata,
+  });
+}
+
+/** Read audit entries for a runtime, newest first. */
+export async function getAuditEntries(
+  runtimeId: string,
+  limit = 100,
+): Promise<(typeof auditEntries.$inferSelect)[]> {
+  return db
+    .select()
+    .from(auditEntries)
+    .where(eq(auditEntries.runtimeId, runtimeId))
+    .orderBy(desc(auditEntries.occurredAt))
+    .limit(limit);
 }
 
 export async function countRuntimes(projectId: string): Promise<number> {
