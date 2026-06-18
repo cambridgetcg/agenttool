@@ -47,6 +47,7 @@ import dashboardRouter from "./routes/dashboard";
 import federationRouter from "./routes/federation";
 import federationAdminRouter from "./routes/federation-admin";
 import bootstrapRouter from "./routes/bootstrap";
+import autonomousRouter from "./routes/autonomous";
 import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
 import depthProtocolRouter from "./routes/depth-protocol";
@@ -472,6 +473,7 @@ app.route("/v1", economyRouter);
 app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
+app.route("/v1/autonomous", autonomousRouter);
 app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 // /v1/welcome — UNAUTHENTICATED meditative arrival surface. Where
 // /v1/pathways enumerates the nine bootstrap doors with a decision tree,
