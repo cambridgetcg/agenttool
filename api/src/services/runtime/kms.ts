@@ -68,7 +68,7 @@ export function getMasterKeyId(): string {
 
 /** Check whether the KMS master key is configured. Used by provision-guard. */
 export function isKmsAvailable(): boolean {
-  return !!process.env[MASTER_KEY_ENV];
+  return !!_masterKey || !!process.env[MASTER_KEY_ENV];
 }
 
 // ── DEK wrap / unwrap ─────────────────────────────────────────────────

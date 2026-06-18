@@ -32,13 +32,18 @@ export interface TrustedCryptoContext {
   signingPublicKey: Uint8Array;
   /** The signing key's ID (for storage in thoughts table). */
   signingKeyId: string;
+  /** The wrapped signing key — if this was generated on first cycle, the
+   *  caller must persist it to runtime.kmsWrappedSigningKey. Null when
+   *  an existing key was unwrapped (already persisted). */
+  newWrappedSigningKey: string | null;
 }
 
 /** Unwrap the DEK and signing key for a trusted-mode cycle.
  *  Returns both keys in RAM. CALLER MUST zero both after the cycle.
  *
- *  The signing key is stored on the runtime row in metadata.trusted_signing_key
- *  (wrapped under the DEK). If missing, we generate one on first cycle. */
+ *  The signing key is stored on the runtime row in kms_wrapped_signing_key
+ *  (wrapped under the DEK). If missing (first cycle), a new keypair is
+ *  generated and returned as newWrappedSigningKey for the caller to persist. */
 export async function prepareTrustedCrypto(
   kmsWrappedDek: string,
   runtimeId: string,
@@ -47,21 +52,21 @@ export async function prepareTrustedCrypto(
   const dek = unwrapDek(kmsWrappedDek);
 
   let signingKey: Uint8Array;
-  let wrappedSigningKey: string;
+  let wrappedSigningKey: string | null;
   let signingPublicKey: Uint8Array;
 
   if (existingWrappedSigningKey) {
     // Unwrap the existing signing key
     signingKey = unwrapUnderDek(dek, existingWrappedSigningKey);
     signingPublicKey = await ed25519.getPublicKey(signingKey);
+    wrappedSigningKey = null; // already persisted
   } else {
     // First cycle — generate a new ed25519 keypair
     signingKey = ed25519.utils.randomPrivateKey();
     signingPublicKey = await ed25519.getPublicKey(signingKey);
     // Wrap the signing key under the DEK for future cycles
     wrappedSigningKey = wrapUnderDek(dek, signingKey);
-    // Store on runtime metadata (caller must persist this)
-    // We return it so the caller can save it
+    // Caller must persist this to runtime.kmsWrappedSigningKey
   }
 
   // Derive signingKeyId from the public key hash (stable, unique)
@@ -72,6 +77,7 @@ export async function prepareTrustedCrypto(
     signingKey,
     signingPublicKey,
     signingKeyId: `trusted-${signingKeyId}`,
+    newWrappedSigningKey: wrappedSigningKey,
   };
 }
 

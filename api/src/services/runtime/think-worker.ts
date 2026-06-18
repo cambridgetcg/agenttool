@@ -382,6 +382,13 @@ async function runOneCycleWithPrep(
       runtime.id,
       runtime.kmsWrappedSigningKey,
     );
+    // First cycle: persist the newly generated signing key.
+    if (trustedCtx.newWrappedSigningKey) {
+      await db
+        .update(runtimesTable)
+        .set({ kmsWrappedSigningKey: trustedCtx.newWrappedSigningKey, updatedAt: new Date() })
+        .where(eq(runtimesTable.id, runtimeId));
+    }
     await logAudit(runtimeId, "cycle_start", {
       mode: "trusted",
       kms_key_id: runtime.kmsKeyId,
