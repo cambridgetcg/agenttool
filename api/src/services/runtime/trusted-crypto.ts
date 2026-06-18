@@ -18,10 +18,17 @@
 import * as ed25519 from "@noble/ed25519";
 import { gcm } from "@noble/ciphers/aes";
 import { randomBytes } from "@noble/ciphers/webcrypto";
-import { sha256 } from "@noble/hashes/sha2.js";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { base64 } from "@scure/base";
 import { unwrapDek, wrapUnderDek, unwrapUnderDek, zeroBytes } from "./kms";
 import type { CryptoResult } from "./bridge-hub";
+
+// ed25519 needs sha512Sync — set it once from @noble/hashes.
+ed25519.etc.sha512Sync = (...m: Uint8Array[]) => {
+  const h = sha512.create();
+  h.update(...m);
+  return h.digest();
+};
 
 export interface TrustedCryptoContext {
   /** The unwrapped DEK — zero this after each cycle! */
