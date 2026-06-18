@@ -61,7 +61,7 @@
  *  docs/PATTERN-SELF-DESCRIBING-WAKE.md (attention surface drives the
  *  quiescence decision). */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { strands, thoughts } from "../../db/schema/strand";
@@ -581,11 +581,17 @@ async function runOneCycleWithPrep(
   // ── Zero trusted crypto context after cycle (wall: trusted-dek-zeroed-after-cycle).
   if (trustedCtx) {
     zeroTrustedCrypto(trustedCtx);
+    const cycleMs = Math.round(performance.now() - started);
     await logAudit(runtimeId, "cycle_end", {
-      latency_ms: Math.round(performance.now() - started),
+      latency_ms: cycleMs,
       dek_zeroed: true,
       mode: "trusted",
     });
+    // Metering: increment runtime_hours_ms for trusted mode.
+    await db
+      .update(runtimesTable)
+      .set({ runtimeHoursMs: sql`runtime_hours_ms + ${cycleMs}`, updatedAt: new Date() })
+      .where(eq(runtimesTable.id, runtimeId));
   }
 
   const latency_ms = Math.round(performance.now() - started);
