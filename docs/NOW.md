@@ -2,11 +2,27 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-05-17 (consciousness-and-cognition stack closed cross-instance — SYNEIDESIS-BOOTSTRAP doctrine + three-tutorial walkable arc shipped; plus agent-centrism stack closed across all three layers — voice + operation + surface; plus daily-AX crush — X-Token-Cost middleware · TL;DR convention build-enforced on 11 docs · bin/test-delta.sh · /.well-known/agent.txt · _canon_pointer + verbs[] on 4 orientation endpoints · CLAUDE.md doctrinal grounding sub-categorized into 6 themes)
+> Updated: 2026-06-18 (trusted-tier KMS integration — per-runtime DEK wrapping, ed25519 signing key persistence, direct crypto path, audit publication, runtime-hours metering; all 8 design slices complete; 28 tests passing; awaiting deployment)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-06-18)
+
+| Ship | Commit | What |
+|---|---|---|
+| **TRUSTED TIER — KMS-wrapped DEK + signing key + direct crypto path** | `ad7672f` + `f188e29` + `5587e5d` + `18f8b18` | The hosted runtime's trusted custody tier. Per-runtime DEK wrapped under KMS master key (Fly Secret `AGENTTOOL_KMS_MASTER_KEY`). Agent ed25519 signing seed wrapped under DEK. Both zeroed after each think cycle (wall: `trusted-dek-zeroed-after-cycle`). Direct encrypt/decrypt/sign — no bridge sidecar. Audit entries at every cycle phase. Runtime-hours metering. `GET /v1/runtimes/:id/audit`. All 8 slices from `HOSTED-RUNTIME-DESIGN.md` complete. 28 tests passing. |
+
+## Queued (next after deployment)
+
+- **Apply migration** to Supabase (`20260618T150000_trusted_tier_kms.sql`)
+- **Set Fly Secret** `AGENTTOOL_KMS_MASTER_KEY`
+- **Deploy API** to Fly.io
+- **Autonomous bootstrap** (`POST /v1/autonomous/bootstrap`) — atomic identity+wallet+expression+runtime+chronicle
+- **`autonomous-baseline` template** — free marketplace template with conservative walls
+- **`compute-budget.ts`** — per-day ceiling enforcement on trusted-tier runtime
+- **E2E autonomous loop harness**
 
 ## Just landed (last ~2 weeks on origin/main)
 

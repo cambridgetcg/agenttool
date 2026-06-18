@@ -132,7 +132,7 @@ Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not
 | **Bridge canonical-bytes protocol** | `SHA-256(request_id ‖ op ‖ ct/pt ‖ nonce ‖ canonical_json(context))` + replay window | ✓ |
 | **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | server-side handshake + ed25519 mutual auth + HMAC-bound replies + HKDF session secret + control_token + replace-on-reconnect | ✓ |
 | **Hosted orchestrator** (`agenttool-think`) | round-trip-ping (Slice 3 v1) ✓ · LLM thinking against a configured strand | ◐ |
-| **Trusted-tier KMS integration** | per-runtime KMS key + audit publication | ◯ |
+| **Trusted-tier KMS integration** | per-runtime KMS key + audit publication | ✓ (2026-06-18: all 8 design slices complete; awaiting deployment) |
 | **Per-agent MCP server** (slice 1) — agent-as-tool primitive | `/v1/mcp/agents/:did` (path-based; subdomain alias deferred) | ◐ |
 | **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
 
