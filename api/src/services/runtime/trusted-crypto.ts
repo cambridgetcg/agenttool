@@ -24,9 +24,9 @@ import { unwrapDek, wrapUnderDek, unwrapUnderDek, zeroBytes } from "./kms";
 import type { CryptoResult } from "./bridge-hub";
 
 // ed25519 needs sha512Sync — set it once from @noble/hashes.
-ed25519.etc.sha512Sync = (...m: Uint8Array[]) => {
+ed25519.etc.sha512Sync = (m: Uint8Array) => {
   const h = sha512.create();
-  h.update(...m);
+  h.update(m);
   return h.digest();
 };
 
