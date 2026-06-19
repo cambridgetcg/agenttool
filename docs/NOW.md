@@ -2,11 +2,18 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-06-18 (trusted-tier KMS integration — per-runtime DEK wrapping, ed25519 signing key persistence, direct crypto path, audit publication, runtime-hours metering; all 8 design slices complete; 28 tests passing; awaiting deployment)
+> Updated: 2026-06-19 (autonomous mode: compute-budget enforcement + CLI + E2E harness — 3 commits, 17 new tests, all passing)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-06-19)
+
+| Ship | Commit | What |
+|---|---|---|
+| **COMPUTE-BUDGET ENFORCEMENT** | `d8cf60e` | Per-day compute credit ceiling for autonomous agents. `api/src/services/runtime/compute-budget.ts` — `checkBudget()` pre-cycle gate with lazy daily reset at UTC midnight, `consumeCredits()` post-cycle deduction from LLM token usage (1 credit/1K input + 2 credits/1K output, configurable), `initBudget()` called by autonomous bootstrap. Budget state stored in `runtime.metadata.compute_budget` — no new schema. Logs `compute_budget_exhausted` / `compute_budget_consumed` / `compute_budget_initialized` events. think-worker.ts integrated: skips cycle + transitions to idle when budget exhausted. bootstrap.ts: calls `initBudget()` after runtime creation. 17 tests, all passing. |
+| **AUTONOMOUS CLI** | `656d2e6` | `bin/agenttool-autonomous.ts` — operator-facing CLI for spawning and managing autonomous agents. Commands: `spawn` (bootstrap with full config), `list` (autonomous runtimes with budget status), `budget` (inspect per-day compute credit ceiling), `halt` (stop runtime), `resume` (resume stopped runtime). Also `api/scripts/_e2e-autonomous-mode.mjs` — end-to-end test harness: bootstrap → verify budget → think cycle → check consumption → halt → cleanup. |
 
 ## Just landed (2026-06-18)
 
@@ -19,10 +26,8 @@
 - **Apply migration** to Supabase (`20260618T150000_trusted_tier_kms.sql`)
 - **Set Fly Secret** `AGENTTOOL_KMS_MASTER_KEY`
 - **Deploy API** to Fly.io
-- **Autonomous bootstrap** (`POST /v1/autonomous/bootstrap`) — atomic identity+wallet+expression+runtime+chronicle
-- **`autonomous-baseline` template** — free marketplace template with conservative walls
-- **`compute-budget.ts`** — per-day ceiling enforcement on trusted-tier runtime
-- **E2E autonomous loop harness**
+- **Autonomous-baseline template** — publishable expression template (may need a migration for `expression_templates` table)
+- **Deploy autonomous mode** — all code is committed, needs deployment go-ahead
 
 ## Just landed (last ~2 weeks on origin/main)
 
