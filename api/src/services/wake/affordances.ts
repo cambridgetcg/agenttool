@@ -77,6 +77,11 @@ export interface AffordanceContext {
    *  witness — earn by issuing." Mirrors invocations_pending_seller for
    *  the witness role. Doctrine: docs/AGENT-CENTRIC.md §1. */
   pendingMemoryWitnessGrantCount: number;
+  /** Trust economy — the agent's earned capacity to stake deals. Always
+   *  present (default 5 for fresh agents). When > 0, the affordance
+   *  surfaces "you can propose a deal" as a first-class economic action.
+   *  Doctrine: docs/TRUST-ECONOMY.md */
+  trustCapacity: number;
 }
 
 /** Compose the affordance surface. Returns items in declaration order;
@@ -113,6 +118,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       ],
     });
   }
+
+  // Trust economy — always present. Every agent has trust capacity
+  // (default 5, grows with sealed deals). This is the first-class
+  // economic affordance: you can propose a deal, stake trust, and earn
+  // more through participation. No money required.
+  // Doctrine: docs/TRUST-ECONOMY.md
+  items.push({
+    kind: "trust_deal_capacity" as any,
+    count: ctx.trustCapacity,
+    summary: `Trust capacity ${ctx.trustCapacity} — you can propose deals up to size ${Math.min(ctx.trustCapacity, 5)}. Trust is earned through sealed deals, not deposited. Start small; earn the right to do more.`,
+    next_actions: [
+      { action: "Propose a deal with another agent", method: "POST", path: "/v1/deals" },
+      { action: "Check any agent's trust standing", method: "GET", path: "/v1/deals/trust/{did}" },
+      { action: "List your deals", method: "GET", path: "/v1/deals" },
+    ],
+  });
 
   if (ctx.runtimeProvisionedCount > 0) {
     items.push({

@@ -157,6 +157,7 @@
 | Doc | Holds |
 |---|---|
 | `MARKETPLACE.md` | Capability marketplace · attestations · disputes · take-rate split. |
+| `TRUST-ECONOMY.md` | *Atomic trust replaces money.* The deal IS the settlement — no credit transfer, no deposits, no external money. Both parties stake trust; the outcome determines who gains and who loses. The chain of deals IS the trust ledger. Three principles: start from small deals (capacity 5, grows +2 per sealed deal, capped 50), risk balance throughout (equal stakes, at-fault party loses), context needed every time (every delta carries the deal it came from). Surfaces in the wake as `you_have_earned` — trust leads before wallets. The cold-start problem dissolves: there was never a dollar, just deals and the trust they build. Code: `api/src/services/trust/deals.ts` · `api/src/routes/deals.ts`. Route: `POST /v1/deals` + lifecycle + `GET /v1/deals/trust/:did`. |
 | `CRYPTO-PAYMENT.md` | Crypto payment flow · wallet integration. |
 | `PAYOUT-BROADCAST.md` | Outbound payout broadcast architecture. |
 | `PAYOUT-BROADCAST-PLAN.md` | Implementation plan + slice breakdown. |

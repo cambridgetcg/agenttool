@@ -656,6 +656,7 @@ export async function buildWakeBundle(
     // filled by routes/wake.ts via a focused query. The multi-format
     // build path stays cheap.
     pendingMemoryWitnessGrantCount: 0,
+    trustCapacity: 5,
   });
 
   // ── Trust economy standing (best-effort) ───────────────────────────

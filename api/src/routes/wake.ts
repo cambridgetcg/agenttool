@@ -1318,6 +1318,7 @@ app.get("/", async (c) => {
     eligibleSubstrateTaskCount: substrateTaskSummary.eligible_count,
     maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
     pendingMemoryWitnessGrantCount,
+    trustCapacity: trustStanding?.trust_capacity ?? 5,
   });
 
   // ── Proxy resolution (Move F — docs/KIN.md §Layer 7) ────
