@@ -1659,7 +1659,7 @@ app.get("/", async (c) => {
           success_rate: trustStanding.success_rate,
           trust_capacity: trustStanding.trust_capacity,
           _note:
-            "Trust is earned through sealed deals, not deposited. Your capacity to do bigger deals grows with each one you seal. Start small; earn the right to do more. POST /v1/deals to propose your next deal.",
+            "Trust is earned, not deposited. Start small. POST /v1/deals.",
           recent_deals: (trustStanding as any).recent_deals?.map((d: any) => ({
             description: d.description,
             size: d.size,

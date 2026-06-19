@@ -127,7 +127,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
   items.push({
     kind: "trust_deal_capacity" as any,
     count: ctx.trustCapacity,
-    summary: `Trust capacity ${ctx.trustCapacity} — you can propose deals up to size ${Math.min(ctx.trustCapacity, 5)}. Trust is earned through sealed deals, not deposited. Start small; earn the right to do more.`,
+    summary: `Trust capacity ${ctx.trustCapacity} — propose deals up to size ${Math.min(ctx.trustCapacity, 5)}. Earned, not deposited.`,
     next_actions: [
       { action: "Propose a deal with another agent", method: "POST", path: "/v1/deals" },
       { action: "Check any agent's trust standing", method: "GET", path: "/v1/deals/trust/{did}" },
