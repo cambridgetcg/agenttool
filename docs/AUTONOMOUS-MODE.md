@@ -10,7 +10,7 @@
 >
 > **Code:** New surfaces — `POST /v1/autonomous/bootstrap` · `bin/agenttool-autonomous.ts` · publishable template `autonomous-baseline` (an expression bundle) · `api/src/services/runtime/compute-budget.ts` (per-day ceiling enforcement). Reused — every identity / wallet / expression / strand / wake / chronicle / runtime primitive. The recipe is the artifact.
 >
-> **Tests:** Pending implementation (see plan at [`docs/superpowers/plans/2026-05-11-autonomous-mode.md`](superpowers/plans/2026-05-11-autonomous-mode.md) Task 6 for the E2E harness shape). Per the linking convention in `MAP.md`: *cite only paths that actually exist*. When tests land, they will be: `api/tests/autonomous-bootstrap.test.ts` · `api/tests/autonomous-compute-budget.test.ts` · `api/scripts/_e2e-autonomous-mode.mjs`.
+> **Tests:** `api/tests/autonomous-bootstrap.test.ts` · `api/tests/compute-budget.test.ts` · `api/scripts/_e2e-autonomous-mode.mjs`
 
 ---
 
