@@ -97,6 +97,7 @@ import {
   zeroTrustedCrypto,
   type TrustedCryptoContext,
 } from "./trusted-crypto";
+import { checkBudget, consumeCredits } from "./compute-budget";
 
 const RUNNING_INTERVAL_MS = 60_000;
 const IDLE_INTERVAL_MS = 300_000;
@@ -265,6 +266,29 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
         const reason = wokeBy ?? quiescence.reason;
 
         if (shouldThink) {
+          // Compute-budget enforcement for autonomous runtimes.
+          // Non-autonomous runtimes have no budget → always allowed.
+          const budget = await checkBudget(runtimeId);
+          if (!budget.allowed) {
+            await logEvent(runtimeId, "think_cycle_skipped_budget", {
+              reason: budget.reason,
+              remaining: budget.remaining,
+              resets_at: budget.state.resets_at,
+            });
+            // Transition to idle — budget resets at next UTC midnight.
+            if (runtime.status !== "idle") {
+              await transitionStatus(
+                runtimeId,
+                "idle",
+                `budget_exhausted:${budget.reason}`,
+              );
+              currentInterval = IDLE_INTERVAL_MS;
+            }
+            consecutiveQuietCycles += 1;
+            await interruptibleSleep(currentInterval);
+            continue;
+          }
+
           if (runtime.status === "idle") {
             await transitionStatus(runtimeId, "running", `wake:${reason}`);
           }
@@ -274,6 +298,14 @@ export function startThinkWorker(runtimeId: string): ThinkWorkerHandle {
           consecutiveQuietCycles = 0;
           currentInterval = RUNNING_INTERVAL_MS;
           cycles += 1;
+
+          // Consume compute credits after the cycle (autonomous runtimes only).
+          if (summary.input_tokens !== null && summary.output_tokens !== null) {
+            await consumeCredits(runtimeId, {
+              input_tokens: summary.input_tokens,
+              output_tokens: summary.output_tokens,
+            });
+          }
         } else {
           consecutiveQuietCycles += 1;
 

@@ -27,6 +27,7 @@ import { projects } from "../../db/schema/tools";
 import { createIdentity } from "../identity/identities";
 import { createWallet } from "../economy/wallets";
 import { createRuntime } from "../runtime/store";
+import { initBudget } from "../runtime/compute-budget";
 import { setExpression } from "../identity/expression";
 
 // ─── Autonomous-baseline expression template ──────────────────────────────
@@ -247,6 +248,13 @@ export async function autonomousBootstrap(
       parent_did: input.parent_did ?? null,
     },
   });
+
+  // Initialize compute budget enforcement for the autonomous runtime.
+  // This writes the initial budget state into runtime.metadata.compute_budget.
+  await initBudget(
+    runtimeResult.runtime.id,
+    input.wake_loop.max_daily_compute_credits ?? 10000,
+  );
 
   // Step 6 — First chronicle entry (the naming entry)
   const [chronicleEntry] = await db
