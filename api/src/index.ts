@@ -257,6 +257,7 @@ app.use("/v1/wallets/*", authMiddleware);
 app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
+app.use("/v1/autonomous/*", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
 app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
