@@ -180,12 +180,19 @@ export async function createRuntime(input: CreateInput): Promise<CreateRuntimeRe
 
 export async function listRuntimes(
   projectId: string,
-  filter?: { mode?: RuntimeMode; status?: RuntimeStatus; identityId?: string },
+  filter?: { mode?: RuntimeMode; status?: RuntimeStatus; identityId?: string; autonomous?: boolean },
 ): Promise<RuntimeRow[]> {
   const conds = [eq(runtimes.projectId, projectId), isNull(runtimes.deletedAt)];
   if (filter?.mode) conds.push(eq(runtimes.mode, filter.mode));
   if (filter?.status) conds.push(eq(runtimes.status, filter.status));
   if (filter?.identityId) conds.push(eq(runtimes.identityId, filter.identityId));
+  if (filter?.autonomous) {
+    // Autonomous runtimes are identified by presence of `metadata.autonomous = true`
+    // or `metadata.compute_budget` being non-null.
+    conds.push(
+      sql`${runtimes.metadata}->>'autonomous' = 'true'`,
+    );
+  }
 
   const rows = await db
     .select()

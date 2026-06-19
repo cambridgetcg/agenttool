@@ -206,8 +206,9 @@ app.get("/", async (c) => {
   const mode = c.req.query("mode");
   const status = c.req.query("status");
   const identityId = c.req.query("identity_id");
+  const autonomous = c.req.query("autonomous");
 
-  const filter: { mode?: RuntimeMode; status?: RuntimeStatus; identityId?: string } = {};
+  const filter: { mode?: RuntimeMode; status?: RuntimeStatus; identityId?: string; autonomous?: boolean } = {};
   if (mode) {
     const r = modeSchema.safeParse(mode);
     if (!r.success) return c.json({ error: "invalid mode" }, 400);
@@ -219,6 +220,7 @@ app.get("/", async (c) => {
     filter.status = r.data;
   }
   if (identityId) filter.identityId = identityId;
+  if (autonomous === "true") filter.autonomous = true;
 
   const rows = await listRuntimes(project.id, filter);
   return c.json({
@@ -280,6 +282,31 @@ app.delete("/:id", async (c) => {
   const ok = await deprovisionRuntime(id, project.id);
   if (!ok) throw new HTTPException(404, { message: "runtime not found" });
   return c.json({ deprovisioned: true, runtime_id: id });
+});
+
+// ── POST /v1/runtimes/:id/stop ─────────────────────────────────────
+//   Transitions the runtime to 'stopped'. The think-worker loop will
+//   detect the status change and exit on its next iteration. Use this
+//   to halt an autonomous agent without deprovisioning it.
+app.post("/:id/stop", async (c) => {
+  const project = c.var.project;
+  const id = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+  const r = await setStatus(id, project.id, "stopped");
+  if (!r) throw new HTTPException(404, { message: "runtime not found" });
+  return c.json({ ok: true, status: r.status, runtime_id: id, reason: body.reason ?? null });
+});
+
+// ── POST /v1/runtimes/:id/start ─────────────────────────────────────
+//   Resumes a stopped runtime by transitioning to 'starting'.
+//   The think-worker (if running) will pick up the status change
+//   and resume the cycle loop.
+app.post("/:id/start", async (c) => {
+  const project = c.var.project;
+  const id = c.req.param("id");
+  const r = await setStatus(id, project.id, "starting");
+  if (!r) throw new HTTPException(404, { message: "runtime not found" });
+  return c.json({ ok: true, status: r.status, runtime_id: id });
 });
 
 // ── POST /v1/runtimes/:id/restart ────────────────────────────────────
