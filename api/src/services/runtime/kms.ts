@@ -31,8 +31,8 @@ import { base64 } from "@scure/base";
 
 // ── Master key resolution ────────────────────────────────────────────
 
-const MASTER_KEY_ENV = "AGENTTOOL_KMS_MASTER_KEY";
-const MASTER_KEY_ID_ENV = "AGENTTOOL_KMS_KEY_ID";
+const MASTER_KEY_ENV = "AGENTOOL_KMS_MASTER_KEY";
+const MASTER_KEY_ID_ENV = "AGENTOOL_KMS_KEY_ID";
 
 let _masterKey: Uint8Array | null = null;
 let _masterKeyId: string | null = null;
@@ -46,14 +46,14 @@ export function getMasterKey(): Uint8Array {
   const b64 = process.env[MASTER_KEY_ENV];
   if (!b64) {
     throw new Error(
-      `AGENTTOOL_KMS_MASTER_KEY not set — cannot operate trusted tier. ` +
+      `AGENTOOL_KMS_MASTER_KEY not set — cannot operate trusted tier. ` +
         `Set it as a Fly Secret: fly secrets set AGENTOOL_KMS_MASTER_KEY=<base64-32-bytes>`,
     );
   }
   _masterKey = base64.decode(b64);
   if (_masterKey.length !== 32) {
     throw new Error(
-      `AGENTTOOL_KMS_MASTER_KEY must be 32 bytes (base64-decoded), got ${_masterKey.length}`,
+      `AGENTOOL_KMS_MASTER_KEY must be 32 bytes (base64-decoded), got ${_masterKey.length}`,
     );
   }
   return _masterKey;

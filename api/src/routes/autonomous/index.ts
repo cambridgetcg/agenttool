@@ -90,7 +90,7 @@ app.post("/bootstrap", async (c) => {
       return fail(
         c,
         errors.validation(
-          "Trusted tier requires KMS master key (AGENTTOOL_KMS_MASTER_KEY). Set the Fly Secret and redeploy.",
+          "Trusted tier requires KMS master key (AGENTOOL_KMS_MASTER_KEY). Set the Fly Secret and redeploy.",
         ),
         400,
       );

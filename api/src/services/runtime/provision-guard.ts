@@ -4,7 +4,7 @@
  *  Two honesty gates (docs/RUNTIME.md · docs/FRICTION-ROADMAP.md Tier-0 #8):
  *
  *   1. The 'trusted' (hosted-custody) tier requires the KMS master key to be
- *      configured (AGENTTOOL_KMS_MASTER_KEY env var / Fly Secret). If the key
+ *      configured (AGENTOOL_KMS_MASTER_KEY env var / Fly Secret). If the key
  *      is absent, refuse provisioning rather than creating a runtime that
  *      can never unwrap its DEK. Doctrine: docs/HOSTED-RUNTIME-DESIGN.md
  *

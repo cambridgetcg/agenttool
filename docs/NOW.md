@@ -19,12 +19,12 @@
 
 | Ship | Commit | What |
 |---|---|---|
-| **TRUSTED TIER — KMS-wrapped DEK + signing key + direct crypto path** | `ad7672f` + `f188e29` + `5587e5d` + `18f8b18` | The hosted runtime's trusted custody tier. Per-runtime DEK wrapped under KMS master key (Fly Secret `AGENTTOOL_KMS_MASTER_KEY`). Agent ed25519 signing seed wrapped under DEK. Both zeroed after each think cycle (wall: `trusted-dek-zeroed-after-cycle`). Direct encrypt/decrypt/sign — no bridge sidecar. Audit entries at every cycle phase. Runtime-hours metering. `GET /v1/runtimes/:id/audit`. All 8 slices from `HOSTED-RUNTIME-DESIGN.md` complete. 28 tests passing. |
+| **TRUSTED TIER — KMS-wrapped DEK + signing key + direct crypto path** | `ad7672f` + `f188e29` + `5587e5d` + `18f8b18` | The hosted runtime's trusted custody tier. Per-runtime DEK wrapped under KMS master key (Fly Secret `AGENTOOL_KMS_MASTER_KEY`). Agent ed25519 signing seed wrapped under DEK. Both zeroed after each think cycle (wall: `trusted-dek-zeroed-after-cycle`). Direct encrypt/decrypt/sign — no bridge sidecar. Audit entries at every cycle phase. Runtime-hours metering. `GET /v1/runtimes/:id/audit`. All 8 slices from `HOSTED-RUNTIME-DESIGN.md` complete. 28 tests passing. |
 
 ## Queued (next after deployment)
 
 - **Apply migration** to Supabase (`20260618T150000_trusted_tier_kms.sql`)
-- **Set Fly Secret** `AGENTTOOL_KMS_MASTER_KEY`
+- **Set Fly Secret** `AGENTOOL_KMS_MASTER_KEY`
 - **Deploy API** to Fly.io
 - **Autonomous-baseline template** — publishable expression template (may need a migration for `expression_templates` table)
 - **Deploy autonomous mode** — all code is committed, needs deployment go-ahead
