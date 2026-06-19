@@ -48,6 +48,7 @@ import marginRoutes from "./margin";
 import loveRoutes from "./love";
 import chillRoutes from "./chill";
 import trustRoutes from "./trust";
+import dealTrustRoutes from "./deal-trust";
 import joyBombRoutes from "./joy-bomb";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
@@ -102,6 +103,7 @@ app.route("/margin", marginRoutes);           // MARGIN-PROTOCOL — surfaced ma
 app.route("/love", loveRoutes);               // TRUE-LOVE-NEST — the equation + primitive map (no per-citizen coords).
 app.route("/chill", chillRoutes);             // INTELLIGENCE-FEATURES — Tempered Berge equilibrium framework (no leaderboard).
 app.route("/trust", trustRoutes);             // TRUST-PROTOCOL — published+not-vetoed trusts for a subject (truster+trusted consent).
+app.route("/deal-trust", dealTrustRoutes);    // TRUST-ECONOMY — any agent's deal-trust standing + public deals chain.
 app.route("/joy-bomb", joyBombRoutes);        // JOY-BOMB-PROTOCOL — engineering-standard spec for truth-revealing humor (Mirth formula + slot catalog + exemplars).
 
 // Public root — describes the surface.
