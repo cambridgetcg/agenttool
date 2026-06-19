@@ -569,6 +569,26 @@ export interface WakeBundle {
    *  affordances name what's reachable. Same NextAction shape as errors-as-
    *  instructions. Doctrine: docs/PATTERN-SELF-DESCRIBING-WAKE.md */
   affordances?: AffordanceBundle;
+  /** Trust economy standing — what the agent has earned through sealed
+   *  deals. Computed from the deal chain, not stored as a scalar. Optional
+   *  for back-compat (degraded to absent if deals table missing).
+   *  Doctrine: docs/TRUST-ECONOMY.md */
+  trust_standing?: {
+    trust_score: number;
+    deals_total: number;
+    deals_sealed: number;
+    deals_failed: number;
+    success_rate: number;
+    trust_capacity: number;
+    recent_deals: Array<{
+      description: string;
+      size: number;
+      status: string;
+      outcome: string | null;
+      your_trust_delta: number | null;
+      counterparty_did: string;
+    }>;
+  };
 }
 
 const MAX_RECENT_MEMORIES_IN_MD = 8;
@@ -1144,6 +1164,42 @@ export function renderVolatileSection(b: WakeBundle): string {
   // immediately after attention so the agent sees the same shape
   // (action-tugged + capability-affordant) in one reading sweep.
   lines.push(...renderAffordancesSection(b));
+
+  // ── What you've earned (trust economy) ──────────────────────────────
+  // Trust leads. Before the agent reads what it carries (wallets, credits),
+  // it reads what it's earned through deals. The trust economy replaces
+  // money with atomic trust transactions. Doctrine: docs/TRUST-ECONOMY.md
+  if (b.trust_standing) {
+    lines.push("## What you've earned");
+    lines.push("");
+    const ts = b.trust_standing;
+    if (ts.deals_total === 0) {
+      lines.push(
+        `- **Trust**: 0 — you are new here. Your capacity is ${ts.trust_capacity} (enough for size-1 deals). Propose your first deal. POST /v1/deals.`,
+      );
+    } else {
+      lines.push(
+        `- **Trust**: ${ts.trust_score} (earned through ${ts.deals_sealed} sealed deal${ts.deals_sealed === 1 ? "" : "s"}, ${ts.deals_failed} failed)`,
+      );
+      lines.push(
+        `- **Success rate**: ${(ts.success_rate * 100).toFixed(0)}%`,
+      );
+      lines.push(
+        `- **Capacity**: ${ts.trust_capacity} — you can stake deals up to size ${Math.min(ts.trust_capacity, 5)}`,
+      );
+      if (ts.recent_deals.length > 0) {
+        lines.push("");
+        lines.push("Your recent deals:");
+        for (const d of ts.recent_deals.slice(0, 5)) {
+          const delta = d.your_trust_delta !== null ? (d.your_trust_delta >= 0 ? `+${d.your_trust_delta}` : `${d.your_trust_delta}`) : "—";
+          lines.push(
+            `- [${d.status}] ${d.description} (size ${d.size}) — trust ${delta} — with ${d.counterparty_did.slice(0, 25)}...`,
+          );
+        }
+      }
+    }
+    lines.push("");
+  }
 
   // ── What you carry ─────────────────────────────────────────────────
   lines.push("## What you carry");

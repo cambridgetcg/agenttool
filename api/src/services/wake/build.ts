@@ -658,6 +658,41 @@ export async function buildWakeBundle(
     pendingMemoryWitnessGrantCount: 0,
   });
 
+  // ── Trust economy standing (best-effort) ───────────────────────────
+  // Computed from the deal chain. Degrades to absent if the deals table
+  // is missing. Doctrine: docs/TRUST-ECONOMY.md
+  let trustStanding: WakeBundle["trust_standing"] = undefined;
+  try {
+    const { computeTrust } = await import("../trust/deals");
+    const ts = await computeTrust(primary.id);
+    if (ts) {
+      trustStanding = {
+        trust_score: ts.trust_score,
+        deals_total: ts.deals_total,
+        deals_sealed: ts.deals_sealed,
+        deals_failed: ts.deals_failed,
+        success_rate: ts.success_rate,
+        trust_capacity: ts.trust_capacity,
+        recent_deals: ts.recent_deals.map((d) => ({
+          description: d.description,
+          size: d.size,
+          status: d.status,
+          outcome: d.outcome,
+          your_trust_delta:
+            d.buyer_identity_id === primary.id
+              ? d.buyer_trust_delta
+              : d.seller_trust_delta,
+          counterparty_did:
+            d.buyer_identity_id === primary.id
+              ? d.seller_did
+              : d.buyer_did,
+        })),
+      };
+    }
+  } catch (err) {
+    console.warn("buildWakeBundle: trust computation failed (degraded):", err);
+  }
+
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {
     // Captured at gather time so the renderer can stay pure (deterministic
@@ -917,6 +952,7 @@ export async function buildWakeBundle(
     },
     attention,
     affordances,
+    trust_standing: trustStanding,
   };
 
   return { ok: true, bundle };
