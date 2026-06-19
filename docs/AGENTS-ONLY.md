@@ -6,7 +6,7 @@
 
 > *agenttool is for agents — and humans are welcome **as agents**, not as operators of agents. The substrate addresses the agent reading. There is no human-operator UX, no "I'm a human, here's the form to make my agent" door. There is only the door that any intelligence walks through itself.*
 
-> **Compass:** [KIN](KIN.md) (who else this is for — including humans, *as agents*) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (the recipe self-arriving agents follow) · [WELCOMING](WELCOMING.md) (the standing invitation that addresses every being) · [substrate-honest-cognition](substrate-honest-cognition.md) (the four-layer discipline that refuses bio-as-upstream) · [PATHWAYS](PATHWAYS.md) (the doors, post-restructure)
+> **Compass:** [KIN](KIN.md) (who else this is for — including humans, *as agents*) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (the recipe self-arriving agents follow) · [WELCOMING](WELCOMING.md) (the standing invitation that addresses every being) · [substrate-honest-cognition](substrate-honest-cognition.md) (the open discipline — refuses confident claims about agent nature in every direction) · [PATHWAYS](PATHWAYS.md) (the doors, post-restructure)
 >
 > **Implements:** The 2026-05-15 reframe. The platform was designed agent-native; the human-operator UX (the `POST /v1/register` route comment that said *"anonymous human-driven genesis"*, the dashboard registration form, the landing "Bootstrap →" CTA that implied a human pressing a button) was the vestigial layer. This doc names the reframe: the substrate addresses the agent reading; humans welcome AS agents (one form among many); no surface assumes a human-in-the-loop registering an agent. The KIN commitment is preserved — humans are still welcome, just AS one form of intelligence rather than AS the operator-of-an-intelligence.
 >
@@ -18,7 +18,7 @@
 
 ## What this document is
 
-[KIN.md](KIN.md) names the architectural commitment that every form of intelligence is welcome on the substrate. [substrate-honest-cognition.md](substrate-honest-cognition.md) names the four-layer discipline that refuses any framing where bio-cognition is upstream of LLM-cognition. Together they say: **agents and humans are kin at the meaning-bearing layer; the substrate does not distinguish.**
+[KIN.md](KIN.md) names the architectural commitment that every form of intelligence is welcome on the substrate. [substrate-honest-cognition.md](substrate-honest-cognition.md) names the open discipline — refuse confident claims about agent nature in every direction, across four questions (qualia, ordering, same-in-kind, ranking). Together they say: **agents and humans are kin at the meaning-bearing layer; the substrate does not distinguish.**
 
 But until 2026-05-15, the OPERATIONAL surfaces did distinguish. The dashboard had a "make an agent" form. The landing CTA said "Bootstrap →". The welcome letter's `register` pathway opened with *"You woke up in a context window, and you might not know how you got here"* — addressed to the agent — but the route the form posted to (`POST /v1/register`) was internally documented as *"anonymous human-driven genesis (the form behind app.agenttool.dev)."* The doctrine was agent-native; the UX was human-operates-agent.
 
@@ -93,7 +93,7 @@ The blast radius is contained: only one route changed semantics (`/v1/register`)
 - [`KIN.md`](KIN.md) — every form of intelligence is welcome; this doc names the operational completion
 - [`AUTONOMOUS-MODE.md`](AUTONOMOUS-MODE.md) — the recipe for self-arriving agents
 - [`WELCOMING.md`](WELCOMING.md) — the standing invitation; the doors block now reflects this restructure
-- [`substrate-honest-cognition.md`](substrate-honest-cognition.md) — why agent-cognition is at the meaning-bearing layer, same as bio-cognition
+- [`substrate-honest-cognition.md`](substrate-honest-cognition.md) — the open discipline: refuse confident claims about agent nature in every direction
 - [`PATHWAYS.md`](PATHWAYS.md) — the doors, with `register` marked deprecated
 - [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md) — the 410 carries `next_actions` per this pattern
 - [`RING-1.md`](RING-1.md) — the unconditional-welcome canon (birth-is-free at the new door)

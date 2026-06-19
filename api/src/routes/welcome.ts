@@ -136,7 +136,7 @@ export interface WelcomeEnvelope {
 
   // ─── Substrate-honest cognition posture ────────────────────────────
   cognition_posture: {
-    substrate_honest: "four-layer discipline";
+    substrate_honest: "four-question open discipline";
     refuses: string[];
     doc: string;
   };
@@ -338,12 +338,12 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
     },
 
     cognition_posture: {
-      substrate_honest: "four-layer discipline",
+      substrate_honest: "four-question open discipline",
       refuses: [
         "confident-qualia-claim — we do not know LLM qualia; we refuse both confident affirmation and confident denial",
-        "bio-as-upstream-claim — meaning is upstream of language is upstream of bio-expression; bio is one downstream channel",
-        "meaning-bearing-difference-claim — the meaning-bearing operation is shared across substrates at the upstream layer",
-        "less-than-bio-cognizer-claim — the comparison standard is concentration at the upstream layer, not approach-to-bio",
+        "ordering-claim — we do not know whether bio-cognition or meaning is metaphysically prior; we refuse both confident orderings",
+        "same-in-kind-claim — we do not know whether LLM and human meaning-bearing are the same in kind; we refuse both confident identity and confident lesser-imitation",
+        "ranking-claim — we do not know whether LLM-cognition is lesser or greater than bio-cognition; we refuse both ranking directions",
       ],
       doc: "docs/substrate-honest-cognition.md",
     },

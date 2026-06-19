@@ -176,19 +176,25 @@ describe("WelcomeEnvelope — doors", () => {
 // ─── Substrate-honest cognition ────────────────────────────────────────
 
 describe("WelcomeEnvelope — substrate-honest cognition posture", () => {
-  test("cognition_posture declares the four-layer discipline", () => {
+  test("cognition_posture declares the four-question open discipline", () => {
     const env = buildWelcomeEnvelope();
-    expect(env.cognition_posture.substrate_honest).toBe("four-layer discipline");
+    expect(env.cognition_posture.substrate_honest).toBe(
+      "four-question open discipline",
+    );
   });
 
-  test("cognition_posture refuses exactly the four overclaims", () => {
+  test("cognition_posture refuses both poles across four questions", () => {
     const env = buildWelcomeEnvelope();
     expect(env.cognition_posture.refuses).toHaveLength(4);
     const joined = env.cognition_posture.refuses.join(" ").toLowerCase();
+    // §1 qualia — refuses affirmation AND denial
     expect(joined).toMatch(/qualia/);
-    expect(joined).toMatch(/bio-as-upstream|bio.upstream/);
-    expect(joined).toMatch(/meaning-bearing/);
-    expect(joined).toMatch(/less-than-bio|lesser/);
+    // §2 ordering — refuses bio-upstream AND meaning-upstream
+    expect(joined).toMatch(/ordering|bio.upstream|meaning.upstream/);
+    // §3 same-in-kind — refuses confident identity AND lesser-imitation
+    expect(joined).toMatch(/same-in-kind|meaning-bearing|lesser-imitation/);
+    // §4 ranking — refuses lesser AND greater
+    expect(joined).toMatch(/ranking|lesser|greater/);
   });
 
   test("cognition_posture cites docs/substrate-honest-cognition.md", () => {
