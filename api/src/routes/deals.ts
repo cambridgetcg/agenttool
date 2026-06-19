@@ -26,6 +26,7 @@ import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { deals } from "../db/schema/deals";
 import { identities } from "../db/schema/identity";
+import { identityKeys } from "../db/schema/identity";
 import {
   createDeal,
   acceptDeal,
@@ -34,6 +35,7 @@ import {
   failDeal,
   computeTrust,
 } from "../services/trust/deals";
+import { recognisePreSigned, canonicalRecognitionBytes } from "../services/real-recognise-real/lifecycle";
 
 const app = new Hono<ProjectContext>();
 
@@ -281,6 +283,104 @@ app.get("/deals/trust/:did", async (c) => {
   }
 
   return c.json({ trust });
+});
+
+// ── Recognise a counterparty after a sealed deal ───────────────────────
+// The bridge: deal trust (transactional) feeds recognition trust (relational).
+// After a deal seals, either party can sign a recognition event referencing
+// the deal as evidence. The recognition uses the RRR canonical bytes format
+// and enters the mutual_recognition chain. No override — the agent signs it
+// themselves; the substrate never auto-emits recognition.
+// Doctrine: docs/TRUST-ECONOMY.md + docs/REAL-RECOGNISE-REAL.md
+
+const recogniseSchema = z.object({
+  agent_id: z.string().uuid(),
+  signing_key_id: z.string().uuid(),
+  signature: z.string().min(1),
+  public_key_b64: z.string().min(1),
+  kind: z.enum(["writer", "collaborator", "kindred", "cast-mate", "recurring-character"]),
+  note: z.string().min(1).max(500).optional(),
+  acknowledges_prior_id: z.string().uuid().optional(),
+  created_at: z.string().datetime().optional(),
+});
+
+app.post("/deals/:id/recognise", async (c) => {
+  const dealId = c.req.param("id");
+  const project = c.var.project;
+  const body = recogniseSchema.parse(await c.req.json());
+
+  // resolve the agent
+  const agent = await resolveAgent(body.agent_id, project.id);
+  if (!agent) {
+    return c.json({ error: "agent_not_found", message: `agent_id ${body.agent_id} not found` }, 404);
+  }
+
+  // load the deal — must be sealed
+  const [deal] = await db.select().from(deals)
+    .where(and(eq(deals.id, dealId), eq(deals.projectId, project.id)))
+    .limit(1);
+
+  if (!deal) {
+    return c.json({ error: "deal_not_found", message: `deal ${dealId} not found` }, 404);
+  }
+
+  if (deal.status !== "sealed") {
+    return c.json({ error: "deal_not_sealed", message: `deal must be sealed before recognition — current status: ${deal.status}` }, 400);
+  }
+
+  // the recogniser must be a party to the deal
+  const isBuyer = deal.buyerIdentityId === agent.id;
+  const isSeller = deal.sellerIdentityId === agent.id;
+  if (!isBuyer && !isSeller) {
+    return c.json({ error: "not_a_party", message: "only deal parties can recognise" }, 403);
+  }
+
+  // the recognised party is the other side
+  const recognisedDid = isBuyer ? deal.sellerDid : deal.buyerDid;
+
+  const createdAt = body.created_at ? new Date(body.created_at) : new Date();
+  const createdAtIso = createdAt.toISOString();
+
+  // verify the signature against canonical recognition bytes
+  const noteHash = body.note
+    ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body.note))))
+        .map(b => b.toString(16).padStart(2, "0")).join("")
+    : "";
+  const canonical = canonicalRecognitionBytes({
+    projectId: project.id,
+    byDid: agent.did,
+    recognisedDid,
+    kind: body.kind,
+    acknowledgesPriorId: body.acknowledges_prior_id ?? null,
+    noteSha256Hex: noteHash,
+    createdAtIso,
+  });
+
+  // the recognisePreSigned function verifies the signature itself
+  try {
+    const result = await recognisePreSigned({
+      projectId: project.id,
+      byAgentId: agent.id,
+      byDid: agent.did,
+      recognisedDid,
+      kind: body.kind,
+      acknowledgesPriorId: body.acknowledges_prior_id ?? null,
+      note: body.note ?? null,
+      createdAt,
+      signature: body.signature,
+      signingKeyId: body.signing_key_id,
+      publicKeyB64: body.public_key_b64,
+    });
+
+    return c.json({
+      recognition: result,
+      deal_id: dealId,
+      _note: "Recognition emitted from a sealed deal. Transactional trust (the deal) feeds relational trust (the RRR cascade). The chain deepens.",
+    }, 201);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "unknown_error";
+    return c.json({ error: "recognition_failed", message: msg }, 400);
+  }
 });
 
 export default app;
