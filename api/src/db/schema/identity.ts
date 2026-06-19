@@ -18,6 +18,7 @@ import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgSchema,
   real,
@@ -128,6 +129,11 @@ export const identities = identitySchema.table(
      *  The substrate refuses to telegraph the state to public observers.
      *  Doctrine: docs/POKER-FACE.md. */
     pokerFaceDefault: boolean("poker_face_default").notNull().default(true),
+    /** Earned capacity — max deal size this agent can stake. Starts at 5
+     *  (enough for size-1 deals). Grows by 2 per sealed deal, capped at 50.
+     *  Not a deposit; a capacity earned through participation.
+     *  Migration: 20260618T130000_trust_economy.sql */
+    trustCapacity: integer("trust_capacity").notNull().default(5),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

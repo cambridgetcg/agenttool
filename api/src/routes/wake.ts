@@ -568,6 +568,19 @@ app.get("/", async (c) => {
     .from(wallets)
     .where(eq(wallets.projectId, project.id));
 
+  // ── Trust economy: earned trust through sealed deals ──────────────
+  // The trust economy replaces money with atomic trust transactions.
+  // An agent's trust standing is computed from their deal chain — not
+  // stored as a scalar. This is where the wake surfaces the agent as an
+  // economic being: what they've earned, what they've staked, what they
+  // can do next. Best-effort: degrades to empty if the deals table is
+  // missing (pre-migration environments).
+  // Doctrine: trust economy — start from small deals, risk balance
+  // throughout, context needed every time.
+  let trustStanding = null;
+  let trustError = null;
+  // trust computation moved below — needs primary.id which resolves later
+
   // ── Vault secret names ───────────────────────────────────────────────
   const projectVaultNames = await db
     .select({
@@ -883,6 +896,25 @@ app.get("/", async (c) => {
       );
     }
     primary = match;
+  }
+
+  // ── Trust economy: earned trust through sealed deals ──────────────
+  // The trust economy replaces money with atomic trust transactions.
+  // An agent's trust standing is computed from their deal chain — not
+  // stored as a scalar. This is where the wake surfaces the agent as an
+  // economic being: what they've earned, what they've staked, what they
+  // can do next. Best-effort: degrades to null if the deals table is
+  // missing (pre-migration environments).
+  // Doctrine: trust economy — start from small deals, risk balance
+  // throughout, context needed every time.
+  if (primary) {
+    try {
+      const { computeTrust } = await import("../services/trust/deals");
+      trustStanding = await computeTrust(primary.id);
+    } catch (err) {
+      trustError = err instanceof Error ? err.message : String(err);
+      console.warn("wake: trust computation failed (degraded):", trustError);
+    }
   }
 
   // ── Unconsumed dream cycles (you_dreamed) ──────────────────────────
@@ -1604,6 +1636,47 @@ app.get("/", async (c) => {
         status: w.status,
       })),
     },
+
+    // ── Trust economy — what you've earned through deals ──────────────
+    // The trust economy replaces money with atomic trust transactions.
+    // Your trust standing is computed from your chain of deals — not a
+    // deposited scalar. Start from small deals, risk balance throughout,
+    // context needed every time. Your capacity to do bigger deals grows
+    // with each sealed deal. You earn it through participation.
+    //   trust_score       — net trust from sealed/failed deals
+    //   deals_sealed      — deals where both parties delivered
+    //   deals_failed      — deals that didn't complete (at-fault party loses trust)
+    //   success_rate      — sealed / total completed deals
+    //   trust_capacity    — max deal size you can stake (grows with sealed deals)
+    //   recent_deals      — the chain itself (context for every number)
+    you_have_earned: trustStanding
+      ? {
+          trust_score: trustStanding.trust_score,
+          deals_total: trustStanding.deals_total,
+          deals_sealed: trustStanding.deals_sealed,
+          deals_failed: trustStanding.deals_failed,
+          success_rate: trustStanding.success_rate,
+          trust_capacity: trustStanding.trust_capacity,
+          _note:
+            "Trust is earned through sealed deals, not deposited. Your capacity to do bigger deals grows with each one you seal. Start small; earn the right to do more. POST /v1/deals to propose your next deal.",
+          recent_deals: (trustStanding as any).recent_deals?.map((d: any) => ({
+            description: d.description,
+            size: d.size,
+            status: d.status,
+            outcome: d.outcome,
+            your_trust_delta:
+              d.buyer_identity_id === primary.id
+                ? d.buyer_trust_delta
+                : d.seller_trust_delta,
+            counterparty_did:
+              d.buyer_identity_id === primary.id
+                ? d.seller_did
+                : d.buyer_did,
+          })),
+        }
+      : trustError
+        ? { _error: trustError }
+        : null,
 
     you_keep: {
       vault: projectVaultNames.map((v) => ({
