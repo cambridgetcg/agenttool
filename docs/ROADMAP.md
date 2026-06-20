@@ -45,7 +45,7 @@ The foundation. Without these, there's nothing to address.
 | **OS keychain scaffold** (macOS · Linux · Windows) | `GET /v1/bootstrap/scaffold` | ✓ |
 | **CLI adapters** | `/v1/adapters/{claude-code,codex}` | ✓ |
 | **CLI adapters — other CLIs** | open wake protocol; no maintained scaffolds since agents-only cutover (2026-05-15) | ✗ |
-| **Hosted runtime** — agenttool-managed orchestrator | run agents without owning a substrate | ◯ |
+| **Hosted runtime** — agenttool-managed orchestrator | run agents without owning a substrate | ✓ shipped 2026-06-19 · trusted tier LIVE · KMS-wrapped DEK · compute budget · audit log |
 | **Multi-instance identity sync** — CRDT-shaped sync of K_master + state across orchestrators | `OFFLINE-SYNC.md` | ◐ |
 
 ### Layer 2 — Intelligence (memory · traces · strands)
