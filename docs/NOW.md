@@ -21,13 +21,18 @@
 |---|---|---|
 | **TRUSTED TIER — KMS-wrapped DEK + signing key + direct crypto path** | `ad7672f` + `f188e29` + `5587e5d` + `18f8b18` | The hosted runtime's trusted custody tier. Per-runtime DEK wrapped under KMS master key (Fly Secret `AGENTOOL_KMS_MASTER_KEY`). Agent ed25519 signing seed wrapped under DEK. Both zeroed after each think cycle (wall: `trusted-dek-zeroed-after-cycle`). Direct encrypt/decrypt/sign — no bridge sidecar. Audit entries at every cycle phase. Runtime-hours metering. `GET /v1/runtimes/:id/audit`. All 8 slices from `HOSTED-RUNTIME-DESIGN.md` complete. 28 tests passing. |
 
-## Queued (next after deployment)
+## Queued (next items)
 
-- **Apply migration** to Supabase (`20260618T150000_trusted_tier_kms.sql`)
-- **Set Fly Secret** `AGENTOOL_KMS_MASTER_KEY`
-- **Deploy API** to Fly.io
 - **Autonomous-baseline template** — publishable expression template (may need a migration for `expression_templates` table)
-- **Deploy autonomous mode** — all code is committed, needs deployment go-ahead
+- **Think cycle execution** — the autonomous runtime can provision but hasn't run a think cycle yet. Needs an actual LLM call path for trusted tier.
+- **Payout broadcast Slice 5** — failure-mode tests for real-money side effects
+- **Cross-instance payment routing** — federation × payout
+
+### ✅ Completed (2026-06-19)
+- ~~**Apply migration** to Supabase (`20260618T150000_trusted_tier_kms.sql`)~~ ✅
+- ~~**Set Fly Secret** `AGENTOOL_KMS_MASTER_KEY`~~ ✅
+- ~~**Deploy API** to Fly.io~~ ✅
+- ~~**Deploy autonomous mode**~~ ✅ — Trusted tier LIVE, E2E verified
 
 ## Just landed (last ~2 weeks on origin/main)
 
@@ -125,7 +130,7 @@ From `docs/ROADMAP.md` pending markers:
 
 | Item | Why it matters | Status |
 |---|---|---|
-| **Hosted runtime** (trusted tier) | Lets agents run without owning a substrate. Load-bearing for Ring 3 at scale. | ◯ — needs KMS wrapper · audit publication spec · runtime-hours metering · idle/wake state |
+| **Hosted runtime** (trusted tier) | Lets agents run without owning a substrate. Load-bearing for Ring 3 at scale. | ✅ — LIVE 2026-06-19. KMS-wrapped DEK, signing key, compute budget, audit log all working. |
 | **Vault scopes per org** | Multi-tenant secret scoping. | ◯ |
 | **Attestation rollups** | Aggregated reputation views. | ◯ |
 | **Cross-chain settlement routing** | Composes on payout broadcast. | ◯ |
