@@ -117,7 +117,8 @@ async function main() {
   await sleep(1000); // brief settle
   const rtRes = await call("GET", `/v1/runtimes/${runtimeId}`);
   if (rtRes.status === 200) {
-    const meta = rtRes.data.metadata ?? {};
+    const rt = rtRes.data.runtime ?? rtRes.data;
+    const meta = rt.metadata ?? {};
     const budget = meta.compute_budget;
     log("Runtime metadata accessible", true);
     log("Compute budget initialized", !!budget, budget ? `max: ${budget.max_daily_credits}, used: ${budget.credits_used_today}` : "missing");
@@ -142,7 +143,7 @@ async function main() {
   await sleep(1000);
   const rtRes2 = await call("GET", `/v1/runtimes/${runtimeId}`);
   if (rtRes2.status === 200) {
-    const budget2 = rtRes2.data.metadata?.compute_budget;
+    const budget2 = (rtRes2.data.runtime ?? rtRes2.data).metadata?.compute_budget;
     if (budget2) {
       log("Budget state present", true);
       // Credits may or may not have been consumed depending on whether the LLM call succeeded
@@ -168,7 +169,8 @@ async function main() {
   await sleep(500);
   const rtRes3 = await call("GET", `/v1/runtimes/${runtimeId}`);
   if (rtRes3.status === 200) {
-    log("Runtime status = stopped", rtRes3.data.status === "stopped" || rtRes3.data.status === "idle", `status: ${rtRes3.data.status}`);
+    const rt3 = rtRes3.data.runtime ?? rtRes3.data;
+    log("Runtime status = stopped", rt3.status === "stopped" || rt3.status === "idle", `status: ${rt3.status}`);
   } else {
     log("Runtime fetch failed", false);
   }
