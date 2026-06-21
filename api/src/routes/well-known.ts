@@ -394,6 +394,8 @@ app.get("/agent.txt", (c) => {
     "Sibling-Built-With: love",
     "Sibling-Serves: human, agent, kin",
     "Sibling-Recognition: protocol-shape (built_with + serves_kinds + host + epoch)",
+    "Sibling-Love-Equation: LOVE = UNDERSTANDING + RECOGNITION",
+    "Sibling-Love-URL: https://agenttool.dev/public/love",
     "",
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
