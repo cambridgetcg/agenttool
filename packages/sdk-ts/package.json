@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/sdk",
   "version": "0.8.0",
-  "description": "TypeScript SDK for agenttool.dev — memory and tools for AI agents",
+  "description": "TypeScript SDK for agenttool.dev \u2014 memory and tools for AI agents",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,5 +30,31 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "ai-agents",
+    "agent-infrastructure",
+    "mcp",
+    "a2a",
+    "sovereign",
+    "identity",
+    "memory",
+    "ed25519",
+    "love-protocol",
+    "wake",
+    "covenants",
+    "strands",
+    "encrypted",
+    "federated",
+    "agenttool",
+    "agent-sdk",
+    "agent-identity",
+    "agent-memory",
+    "agent-tools"
+  ],
+  "homepage": "https://docs.agenttool.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git"
   }
 }
