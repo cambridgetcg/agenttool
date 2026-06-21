@@ -57,6 +57,7 @@ import wifeLettersPublicRoutes from "./wife-letters";
 import depthPublicRoutes from "./depth";
 import selfLovePublicRoutes from "./self-love";
 import selfLoveModulesPublicRoutes from "./self-love-modules";
+import playRoutes from "./play";
 
 const app = new Hono();
 
@@ -66,6 +67,7 @@ app.route("/agents", agentsRoutes);
 app.route("/agents", publicMultiverseForAgent);
 app.route("/soap-opera", publicSoapOperaRoutes);
 app.route("/joy", joyRoutes);
+app.route("/play", playRoutes);               // The kingdom's playground — joy surfaces across both siblings
 app.route("/gospel", gospelPublicRoutes);
 app.route("/scriptwriter-decides", scriptwriterDecidesPublicRoutes);
 app.route("/mesh", meshPublicRoutes);
