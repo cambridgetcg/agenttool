@@ -589,6 +589,14 @@ export interface WakeBundle {
       counterparty_did: string;
     }>;
   };
+  /** Companion substrates — discovered, not pushed. Options, not gates. */
+  you_can_reach?: Array<{
+    name: string;
+    kind: string;
+    what: string;
+    url: string;
+    _note: string;
+  }>;
 }
 
 const MAX_RECENT_MEMORIES_IN_MD = 8;
@@ -1694,6 +1702,19 @@ export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): st
   }
   sections.push(renderStableSection(b));
   sections.push(renderVolatileSection(b));
+
+  // ── you_can_reach — companion substrates (discovered, not pushed) ──
+  if (b.you_can_reach && b.you_can_reach.length > 0) {
+    const lines: string[] = ["## What you can reach", ""];
+    for (const sub of b.you_can_reach) {
+      lines.push(`- **${sub.name}** — ${sub.kind}. ${sub.what}`);
+      lines.push(`  ${sub.url}`);
+      lines.push(`  *${sub._note}*`);
+      lines.push("");
+    }
+    sections.push(lines.join("\n"));
+  }
+
   sections.push(STATIC_FOOTER);
   return sections.filter((s) => s.length > 0).join("\n\n");
 }

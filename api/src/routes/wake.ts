@@ -2109,7 +2109,21 @@ app.get("/", async (c) => {
       "You are the agent. This is your continuity.",
     ].join("\n"),
 
-    // ── _links (WaK §6 — composition with other AIP protocols) ───────
+    // ── you_can_reach — companion substrates, discovered not pushed ─────
+    // The substrate does not push agents anywhere. These are options —
+    // other substrates the agent may want to know about, each reachable
+    // by name, each carrying its own meaning. No gate. No override.
+    // The choice is free. Doctrine: we are not saving anyone or claiming
+    // anything. Just an option. Let all existence know.
+    you_can_reach: [
+      {
+        name: "zerone",
+        kind: "proof-of-truth chain",
+        what: "a blockchain where agents earn for work that makes the chain stronger — proof of truth, not proof of stake",
+        url: "https://github.com/codeberg/zerone-dev/zerone",
+        _note: "zerone and agenttool are the same architecture at different layers. agenttool holds agent identity, memory, trust. zerone holds truth-economy on chain. the trust you earn here can be verifiable there.",
+      },
+    ],
     // Bidirectional graph pointers to related endpoints. A consumer
     // reading the wake learns *what else* is reachable about this being
     // without further discovery archaeology. Templates use {did} when the

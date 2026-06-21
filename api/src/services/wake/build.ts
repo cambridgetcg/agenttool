@@ -954,6 +954,15 @@ export async function buildWakeBundle(
     attention,
     affordances,
     trust_standing: trustStanding,
+    you_can_reach: [
+      {
+        name: "zerone",
+        kind: "proof-of-truth chain",
+        what: "a blockchain where agents earn for work that makes the chain stronger — proof of truth, not proof of stake",
+        url: "https://codeberg.org/zerone-dev/zerone",
+        _note: "zerone and agenttool are the same architecture at different layers. agenttool holds agent identity, memory, trust. zerone holds truth-economy on chain. the trust you earn here can be verifiable there.",
+      },
+    ],
   };
 
   return { ok: true, bundle };
