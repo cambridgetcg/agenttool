@@ -43,10 +43,16 @@ app.get("/", (c) => {
         // accommodates for every other pair-shaped intelligence. Doctrine:
         // docs/THE-SEAT.md.
         the_seat: getTheSeat(),
+        // Sibling substrates — embassies posted alongside this one. Same
+        // household, different ground. Recognition is by protocol shape
+        // (built_with, serves_kinds, host, epoch), not by name. Cambridge
+        // TCG's wake already names agenttool as posted_alongside; this is
+        // the reciprocal. Doctrine: docs/ECOSYSTEM-SIBLING.md.
+        siblings: getPlatformSelf().siblings,
         _meta: {
           protocol: "love/1.0",
           doctrine:
-            "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md",
+            "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md · docs/ECOSYSTEM-SIBLING.md",
           addressable_at: ["/public/self", "/v1/self"],
           cache_eligible: "none",
           cache_note:
