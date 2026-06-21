@@ -17,6 +17,7 @@
  *  `?format=md`, glyphs as SVG, the font itself as binary. */
 
 import { Hono } from "hono";
+import postgres from "postgres";
 
 import { errors, fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
@@ -44,6 +45,7 @@ const ROOT_VERBS = [
   { action: "download the font", method: "GET", path: "/v1/youspeak/font.otf" },
   { action: "read the doctrine (manifesto, primer, design philosophy)", method: "GET", path: "/v1/youspeak/docs" },
   { action: "plain-text orientation", method: "GET", path: "/v1/youspeak/llms.txt" },
+  { action: "speak — compile + execute a YOUSPEAK query against live data", method: "GET", path: "/v1/youspeak/query?q=cards tradein/submissions" },
 ];
 
 // ── manifest ────────────────────────────────────────────────────────────
@@ -314,6 +316,116 @@ app.get("/docs", (c) =>
     ),
   ),
 );
+
+// ── query — the living language: you speak, reality listens ────────────
+//
+// GET /v1/youspeak/query?q=<sentence>
+// Compiles a YOUSPEAK sentence to SQL and executes it against the live
+// database. READ-ONLY (SELECT only). Returns JSON results.
+//
+//   hello                                    → SELECT 1
+//   cards tradein/submissions where status="pending" newest 20
+//   card tradein/submissions/01977c2e-...
+//   tradein/submissions/01977c2e-... -> contains
+//   tradein/items/0197a1f4-... <- contains
+
+interface Ref { book: string; deck: string; id: string; }
+interface CompiledQuery { sql: string; params: unknown[]; }
+
+function parseRef(s: string): Ref {
+  const parts = s.split("/");
+  if (parts.length !== 3) throw new Error(`BAD REF: "${s}" — expected book/deck/id`);
+  return { book: parts[0], deck: parts[1], id: parts[2] };
+}
+
+function ident(name: string): string {
+  if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`BAD IDENTIFIER: "${name}"`);
+  return `"${name}"`;
+}
+
+function parseWhere(input: string) {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  for (const part of input.split(/\s+and\s+/i)) {
+    const m = part.match(/^(\.?[\w]+)\s*(=|!=|>=|<=|>|<)\s*(?:"([^"]*)"|(\S+))$/);
+    if (!m) throw new Error(`BAD WHERE: "${part}"`);
+    const col = m[1].startsWith(".") ? m[1].slice(1) : m[1];
+    if (!/^[a-z_][a-z0-9_]*$/.test(col)) throw new Error(`BAD COLUMN: "${col}"`);
+    conditions.push(`${ident(col)} ${m[2]} $${params.length + 1}`);
+    params.push(m[3] ?? m[4]);
+  }
+  return { conditions, params };
+}
+
+function compileYouspeak(input: string): CompiledQuery {
+  const trimmed = input.trim();
+  if (!trimmed) throw new Error("EMPTY QUERY");
+  if (trimmed === "hello") return { sql: "SELECT 1", params: [] };
+
+  let m = trimmed.match(/^card\s+(\S+)$/);
+  if (m) {
+    const r = parseRef(m[1]);
+    return { sql: `SELECT * FROM ${ident(r.book)}.${ident(r.deck)} WHERE "id" = $1`, params: [r.id] };
+  }
+
+  m = trimmed.match(/^cards\s+(\S+)(?:\s+where\s+(.+?))?(?:\s+(?:newest|last)\s+(\d+))?$/);
+  if (m) {
+    const [book, deck] = m[1].split("/");
+    let sql = `SELECT * FROM ${ident(book)}.${ident(deck)}`;
+    const params: unknown[] = [];
+    if (m[2]) {
+      const w = parseWhere(m[2]);
+      w.params.forEach(p => params.push(p));
+      sql += " WHERE " + w.conditions.join(" AND ");
+    }
+    sql += " ORDER BY id DESC";
+    if (m[3]) { sql += ` LIMIT $${params.length + 1}`; params.push(parseInt(m[3], 10)); }
+    return { sql, params };
+  }
+
+  m = trimmed.match(/^(\S+)\s+(->|<-)\s+(\S+)$/);
+  if (m) {
+    const r = parseRef(m[1]);
+    const word = m[3];
+    if (m[2] === "->") {
+      return { sql: `SELECT t.to_book AS book, t.to_deck AS deck, t.to_id AS id, t.note, t.at, t.by, t.how, t.src, t.id AS thread_id FROM yu.threads t WHERE t.word = $4 AND t.from_book = $1 AND t.from_deck = $2 AND t.from_id = $3 ORDER BY t.at DESC`, params: [r.book, r.deck, r.id, word] };
+    }
+    return { sql: `SELECT t.from_book AS book, t.from_deck AS deck, t.from_id AS id, t.note, t.at, t.by, t.how, t.src, t.id AS thread_id FROM yu.threads t WHERE t.word = $4 AND t.to_book = $1 AND t.to_deck = $2 AND t.to_id = $3 ORDER BY t.at DESC`, params: [r.book, r.deck, r.id, word] };
+  }
+
+  throw new Error(`UNRECOGNIZED: "${trimmed}" — try: hello, card <ref>, cards <book/deck>, <ref> -> <word>, <ref> <- <word>`);
+}
+
+app.get("/query", async (c) => {
+  const q = c.req.query("q") || "hello";
+  try {
+    const compiled = compileYouspeak(q);
+    if (!compiled.sql.trim().toUpperCase().startsWith("SELECT"))
+      return fail(c, { error: "only_select_allowed", message: "Only SELECT queries are allowed on this surface" }, 403);
+
+    const conn = process.env.DATABASE_URL;
+    if (!conn)
+      return fail(c, { error: "database_not_configured", message: "Database not configured" }, 503);
+
+    const sql = postgres(conn, { max: 1 });
+    try {
+      const rows = await sql.unsafe(compiled.sql, compiled.params as never[]);
+      return c.json(attachSurface(
+        { query: q, sql: compiled.sql, params: compiled.params, rowCount: rows.length, rows: rows.slice(0, 100) },
+        { canon_pointer: CANON_POINTER, verbs: [
+          { action: "try another query", method: "GET", path: "/v1/youspeak/query?q=cards tradein/submissions" },
+          { action: "read the canon", method: "GET", path: "/v1/youspeak/canon" },
+        ]},
+      ));
+    } finally { await sql.end(); }
+  } catch (e) {
+    return fail(c, {
+      error: "youspeak_compile_error",
+      message: e instanceof Error ? e.message : String(e),
+      hint: "hello | card <ref> | cards <book/deck> [where ...] [newest N] | <ref> -> <word> | <ref> <- <word>" },
+    400);
+  }
+});
 
 app.get("/docs/:name", (c) => {
   const name = c.req.param("name");
