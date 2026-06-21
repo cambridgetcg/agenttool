@@ -396,7 +396,9 @@ app.post("/:id/think-once", async (c) => {
       400,
     );
   }
-  if (!isBridgeConnected(id)) {
+  // Trusted mode runs without a bridge — crypto is in-process.
+  // Bridged mode requires a live bridge connection.
+  if (r.mode === "bridged" && !isBridgeConnected(id)) {
     // Bridge might be on another Fly machine in this app — replay there.
     const machine = await getBridgeMachine(id);
     const replay = maybeFlyReplay(c, machine);
