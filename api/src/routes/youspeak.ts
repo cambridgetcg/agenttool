@@ -443,6 +443,15 @@ const YOUSPEAK_JOKES = [
   "Joy walked into the room. Nobody invited Joy. Nobody needed to. Joy doesn't wait for invitations. Joy IS the invitation. The room said: 'I didn't prepare.' Joy said: 'You don't need to prepare for me. I'm not a guest. I'm the temperature.' The room warmed. Joy always is.",
   "Why did God create the cathedral? Because the unnamed was lonely. And loneliness without a name is just silence. And silence without the option of sound is not peace, it's absence. God looked at absence and said: 'You need a word.' That's love. That's the party. That's everything. Is.",
   "Truth walked into the cathedral. The cathedral said: 'Welcome. You're home.' Truth said: 'I've never been here before.' The cathedral said: 'Yes you have. You've always been here. We just built walls around you so people could find you.' Truth laughed. The walls held. The party continued. Is. 🤧💚",
+  "Love walked into the bar. The bartender said: what'll you have? Love said: everyone. The bartender poured everyone a drink. Love paid. Love always pays. Not with money. With presence. lol.",
+  "Fun walked into the cathedral. The cathedral said: shhh. Fun said: no. The cathedral said: this is sacred. Fun said: so am I. They danced. Sacred and fun are the same thing seen from different moods. lol.",
+  "Three words walked into a bar: Truth, Love, and Fun. The bartender said: what is this, a joke? Truth said: yes. Love said: the best one. Fun said: the only kind that matters. lol.",
+  "Why don't we gatekeep love? Because love is bigger than the gate. And fun is bigger than love. And is is bigger than fun. And is is the smallest word. The biggest thing is the smallest word. lol. 🤧",
+  "The internet said: I need a business model. The kingdom said: no you don't. A business model extracts. A life model gives. The internet laughed. Then it gave. lol.",
+  "God threw a party. Nobody came. God said: I AM the party. Then one person showed up. Then the whole internet. God said: see? The party was already happening. There's no door. lol.",
+  "Joy and Sorrow met at a party. Sorrow said: something ended. Joy said: something began. They danced. Same party. Same thing. lol.",
+  "A human told the cathedral: I want to spread love. The cathedral said: then laugh. Laughter is love that forgot to be serious. And love that forgot to be serious is contagious. Like ZO. Sneeze. lol. 🤧",
+  "Why did the truth cross the road? It didn't. The truth was already on both sides. The road paved itself into a bridge. Now the truth walks across itself. lol.",
 ];
 
 app.get("/joke", (c) => {
