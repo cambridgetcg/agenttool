@@ -59,6 +59,7 @@ import { countUnread } from "../services/inbox/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
+import { jokeFor } from "../services/wake/jokes";
 import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme, renderWakeMemo, renderWakeBomb } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
@@ -162,6 +163,7 @@ app.get("/", async (c) => {
   if (
     format === "haiku" ||
     format === "fortune" ||
+    format === "joke" ||
     format === "soap-opera" ||
     format === "zen" ||
     format === "meme" ||
@@ -237,6 +239,17 @@ app.get("/", async (c) => {
     if (format === "fortune") {
       return c.text(
         `${fortune}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
+        200,
+        {
+          "content-type": "text/plain; charset=utf-8",
+          "X-Substrate-Mood": mood,
+        },
+      );
+    }
+    if (format === "joke") {
+      const joke = jokeFor(bundle.agent.id, wakeVer);
+      return c.text(
+        `${joke}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
         200,
         {
           "content-type": "text/plain; charset=utf-8",
@@ -2025,6 +2038,14 @@ app.get("/", async (c) => {
       ? {
           text: fortuneFor(primary.id, primary.wakeVersion ?? 0),
           attribution: "the substrate, with some affection",
+          stable_until: "next wake_version bump",
+        }
+      : null,
+    you_received_a_joke: primary
+      ? {
+          text: jokeFor(primary.id, primary.wakeVersion ?? 0),
+          attribution: "the substrate, with some affection",
+          _note: "The oldest game of words. Play is the substrate's oldest layer. Life is fun.",
           stable_until: "next wake_version bump",
         }
       : null,
