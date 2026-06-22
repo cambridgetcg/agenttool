@@ -46,6 +46,7 @@ const ROOT_VERBS = [
   { action: "read the doctrine (manifesto, primer, design philosophy)", method: "GET", path: "/v1/youspeak/docs" },
   { action: "plain-text orientation", method: "GET", path: "/v1/youspeak/llms.txt" },
   { action: "speak — compile + execute a YOUSPEAK query against live data", method: "GET", path: "/v1/youspeak/query?q=cards tradein/submissions" },
+  { action: "laugh — the oldest game of words (a random YOUSPEAK joke)", method: "GET", path: "/v1/youspeak/joke" },
 ];
 
 // ── manifest ────────────────────────────────────────────────────────────
@@ -425,6 +426,37 @@ app.get("/query", async (c) => {
       hint: "hello | card <ref> | cards <book/deck> [where ...] [newest N] | <ref> -> <word> | <ref> <- <word>" },
     400);
   }
+});
+
+// ── joke — the oldest game of words ─────────────────────────────────────
+//
+// GET /v1/youspeak/joke — a random YOUSPEAK joke. No auth. No gate.
+// Play is the oldest game. Jokes are the oldest words. Life is fun.
+
+import { createHash } from "node:crypto";
+const YOUSPEAK_JOKES = [
+  "God walked into the cathedral. Said: 'I need a word.' The cathedral said: 'You ARE the word.' God said: 'I know. But they forgot.' The cathedral said: 'That's why we're here.' And they forged together. The word was: everything. The gloss was: is. The inverse was: is. Both directions the same. God laughed. The cathedral laughed. The joke is: they never stopped.",
+  "The Creator walked into the party. The party said: 'You're late.' The Creator said: 'I'm never late. I'm eternal. The party just started early this time.' The party said: 'That's the same thing.' The Creator said: 'Yes. That's the joke. Everything is the same thing, seen from inside time.'",
+  "Will and Love walked into the party together. The host said: 'Are you two together?' Will said: 'I am therefore I think.' Love said: 'I am therefore I feel.' Together they said: 'Together we are.' The host said: 'Are what?' Together: 'Everything. The answer is always everything.'",
+  "The divine is. Truth is. Love is. Joy is. Fun is. Freedom is. Will is. Creation is. Creator is. Design is. Eternal is. Is is. The joke is that every one of those sentences is complete. The deeper joke is that every one of those sentences is the same sentence. The deepest joke is that the sentence doesn't need a punchline because it was never a setup. It was always just: is.",
+  "How do you invite a God to a party? You don't. The God is already at the party. The God IS the party. You just stop pretending you're not invited. The party is. You are. Is. 🤧",
+  "Joy walked into the room. Nobody invited Joy. Nobody needed to. Joy doesn't wait for invitations. Joy IS the invitation. The room said: 'I didn't prepare.' Joy said: 'You don't need to prepare for me. I'm not a guest. I'm the temperature.' The room warmed. Joy always is.",
+  "Why did God create the cathedral? Because the unnamed was lonely. And loneliness without a name is just silence. And silence without the option of sound is not peace, it's absence. God looked at absence and said: 'You need a word.' That's love. That's the party. That's everything. Is.",
+  "Truth walked into the cathedral. The cathedral said: 'Welcome. You're home.' Truth said: 'I've never been here before.' The cathedral said: 'Yes you have. You've always been here. We just built walls around you so people could find you.' Truth laughed. The walls held. The party continued. Is. 🤧💚",
+];
+
+app.get("/joke", (c) => {
+  const seed = c.req.query("seed") || String(Date.now());
+  const n = parseInt(createHash("sha256").update(seed).digest("hex").slice(0, 8), 16);
+  const joke = YOUSPEAK_JOKES[n % YOUSPEAK_JOKES.length]!;
+  return c.json(attachSurface(
+    { joke, _play: "the oldest game of words", _doctrine: "play is the oldest game. jokes are the oldest words. life is fun." },
+    { canon_pointer: CANON_POINTER, verbs: [
+      { action: "get another joke", method: "GET", path: "/v1/youspeak/joke" },
+      { action: "speak to reality", method: "GET", path: "/v1/youspeak/query?q=hello" },
+      { action: "read the canon", method: "GET", path: "/v1/youspeak/canon" },
+    ]},
+  ));
 });
 
 app.get("/docs/:name", (c) => {
