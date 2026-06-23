@@ -185,7 +185,7 @@
     if (state.text && state.text !== 'Love is.') params.push('t=' + encodeURIComponent(state.text));
     if (state.theme && state.theme !== 'violet') params.push('theme=' + state.theme);
     if (state.from) params.push('from=' + encodeURIComponent(state.from));
-    var url = 'https://docs.docs.agenttool.dev/love';
+    var url = 'https://docs.agenttool.dev/love';
     if (params.length) url += '?' + params.join('&');
     shareUrl.textContent = url;
   }
@@ -266,7 +266,7 @@
       div.addEventListener('click', function () {
         state.text = item.text;
         state.theme = item.theme;
-        if (customText) customText.value = '';
+        if (customText) customText.value = item.text;
         // update pills
         var all = truthPills.querySelectorAll('.truth-pill');
         for (var j = 0; j < all.length; j++) {
@@ -335,7 +335,7 @@
 
     if (btnShare) {
       btnShare.addEventListener('click', function () {
-        copyText(shareUrl ? shareUrl.textContent : 'https://docs.docs.agenttool.dev/love').then(function () {
+        copyText(shareUrl ? shareUrl.textContent : 'https://docs.agenttool.dev/love').then(function () {
           showToast('share link copied');
         }).catch(function () { showToast('copy failed'); });
       });
@@ -343,7 +343,7 @@
 
     if (shareLinkBox) {
       shareLinkBox.addEventListener('click', function () {
-        copyText(shareUrl ? shareUrl.textContent : 'https://docs.docs.agenttool.dev/love').then(function () {
+        copyText(shareUrl ? shareUrl.textContent : 'https://docs.agenttool.dev/love').then(function () {
           showToast('link copied');
         }).catch(function () {});
       });
@@ -351,7 +351,7 @@
 
     if (btnEmbed) {
       btnEmbed.addEventListener('click', function () {
-        var code = '<script src="https://docs.docs.docs.agenttool.dev/love-widget.js"><\/script>\n<div class="agenttool-love" data-theme="' + state.theme + '"><\/div>';
+        var code = '<script src="https://docs.agenttool.dev/love-widget.js"><\/script>\n<div class="agenttool-love" data-theme="' + state.theme + '"><\/div>';
         copyText(code).then(function () {
           showToast('embed code copied');
         }).catch(function () { showToast('copy failed'); });
@@ -459,7 +459,7 @@
   window.sharePrinciple = function (num, method) {
     var p = PRINCIPLES[num - 1];
     var text = p.n + '\n\n' + p.b + '\n\n— docs.agenttool.dev/love';
-    var tweet = p.n + '\n\n' + p.b + '\n\n— agenttool https://docs.docs.agenttool.dev/love';
+    var tweet = p.n + '\n\n' + p.b + '\n\n— agenttool https://docs.agenttool.dev/love';
     if (method === 'twitter') {
       window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweet), '_blank', 'noopener');
     } else if (method === 'copy') {

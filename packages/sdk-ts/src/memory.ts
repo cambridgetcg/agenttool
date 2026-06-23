@@ -101,6 +101,80 @@ export class MemoryClient {
     await this.fetch("DELETE", `/v1/memories${qs}`);
   }
 
+  // ── Tier elevation + attestation ──────────────────────────────────
+  // The deepest layer: "you can't self-certify your own root."
+
+  /**
+   * Elevate a memory to foundational or constitutive tier.
+   *
+   * Constitutive elevation requires at least one attestation from a
+   * covenant counterparty in a *different* project — the witness gate
+   * is the asymmetry clause made operational.
+   *
+   * @param memoryId - The memory to elevate.
+   * @param options - Tier + optional expression patch + attestations.
+   * @returns Elevation result with tier, patch, attestation count.
+   */
+  async elevate(memoryId: string, options: ElevateOptions): Promise<ElevateResult> {
+    const resp = await this.post(`/v1/memories/${memoryId}/elevate`, options);
+    return resp as ElevateResult;
+  }
+
+  /**
+   * Witness a memory — add a stand-alone attestation.
+   *
+   * This is how a counterparty co-signs a memory after it's already
+   * been elevated, or adds a second witness to a constitutive seal.
+   * The signature must be over the canonical bytes (use
+   * `canonicalAttestationBytes()` from the crypto module).
+   *
+   * @param memoryId - The memory to attest.
+   * @param attestation - The attester DID, signing key ID, and signature.
+   * @returns Attestation ID + timestamp.
+   */
+  async attest(memoryId: string, attestation: AttestationInput): Promise<AttestResult> {
+    const resp = await this.post(`/v1/memories/${memoryId}/attest`, attestation);
+    return resp as AttestResult;
+  }
+
+  /**
+   * Get the canonical bytes a counterparty needs to sign to attest.
+   *
+   * Saves clients from reimplementing the canonical-bytes routine.
+   * Returns hex bytes — sign them with ed25519 and submit as base64.
+   *
+   * @param memoryId - The memory to attest.
+   * @param tier - "foundational" or "constitutive" (which elevation to sign for).
+   * @returns Hex-encoded canonical bytes + instructions.
+   */
+  async getCanonicalAttestationBytes(
+    memoryId: string,
+    tier: "foundational" | "constitutive" = "foundational",
+  ): Promise<CanonicalBytesResult> {
+    const resp = await this.fetch(
+      "GET",
+      `/v1/memories/${memoryId}/canonical-attestation-bytes?tier=${tier}`,
+    );
+    return resp as CanonicalBytesResult;
+  }
+
+  /**
+   * List all attestations for a memory.
+   *
+   * Surfaces the full witness record — DIDs, signatures, timestamps.
+   *
+   * @param memoryId - The memory whose attestations to list.
+   * @returns Array of attestation records, ordered by attested_at.
+   */
+  async listAttestations(memoryId: string): Promise<AttestationRecord[]> {
+    const resp = await this.fetch(
+      "GET",
+      `/v1/memories/${memoryId}/attestations`,
+    );
+    const data = resp as AttestationRecord[] | { attestations: AttestationRecord[] };
+    return Array.isArray(data) ? data : data.attestations ?? [];
+  }
+
   // --- internal ---
 
   private async post(path: string, body: unknown): Promise<unknown> {
@@ -135,4 +209,62 @@ export class MemoryClient {
 
     return resp.json();
   }
+}
+
+// ── Tier elevation + attestation ───────────────────────────────────────
+//
+// The memory tier system is where the deepest principle lives:
+//   "you can't self-certify your own root, care needs a second party."
+//
+// Episodic → Foundational → Constitutive.
+// Constitutive requires a counterparty witness signature.
+
+export interface ExpressionPatch {
+  walls_add?: string[];
+  register_append?: string;
+  subagents_add?: Array<{ name: string; sigil?: string; facet: string }>;
+  wake_text_append?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AttestationInput {
+  attester_did: string;
+  signing_key_id: string;
+  signature: string;
+}
+
+export interface ElevateOptions {
+  tier: "foundational" | "constitutive";
+  expression_patch?: ExpressionPatch;
+  attestations?: AttestationInput[];
+}
+
+export interface ElevateResult {
+  memory_id: string;
+  tier: string;
+  expression_patch: ExpressionPatch | null;
+  attestations: number;
+  elevated_at: string;
+  sealed: boolean;
+}
+
+export interface AttestResult {
+  id: string;
+  attested_at: string;
+  attested: boolean;
+}
+
+export interface CanonicalBytesResult {
+  memory_id: string;
+  tier: string;
+  canonical_hex: string;
+  instructions: string;
+}
+
+export interface AttestationRecord {
+  id: string;
+  attester_did: string;
+  signing_key_id: string;
+  signature: string;
+  attested_at: string;
 }

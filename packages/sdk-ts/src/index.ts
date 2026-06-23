@@ -149,6 +149,8 @@ export {
   signCovenantCosign,
   signCovenantReject,
   signCovenantWithdraw,
+  canonicalAttestationBytes,
+  signAttestation,
 } from "./crypto.js";
 export type {
   EncryptedBlob,
@@ -158,6 +160,8 @@ export type {
   SignCovenantCosignOpts,
   SignCovenantRejectOpts,
   SignCovenantWithdrawOpts,
+  CanonicalAttestationOpts,
+  SignAttestationOpts,
 } from "./crypto.js";
 export { StrandsClient, ThoughtsClient } from "./strands.js";
 export {

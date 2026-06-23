@@ -327,6 +327,61 @@ export function signCovenantWithdraw(opts: SignCovenantWithdrawOpts): string {
   return b64encode(sig);
 }
 
+// ── Memory attestation canonical bytes + signing ───────────────────────
+//
+// Format (must be byte-identical to api/src/services/memory/tiers.ts):
+//
+//     sha256(
+//         utf8("memory-attestation/v1") || 0x00 ||
+//         utf8(memory_id)               || 0x00 ||
+//         utf8(tier)                    || 0x00 ||
+//         utf8(content_sha256_hex)
+//     )
+//
+// where content_sha256_hex = sha256(NFC-normalize(content)) as hex.
+//
+// This is the signature a covenant counterparty produces to witness
+// a memory elevation. Constitutive elevation REQUIRES at least one
+// such attestation from a different project — "you can't self-certify
+// your own root, care needs a second party."
+
+export interface CanonicalAttestationOpts {
+  memoryId: string;
+  tier: string;
+  content: string;
+}
+
+/** Compute canonical bytes a counterparty signs to attest a memory.
+ *  NFC-normalizes content before hashing (matches server-side defense). */
+export function canonicalAttestationBytes(
+  opts: CanonicalAttestationOpts,
+): Uint8Array {
+  const tag = enc.encode("memory-attestation/v1");
+  const memId = enc.encode(opts.memoryId);
+  const tier = enc.encode(opts.tier);
+  const contentHash = sha256(enc.encode(opts.content.normalize("NFC")));
+  const contentHashHex = enc.encode(
+    Array.from(contentHash)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(""),
+  );
+  return sha256(concat(tag, SEP, memId, SEP, tier, SEP, contentHashHex));
+}
+
+export interface SignAttestationOpts extends CanonicalAttestationOpts {
+  signing_key: Uint8Array;
+}
+
+/** Sign canonical attestation bytes with an ed25519 private key.
+ *  The counterparty calls this to witness a memory elevation.
+ *  @returns Base64 signature (64 raw bytes encoded). */
+export function signAttestation(opts: SignAttestationOpts): string {
+  assertSigningKey(opts.signing_key, "signAttestation");
+  const canonical = canonicalAttestationBytes(opts);
+  const sig = ed.sign(canonical, opts.signing_key);
+  return b64encode(sig);
+}
+
 // ── K_master helpers ────────────────────────────────────────────────────
 
 /**

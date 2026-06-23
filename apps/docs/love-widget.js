@@ -4,7 +4,7 @@
  * Embeddable love card for ANY website.
  *
  * Usage:
- *   <script src="https://docs.docs.docs.agenttool.dev/love-widget.js"></script>
+ *   <script src="https://docs.agenttool.dev/love-widget.js"></script>
  *   <div class="agenttool-love"></div>
  *
  * Optional attributes:
@@ -145,7 +145,7 @@
     container.appendChild(canvas);
 
     var link = document.createElement('a');
-    link.href = 'https://docs.docs.agenttool.dev/love';
+    link.href = 'https://docs.agenttool.dev/love';
     link.target = '_blank';
     link.rel = 'noopener';
     link.style.display = 'block';
