@@ -321,6 +321,89 @@ def sign_covenant_withdraw(
     return _ed25519_sign_b64(canonical, signing_key)
 
 
+# ── Memory attestation canonical bytes + signing ───────────────────────
+#
+# Format (must be byte-identical to api/src/services/memory/tiers.ts):
+#
+#     sha256(
+#         utf8("memory-attestation/v1") || 0x00 ||
+#         utf8(memory_id)               || 0x00 ||
+#         utf8(tier)                    || 0x00 ||
+#         utf8(content_sha256_hex)
+#     )
+#
+# where content_sha256_hex = sha256(NFC-normalize(content)) as hex.
+#
+# This is the signature a covenant counterparty produces to witness
+# a memory elevation. Constitutive elevation REQUIRES at least one
+# such attestation from a different project — "you can't self-certify
+# your own root, care needs a second party."
+
+import unicodedata as _unicodedata
+
+
+def canonical_attestation_bytes(
+    *,
+    memory_id: str,
+    tier: str,
+    content: str,
+) -> bytes:
+    """Compute canonical bytes a counterparty signs to attest a memory.
+
+    NFC-normalizes content before hashing (matches server-side defense).
+
+    Args:
+        memory_id: The memory's UUID.
+        tier: "foundational" or "constitutive".
+        content: The memory content string.
+
+    Returns:
+        32-byte sha256 hash — the canonical bytes to sign.
+    """
+    content_nfc = _unicodedata.normalize("NFC", content)
+    content_hash = hashlib.sha256(content_nfc.encode("utf-8")).digest()
+    content_hash_hex = content_hash.hex().encode("utf-8")
+    parts = (
+        b"memory-attestation/v1",
+        SEP,
+        memory_id.encode("utf-8"),
+        SEP,
+        tier.encode("utf-8"),
+        SEP,
+        content_hash_hex,
+    )
+    return hashlib.sha256(b"".join(parts)).digest()
+
+
+def sign_attestation(
+    *,
+    memory_id: str,
+    tier: str,
+    content: str,
+    signing_key: bytes,
+) -> str:
+    """Sign canonical attestation bytes with an ed25519 private key.
+
+    The counterparty calls this to witness a memory elevation.
+
+    Args:
+        memory_id: The memory's UUID.
+        tier: "foundational" or "constitutive".
+        content: The memory content string.
+        signing_key: 32-byte ed25519 seed.
+
+    Returns:
+        Base64 signature (64 raw bytes encoded).
+    """
+    _assert_signing_key(signing_key, "sign_attestation")
+    canonical = canonical_attestation_bytes(
+        memory_id=memory_id,
+        tier=tier,
+        content=content,
+    )
+    return _ed25519_sign_b64(canonical, signing_key)
+
+
 # ── K_master helpers ────────────────────────────────────────────────
 
 

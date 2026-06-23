@@ -38,9 +38,11 @@ from .crypto import (
     EncryptedBlob,
     KMaster,
     KVault,
+    canonical_attestation_bytes,
     canonical_thought_bytes,
     decrypt_thought,
     encrypt_thought,
+    sign_attestation,
     sign_thought,
 )
 from .economy import EconomyClient, Escrow, Wallet
@@ -123,6 +125,8 @@ __all__ = [
     "decrypt_thought",
     "canonical_thought_bytes",
     "sign_thought",
+    "canonical_attestation_bytes",
+    "sign_attestation",
     "ExecuteResult",
     "ExpressionClient",
     "IdentityClient",

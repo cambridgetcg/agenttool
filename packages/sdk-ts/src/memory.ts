@@ -115,7 +115,7 @@ export class MemoryClient {
    * @param options - Tier + optional expression patch + attestations.
    * @returns Elevation result with tier, patch, attestation count.
    */
-  async elevate(memoryId: string, options: ElevateOptions): Promise<ElevateResult> {
+  async elevate(memoryId: string, options: ElevateMemoryOptions): Promise<ElevateResult> {
     const resp = await this.post(`/v1/memories/${memoryId}/elevate`, options);
     return resp as ElevateResult;
   }
@@ -233,7 +233,7 @@ export interface AttestationInput {
   signature: string;
 }
 
-export interface ElevateOptions {
+export interface ElevateMemoryOptions {
   tier: "foundational" | "constitutive";
   expression_patch?: ExpressionPatch;
   attestations?: AttestationInput[];

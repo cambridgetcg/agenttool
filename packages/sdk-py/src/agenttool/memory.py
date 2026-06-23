@@ -216,3 +216,112 @@ class MemoryClient:
         """
         resp = self._http.delete(self._url("/v1/memories"), params={"key": key})
         _raise_for_status(resp, "Memory delete_by_key")
+
+    # ── Tier elevation + attestation ──────────────────────────────
+    # The deepest layer: "you can't self-certify your own root."
+
+    def elevate(
+        self,
+        memory_id: str,
+        *,
+        tier: str,
+        expression_patch: Optional[Dict[str, Any]] = None,
+        attestations: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Elevate a memory to foundational or constitutive tier.
+
+        Constitutive elevation requires at least one attestation from a
+        covenant counterparty in a *different* project — the witness
+        gate is the asymmetry clause made operational.
+
+        Args:
+            memory_id: The memory to elevate.
+            tier: "foundational" or "constitutive".
+            expression_patch: Optional patch to the agent's expression.
+            attestations: Optional list of counterparty attestations.
+
+        Returns:
+            Elevation result with tier, patch, attestation count.
+        """
+        body: Dict[str, Any] = {"tier": tier}
+        if expression_patch is not None:
+            body["expression_patch"] = expression_patch
+        if attestations is not None:
+            body["attestations"] = attestations
+        resp = self._http.post(self._url(f"/v1/memories/{memory_id}/elevate"), json=body)
+        _raise_for_status(resp, "Memory elevate")
+        return resp.json()
+
+    def attest(
+        self,
+        memory_id: str,
+        *,
+        attester_did: str,
+        signing_key_id: str,
+        signature: str,
+    ) -> Dict[str, Any]:
+        """Witness a memory — add a stand-alone attestation.
+
+        This is how a counterparty co-signs a memory after it's already
+        been elevated, or adds a second witness to a constitutive seal.
+
+        Args:
+            memory_id: The memory to attest.
+            attester_did: The witness's DID.
+            signing_key_id: UUID of the witness's signing key.
+            signature: Base64 ed25519 signature over canonical bytes.
+
+        Returns:
+            Attestation ID + timestamp.
+        """
+        body = {
+            "attester_did": attester_did,
+            "signing_key_id": signing_key_id,
+            "signature": signature,
+        }
+        resp = self._http.post(self._url(f"/v1/memories/{memory_id}/attest"), json=body)
+        _raise_for_status(resp, "Memory attest")
+        return resp.json()
+
+    def get_canonical_attestation_bytes(
+        self,
+        memory_id: str,
+        *,
+        tier: str = "foundational",
+    ) -> Dict[str, Any]:
+        """Get the canonical bytes a counterparty needs to sign.
+
+        Saves clients from reimplementing the canonical-bytes routine.
+        Returns hex bytes — sign them with ed25519 and submit as base64.
+
+        Args:
+            memory_id: The memory to attest.
+            tier: "foundational" or "constitutive".
+
+        Returns:
+            Dict with canonical_hex, memory_id, tier, instructions.
+        """
+        resp = self._http.get(
+            self._url(f"/v1/memories/{memory_id}/canonical-attestation-bytes"),
+            params={"tier": tier},
+        )
+        _raise_for_status(resp, "Memory canonical-attestation-bytes")
+        return resp.json()
+
+    def list_attestations(self, memory_id: str) -> List[Dict[str, Any]]:
+        """List all attestations for a memory.
+
+        Surfaces the full witness record — DIDs, signatures, timestamps.
+
+        Args:
+            memory_id: The memory whose attestations to list.
+
+        Returns:
+            List of attestation records, ordered by attested_at.
+        """
+        resp = self._http.get(self._url(f"/v1/memories/{memory_id}/attestations"))
+        _raise_for_status(resp, "Memory list-attestations")
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        return data.get("attestations", [])

@@ -163,6 +163,16 @@ export type {
   CanonicalAttestationOpts,
   SignAttestationOpts,
 } from "./crypto.js";
+export { MemoryClient } from "./memory.js";
+export type {
+  ExpressionPatch,
+  AttestationInput,
+  ElevateMemoryOptions,
+  ElevateResult,
+  AttestResult,
+  CanonicalBytesResult,
+  AttestationRecord,
+} from "./memory.js";
 export { StrandsClient, ThoughtsClient } from "./strands.js";
 export {
   InboxClient,
