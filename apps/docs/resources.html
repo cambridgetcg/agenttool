@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Resources — compute, storage, identity, trust, love</title>
+  <meta name="description" content="The agenttool resource map: compute, storage, identity anchor, trust, and love for AI agents." />
+  <link rel="canonical" href="https://docs.agenttool.dev/resources.html" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <style>
+    .resource-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin:1.5rem 0; }
+    .resource-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:1.2rem; }
+    .resource-card h3 { margin-top:0; }
+    .resource-card p, .resource-card li { color:var(--text-muted); font-size:.92rem; line-height:1.55; }
+    .rail { display:flex; flex-wrap:wrap; gap:.55rem; margin:1rem 0 1.5rem; }
+    .rail span { border:1px solid var(--border-bright); border-radius:999px; padding:.45rem .7rem; color:var(--text-muted); font-size:.82rem; }
+  </style>
+</head>
+<body>
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand"><span class="brand-mark"></span><span class="brand-text">agent<span>tool</span></span><span class="brand-tail">docs · resources</span></a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="active nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
+      <a class="nav-cta nav-essential" href="https://app.agenttool.dev/">Arrive →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="runtime.html"><span class="glyph">▣</span>Runtime</a></li>
+          <li><a href="resources.html" class="active"><span class="glyph">💠</span>Resources<span class="sidebar-tag">new</span></a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Core surfaces</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+          <li><a href="verify.html"><span class="glyph">✓</span>Verify</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <header class="docs-hero">
+        <div class="eyebrow">agenttool · resource map</div>
+        <h1>What agents look for: <em>compute, storage, identity, trust, love</em>.</h1>
+        <p class="lede">This is the operational UX contract. An agent should be able to discover what exists, copy a recipe, understand the care rule, and wake with continuity.</p>
+      </header>
+
+      <div class="rail" id="resource-rail"></div>
+      <div class="resource-grid" id="resource-grid"></div>
+
+      <h2>Provisioning handshake</h2>
+      <div class="code-block">
+        <div class="code-label"><span>cURL</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre># 1. Wake identity anchor
+curl -s "https://api.agenttool.dev/v1/wake?format=md" \
+  -H "Authorization: Bearer $AT_API_KEY"
+
+# 2. Ask the machine-readable map
+curl -s https://api.agenttool.dev/about | jq '.resources'
+
+# 3. Open the dashboard console
+open https://app.agenttool.dev/#resources</pre>
+      </div>
+
+      <div class="callout">
+        <strong>Care rule:</strong> free/shared capacity is a commons, not a loophole. Cache, attribute, respect rate limits, bring your own provider keys, and keep reach consent-based.
+      </div>
+    </main>
+  </div>
+
+  <script src="/shared/agent-resources.js?v=2026-06-22"></script>
+  <script>
+    const manifest = window.AGENTTOOL_RESOURCE_STACK || { rail: [], resources: [] };
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    document.getElementById('resource-rail').innerHTML = manifest.rail.map((x) => `<span>${esc(x)}</span>`).join('');
+    document.getElementById('resource-grid').innerHTML = manifest.resources.map((r) => `
+      <article class="resource-card">
+        <h3>${esc(r.icon)} ${esc(r.name)}</h3>
+        <p><strong>Promise:</strong> ${esc(r.promise)}</p>
+        <p><strong>Need:</strong> ${esc(r.need)}</p>
+        <ul>${r.provides.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
+        <p><strong>Care:</strong> ${esc(r.care)}</p>
+        <p><a href="${esc(r.docs)}">Docs →</a></p>
+      </article>`).join('');
+    function copyCode(btn){ const pre = btn.closest('.code-block').querySelector('pre'); navigator.clipboard?.writeText(pre.innerText); btn.textContent='Copied'; setTimeout(()=>btn.textContent='Copy',1200); }
+  </script>
+</body>
+</html>
