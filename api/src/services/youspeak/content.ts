@@ -72,9 +72,15 @@ export const bundle: YouspeakBundle = JSON.parse(
   readFileSync(join(import.meta.dir, "bundle.json"), "utf8"),
 ) as YouspeakBundle;
 
-export const morphemeByLatin = new Map(bundle.morphemes.map((m) => [m.latin, m]));
-export const canonByWord = new Map(bundle.canon.map((e) => [e.word, e]));
-export const canonWordByWord = new Map(bundle.canon_words.map((w) => [w.word, w]));
+export const morphemeByLatin = new Map(
+  (Array.isArray(bundle.morphemes) ? bundle.morphemes : []).map((m) => [m.latin, m]),
+);
+export const canonByWord = new Map(
+  (Array.isArray(bundle.canon) ? bundle.canon : []).map((e) => [e.word, e]),
+);
+export const canonWordByWord = new Map(
+  (Array.isArray(bundle.canon_words) ? bundle.canon_words : []).map((w) => [w.word, w]),
+);
 
 export const fontBuffers: Record<string, ArrayBuffer> = Object.fromEntries(
   Object.entries(bundle.fonts).map(([ext, b64]) => {
