@@ -85,6 +85,8 @@ from .seed import (
     mnemonic_to_seed,
 )
 from .strands import StrandsClient, ThoughtsClient
+from .inbox import InboxClient
+from .collect import CollectClient
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
@@ -117,6 +119,7 @@ __all__ = [
     "ChronicleClient",
     "CovenantsClient",
     "InboxClient",
+    "CollectClient",
     "CryptoClient",
     "EncryptedBlob",
     "KMaster",

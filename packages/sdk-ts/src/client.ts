@@ -12,6 +12,7 @@ import { InboxClient } from "./inbox.js";
 import { MemoryClient, type HttpConfig } from "./memory.js";
 import { StrandsClient } from "./strands.js";
 import { CollectClient } from "./collect.js";
+import { AtRestClient } from "./at-rest.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -59,6 +60,7 @@ export class AgentTool {
   private _crypto: CryptoClient | undefined;
   private _inbox: InboxClient | undefined;
   private _collect: CollectClient | undefined;
+  private _atRest: AtRestClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -185,6 +187,13 @@ export class AgentTool {
       strands: this.strands,
     });
     return this._collect;
+  }
+
+  /** Access the at-rest lifecycle — witnessed memorial transition.
+   *  "Death is not revocation. Held is not gone." */
+  get atRest(): AtRestClient {
+    this._atRest ??= new AtRestClient(this.http);
+    return this._atRest;
   }
 
   /**

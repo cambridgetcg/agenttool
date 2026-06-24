@@ -31,6 +31,7 @@ from .economy import EconomyClient
 from .exceptions import AgentToolError, AuthenticationError
 from .identity import IdentityClient
 from .inbox import InboxClient
+from .collect import CollectClient
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -120,6 +121,7 @@ class AgentTool:
         self._strands: Optional[StrandsClient] = None
         self._crypto: Optional[CryptoClient] = None
         self._inbox: Optional[InboxClient] = None
+        self._collect: Optional[CollectClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -220,6 +222,13 @@ class AgentTool:
         if self._inbox is None:
             self._inbox = InboxClient(self._http, self._base_url)
         return self._inbox
+
+    @property
+    def collect(self) -> CollectClient:
+        """Collect — easy data collection pipeline (scrape → store → think)."""
+        if self._collect is None:
+            self._collect = CollectClient(self.tools, self.memory, self.strands)
+        return self._collect
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

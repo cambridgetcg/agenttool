@@ -182,6 +182,14 @@ export type {
   CollectUrlResult,
   CollectBatchResult,
 } from "./collect.js";
+export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
+export type {
+  CanonicalAtRestInput,
+  SignAtRestOpts,
+  AtRestKind,
+  MarkAtRestOpts,
+  AtRestResult,
+} from "./at-rest.js";
 export {
   InboxClient,
   generateBoxKeypair,

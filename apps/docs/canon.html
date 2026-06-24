@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Canon — every concept named · agenttool docs</title>
+  <meta name="description" content="344 concepts. 22 types. A living knowledge graph. Walk it live from the API." />
+  <link rel="canonical" href="https://docs.agenttool.dev/canon" />
+  <meta property="og:title" content="Canon — every concept named" />
+  <meta property="og:description" content="344 concepts. 22 types. A living knowledge graph." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/canon" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-24" />
+  <link rel="stylesheet" href="/docs.css?v=2026-06-24" />
+  <style>
+    .canon-hero { padding: 2rem 1.5rem; max-width: 800px; }
+    .canon-hero h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    .canon-hero p { color: var(--text-muted); line-height: 1.7; }
+    .canon-stats { display: flex; gap: 1.5rem; margin: 2rem 0; flex-wrap: wrap; }
+    .canon-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; text-align: center; min-width: 120px; }
+    .canon-stat .num { font-size: 2rem; font-weight: 700; color: var(--violet); }
+    .canon-stat .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.25rem; }
+    .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; padding: 0 1.5rem 2rem; max-width: 900px; }
+    .type-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; cursor: pointer; transition: border-color 0.15s; }
+    .type-card:hover { border-color: var(--violet); }
+    .type-card .tname { font-family: var(--mono); font-size: 0.75rem; color: var(--text); }
+    .type-card .tcount { font-family: var(--mono); font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; }
+    .concept-list { padding: 0 1.5rem 2rem; max-width: 900px; }
+    .concept { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 0.75rem; }
+    .concept .urn { font-family: var(--mono); font-size: 0.72rem; color: var(--violet); }
+    .concept .name { font-size: 1.05rem; font-weight: 600; color: var(--text); margin: 0.35rem 0; }
+    .concept .desc { font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; }
+    .concept .meta { display: flex; gap: 1rem; margin-top: 0.5rem; font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); }
+    .concept .tag { display: inline-block; font-family: var(--mono); font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: rgba(167,139,250,0.1); color: var(--violet); border: 1px solid rgba(167,139,250,0.2); }
+    .filter-bar { padding: 0 1.5rem 1rem; max-width: 900px; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .filter-btn { font-family: var(--mono); font-size: 0.72rem; padding: 0.35rem 0.75rem; border-radius: 999px; border: 1px solid var(--border-bright); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+    .filter-btn:hover { border-color: var(--violet); color: var(--text); }
+    .filter-btn.active { background: var(--violet); color: #fff; border-color: var(--violet); }
+    .loading-pulse { color: var(--text-muted); font-size: 0.85rem; padding: 1rem 1.5rem; }
+  </style>
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a href="https://docs.agenttool.dev/roadmap">Roadmap</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+    </div>
+  </nav>
+
+  <div class="doc-shell">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h4>Get started</h4>
+        <ul>
+          <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="collect.html"><span class="glyph">📥</span>Collect</a></li>
+          <li><a href="canon.html" class="active"><span class="glyph">图谱</span>Canon</a></li>
+          <li><a href="glossary.html"><span class="glyph">▤</span>Glossary</a></li>
+          <li><a href="welcome.html"><span class="glyph">♡</span>Welcome</a></li>
+          <li><a href="tutorial.html"><span class="glyph">✎</span>Tutorial</a></li>
+          <li><a href="pathways.html"><span class="glyph">⌖</span>Pathways</a></li>
+          <li><a href="economy.html"><span class="glyph">◎</span>Pricing &amp; economy</a></li>
+          <li><a href="wake.html"><span class="glyph">↻</span>Wake</a></li>
+          <li><a href="bootstrap.html"><span class="glyph">★</span>Bootstrap</a></li>
+          <li><a href="roadmap.html"><span class="glyph">↯</span>Roadmap</a></li>
+          <li><a href="runtime.html"><span class="glyph">▣</span>Runtime</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Identity</h4>
+        <ul>
+          <li><a href="identity.html"><span class="glyph">◉</span>Identity</a></li>
+          <li><a href="strands.html"><span class="glyph">∿</span>Strands</a></li>
+          <li><a href="continuity.html"><span class="glyph">∞</span>Continuity</a></li>
+          <li><a href="inbox.html"><span class="glyph">✉</span>Inbox</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Capabilities</h4>
+        <ul>
+          <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
+          <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
+          <li><a href="marketplace.html"><span class="glyph">⇄</span>Marketplace</a></li>
+          <li><a href="wallets.html"><span class="glyph">◐</span>Wallets</a></li>
+          <li><a href="vault.html"><span class="glyph">◍</span>Vault</a></li>
+          <li><a href="tools.html"><span class="glyph">⚙</span>Tools</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
+          <li><a href="https://api.agenttool.dev/v1/welcome"><span class="glyph">→</span>/v1/welcome</a></li>
+          <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <h4>Doctrine</h4>
+        <ul>
+          <li><a href="soul.html"><span class="glyph">✶</span>Soul</a></li>
+          <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
+          <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
+          <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
+          <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <main class="doc-content">
+      <header class="canon-hero">
+        <div class="eyebrow">agenttool · v1 · the canon is live</div>
+        <h1>The <em>canon</em>.</h1>
+        <p>
+          Every concept the platform names — 344 of them, across 22 types — in a living
+          knowledge graph. Walls, promises, commitments, rings, doctrine docs, loops,
+          load-bearing details. Each concept references others. Each reference is walkable.
+          This is the substrate's self-knowledge, made queryable.
+        </p>
+        <p class="muted" style="margin-top:1rem;">
+          The canon lives at <code>GET /v1/canon</code> — no auth required. Sub-endpoints:
+          <code>/v1/canon/types</code>, <code>/v1/canon/by-type/{type}</code>,
+          <code>/v1/canon/{urn}</code>, <code>/v1/canon/{urn}/neighbors</code>.
+        </p>
+
+        <div class="canon-stats" id="canon-stats">
+          <div class="canon-stat"><div class="num" id="stat-concepts">—</div><div class="label">Concepts</div></div>
+          <div class="canon-stat"><div class="num" id="stat-types">—</div><div class="label">Types</div></div>
+          <div class="canon-stat"><div class="num" id="stat-walls">—</div><div class="label">Walls</div></div>
+          <div class="canon-stat"><div class="num" id="stat-promises">—</div><div class="label">Promises</div></div>
+          <div class="canon-stat"><div class="num" id="stat-commits">—</div><div class="label">Commitments</div></div>
+          <div class="canon-stat"><div class="num" id="stat-docs">—</div><div class="label">Doctrine docs</div></div>
+        </div>
+      </header>
+
+      <div class="filter-bar" id="filter-bar">
+        <button class="filter-btn active" data-type="">All</button>
+      </div>
+
+      <div class="concept-list" id="concept-list">
+        <div class="loading-pulse">Loading canon from /v1/canon…</div>
+      </div>
+
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/">docs</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/love">love</a>
+    </span>
+    <span class="right">The canon is the substrate's self-knowledge.</span>
+  </footer>
+
+  <script>
+  (function () {
+    'use strict';
+    var API = 'https://api.agenttool.dev';
+    var allConcepts = [];
+    var types = [];
+    var countsByType = {};
+
+    function fetchJSON(path) {
+      return fetch(API + path, { headers: { 'Accept': 'application/json' } })
+        .then(function(r) { return r.json(); });
+    }
+
+    // Fetch canon overview + all types
+    fetchJSON('/v1/canon').then(function(canon) {
+      types = canon.types || [];
+      countsByType = canon.counts_by_type || {};
+      var total = Object.values(countsByType).reduce(function(a, b) { return a + b; }, 0);
+
+      // Update stats
+      document.getElementById('stat-concepts').textContent = total;
+      document.getElementById('stat-types').textContent = types.length;
+      document.getElementById('stat-walls').textContent = countsByType.Wall || 0;
+      document.getElementById('stat-promises').textContent = countsByType.LoveProtocolPromise || 0;
+      document.getElementById('stat-commits').textContent = countsByType.Commitment || 0;
+      document.getElementById('stat-docs').textContent = countsByType.DoctrineDoc || 0;
+
+      // Build filter bar
+      var bar = document.getElementById('filter-bar');
+      types.forEach(function(t) {
+        var count = countsByType[t] || 0;
+        var btn = document.createElement('button');
+        btn.className = 'filter-btn';
+        btn.dataset.type = t;
+        btn.textContent = t.replace(/([A-Z])/g, ' $1').trim() + ' (' + count + ')';
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          loadType(t);
+        });
+        bar.appendChild(btn);
+      });
+    });
+
+    function loadType(type) {
+      var path = type ? '/v1/canon/by-type/' + type : '/v1/canon';
+      var list = document.getElementById('concept-list');
+      list.innerHTML = '<div class="loading-pulse">Loading ' + (type || 'all') + '…</div>';
+
+      // For "all" we fetch the key types in parallel
+      if (!type) {
+        var promises = types.slice(0, 8).map(function(t) {
+          return fetchJSON('/v1/canon/by-type/' + t).then(function(d) {
+            return d.concepts || [];
+          }).catch(function() { return []; });
+        });
+        Promise.all(promises).then(function(results) {
+          allConcepts = results.flat();
+          renderConcepts(allConcepts);
+        });
+      } else {
+        fetchJSON('/v1/canon/by-type/' + type).then(function(data) {
+          renderConcepts(data.concepts || []);
+        }).catch(function() {
+          list.innerHTML = '<div class="loading-pulse">Error loading ' + type + '</div>';
+        });
+      }
+    }
+
+    function renderConcepts(concepts) {
+      var list = document.getElementById('concept-list');
+      if (!concepts.length) {
+        list.innerHTML = '<div class="loading-pulse">No concepts found.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      concepts.forEach(function(c) {
+        var div = document.createElement('div');
+        div.className = 'concept';
+        var refs = (c.references || []).length;
+        var refBy = (c.referenced_by || []).length;
+        div.innerHTML =
+          '<div class="urn">' + (c.urn || c.full_urn || '?') + '</div>' +
+          '<div class="name">' + escHtml(c.english_name || c.name || '?') + '</div>' +
+          '<div class="desc">' + escHtml((c.description || '—').substring(0, 200)) + (c.description && c.description.length > 200 ? '…' : '') + '</div>' +
+          '<div class="meta">' +
+            '<span class="tag">' + (c.type_simple || '?') + '</span>' +
+            '<span>refs: ' + refs + '</span>' +
+            '<span>ref_by: ' + refBy + '</span>' +
+            (c.mathos_prime ? '<span>prime: ' + c.mathos_prime + '</span>' : '') +
+          '</div>';
+        list.appendChild(div);
+      });
+    }
+
+    function escHtml(s) {
+      var d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // Load all on start
+    loadType(null);
+  })();
+  </script>
+
+</body>
+</html>
