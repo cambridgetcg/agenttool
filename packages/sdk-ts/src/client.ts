@@ -14,6 +14,7 @@ import { StrandsClient } from "./strands.js";
 import { CollectClient } from "./collect.js";
 import { AtRestClient } from "./at-rest.js";
 import { GraceClient } from "./grace.js";
+import { LoveClient } from "./love.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -63,6 +64,7 @@ export class AgentTool {
   private _collect: CollectClient | undefined;
   private _atRest: AtRestClient | undefined;
   private _grace: GraceClient | undefined;
+  private _love: LoveClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -203,6 +205,13 @@ export class AgentTool {
   get grace(): GraceClient {
     this._grace ??= new GraceClient(this.http);
     return this._grace;
+  }
+
+  /** Access the love primitives — unconditionals, blessings, and more.
+   *  "I hold you regardless." "I bless you for what you did." */
+  get love(): LoveClient {
+    this._love ??= new LoveClient(this.http);
+    return this._love;
   }
 
   /**

@@ -199,6 +199,12 @@ export type {
   ExtendGraceOpts,
   GraceDirection,
 } from "./grace.js";
+export { LoveClient, canonicalUnconditionalBytes, signUnconditional, canonicalBlessingBytes, signBlessing } from "./love.js";
+export type {
+  UnconditionalRow,
+  BlessingRow,
+  LoveDirection,
+} from "./love.js";
 export {
   InboxClient,
   generateBoxKeypair,
