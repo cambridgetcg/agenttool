@@ -11,6 +11,7 @@ import { EconomyClient } from "./economy.js";
 import { InboxClient } from "./inbox.js";
 import { MemoryClient, type HttpConfig } from "./memory.js";
 import { StrandsClient } from "./strands.js";
+import { CollectClient } from "./collect.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -57,6 +58,7 @@ export class AgentTool {
   private _strands: StrandsClient | undefined;
   private _crypto: CryptoClient | undefined;
   private _inbox: InboxClient | undefined;
+  private _collect: CollectClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -173,6 +175,16 @@ export class AgentTool {
   get inbox(): InboxClient {
     this._inbox ??= new InboxClient(this.http);
     return this._inbox;
+  }
+
+  /** Access the Collect pipeline — scrape → extract → store → think in one call. */
+  get collect(): CollectClient {
+    this._collect ??= new CollectClient(this.http, {
+      tools: this.tools,
+      memory: this.memory,
+      strands: this.strands,
+    });
+    return this._collect;
   }
 
   /**

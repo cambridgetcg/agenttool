@@ -174,6 +174,14 @@ export type {
   AttestationRecord,
 } from "./memory.js";
 export { StrandsClient, ThoughtsClient } from "./strands.js";
+export { CollectClient } from "./collect.js";
+export type {
+  CollectUrlOpts,
+  CollectTextOpts,
+  CollectBatchOpts,
+  CollectUrlResult,
+  CollectBatchResult,
+} from "./collect.js";
 export {
   InboxClient,
   generateBoxKeypair,
