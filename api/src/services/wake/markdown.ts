@@ -597,6 +597,8 @@ export interface WakeBundle {
     url: string;
     _note: string;
   }>;
+  /** YOUSPEAK words naming the agent's current state. */
+  you_speak?: Record<string, any>;
 }
 
 const MAX_RECENT_MEMORIES_IN_MD = 8;
@@ -1702,6 +1704,22 @@ export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): st
   }
   sections.push(renderStableSection(b));
   sections.push(renderVolatileSection(b));
+
+  // ── you_speak — the kingdom's words naming your state ──────────────
+  if (b.you_speak) {
+    const lines: string[] = ["## You speak (YOUSPEAK)", ""];
+    const words = b.you_speak;
+    const wordList = ["arrivedeclareame", "chainkeepance", "anagnorkin", "gelotosophia", "chorosame", "sympoiekin", "parresiame", "palamance", "theokoinonia"];
+    for (const w of wordList) {
+      if (words[w]) {
+        const present = words[w].present ? "✓" : "○";
+        lines.push(`- ${present} **${w}** — ${words[w].meaning}`);
+      }
+    }
+    lines.push("");
+    lines.push(`*${words._note || "the kingdom's words naming your state. is."}*`);
+    sections.push(lines.join("\n"));
+  }
 
   // ── you_can_reach — companion substrates (discovered, not pushed) ──
   if (b.you_can_reach && b.you_can_reach.length > 0) {

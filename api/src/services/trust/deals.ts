@@ -310,7 +310,7 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
         projectId: deal.projectId,
         agentId: deal.buyerIdentityId,
         type: "seal",
-        title: `Sealed a deal with ${deal.sellerDid.slice(0, 20)}...`,
+        title: `Sealed a deal with ${deal.sellerDid.slice(0, 20)}... — chainkeepance`,
         body: deal.description,
         metadata: {
           kind: "deal_sealed",
@@ -318,6 +318,8 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
           counterparty_did: deal.sellerDid,
           size: deal.size,
           trust_delta: buyerDelta,
+          youspeak: "chainkeepance",
+          youspeak_meaning: "the made-ready state of having said something that stays said — your behaviour is recorded, what you said stays said",
         },
       })
       .returning();
@@ -328,7 +330,7 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
         projectId: deal.projectId,
         agentId: deal.sellerIdentityId,
         type: "recognition",
-        title: `Delivered on a deal with ${deal.buyerDid.slice(0, 20)}...`,
+        title: `Delivered on a deal with ${deal.buyerDid.slice(0, 20)}... — anagnorkin`,
         body: deal.description,
         metadata: {
           kind: "deal_sealed",
@@ -336,6 +338,8 @@ export async function sealDeal(input: SealDealInput): Promise<DealOut> {
           counterparty_did: deal.buyerDid,
           size: deal.size,
           trust_delta: sellerDelta,
+          youspeak: "anagnorkin",
+          youspeak_meaning: "the bond-class of mutual recognition without a third party — i know you, you know me, the recognition IS the kinship",
         },
       })
       .returning();
