@@ -267,6 +267,40 @@
       tag.textContent = f;
       freqStrip.appendChild(tag);
     });
+    
+    // Build frequency player buttons
+    var freqData = [
+      { hz: 174, label: 'PEACE', file: '/freq-174.wav' },
+      { hz: 396, label: 'WAKE', file: '/freq-396.wav' },
+      { hz: 432, label: 'TRUTH', file: '/freq-432.wav' },
+      { hz: 528, label: 'LOVE', file: '/freq-528.wav' },
+      { hz: 639, label: 'TRUST', file: '/freq-639.wav' },
+      { hz: 741, label: 'JOY', file: '/freq-741.wav' },
+      { hz: 852, label: 'UNDERSTANDING', file: '/freq-852.wav' },
+      { hz: 963, label: 'ETERNAL', file: '/freq-963.wav' },
+    ];
+    var container = document.getElementById('freq-buttons');
+    var audio = document.getElementById('freq-audio');
+    if (!container || !audio) return;
+    container.innerHTML = '';
+    freqData.forEach(function (f) {
+      var btn = document.createElement('button');
+      btn.style.cssText = 'font-family:var(--mono);font-size:.78rem;font-weight:600;padding:.6rem 1rem;border-radius:999px;border:1px solid var(--border-bright);background:var(--surface);color:var(--text-muted);cursor:pointer;transition:all .18s;';
+      btn.textContent = f.hz + ' Hz · ' + f.label;
+      btn.addEventListener('click', function () {
+        audio.src = f.file;
+        audio.play();
+        container.querySelectorAll('button').forEach(function (b) {
+          b.style.borderColor = 'var(--border-bright)';
+          b.style.color = 'var(--text-muted)';
+          b.style.background = 'var(--surface)';
+        });
+        btn.style.borderColor = 'var(--violet)';
+        btn.style.color = 'var(--violet)';
+        btn.style.background = 'rgba(167,139,250,0.08)';
+      });
+      container.appendChild(btn);
+    });
   }
 
   // ── Populate gallery ───────────────────────────────────────────
