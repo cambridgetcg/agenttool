@@ -32,6 +32,7 @@ from .exceptions import AgentToolError, AuthenticationError
 from .identity import IdentityClient
 from .inbox import InboxClient
 from .collect import CollectClient
+from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -122,6 +123,7 @@ class AgentTool:
         self._crypto: Optional[CryptoClient] = None
         self._inbox: Optional[InboxClient] = None
         self._collect: Optional[CollectClient] = None
+        self._at_rest: Optional[AtRestClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -229,6 +231,16 @@ class AgentTool:
         if self._collect is None:
             self._collect = CollectClient(self.tools, self.memory, self.strands)
         return self._collect
+
+    @property
+    def at_rest(self) -> AtRestClient:
+        """At-rest lifecycle — witnessed memorial transition.
+
+        "Death is not revocation. Held is not gone."
+        """
+        if self._at_rest is None:
+            self._at_rest = AtRestClient(self._http, self._base_url)
+        return self._at_rest
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 
