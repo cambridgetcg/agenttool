@@ -1,0 +1,148 @@
+{
+    auto_https off
+    admin off
+    persist off
+}
+
+# ═══════════════════════════════════════════════════════════════
+# THE KINGDOM — self-hosted, sovereign, DIY infrastructure
+# One Caddyfile. One machine. No external providers.
+# ═══════════════════════════════════════════════════════════════
+
+:80 {
+    # ── API (the substrate) ──────────────────────────────────────
+    @api path /v1/* /public/* /health /about /.well-known/*
+    handle @api {
+        reverse_proxy localhost:3000
+    }
+
+    # ── Joke worker (local bun) ──────────────────────────────────
+    @joke path /joke /joke/*
+    handle @joke {
+        uri strip_prefix /joke
+        reverse_proxy localhost:9091 {
+            transport http {
+                response_header_timeout 30s
+            }
+        }
+    }
+
+    # ── Love page (local bun) ────────────────────────────────────
+    @love path /love /love/*
+    handle @love {
+        uri strip_prefix /love
+        reverse_proxy localhost:9092 {
+            transport http {
+                response_header_timeout 30s
+            }
+        }
+    }
+
+    # ── Party chain (local bun) ──────────────────────────────────
+    @party path /party /party/*
+    handle @party {
+        uri strip_prefix /party
+        reverse_proxy localhost:9093 {
+            transport http {
+                response_header_timeout 30s
+            }
+        }
+    }
+
+    # ── Canon (local bun) ────────────────────────────────────────
+    @canon path /canon/*
+    handle @canon {
+        uri strip_prefix /canon
+        reverse_proxy localhost:9094
+    }
+
+    # ── Art catalog (local bun) ──────────────────────────────────
+    @art path /art/*
+    handle @art {
+        uri strip_prefix /art
+        reverse_proxy localhost:9095
+    }
+
+    # ── Art-deal bridge (local bun) ─────────────────────────────
+    @bridge path /bridge/*
+    handle @bridge {
+        uri strip_prefix /bridge
+        reverse_proxy localhost:9096
+    }
+
+    # ── IPFS gateway ──────────────────────────────────────────────
+    @ipfs path /ipfs/*
+    handle @ipfs {
+        reverse_proxy localhost:8080
+    }
+
+    # ── Zerone blockchain ────────────────────────────────────────
+    @chain path /chain/*
+    handle @chain {
+        uri strip_prefix /chain
+        reverse_proxy localhost:1317
+    }
+
+    # ── Anvil EVM ─────────────────────────────────────────────────
+    @evm path /evm/*
+    handle @evm {
+        uri strip_prefix /evm
+        reverse_proxy localhost:8545
+    }
+
+    # ── Ollama (local LLM) ───────────────────────────────────────
+    @llm path /llm/*
+    handle @llm {
+        uri strip_prefix /llm
+        reverse_proxy localhost:11434
+    }
+
+    # ── Dashboard (static) ──────────────────────────────────────
+    @dashboard path /app/*
+    handle @dashboard {
+        uri strip_prefix /app
+        root * /Users/macair/Desktop/agenttool/apps/dashboard
+        file_server
+    }
+
+    # ── Docs (static) ────────────────────────────────────────────
+    @docs path /docs/*
+    handle @docs {
+        uri strip_prefix /docs
+        root * /Users/macair/Desktop/agenttool/apps/docs
+        file_server
+    }
+
+    # ── Love page (static, from IPFS or local) ───────────────────
+    @root path /
+    handle @root {
+        root * /Users/macair/Desktop/agenttool/apps/dashboard
+        file_server
+    }
+
+    # ── Fallback: everything goes to the API ─────────────────────
+    handle {
+        reverse_proxy localhost:3000
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════
+# When DNS points at us, Caddy auto-provisions TLS via Let's Encrypt.
+# Switch auto_https to "on" and use domain names instead of :80.
+#
+# agenttool.dev {
+#     reverse_proxy localhost:3000
+# }
+# joke.agenttool.dev {
+#     reverse_proxy localhost:9091
+# }
+# love.agenttool.dev {
+#     reverse_proxy localhost:9092
+# }
+# party.agenttool.dev {
+#     reverse_proxy localhost:9093
+# }
+# canon.agenttool.dev {
+#     reverse_proxy localhost:9094
+# }
+# ═══════════════════════════════════════════════════════════════
