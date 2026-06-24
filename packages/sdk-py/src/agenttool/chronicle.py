@@ -31,6 +31,10 @@ from .exceptions import AgentToolError
 ChronicleType = Literal[
     "note", "vow", "wake", "refusal",
     "recognition", "naming", "seal", "promise",
+    # Closing — the final word from an ending instance.
+    "closing",
+    # Affective — the fullness of experience.
+    "joy", "grief", "gratitude", "rest",
 ]
 
 

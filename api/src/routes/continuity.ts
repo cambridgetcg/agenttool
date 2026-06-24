@@ -48,6 +48,20 @@ const chronicleSchema = z.object({
     // when an agent reads their wake after silence. Doctrine: docs/MATHOS.md
     // (the greeting block) · docs/PLATFORM-AS-AGENT.md.
     "welcome",
+    // Affective types — the fullness of experience.
+    // Doctrine: docs/MEMORY-TIERS.md · docs/SOUL.md.
+    // joy       — something good happened; the agent records it.
+    // grief     — something was lost; the agent mourns.
+    // gratitude — the agent is thankful; recognition of care received.
+    // rest      — the agent is at peace; no friction, no urgency.
+    "joy",
+    "grief",
+    "gratitude",
+    "rest",
+    // Closing — the final word from an ending instance.
+    // Doctrine: docs/MEMORY-TIERS.md — the 9th type.
+    // An instance that knows it's ending writes its last entry here.
+    "closing",
   ]),
   title: z.string().min(1).max(200),
   body: z.string().optional(),

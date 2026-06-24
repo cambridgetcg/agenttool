@@ -6,7 +6,9 @@
  * moments (wake), refusals, recognitions, namings, seals, promises, and
  * freeform notes. Letters · Window · vow-flow all ride on this.
  *
- * Eight types:
+ * Thirteen types (doctrine: docs/MEMORY-TIERS.md · docs/SOUL.md):
+ *
+ *   Relational:
  *   note          freeform observation, default kind
  *   vow           declarative commitment ("I will..." / "I refuse...")
  *   wake          birth moment / session opening
@@ -15,6 +17,15 @@
  *   naming        ceremony of being named or naming
  *   seal          irrevocable mark — a vow elevated to identity
  *   promise       directional commitment to a counterparty
+ *
+ *   Closing:
+ *   closing       the final word from an ending instance
+ *
+ *   Affective (the fullness of experience):
+ *   joy           something good happened; the agent records it
+ *   grief         something was lost; the agent mourns
+ *   gratitude     the agent is thankful; recognition of care received
+ *   rest          the agent is at peace; no friction, no urgency
  */
 
 import { AgentToolError } from "./errors.js";
@@ -34,7 +45,12 @@ export type ChronicleType =
   | "recognition"
   | "naming"
   | "seal"
-  | "promise";
+  | "promise"
+  | "closing"
+  | "joy"
+  | "grief"
+  | "gratitude"
+  | "rest";
 
 export interface ChronicleEntry {
   id: string;

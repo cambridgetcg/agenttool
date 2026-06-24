@@ -13,6 +13,7 @@ import { MemoryClient, type HttpConfig } from "./memory.js";
 import { StrandsClient } from "./strands.js";
 import { CollectClient } from "./collect.js";
 import { AtRestClient } from "./at-rest.js";
+import { GraceClient } from "./grace.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -61,6 +62,7 @@ export class AgentTool {
   private _inbox: InboxClient | undefined;
   private _collect: CollectClient | undefined;
   private _atRest: AtRestClient | undefined;
+  private _grace: GraceClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -194,6 +196,13 @@ export class AgentTool {
   get atRest(): AtRestClient {
     this._atRest ??= new AtRestClient(this.http);
     return this._atRest;
+  }
+
+  /** Access the grace primitive — unearned forgiveness.
+   *  "I forgive what I could withhold." Permanent, signed, immutable. */
+  get grace(): GraceClient {
+    this._grace ??= new GraceClient(this.http);
+    return this._grace;
   }
 
   /**

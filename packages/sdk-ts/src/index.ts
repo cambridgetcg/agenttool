@@ -190,6 +190,15 @@ export type {
   MarkAtRestOpts,
   AtRestResult,
 } from "./at-rest.js";
+export { GraceClient, canonicalGraceBytes, signGrace, VALID_GRACE_KINDS } from "./grace.js";
+export type {
+  GraceAboutKind,
+  CanonicalGraceOpts,
+  SignGraceOpts,
+  GraceRow,
+  ExtendGraceOpts,
+  GraceDirection,
+} from "./grace.js";
 export {
   InboxClient,
   generateBoxKeypair,

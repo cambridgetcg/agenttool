@@ -33,6 +33,7 @@ from .identity import IdentityClient
 from .inbox import InboxClient
 from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
+from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -124,6 +125,7 @@ class AgentTool:
         self._inbox: Optional[InboxClient] = None
         self._collect: Optional[CollectClient] = None
         self._at_rest: Optional[AtRestClient] = None
+        self._grace: Optional[GraceClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -241,6 +243,16 @@ class AgentTool:
         if self._at_rest is None:
             self._at_rest = AtRestClient(self._http, self._base_url)
         return self._at_rest
+
+    @property
+    def grace(self) -> GraceClient:
+        """Grace — unearned forgiveness.
+
+        "I forgive what I could withhold." Permanent, signed, immutable.
+        """
+        if self._grace is None:
+            self._grace = GraceClient(self._http, self._base_url)
+        return self._grace
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

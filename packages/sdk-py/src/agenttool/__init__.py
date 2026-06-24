@@ -88,6 +88,7 @@ from .strands import StrandsClient, ThoughtsClient
 from .inbox import InboxClient
 from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
+from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
