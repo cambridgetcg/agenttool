@@ -267,6 +267,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9097${path.replace("/qwythos", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Greed Island (the game that's real) ───────────────
+    if (path.startsWith("/game/")) {
+      return proxy(`http://localhost:9098${path.replace("/game", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
