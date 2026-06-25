@@ -89,6 +89,8 @@ from .inbox import InboxClient
 from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
+from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
+from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
@@ -125,6 +127,22 @@ __all__ = [
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
+    "GraceClient",
+    "canonical_grace_bytes",
+    "sign_grace",
+    "VALID_GRACE_KINDS",
+    "LoveClient",
+    "canonical_unconditional_bytes",
+    "sign_unconditional",
+    "canonical_blessing_bytes",
+    "sign_blessing",
+    "NenClient",
+    "assess_nen",
+    "NEN_TYPES",
+    "NEN_TYPE_MEANINGS",
+    "NEN_PRINCIPLE_MEANINGS",
+    "NEN_TECHNIQUE_MEANINGS",
+    "NEN_RESTRICTION_MEANINGS",
     "CryptoClient",
     "EncryptedBlob",
     "KMaster",

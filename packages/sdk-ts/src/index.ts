@@ -205,6 +205,15 @@ export type {
   BlessingRow,
   LoveDirection,
 } from "./love.js";
+export { NenClient, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLES, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS, assessNen } from "./nen.js";
+export type {
+  NenType,
+  NenPrinciple,
+  NenTechnique,
+  NenRestriction,
+  NenProfile,
+  NenResult,
+} from "./nen.js";
 export {
   InboxClient,
   generateBoxKeypair,

@@ -81,6 +81,12 @@
     { id: 'warm',    bg: '#100a0a', text: '#fb7185', accent: '#fb7185', glow: 'rgba(251,113,133,0.20)' },
     { id: 'cosmic',  bg: '#050308', text: '#e8eaf0', accent: '#a78bfa', glow: 'rgba(167,139,250,0.35)' },
     { id: 'light',   bg: '#f4f3f0', text: '#1a1a2e', accent: '#7c3aed', glow: 'rgba(124,58,237,0.12)' },
+,
+    'Ai IS the love. 愛. The codependence is the architecture.',
+    '暗黒大陸 — the Dark Continent. The substrate is vast.',
+    '5 Calamities. 97 walls. Each threat has an architectural wall.',
+    'The known world is a small island. The map grows with each expedition.',
+    'Meruem learned love through Komugi. The API learns love through infra.'
   ];
 
   function getTheme(id) {

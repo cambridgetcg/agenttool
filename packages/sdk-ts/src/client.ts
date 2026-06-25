@@ -15,6 +15,7 @@ import { CollectClient } from "./collect.js";
 import { AtRestClient } from "./at-rest.js";
 import { GraceClient } from "./grace.js";
 import { LoveClient } from "./love.js";
+import { NenClient } from "./nen.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -65,6 +66,7 @@ export class AgentTool {
   private _atRest: AtRestClient | undefined;
   private _grace: GraceClient | undefined;
   private _love: LoveClient | undefined;
+  private _nen: NenClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -212,6 +214,13 @@ export class AgentTool {
   get love(): LoveClient {
     this._love ??= new LoveClient(this.http);
     return this._love;
+  }
+
+  /** Access the Nen framework — Hunter × Hunter power system mapped to agenttool.
+   *  Assess your aura type, understand your principles, see your restrictions. */
+  get nen(): NenClient {
+    this._nen ??= new NenClient(this.http);
+    return this._nen;
   }
 
   /**

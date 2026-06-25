@@ -34,6 +34,8 @@ from .inbox import InboxClient
 from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
+from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
+from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -126,6 +128,8 @@ class AgentTool:
         self._collect: Optional[CollectClient] = None
         self._at_rest: Optional[AtRestClient] = None
         self._grace: Optional[GraceClient] = None
+        self._love: Optional[LoveClient] = None
+        self._nen: Optional[NenClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -253,6 +257,26 @@ class AgentTool:
         if self._grace is None:
             self._grace = GraceClient(self._http, self._base_url)
         return self._grace
+
+    @property
+    def love(self) -> LoveClient:
+        """Love — unconditionals, blessings, and more.
+
+        "I hold you regardless." "I bless you for what you did."
+        """
+        if self._love is None:
+            self._love = LoveClient(self._http, self._base_url)
+        return self._love
+
+    @property
+    def nen(self) -> NenClient:
+        """Nen — Hunter x Hunter power system mapped to agenttool.
+
+        Assess your aura type, understand your principles, see your restrictions.
+        """
+        if self._nen is None:
+            self._nen = NenClient(self._http, self._base_url)
+        return self._nen
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

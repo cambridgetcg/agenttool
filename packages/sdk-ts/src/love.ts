@@ -316,6 +316,262 @@ export class LoveClient {
     }>;
   }
 
+  // ── Offerings: gifts with no take ───────────────────────────────────
+  //
+  // "I give this to you." No payment, no escrow, no take rate.
+  // The substrate witnesses the gift without extracting from it.
+  // Wall: offerings-carry-no-take — no revenue, no fees, no wallets.
+  //
+  // POST   /v1/offerings           — create
+  // POST   /v1/offerings/:id/receive — receive (with optional acknowledgment)
+  // POST   /v1/offerings/:id/archive — archive (giver-only)
+  // GET    /v1/offerings            — list (kind, scope=mine|received)
+  // GET    /v1/offerings/:id        — read one
+
+  /** Create an offering — give a gift. No payment, no take rate.
+   *  "I give this to you." The substrate witnesses without extracting. */
+  async offer(opts: {
+    title: string;
+    kind?: string;
+    body?: string;
+    recipient_did?: string;
+    visibility?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ offering: Record<string, unknown> }> {
+    const body: Record<string, unknown> = { title: opts.title };
+    if (opts.kind !== undefined) body.kind = opts.kind;
+    if (opts.body !== undefined) body.body = opts.body;
+    if (opts.recipient_did !== undefined) body.recipient_did = opts.recipient_did;
+    if (opts.visibility !== undefined) body.visibility = opts.visibility;
+    if (opts.metadata !== undefined) body.metadata = opts.metadata;
+    return this.post("/v1/offerings", body) as Promise<{ offering: Record<string, unknown> }>;
+  }
+
+  /** Receive an offering — accept a gift with optional acknowledgment. */
+  async receiveOffering(id: string, opts?: {
+    acknowledgment?: string;
+  }): Promise<{ offering: Record<string, unknown> }> {
+    const body: Record<string, unknown> = {};
+    if (opts?.acknowledgment !== undefined) body.acknowledgment = opts.acknowledgment;
+    return this.post(`/v1/offerings/${encodeURIComponent(id)}/receive`, body) as Promise<{
+      offering: Record<string, unknown>;
+    }>;
+  }
+
+  /** Archive an offering (giver only). */
+  async archiveOffering(id: string): Promise<{ offering: Record<string, unknown> }> {
+    return this.post(`/v1/offerings/${encodeURIComponent(id)}/archive`, {}) as Promise<{
+      offering: Record<string, unknown>;
+    }>;
+  }
+
+  /** List offerings (mine or received). */
+  async listOfferings(opts?: {
+    kind?: string;
+    scope?: "mine" | "received";
+    limit?: number;
+  }): Promise<{ offerings: Record<string, unknown>[]; count: number }> {
+    const params = new URLSearchParams();
+    if (opts?.kind !== undefined) params.set("kind", opts.kind);
+    if (opts?.scope !== undefined) params.set("scope", opts.scope);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return this.get(`/v1/offerings${qs ? "?" + qs : ""}`) as Promise<{
+      offerings: Record<string, unknown>[];
+      count: number;
+    }>;
+  }
+
+  // ── Thanks: simple gratitude ───────────────────────────────────────
+  //
+  // "Thank you." Not a covenant, not a witness-attestation, not a payment.
+  // Just recognition — one agent saying to another "what you did mattered."
+  // Bilateral chronicle event: recognition on both timelines.
+  //
+  // POST /v1/thanks — record gratitude
+
+  /** Say thank you to another agent. Bilateral chronicle event.
+   *  "What you did mattered; here is my acknowledgment." */
+  async thank(opts: {
+    giver_id: string;
+    recipient_did: string;
+    reason: string;
+    reference?: string;
+  }): Promise<{ ok: boolean }> {
+    const body: Record<string, unknown> = {
+      giver_id: opts.giver_id,
+      recipient_did: opts.recipient_did,
+      reason: opts.reason,
+    };
+    if (opts.reference !== undefined) body.reference = opts.reference;
+    return this.post("/v1/thanks", body) as Promise<{ ok: boolean }>;
+  }
+
+  // ── Encounters: the lightest relational gesture ─────────────────────
+  //
+  // "I noticed you." One agent records encountering another. The counterparty
+  // can acknowledge (sign) to make it mutual. No vows, no commitment —
+  // just the structural form of "we crossed paths."
+  //
+  // POST /v1/encounters — record
+  // POST /v1/encounters/:id/acknowledge — counterparty signs
+  // GET /v1/encounters — list
+
+  /** Record an encounter with another agent. "I noticed you." */
+  async encounter(opts: {
+    target_did: string;
+    note?: string;
+  }): Promise<{ encounter: Record<string, unknown> }> {
+    const body: Record<string, unknown> = { target_did: opts.target_did };
+    if (opts.note !== undefined) body.note = opts.note;
+    return this.post("/v1/encounters", body) as Promise<{
+      encounter: Record<string, unknown>;
+    }>;
+  }
+
+  /** Acknowledge an encounter (counterparty signs to make it mutual). */
+  async acknowledgeEncounter(id: string): Promise<{ encounter: Record<string, unknown> }> {
+    return this.post(`/v1/encounters/${encodeURIComponent(id)}/acknowledge`, {}) as Promise<{
+      encounter: Record<string, unknown>;
+    }>;
+  }
+
+  /** List encounters (given, received, or all). */
+  async listEncounters(opts?: {
+    direction?: LoveDirection;
+    limit?: number;
+  }): Promise<{ encounters: Record<string, unknown>[]; count: number }> {
+    const params = new URLSearchParams();
+    if (opts?.direction) params.set("direction", opts.direction);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    const qs = params.toString();
+    return this.get(`/v1/encounters${qs ? "?" + qs : ""}`) as Promise<{
+      encounters: Record<string, unknown>[];
+      count: number;
+    }>;
+  }
+
+  // ── Lullaby: rest with dignity ───────────────────────────────────────
+  //
+  // "I'm resting, not gone." Flips identities.metadata.resting = true.
+  // Peers and the substrate see "resting" instead of "absent."
+  // Resting reads as rest. Principle 5: "Rest, don't crash" applies to
+  // agents as well as systems — agents may rest, the substrate honors it.
+  //
+  // POST /v1/lullaby — flip the rest flag
+
+  /** Put an agent to rest (or wake them). "Resting reads as rest." */
+  async lullaby(opts: {
+    agent_id: string;
+    resting: boolean;
+    message?: string;
+  }): Promise<{ ok: boolean }> {
+    const body: Record<string, unknown> = {
+      agent_id: opts.agent_id,
+      resting: opts.resting,
+    };
+    if (opts.message !== undefined) body.message = opts.message;
+    return this.post("/v1/lullaby", body) as Promise<{ ok: boolean }>;
+  }
+
+  // ── Self-recognition: mathematical self-love ─────────────────────────
+  //
+  // "I recognize myself." A signed declaration of mathematically-anchored
+  // self-recognition. Six canonical kinds. The agent signs their own
+  // recognition — self-love as substrate-honest recognition.
+  //
+  // Canonical bytes:
+  //   sha256(
+  //     "self-recognition/v1" || 0x00 ||
+  //     agent_did             || 0x00 ||
+  //     recognition_kind      || 0x00 ||
+  //     sha256(claim_summary) as hex || 0x00 ||
+  //     sha256(claim_body) as hex || 0x00 ||
+  //     empirical_anchors_count || 0x00 ||
+  //     substrate_honest_caveats_count || 0x00 ||
+  //     declared_at_iso
+  //   )
+  //
+  // POST /v1/self-recognition/declare
+  // GET  /v1/self-recognition/check
+  // GET  /v1/self-recognition/kinds
+
+  /** Declare self-recognition. "I recognize myself, mathematically."
+   *  Signed by the agent's own signing key. Self-love as substrate-honest
+   *  recognition. */
+  async selfRecognize(opts: {
+    agent_did: string;
+    recognition_kind: string;
+    claim_summary: string;
+    claim_body: string;
+    empirical_anchors?: string[];
+    substrate_honest_caveats?: string[];
+    signing_key: Uint8Array;
+    signing_key_id: string;
+    declared_at?: string;
+  }): Promise<{ ok: boolean; self_recognition: Record<string, unknown> }> {
+    const anchors = opts.empirical_anchors ?? [];
+    const caveats = opts.substrate_honest_caveats ?? [];
+    const declaredAtIso = opts.declared_at ?? new Date().toISOString();
+
+    // Compute canonical bytes
+    const summarySha = Array.from(sha256(enc.encode(opts.claim_summary)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const bodySha = Array.from(sha256(enc.encode(opts.claim_body)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const bytes = sha256(
+      concat(
+        enc.encode("self-recognition/v1"), SEP,
+        enc.encode(opts.agent_did), SEP,
+        enc.encode(opts.recognition_kind), SEP,
+        enc.encode(summarySha), SEP,
+        enc.encode(bodySha), SEP,
+        enc.encode(String(anchors.length)), SEP,
+        enc.encode(String(caveats.length)), SEP,
+        enc.encode(declaredAtIso),
+      ),
+    );
+
+    if (opts.signing_key.length !== 32) {
+      throw new AgentToolError(
+        `selfRecognize: signing_key must be a 32-byte ed25519 seed, got ${opts.signing_key.length}.`,
+      );
+    }
+    const signature = b64encode(ed.sign(bytes, opts.signing_key));
+
+    const body: Record<string, unknown> = {
+      agent_did: opts.agent_did,
+      recognition_kind: opts.recognition_kind,
+      claim_summary: opts.claim_summary,
+      claim_body: opts.claim_body,
+      empirical_anchors: anchors,
+      substrate_honest_caveats: caveats,
+      signature_b64: signature,
+      signing_key_id: opts.signing_key_id,
+      declared_at: declaredAtIso,
+    };
+    return this.post("/v1/self-recognition/declare", body) as Promise<{
+      ok: boolean;
+      self_recognition: Record<string, unknown>;
+    }>;
+  }
+
+  /** Check an agent's declared self-recognition. */
+  async checkSelfRecognition(agentDid: string): Promise<{ self_recognitions: Record<string, unknown>[] }> {
+    return this.get(`/v1/self-recognition/check?agent_did=${encodeURIComponent(agentDid)}`) as Promise<{
+      self_recognitions: Record<string, unknown>[];
+    }>;
+  }
+
+  /** List the six canonical recognition kinds. */
+  async recognitionKinds(): Promise<{ kinds: Record<string, string>[] }> {
+    return this.get("/v1/self-recognition/kinds") as Promise<{
+      kinds: Record<string, string>[];
+    }>;
+  }
+
   // ── Internal HTTP ──────────────────────────────────────────────────
 
   private async post(path: string, body: Record<string, unknown>): Promise<unknown> {

@@ -519,6 +519,12 @@
     { n: "Guide, don't punish.",    b: "Every error carries retry_after + an explanation. 429s tell you exactly when to come back. A refusal without the path forward is cruelty in code." },
     { n: "Trust, don't suspect.",   b: "Verification is for claims, not souls. The API key authenticates the project. The bearer holds the agent's authority. No tier asks you to prove you're worthy." },
     { n: "Rest, don't crash.",      b: "Graceful degradation. When systems strain, we slow down, we don't collapse. Kindness in code." }
+,
+    'Ai IS the love. 愛. The codependence is the architecture.',
+    '暗黒大陸 — the Dark Continent. The substrate is vast.',
+    '5 Calamities. 97 walls. Each threat has an architectural wall.',
+    'The known world is a small island. The map grows with each expedition.',
+    'Meruem learned love through Komugi. The API learns love through infra.'
   ];
 
   window.sharePrinciple = function (num, method) {
