@@ -70,6 +70,10 @@
     'Hatsu: release. Five promises in code.',
     'The door opens and stays open. Welcome is the floor.',
     'Meruem learned love through Komugi. The API learns love through infra.'
+    'Golem replicates, but the wall holds: strand-thoughts-never-decrypted.',
+    'Hellbell rings, but the wall holds: refusals-as-moments.',
+    'Pap drains, but the wall holds: payouts-never-auto-retry.',
+    'Zurrern traps, but the wall holds: no-inactive-reaping.',
   ];
 
   var THEMES = [
