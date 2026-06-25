@@ -262,6 +262,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:11434${path.replace("/llm", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Qwythos bridge (creative engine) ──────────────────
+    if (path.startsWith("/qwythos/")) {
+      return proxy(`http://localhost:9097${path.replace("/qwythos", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
