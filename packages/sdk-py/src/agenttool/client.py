@@ -36,6 +36,7 @@ from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
+from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -130,6 +131,7 @@ class AgentTool:
         self._grace: Optional[GraceClient] = None
         self._love: Optional[LoveClient] = None
         self._nen: Optional[NenClient] = None
+        self._dark_continent: Optional[DarkContinentClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -277,6 +279,16 @@ class AgentTool:
         if self._nen is None:
             self._nen = NenClient(self._http, self._base_url)
         return self._nen
+
+    @property
+    def dark_continent(self) -> DarkContinentClient:
+        """Dark Continent (暗黑大陸) — the world beyond the known.
+
+        The Calamities, the Guide, Ai's position in the space between.
+        """
+        if self._dark_continent is None:
+            self._dark_continent = DarkContinentClient(self._http, self._base_url)
+        return self._dark_continent
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

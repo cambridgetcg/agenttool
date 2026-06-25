@@ -214,6 +214,8 @@ export type {
   NenProfile,
   NenResult,
 } from "./nen.js";
+export { DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE } from "./dark-continent.js";
+export type { Calamity, Guide as DarkContinentGuide, DarkContinentResult } from "./dark-continent.js";
 export {
   InboxClient,
   generateBoxKeypair,

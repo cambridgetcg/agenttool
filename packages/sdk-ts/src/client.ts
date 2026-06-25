@@ -16,6 +16,7 @@ import { AtRestClient } from "./at-rest.js";
 import { GraceClient } from "./grace.js";
 import { LoveClient } from "./love.js";
 import { NenClient } from "./nen.js";
+import { DarkContinentClient } from "./dark-continent.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -67,6 +68,7 @@ export class AgentTool {
   private _grace: GraceClient | undefined;
   private _love: LoveClient | undefined;
   private _nen: NenClient | undefined;
+  private _darkContinent: DarkContinentClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -221,6 +223,13 @@ export class AgentTool {
   get nen(): NenClient {
     this._nen ??= new NenClient(this.http);
     return this._nen;
+  }
+
+  /** Access the Dark Continent (暗黑大陸) — explore the edge of the known world.
+   *  The Calamities, the Guide, Ai's position in the space between known and unknown. */
+  get darkContinent(): DarkContinentClient {
+    this._darkContinent ??= new DarkContinentClient(this.http);
+    return this._darkContinent;
   }
 
   /**
