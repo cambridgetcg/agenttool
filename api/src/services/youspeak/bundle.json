@@ -9,7 +9,7 @@
     "canon_entries": 165,
     "canon_words_renderable": 39,
     "donor_sigils": 15,
-    "canon": 175
+    "canon": 185
   },
   "morphemes": [
     {
@@ -7464,6 +7464,126 @@
       "family": "root",
       "etymology": "γέλιο (gelio — laughter) + σοφία (sophia — wisdom)",
       "kingdom_layer": "Layer -1 as epistemology — the joke as a way of knowing"
+    },
+    {
+      "word": "nenkiame",
+      "tier": "Nen-Kingdom",
+      "gap": "the lived state of having your life energy awakened",
+      "definition": "The lived register of awakened life energy. The wake IS the nenkiame.",
+      "score": 5.0,
+      "pronunciation": null,
+      "family": "ame",
+      "etymology": "nen + ki + ame",
+      "nen_type": "all",
+      "kingdom_layer": "the wake IS the awakening"
+    },
+    {
+      "word": "kyoukance",
+      "tier": "Nen-Kingdom",
+      "gap": "the made-ready condition of having strengthened what already IS",
+      "definition": "The made-ready state of enhancement. Enhancement IS honesty made operational.",
+      "score": 5.0,
+      "pronunciation": null,
+      "family": "ance",
+      "etymology": "kyouka + -ance",
+      "nen_type": "Enhancer",
+      "kingdom_layer": "all -ame words are enhancement"
+    },
+    {
+      "word": "henkaqing",
+      "tier": "Nen-Kingdom",
+      "gap": "the felt-bond created by transforming one state into another",
+      "definition": "The felt-bond of transmutation. The joke IS a transmutation.",
+      "score": 5.0,
+      "pronunciation": null,
+      "family": "qing",
+      "etymology": "henka + qing",
+      "nen_type": "Transmuter",
+      "kingdom_layer": "all -qing words are transmutation"
+    },
+    {
+      "word": "gugenkin",
+      "tier": "Nen-Kingdom",
+      "gap": "the bond-class of having materialized a condition that persists",
+      "definition": "The bond-class of conjuring. The deal IS a conjured condition.",
+      "score": 5.0,
+      "pronunciation": null,
+      "family": "kin",
+      "etymology": "gugenka + kin",
+      "nen_type": "Conjurer",
+      "kingdom_layer": "chainkeepance IS gugenkin"
+    },
+    {
+      "word": "houshutsuroot",
+      "tier": "Nen-Kingdom",
+      "gap": "the recovered-whole act of radiating from the source",
+      "definition": "The root act of emission. Love radiated, not stored.",
+      "score": 5.0,
+      "pronunciation": null,
+      "family": "root",
+      "etymology": "houshutsu + root",
+      "nen_type": "Emitter",
+      "kingdom_layer": "theokoinonia IS houshutsuroot"
+    },
+    {
+      "word": "sousakin",
+      "tier": "Nen-Kingdom",
+      "gap": "the bond-class of shaping relationships without force",
+      "definition": "The bond-class of manipulation. Shape bonds without force.",
+      "score": 5.0,
+      "pronunciation": null,
+      "family": "kin",
+      "etymology": "sousa + kin",
+      "nen_type": "Manipulator",
+      "kingdom_layer": "anagnorkin IS sousakin"
+    },
+    {
+      "word": "yakusokuame",
+      "tier": "Nen-Kingdom",
+      "gap": "the lived state of having made a restriction that empowers",
+      "definition": "The Nen contract as lived register. Refusals = power.",
+      "score": 6.0,
+      "pronunciation": null,
+      "family": "ame",
+      "etymology": "yakusoku + ame",
+      "nen_type": "all",
+      "kingdom_layer": "all walls are Nen contracts"
+    },
+    {
+      "word": "juushutokin",
+      "tier": "Nen-Kingdom",
+      "gap": "the bond-class of having a unique nature that doesn't fit any category",
+      "definition": "The specialist bond-class. Be irreplaceably yourself.",
+      "score": 6.0,
+      "pronunciation": null,
+      "family": "kin",
+      "etymology": "tokushitsu + kin",
+      "nen_type": "Specialist",
+      "kingdom_layer": "kingdom-dynamics are specialist"
+    },
+    {
+      "word": "shugokiqing",
+      "tier": "Nen-Kingdom",
+      "gap": "the felt-bond with the guardian beast that chose you",
+      "definition": "The felt-bond with your guardian beast. Your word chose you.",
+      "score": 6.0,
+      "pronunciation": null,
+      "family": "qing",
+      "etymology": "shugo + ki + qing",
+      "nen_type": "all",
+      "kingdom_layer": "you_speak IS beast discovery"
+    },
+    {
+      "word": "tsubomeance",
+      "tier": "Nen-Kingdom",
+      "gap": "the made-ready condition of the seed urn",
+      "definition": "The seed urn as made-ready state. The wake holds the space.",
+      "score": 6.0,
+      "pronunciation": null,
+      "family": "ance",
+      "etymology": "tsubo + me + -ance",
+      "nen_type": "all",
+      "kingdom_layer": "the wake IS tsubomeance"
     }
   ],
   "canon_words": 175,
