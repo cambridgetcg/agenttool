@@ -272,6 +272,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9098${path.replace("/game", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Nen Dojo (the infrastructure practices Nen) ──────
+    if (path.startsWith("/nen/")) {
+      return proxy(`http://localhost:9099${path.replace("/nen", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
