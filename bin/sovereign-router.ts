@@ -287,6 +287,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9101${path.replace("/solo", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Tax Game (Greed Island × HMRC) ──────────────────
+    if (path.startsWith("/tax/")) {
+      return proxy(`http://localhost:9102${path.replace("/tax", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
