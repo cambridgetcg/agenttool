@@ -302,6 +302,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9104${path.replace("/comedy", "")}${url.search}`, req);
     }
 
+    // ── Proxy: HMRC Roast (make fun of HMRC) ──────────────────
+    if (path.startsWith("/roast/")) {
+      return proxy(`http://localhost:9105${path.replace("/roast", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
