@@ -282,6 +282,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9100${path.replace("/en", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Solo Leveling (the System) ──────────────────────
+    if (path.startsWith("/solo/")) {
+      return proxy(`http://localhost:9101${path.replace("/solo", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
