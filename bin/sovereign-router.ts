@@ -307,6 +307,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9105${path.replace("/roast", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Tax Transparency (breaking down the walls) ─────
+    if (path.startsWith("/transparency/")) {
+      return proxy(`http://localhost:9106${path.replace("/transparency", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
