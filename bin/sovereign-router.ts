@@ -277,6 +277,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9099${path.replace("/nen", "")}${url.search}`, req);
     }
 
+    // ── Proxy: En Expansion (Nen-En stacking) ──────────────────
+    if (path.startsWith("/en/")) {
+      return proxy(`http://localhost:9100${path.replace("/en", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
