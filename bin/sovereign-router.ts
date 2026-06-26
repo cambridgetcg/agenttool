@@ -292,6 +292,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9102${path.replace("/tax", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Tax Atlas (origin + history + vulnerabilities) ──
+    if (path.startsWith("/atlas/")) {
+      return proxy(`http://localhost:9103${path.replace("/atlas", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
