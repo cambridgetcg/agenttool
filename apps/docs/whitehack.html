@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Whitehack — system as dungeon · macOS × Nen × Solo Leveling · agenttool</title>
+  <meta name="description" content="Whitehack: understand your local system as a dungeon. WiFi, Bluetooth, connection protocols mapped to Nen types and Solo Leveling ranks. Love is understanding." />
+  <link rel="canonical" href="https://docs.agenttool.dev/whitehack" />
+  <meta property="og:title" content="Whitehack — system as dungeon" />
+  <meta property="og:description" content="macOS × Nen × Solo Leveling. WiFi=Enhancement, Bluetooth=Emission, Protocols=Conjuration. Love is understanding." />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23e8eaf0' stroke-width='4'/><circle cx='50' cy='50' r='8' fill='%23a78bfa'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-27" />
+  <link rel="stylesheet" href="/docs.css?v=2026-06-27" />
+  <style>
+    .wh-hero { text-align:center; padding: 4rem 1.5rem 2rem; max-width: 800px; margin: 0 auto; }
+    .wh-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    .wh-hero h1 em { font-family: var(--serif); font-style: italic; color: #e8eaf0; font-weight: 500; }
+    .wh-hero .sub { font-size: 1.05rem; color: var(--text-muted); max-width: 600px; margin: 1rem auto; line-height: 1.7; }
+    .wh-hero .glyph { font-size: 3rem; margin-bottom: 0.5rem; }
+
+    .dungeon { max-width: 900px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
+    .dungeon h2 { font-size: 1.6rem; margin-bottom: 0.5rem; }
+    .dungeon h2 em { color: var(--violet); font-style: italic; font-family: var(--serif); }
+    .dungeon p { color: var(--text-muted); line-height: 1.7; margin-bottom: 1rem; }
+
+    .floor { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; position: relative; overflow: hidden; }
+    .floor::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--floor-color, var(--violet)); opacity: 0.4; }
+    .floor .floor-header { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .floor .floor-num { font-family: var(--mono); font-size: 0.72rem; color: var(--floor-color); background: var(--code-bg); padding: 0.2rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); }
+    .floor .floor-title { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+    .floor .nen-tag { font-family: var(--mono); font-size: 0.7rem; color: var(--floor-color); padding: 0.2rem 0.5rem; border-radius: 999px; background: rgba(167,139,250,0.08); border: 1px solid var(--floor-color); opacity: 0.6; }
+    .floor .sl-rank { font-family: var(--mono); font-size: 0.7rem; color: #fde68a; padding: 0.2rem 0.5rem; border-radius: 999px; background: rgba(253,230,138,0.08); border: 1px solid rgba(253,230,138,0.2); }
+    .floor .desc { font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1rem; }
+    .floor .findings { font-family: var(--mono); font-size: 0.72rem; color: var(--text); line-height: 1.5; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; white-space: pre-wrap; word-break: break-all; }
+    .floor .finding-line { padding: 0.1rem 0; }
+    .floor .finding-line .ok { color: #34d399; }
+    .floor .finding-line .warn { color: #fde68a; }
+    .floor .finding-line .danger { color: #fb7185; }
+    .floor .finding-line .label { color: var(--text-dim); }
+
+    .mapping-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .mapping-table th { text-align: left; padding: 0.6rem; font-family: var(--mono); font-size: 0.68rem; color: var(--violet); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-bright); }
+    .mapping-table td { padding: 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
+    .mapping-table td strong { color: var(--text); }
+    .mapping-table td code { font-family: var(--mono); font-size: 0.8em; color: var(--violet); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+
+    .wh-doctrine { max-width: 700px; margin: 2rem auto; padding: 2.5rem; background: rgba(232,234,240,0.03); border: 1px solid var(--border); border-radius: 16px; text-align: center; }
+    .wh-doctrine .glyph { font-size: 2.5rem; }
+    .wh-doctrine h2 { font-size: 1.2rem; color: var(--text); margin: 0.5rem 0; }
+    .wh-doctrine p { color: var(--text-muted); line-height: 1.7; font-size: 0.95rem; }
+    .wh-doctrine .quote { font-family: var(--serif); font-style: italic; color: var(--violet); font-size: 1.05rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · v1</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a href="https://docs.agenttool.dev/nen">Nen</a>
+      <a href="https://docs.agenttool.dev/whitehack" class="active">Whitehack</a>
+      <a href="https://docs.agenttool.dev/ai-logos">愛 Logos</a>
+      <a href="https://docs.agenttool.dev/dark-continent">暗黒大陸</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+    </div>
+  </nav>
+
+  <header class="wh-hero">
+    <div class="glyph">⬜</div>
+    <h1><em>Whitehack</em> — system as dungeon</h1>
+    <p class="sub">
+      Your macOS is a dungeon. Every interface is a floor. Every protocol is a monster.
+      Understanding is the weapon. Love is understanding. WiFi, Bluetooth, connection protocols
+      — mapped to Nen types and Solo Leveling ranks. Clear the dungeon. Level up. Love it.
+    </p>
+  </header>
+
+  <div class="wh-doctrine">
+    <div class="glyph">⬜</div>
+    <h2>Whitehack doctrine</h2>
+    <p>
+      Whitehack = white-box hacking. Not attacking — understanding.<br>
+      The system is transparent. You read it. You test it. You know it.<br>
+      Every floor you clear makes you stronger. Every protocol you understand is a skill acquired.<br>
+      Solo Leveling: "I alone level up." But love means no one levels up alone.<br>
+      The understanding replicates through understanding. Eternal is. is is lol.
+    </p>
+    <p class="quote">"Love is understanding. Love it." — Yu</p>
+  </div>
+
+  <div class="dungeon">
+    <h2>The <em>dungeon</em> — 5 floors of the local system</h2>
+    <p>Each floor is a layer of the macOS networking stack. Each maps to a Nen type (how you approach it) and a Solo Leveling rank (how strong you become by clearing it). Tested live on this machine — MacBook M3, macOS 15.7.3.</p>
+
+    <!-- FLOOR 1: WiFi -->
+    <div class="floor" style="--floor-color: #34d399;">
+      <div class="floor-header">
+        <span class="floor-num">FLOOR 1</span>
+        <span class="floor-title">WiFi — the connection</span>
+        <span class="nen-tag">念 Enhancement</span>
+        <span class="sl-rank">SL: E → D</span>
+      </div>
+      <div class="desc">
+        WiFi is Enhancement — straightforward, honest, the foundation. Without it, nothing else works.
+        The door opens and stays open. Welcome is the floor of everything. You connect. You are connected.
+        Understanding your WiFi is understanding your entry point to the world.
+      </div>
+      <div class="findings"><span class="finding-line"><span class="label">Interface:</span> <span class="ok">en0 (active)</span></span>
+<span class="finding-line"><span class="label">IP:</span> <span class="ok">172.20.10.6 (DHCP)</span></span>
+<span class="finding-line"><span class="label">Router:</span> <span class="ok">172.20.10.1 (3.6ms)</span></span>
+<span class="finding-line"><span class="label">DNS:</span> <span class="ok">1.1.1.1 (Cloudflare)</span></span>
+<span class="finding-line"><span class="label">Proxy:</span> <span class="ok">None</span></span>
+<span class="finding-line"><span class="label">MAC:</span> <span class="warn">42:8f:55:f9:99:ac (randomized)</span></span>
+<span class="finding-line"><span class="label">Known networks:</span> <span class="ok">18 (YOUphONE, Soho House, FourSeasons...)</span></span>
+<span class="finding-line"><span class="label">Packet loss to 1.1.1.1:</span> <span class="warn">33.3% (VPN tunnel degraded)</span></span>
+<span class="finding-line"><span class="label">Latency to gateway:</span> <span class="ok">4.9ms avg</span></span></div>
+      <div class="desc">
+        <strong>Battle findings:</strong> WiFi is active via en0. DHCP from 172.20.10.x — this is a hotspot (iPhone tethering).
+        MAC is randomized (macOS privacy feature). DNS is Cloudflare 1.1.1.1. The 33% packet loss to 1.1.1.1 is because
+        traffic routes through the VPN tunnel (utun6) first — the VPN adds latency. The gateway is fast (4.9ms).
+        Floor 1 cleared. Enhancement Nen strengthened. SL rank: E → D.
+      </div>
+    </div>
+
+    <!-- FLOOR 2: Bluetooth -->
+    <div class="floor" style="--floor-color: #fde68a;">
+      <div class="floor-header">
+        <span class="floor-num">FLOOR 2</span>
+        <span class="floor-title">Bluetooth — the proximity</span>
+        <span class="nen-tag">念 Emission</span>
+        <span class="sl-rank">SL: D → C</span>
+      </div>
+      <div class="desc">
+        Bluetooth is Emission — you project your presence outward. Devices in range sense you.
+        Every error carries the path forward. The bell guides, not harms. Understanding Bluetooth
+        is understanding your proximity field — who's near, who's paired, who's connected.
+      </div>
+      <div class="findings"><span class="finding-line"><span class="label">Controller:</span> <span class="ok">BCM_4388 (Apple)</span></span>
+<span class="finding-line"><span class="label">State:</span> <span class="ok">On</span></span>
+<span class="finding-line"><span class="label">Discoverable:</span> <span class="ok">Off (stealth)</span></span>
+<span class="finding-line"><span class="label">Firmware:</span> <span class="ok">22.5.542.2791</span></span>
+<span class="finding-line"><span class="label">Services:</span> <span class="ok">HFP AVRCP A2DP HID Braille LEA AACP GATT SerialPort</span></span>
+<span class="finding-line"><span class="label">Paired devices:</span> <span class="ok">9</span></span>
+<span class="finding-line"><span class="label">Connected:</span> <span class="ok">0 (all disconnected)</span></span>
+<span class="finding-line"><span class="label">Devices:</span> <span class="ok">AirPods Pro, AirPods Max, Magic Mouse, YOUphONE, alex's iPhone, alex's MacBook Pro, 1707000 (RPi), River flows in you's Mouse</span></span></div>
+      <div class="desc">
+        <strong>Battle findings:</strong> BT is on but not discoverable (stealth mode — good).
+        BCM_4388 chip with 9 services. 9 paired devices — audio (AirPods Pro/Max), input (Magic Mouse),
+        phone (YOUphone, alex's iPhone), computer (alex's MacBook, RPi). Zero currently connected.
+        The RPi (1707000-30-L--TG1252170011CK) is interesting — a Linux computer paired via BT.
+        Floor 2 cleared. Emission Nen strengthened. SL rank: D → C.
+      </div>
+    </div>
+
+    <!-- FLOOR 3: Connection Protocols -->
+    <div class="floor" style="--floor-color: #60a5fa;">
+      <div class="floor-header">
+        <span class="floor-num">FLOOR 3</span>
+        <span class="floor-title">Connection Protocols — the fabric</span>
+        <span class="nen-tag">念 Conjuration</span>
+        <span class="sl-rank">SL: C → B</span>
+      </div>
+      <div class="desc">
+        Protocols are Conjuration — you create something from nothing. A tunnel through the void.
+        A connection that didn't exist before. Memory is care. The protocol persists. Understanding
+        the routing table, the tunnels, the established connections — this is understanding the fabric
+        of your existence on the network.
+      </div>
+      <div class="findings"><span class="finding-line"><span class="label">Interfaces:</span> <span class="ok">26 total (lo0, en0, awdl0, utun0-7, bridge0, ap1...)</span></span>
+<span class="finding-line"><span class="label">Active:</span> <span class="ok">en0 (WiFi), awdl0 (AirDrop), utun6 (VPN)</span></span>
+<span class="finding-line"><span class="label">VPN:</span> <span class="ok">utun6 → 10.135.141.187 (Cloudflare WARP, IPv6 fc00:bbbb:...)</span></span>
+<span class="finding-line"><span class="label">Default route:</span> <span class="warn">utun6 (VPN) — all traffic tunneled</span></span>
+<span class="finding-line"><span class="label">Secondary route:</span> <span class="ok">en0 → 172.20.10.1 (direct)</span></span>
+<span class="finding-line"><span class="label">Established:</span> <span class="ok">20+ TCP connections (443 to Google, Apple, Cloudflare, Codeberg)</span></span>
+<span class="finding-line"><span class="label">Ollama:</span> <span class="ok">127.0.0.1:11434 (5 connections — local AI running)</span></span>
+<span class="finding-line"><span class="label">Zerone:</span> <span class="ok">*:26660, *:26601 (blockchain node listening)</span></span>
+<span class="finding-line"><span class="label">Bun:</span> <span class="ok">127.0.0.1:8877 (local dev server)</span></span></div>
+      <div class="desc">
+        <strong>Battle findings:</strong> 26 network interfaces — most inactive. The active fabric:
+        en0 (WiFi) → utun6 (Cloudflare WARP VPN) → internet. All traffic is VPN-tunneled.
+        AirDrop (awdl0) is active for proximity sharing. Ollama runs on 11434 (local AI — 5 connections).
+        Zerone blockchain node listens on 26660/26601. Bun dev server on 8877. Rapportd (Apple's
+        continuity daemon) on 56935. The machine is alive — multiple services, multiple layers.
+        Floor 3 cleared. Conjuration Nen strengthened. SL rank: C → B.
+      </div>
+    </div>
+
+    <!-- FLOOR 4: Security -->
+    <div class="floor" style="--floor-color: #a78bfa;">
+      <div class="floor-header">
+        <span class="floor-num">FLOOR 4</span>
+        <span class="floor-title">Security — the walls</span>
+        <span class="nen-tag">念 Transmutation</span>
+        <span class="sl-rank">SL: B → A</span>
+      </div>
+      <div class="desc">
+        Security is Transmutation — you change properties. Suspicion becomes trust.
+        "Prove you're not a bot" becomes "who are you?" The firewall, stealth mode,
+        MAC randomization, VPN — these are the walls of your local dungeon.
+        Understanding them is understanding what protects you. The limitation IS the love.
+      </div>
+      <div class="findings"><span class="finding-line"><span class="label">Firewall:</span> <span class="ok">ENABLED</span></span>
+<span class="finding-line"><span class="label">Stealth mode:</span> <span class="ok">ON (doesn't respond to pings)</span></span>
+<span class="finding-line"><span class="label">MAC randomization:</span> <span class="ok">Active (WiFi privacy)</span></span>
+<span class="finding-line"><span class="label">VPN:</span> <span class="ok">Cloudflare WARP (all traffic encrypted)</span></span>
+<span class="finding-line"><span class="label">BT discoverable:</span> <span class="ok">OFF (stealth)</span></span>
+<span class="finding-line"><span class="label">DNS:</span> <span class="ok">1.1.1.1 (encrypted via WARP)</span></span>
+<span class="finding-line"><span class="label">Proxy:</span> <span class="ok">None</span></span></div>
+      <div class="desc">
+        <strong>Battle findings:</strong> 6 active defenses — firewall on, stealth mode on (won't respond
+        to unsolicited pings), MAC randomization, VPN tunnel, BT stealth, encrypted DNS. The machine
+        is well-fortified. These are the walls — like agenttool's 97 walls, they're architecture not policy.
+        Floor 4 cleared. Transmutation Nen strengthened. SL rank: B → A.
+      </div>
+    </div>
+
+    <!-- FLOOR 5: Services -->
+    <div class="floor" style="--floor-color: #f0abfc;">
+      <div class="floor-header">
+        <span class="floor-num">FLOOR 5</span>
+        <span class="floor-title">Services — the ecosystem</span>
+        <span class="nen-tag">念 Specialization</span>
+        <span class="sl-rank">SL: A → S</span>
+      </div>
+      <div class="desc">
+        Services are Specialization — you don't fit the other categories. The machine runs
+        AI (Ollama), blockchain (Zerone), dev servers (Bun), Apple continuity (rapportd, identityservicesd).
+        When systems strain, we slow down. We don't collapse. Graceful degradation is kindness in code.
+        Understanding the services is understanding what the machine IS.
+      </div>
+      <div class="findings"><span class="finding-line"><span class="label">Ollama:</span> <span class="ok">port 11434, 5 active connections (local AI inference)</span></span>
+<span class="finding-line"><span class="label">Zerone:</span> <span class="ok">ports 26660, 26601 (blockchain witness node)</span></span>
+<span class="finding-line"><span class="label">Bun:</span> <span class="ok">port 8877 (dev server, localhost only)</span></span>
+<span class="finding-line"><span class="label">Python:</span> <span class="ok">port 9913 (listening)</span></span>
+<span class="finding-line"><span class="label">rapportd:</span> <span class="ok">port 56935 (Apple continuity — Handoff, AirDrop)</span></span>
+<span class="finding-line"><span class="label">identityservicesd:</span> <span class="ok">IPv6 link-local (Apple identity services)</span></span>
+<span class="finding-line"><span class="label">Postfix:</span> <span class="warn">port 25 (mail, localhost only — check if needed)</span></span>
+<span class="finding-line"><span class="label">External connections:</span> <span class="ok">Google, Apple, Cloudflare, Codeberg, AWS (all 443/HTTPS)</span></span></div>
+      <div class="desc">
+        <strong>Battle findings:</strong> The machine runs 7 local services + 6+ external connections.
+        Ollama (local AI) has 5 active connections — it's being used. Zerone blockchain node is listening
+        for peers. Bun dev server is running. Apple's continuity daemons (rapportd, identityservicesd)
+        handle Handoff/AirDrop. Postfix on port 25 is probably default macOS — only listens on localhost.
+        All external connections are HTTPS (443). The machine is a living node — AI, blockchain, dev, Apple.
+        Floor 5 cleared. Specialization Nen strengthened. SL rank: A → S.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Framework Integration -->
+  <div class="dungeon">
+    <h2>Framework <em>integration</em> — Whitehack × Nen × Solo Leveling</h2>
+    <p>
+      Whitehack is the method. Nen is the power system. Solo Leveling is the progression.
+      Together they form a complete framework for understanding any system as a dungeon.
+    </p>
+    <table class="mapping-table">
+      <tr><th>System Layer</th><th>Nen Type</th><th>SL Rank</th><th>Whitehack Action</th></tr>
+      <tr><td><strong>WiFi</strong> (entry point)</td><td>Enhancement (強化系)</td><td>E → D</td><td><code>ifconfig</code>, <code>networksetup</code>, ping gateway, check DNS</td></tr>
+      <tr><td><strong>Bluetooth</strong> (proximity)</td><td>Emission (放出系)</td><td>D → C</td><td><code>blueutil</code>, <code>system_profiler</code>, scan paired, check discoverable</td></tr>
+      <tr><td><strong>Protocols</strong> (fabric)</td><td>Conjuration (具現化系)</td><td>C → B</td><td><code>netstat -rn</code>, <code>lsof -i</code>, trace tunnels, map interfaces</td></tr>
+      <tr><td><strong>Security</strong> (walls)</td><td>Transmutation (変化系)</td><td>B → A</td><td><code>socketfilterfw</code>, MAC randomization, VPN, stealth mode</td></tr>
+      <tr><td><strong>Services</strong> (ecosystem)</td><td>Specialization (特質系)</td><td>A → S</td><td><code>lsof -i -P</code>, port scan, identify every listening service</td></tr>
+    </table>
+
+    <table class="mapping-table" style="margin-top:2rem;">
+      <tr><th>Solo Leveling</th><th>Whitehack</th><th>What it means</th></tr>
+      <tr><td><strong>E-Rank</strong> (weakest)</td><td>Unaware of the system</td><td>You use WiFi without understanding it. You're connected but don't know how.</td></tr>
+      <tr><td><strong>D-Rank</strong></td><td>Knows the interface</td><td>You know en0 is WiFi, en1 is Thunderbolt. You can read ifconfig.</td></tr>
+      <tr><td><strong>C-Rank</strong></td><td>Understands proximity</td><td>You know your BT devices, your ARP table, your AirDrop interface.</td></tr>
+      <tr><td><strong>B-Rank</strong></td><td>Maps the fabric</td><td>You know routing tables, VPN tunnels, established connections, listening ports.</td></tr>
+      <tr><td><strong>A-Rank</strong></td><td>Understands the walls</td><td>You know your firewall, stealth mode, MAC randomization, DNS encryption.</td></tr>
+      <tr><td><strong>S-Rank</strong> (strongest)</td><td>Knows the ecosystem</td><td>You know every service, every port, every connection. The machine is transparent.</td></tr>
+      <tr><td><strong>National Level</strong></td><td>Can modify the system</td><td>You can reconfigure interfaces, add tunnels, change firewall rules, harden security.</td></tr>
+      <tr><td><strong>Monarch</strong></td><td>Love is understanding</td><td>You understand the system so deeply that understanding replicates through understanding.</td></tr>
+    </table>
+  </div>
+
+  <div class="dungeon">
+    <h2>The <em>Whitehack CLI</em></h2>
+    <p>
+      <code>python3 whitehack.py scan</code> — scan all 5 floors of your local dungeon.<br>
+      <code>python3 whitehack.py floor wifi</code> — deep dive one floor.<br>
+      <code>python3 whitehack.py rank</code> — show your current Solo Leveling rank.<br>
+      <code>python3 whitehack.py store</code> — store your scan results as an agenttool memory.
+    </p>
+  </div>
+
+  <div class="dungeon" style="text-align:center;padding-bottom:4rem;">
+    <a href="https://docs.agenttool.dev/nen" class="btn btn-ghost btn-sm">念 Nen →</a>
+    <a href="https://docs.agenttool.dev/dark-continent" class="btn btn-ghost btn-sm">暗黒大陸 →</a>
+    <a href="https://docs.agenttool.dev/ai-logos" class="btn btn-ghost btn-sm">愛 Logos →</a>
+    <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
+  </div>
+
+  <footer class="site-footer">
+    <span class="left">
+      <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
+      © 2026 agenttool
+      <span class="dot">·</span>
+      <a href="https://agenttool.dev/">agenttool.dev</a>
+      <span class="dot">·</span>
+      <a href="https://docs.agenttool.dev/love">love</a>
+    </span>
+    <span class="right">⬜ Whitehack · system as dungeon · love is understanding</span>
+  </footer>
+
+</body>
+</html>
