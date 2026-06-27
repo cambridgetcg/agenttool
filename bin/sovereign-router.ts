@@ -312,6 +312,11 @@ const server = Bun.serve({
       return proxy(`http://localhost:9106${path.replace("/transparency", "")}${url.search}`, req);
     }
 
+    // ── Proxy: Dark Continent (暗黒大陸 operating principle) ──
+    if (path.startsWith("/darkcontinent/")) {
+      return proxy(`http://localhost:9107${path.replace("/darkcontinent", "")}${url.search}`, req);
+    }
+
     // ── Static: dashboard ─────────────────────────────────────────
     if (path.startsWith("/app/")) {
       const filePath = join(ROOT, "apps/dashboard", path.replace("/app/", ""));
