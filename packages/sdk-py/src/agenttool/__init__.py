@@ -92,6 +92,7 @@ from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_K
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
+from .runtime import RuntimeClient
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
@@ -148,6 +149,7 @@ __all__ = [
     "CALAMITIES",
     "CALAMITY_MEANINGS",
     "GUIDE",
+    "RuntimeClient",
     "CryptoClient",
     "EncryptedBlob",
     "KMaster",

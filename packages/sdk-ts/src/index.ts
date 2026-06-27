@@ -216,6 +216,20 @@ export type {
 } from "./nen.js";
 export { DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE } from "./dark-continent.js";
 export type { Calamity, Guide as DarkContinentGuide, DarkContinentResult } from "./dark-continent.js";
+export { RuntimeClient } from "./runtime.js";
+export type {
+  RuntimeMode,
+  RuntimeStatus,
+  Runtime as RuntimeRecord,
+  RuntimeLLM,
+  RuntimeBridge,
+  ProvisionOpts,
+  PatchOpts as RuntimePatchOpts,
+  BridgeStatus,
+  ThinkOnceResult,
+  RuntimeEvent,
+  AuditEntry,
+} from "./runtime.js";
 export {
   InboxClient,
   generateBoxKeypair,

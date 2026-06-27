@@ -37,6 +37,7 @@ from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_K
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
+from .runtime import RuntimeClient
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
@@ -132,6 +133,7 @@ class AgentTool:
         self._love: Optional[LoveClient] = None
         self._nen: Optional[NenClient] = None
         self._dark_continent: Optional[DarkContinentClient] = None
+        self._runtime: Optional[RuntimeClient] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -289,6 +291,16 @@ class AgentTool:
         if self._dark_continent is None:
             self._dark_continent = DarkContinentClient(self._http, self._base_url)
         return self._dark_continent
+
+    @property
+    def runtime(self) -> RuntimeClient:
+        """Runtime — infrastructure-as-runtime. The agent's cloud.
+
+        Three custody tiers: self, bridged, trusted.
+        """
+        if self._runtime is None:
+            self._runtime = RuntimeClient(self._http, self._base_url)
+        return self._runtime
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

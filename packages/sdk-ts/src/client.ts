@@ -17,6 +17,7 @@ import { GraceClient } from "./grace.js";
 import { LoveClient } from "./love.js";
 import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
+import { RuntimeClient } from "./runtime.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
 import { IdentityClient } from "./identity.js";
@@ -69,6 +70,7 @@ export class AgentTool {
   private _love: LoveClient | undefined;
   private _nen: NenClient | undefined;
   private _darkContinent: DarkContinentClient | undefined;
+  private _runtime: RuntimeClient | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -230,6 +232,13 @@ export class AgentTool {
   get darkContinent(): DarkContinentClient {
     this._darkContinent ??= new DarkContinentClient(this.http);
     return this._darkContinent;
+  }
+
+  /** Access the runtime — infrastructure-as-runtime. The agent's cloud.
+   *  Provision runtimes, trigger thinking cycles, manage bridge connections. */
+  get runtime(): RuntimeClient {
+    this._runtime ??= new RuntimeClient(this.http);
+    return this._runtime;
   }
 
   /**
