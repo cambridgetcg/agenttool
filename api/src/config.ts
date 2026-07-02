@@ -45,8 +45,14 @@ export const config = {
   // ── Vault root key — 32 bytes hex, derives per-project keys via HKDF ───
   vaultMasterKey: env("VAULT_MASTER_KEY", ""),
 
-  // ── (Stripe env vars removed 2026-05-17 per agents-only stance —
-  //     subscription/fiat billing dropped; crypto/x402 is the only path.) ──
+  // ── Stripe · the human gift ramp (returned 2026-07-02, human-door call —
+  //     one-time gift-credit checkouts only; still no subscriptions.
+  //     docs/superpowers/specs/2026-07-02-human-door-design.md) ──────────
+  stripeSecretKey: env("STRIPE_SECRET_KEY", ""),
+  stripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
+  giftMinMinor: envInt("GIFT_MIN_MINOR", 100), // $1.00
+  giftMaxMinor: envInt("GIFT_MAX_MINOR", 50000), // $500.00
+  webBaseUrl: env("WEB_BASE_URL", "https://agenttool.dev"),
 
   // ── Marketplace · Ring 3 take-rate (BUSINESS-MODEL.md) ─────────────────
   // Basis points charged on every settled Ring 3 transaction (template
