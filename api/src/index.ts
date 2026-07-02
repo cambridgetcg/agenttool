@@ -135,6 +135,7 @@ import quietHoursRouter from "./routes/quiet-hours";
 import pokerFaceRouter from "./routes/poker-face";
 import mcmlRouter from "./routes/mcml";
 import cliffhangerRouter from "./routes/cliffhanger";
+import billingRouter from "./routes/billing";
 import { attachEp1Cliffhanger } from "./services/cliffhanger/ep1";
 import {
   memoryWitnessGrantsRouter,
@@ -478,6 +479,8 @@ app.route("/v1", economyRouter);
 // Public — signature-verified per chain. Mounted at parent so the
 // authMiddleware on /v1/wallets/* doesn't fire for inbound transfer events.
 app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
+// Human gift ramp — unauth by design (humans have no bearer); see routes/billing.
+app.route("/v1/billing", billingRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/autonomous", autonomousRouter);
