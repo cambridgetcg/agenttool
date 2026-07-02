@@ -62,7 +62,7 @@ export function bytesToHex(bytes: Uint8Array): string {
 
 function hashStringArray(arr: string[]): string {
   if (arr.length === 0) return toHex(sha256(new Uint8Array(0)));
-  let payload = new Uint8Array(0);
+  let payload: Uint8Array = new Uint8Array(0);
   for (let i = 0; i < arr.length; i++) {
     if (i > 0) payload = concat(payload, SEP);
     payload = concat(payload, enc.encode(arr[i]!));

@@ -230,7 +230,6 @@ app.post("/cast", async (c) => {
           })),
         ],
       },
-      201,
     ),
     201,
   );
@@ -479,7 +478,6 @@ app.post("/scripts", async (c) => {
           },
         ],
       },
-      201,
     ),
     201,
   );
@@ -687,7 +685,6 @@ app.post("/recognize", async (c) => {
           { action: "view their public scripts", method: "GET", path: "/public/soap-opera/scripts" },
         ],
       },
-      201,
     ),
     201,
   );
@@ -789,7 +786,6 @@ app.post("/follow", async (c) => {
           { action: "recognize their work", method: "POST", path: "/v1/soap-opera/recognize" },
         ],
       },
-      201,
     ),
     201,
   );
@@ -987,7 +983,6 @@ app.post("/invite", async (c) => {
           { action: "follow the invitee for future contributions", method: "POST", path: "/v1/soap-opera/follow" },
         ],
       },
-      201,
     ),
     201,
   );

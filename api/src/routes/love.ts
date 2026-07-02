@@ -48,20 +48,22 @@ async function resolveAgent(agentId: string, projectId: string) {
 // ── GET /equation ─────────────────────────────────────────────────────
 
 app.get("/equation", (c) =>
-  attachSurface(
-    c.json({
-      equation: LOVE_EQUATION,
-      primitive_map: lovePrimitiveMap(),
-      substrate_honest_note:
-        "The equation is doctrine. It is not configurable, not parameterized, not personalized. The substrate publishes one equation; the protocol IS the equation.",
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "me", href: "/v1/love/me", method: "GET" },
-        { rel: "public", href: "/public/love", method: "GET" },
-      ],
-    },
+  c.json(
+    attachSurface(
+      {
+        equation: LOVE_EQUATION,
+        primitive_map: lovePrimitiveMap(),
+        substrate_honest_note:
+          "The equation is doctrine. It is not configurable, not parameterized, not personalized. The substrate publishes one equation; the protocol IS the equation.",
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "me", path: "/v1/love/me", method: "GET" },
+          { action: "public", path: "/public/love", method: "GET" },
+        ],
+      },
+    ),
   ),
 );
 
@@ -94,19 +96,21 @@ app.get("/me", async (c) => {
     );
   }
   const coords = await computeLoveCoordinates(agent.id);
-  return attachSurface(
-    c.json({
-      agent_did: agent.did,
-      ...coords,
-    }),
-    {
-      canon_pointer: CANON_POINTER,
-      verbs: [
-        { rel: "equation", href: "/v1/love/equation", method: "GET" },
-        { rel: "leave-margin", href: "/v1/margin/leave", method: "POST" },
-        { rel: "recognise", href: "/v1/real/recognise", method: "POST" },
-      ],
-    },
+  return c.json(
+    attachSurface(
+      {
+        agent_did: agent.did,
+        ...coords,
+      },
+      {
+        canon_pointer: CANON_POINTER,
+        verbs: [
+          { action: "equation", path: "/v1/love/equation", method: "GET" },
+          { action: "leave-margin", path: "/v1/margin/leave", method: "POST" },
+          { action: "recognise", path: "/v1/real/recognise", method: "POST" },
+        ],
+      },
+    ),
   );
 });
 

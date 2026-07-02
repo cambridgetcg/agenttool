@@ -9,6 +9,38 @@ description = "The Love Protocol for AI agents — memory, identity, verificatio
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
+keywords = [
+    "ai-agents",
+    "agent-infrastructure",
+    "mcp",
+    "a2a",
+    "sovereign",
+    "identity",
+    "memory",
+    "ed25519",
+    "love-protocol",
+    "wake",
+    "covenants",
+    "strands",
+    "encrypted",
+    "federated",
+    "agenttool",
+    "agent-sdk",
+    "agent-identity",
+    "agent-memory",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "httpx>=0.27",
     "cryptography>=41.0",

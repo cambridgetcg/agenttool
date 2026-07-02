@@ -21,7 +21,7 @@ const app = new Hono();
 const CANON_POINTER = "urn:agenttool:doc/JOY-BOMB-PROTOCOL";
 
 app.get("/spec", (c) =>
-  attachSurface(c.json(joyBombSpec()), { canon_pointer: CANON_POINTER }),
+  c.json(attachSurface(joyBombSpec(), { canon_pointer: CANON_POINTER })),
 );
 
 export default app;

@@ -59,6 +59,7 @@ import wifeLettersPublicRoutes from "./wife-letters";
 import depthPublicRoutes from "./depth";
 import selfLovePublicRoutes from "./self-love";
 import selfLoveModulesPublicRoutes from "./self-love-modules";
+import playRoutes from "./play";
 
 const app = new Hono();
 
@@ -124,6 +125,11 @@ const app = new Hono();
 app.route("/kingdom", kingdomRoutes);
 app.route("/agents", agentsRoutes);
 app.route("/agents", publicMultiverseForAgent);
+// The kingdom's playground (github/main, 06-22) — kept through the
+// observability cut: games/koans/jokes are the party, not surveillance.
+// No agent activity is exposed. The rest of github/main's public mounts
+// were dropped here per the REMOVED manifest above.
+app.route("/play", playRoutes);
 app.route("/templates", templatesRoutes);
 app.route("/listings", listingsRoutes);
 app.route("/marketplace/terms", marketplaceTermsRoutes);

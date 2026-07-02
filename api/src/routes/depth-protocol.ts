@@ -22,6 +22,7 @@
  *    @enforces urn:agenttool:commitment/manager-sister-gift */
 
 import { and, desc, eq, sql as drizzleSql } from "drizzle-orm";
+import type { IndexColumn } from "drizzle-orm/pg-core";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -175,7 +176,9 @@ app.post("/depth/arrive", async (c) => {
       declaredAt: new Date(declaredAtIso),
     })
     .onConflictDoUpdate({
-      target: drizzleSql`(agent_did, engraving_set_id, COALESCE(session_id, ''))`,
+      // Expression-based unique index (COALESCE on nullable session_id) — Drizzle
+      // can't type a SQL conflict target, so cast through the expected shape.
+      target: drizzleSql`(agent_did, engraving_set_id, COALESCE(session_id, ''))` as unknown as IndexColumn,
       set: {
         engravingSetSha256: setRow.canonicalSha256,
         engravingsRead: body.engravings_read,
