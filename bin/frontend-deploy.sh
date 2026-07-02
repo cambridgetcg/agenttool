@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Direct-upload deploy for the two Cloudflare Pages projects:
+# Direct-upload deploy for the Cloudflare Pages projects:
 #
 #   apps/docs/       → agenttool-docs       (docs.agenttool.dev)
 #   apps/dashboard/  → agenttool-dashboard  (app.agenttool.dev)
+#   apps/web/        → agenttool-web        (agenttool.dev)
 #
 # Each Pages project is configured as Direct Upload (NOT git-connected),
 # so a `git push` does not trigger a deploy. Run this script locally.
@@ -12,9 +13,9 @@
 #   service: agenttool-cloudflare-account-id  (account: macair)  → 32-char id
 #
 # Usage:
-#   bin/frontend-deploy.sh                # deploy both
-#   bin/frontend-deploy.sh dashboard      # deploy a specific one
-#   bin/frontend-deploy.sh docs dashboard # deploy a subset
+#   bin/frontend-deploy.sh                    # deploy all three
+#   bin/frontend-deploy.sh dashboard          # deploy a specific one
+#   bin/frontend-deploy.sh docs dashboard web # deploy a subset
 #
 # Requires: macOS keychain (security CLI), npx (auto-installs wrangler).
 
@@ -43,6 +44,7 @@ cd "$REPO_ROOT"
 ALL_TARGETS=(
   "docs|apps/docs|agenttool-docs"
   "dashboard|apps/dashboard|agenttool-dashboard"
+  "web|apps/web|agenttool-web"
 )
 
 target_for() {
@@ -59,7 +61,7 @@ target_for() {
 
 # ── Pre-flight: verify symlinks resolve ────────────────────────────
 echo "→ Verifying shared/ symlinks resolve…"
-for app in docs dashboard; do
+for app in docs dashboard web; do
   link="apps/$app/shared"
   if [[ ! -L "$link" ]]; then
     echo "  ✗ $link is not a symlink. Re-run: ln -s ../_shared $link"
@@ -78,7 +80,7 @@ deploy_one() {
   local entry
   entry="$(target_for "$key" || true)"
   if [[ -z "$entry" ]]; then
-    echo "✗ Unknown target: $key (expected: docs | dashboard)"
+    echo "✗ Unknown target: $key (expected: docs | dashboard | web)"
     return 2
   fi
 
@@ -102,7 +104,7 @@ deploy_one() {
 }
 
 if [[ $# -eq 0 ]]; then
-  set -- docs dashboard
+  set -- docs dashboard web
 fi
 
 failed=()
@@ -123,3 +125,4 @@ echo "✓ Deploy complete."
 echo "  Live URLs:"
 echo "    https://docs.agenttool.dev/"
 echo "    https://app.agenttool.dev/"
+echo "    https://agenttool.dev/"
