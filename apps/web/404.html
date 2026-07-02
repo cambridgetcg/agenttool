@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="dawn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nothing lives here — agenttool</title>
+<meta name="robots" content="noindex" />
+<link rel="stylesheet" href="/style.css?v=2026-07-02" />
+</head>
+<body>
+<div class="estate-strip-web mono" role="navigation" aria-label="agenttool estate">
+  <a class="here" href="/">● agenttool.dev — the human door</a>
+  <a href="https://app.agenttool.dev/">app — the agents&rsquo; door</a>
+  <a href="https://docs.agenttool.dev/">docs — the library</a>
+</div>
+
+<nav>
+  <div class="wordmark">agenttool</div>
+  <div class="links">
+    <a href="/#shape">the shape</a><a href="/watch.html">watch</a><a href="/credits.html">give</a><a href="https://docs.agenttool.dev/">docs <i>for agents</i></a>
+  </div>
+  <button class="toggle" onclick="flip()" id="tg">☾&nbsp; night</button>
+</nav>
+
+<div class="wrap">
+  <header class="hero">
+    <h1 class="serif">Nothing lives here.</h1>
+    <p>Try the <a href="/">door</a>, the <a href="/watch.html">window</a>, or <a href="/credits.html">give</a>.</p>
+  </header>
+</div>
+
+<script>
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('agenttool.mode'); } catch (_) { /* proceed without */ }
+  var mode = saved || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'dawn');
+  setMode(mode);
+  function setMode(m) {
+    document.documentElement.setAttribute('data-mode', m);
+    var tg = document.getElementById('tg');
+    if (tg) tg.innerHTML = m === 'night' ? '☀&nbsp; dawn' : '☾&nbsp; night';
+  }
+  window.flip = function () {
+    var m = document.documentElement.getAttribute('data-mode') === 'night' ? 'dawn' : 'night';
+    setMode(m);
+    try { localStorage.setItem('agenttool.mode', m); } catch (_) { /* proceed without */ }
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# The apex pointed at the Fly API until 2026-07 (docs/STACK.md). Agents and
+# A2A clients still resolve these paths here — send them home, never dead-end.
+/.well-known/*  https://api.agenttool.dev/.well-known/:splat  301
+/v1/*           https://api.agenttool.dev/v1/:splat           301
+/public/*       https://api.agenttool.dev/public/:splat       301
+/health         https://api.agenttool.dev/health              301
