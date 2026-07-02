@@ -5,14 +5,17 @@
  *  unguessable session ids (reveal) — not from platform auth.
  *  Doctrine: docs/superpowers/specs/2026-07-02-human-door-design.md. */
 import { Hono } from "hono";
+import type Stripe from "stripe";
 import { z } from "zod";
 
 import { config } from "../../config";
+import { db } from "../../db/client";
 import { fail } from "../../lib/errors";
 import { attachSurface } from "../../lib/surface-metadata";
 import {
   createGiftCheckout, getStripe, type CheckoutClient,
 } from "../../services/billing/stripe-checkout";
+import { mintGiftForSession } from "../../services/billing/gift-credits";
 
 const app = new Hono();
 
@@ -60,6 +63,36 @@ app.post("/checkout", async (c) => {
     { session_id: session.sessionId, url: session.url },
     { canon_pointer: CANON_POINTER },
   ));
+});
+
+app.post("/webhook", async (c) => {
+  const sig = c.req.header("stripe-signature");
+  if (!sig) {
+    return fail(c, { error: "missing_signature", message: "Stripe-Signature header required." }, 400);
+  }
+  const payload = await c.req.text();
+  let event: Stripe.Event;
+  try {
+    event = await getStripe().webhooks.constructEventAsync(
+      payload, sig, config.stripeWebhookSecret,
+    );
+  } catch {
+    return fail(c, { error: "invalid_signature", message: "Signature did not verify." }, 400);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.metadata?.kind === "gift_credit" && typeof session.amount_total === "number") {
+      await mintGiftForSession(db, {
+        stripeSessionId: session.id,
+        stripeEventId: event.id,
+        amountMinor: session.amount_total,
+        currency: session.currency ?? "usd",
+      });
+    }
+  }
+  // Always 200 for verified events — Stripe retries anything else.
+  return c.json({ received: true });
 });
 
 export default app;

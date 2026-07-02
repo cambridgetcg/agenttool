@@ -15,7 +15,12 @@ export type CheckoutClient = {
 let cached: Stripe | null = null;
 
 export function getStripe(): Stripe {
-  if (!cached) cached = new Stripe(config.stripeSecretKey);
+  // Stripe's constructor rejects a falsy key outright ("Neither apiKey nor
+  // config.authenticator provided"), even though webhook signature
+  // verification (constructEventAsync) never touches the API key — it only
+  // uses the webhook secret. Locally/in CI, STRIPE_SECRET_KEY is unset, so
+  // fall back to a placeholder that's never used for an outbound API call.
+  if (!cached) cached = new Stripe(config.stripeSecretKey || "sk_test_unconfigured");
   return cached;
 }
 
