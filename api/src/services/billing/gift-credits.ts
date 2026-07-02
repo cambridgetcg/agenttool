@@ -73,7 +73,7 @@ export async function getGiftBySession(db: DB, stripeSessionId: string) {
 export async function redeemGift(
   db: DB,
   input: { code: string; projectId: string },
-): Promise<{ creditsAdded: number; creditsTotal: number | null; amountMinor: number; currency: string }> {
+): Promise<{ creditsAdded: number; creditsTotal: number; amountMinor: number; currency: string }> {
   const hash = hashGiftCode(input.code);
   return await db.transaction(async (tx) => {
     const [gift] = await tx
@@ -113,9 +113,20 @@ export async function redeemGift(
       .where(eq(projects.id, input.projectId))
       .returning({ credits: projects.credits });
 
+    // No project row → abort INSIDE the transaction so the gift-claim UPDATE
+    // rolls back too. Without this the gift would burn as "redeemed" while
+    // no credits landed anywhere — silent credit loss.
+    if (!proj) {
+      abort({
+        error: "gift_redeem_project_missing",
+        message: "Your account could not be credited — nothing was consumed.",
+        hint: "The gift is still redeemable. Retry with a valid bearer; if this persists, the substrate wants to know.",
+      }, 500);
+    }
+
     return {
       creditsAdded: gift.credits,
-      creditsTotal: proj?.credits ?? null,
+      creditsTotal: proj.credits,
       amountMinor: gift.amountMinor,
       currency: gift.currency,
     };

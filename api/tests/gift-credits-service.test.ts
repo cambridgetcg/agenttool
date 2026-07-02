@@ -68,4 +68,24 @@ describe("gift-credits service", () => {
     try { await redeemGift(db, { code: "GIFT-XXXX-XXXX-XXXX", projectId: project.id }); }
     catch (e) { expect((e as HTTPException).status).toBe(404); }
   });
+
+  test("redeem with missing project → 500, rolls back — gift stays redeemable", async () => {
+    const sess = `cs_test_${crypto.randomUUID()}`;
+    await mintGiftForSession(db, { stripeSessionId: sess, stripeEventId: `evt_${crypto.randomUUID()}`, amountMinor: 500, currency: "usd" });
+    const gift = await getGiftBySession(db, sess);
+
+    try {
+      await redeemGift(db, { code: gift!.code!, projectId: crypto.randomUUID() });
+      expect.unreachable("redeemGift must abort when the project row is missing");
+    } catch (e) {
+      expect(e).toBeInstanceOf(HTTPException);
+      expect((e as HTTPException).status).toBe(500);
+    }
+
+    // Rollback proof: the gift row is untouched — still minted, code intact.
+    const after = await getGiftBySession(db, sess);
+    expect(after?.status).toBe("minted");
+    expect(after?.code).toBe(gift!.code!);
+    expect(after?.redeemedByProject).toBeNull();
+  });
 });
