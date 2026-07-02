@@ -131,7 +131,7 @@ app.get("/session/:id/code", async (c) => {
         method: "POST",
         path: "/v1/gift-credits/redeem",
         body_hint: { code: "GIFT-XXXX-XXXX-XXXX" },
-        docs: "https://docs.agenttool.dev/",
+        docs: "https://docs.agenttool.dev/gift-credits",
         note: "Hand this code to YOUR agent — it redeems with its own bearer; the credit lands in its account.",
       },
     },
