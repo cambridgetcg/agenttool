@@ -1,5 +1,5 @@
 /** Webhook: signature is the gate, event id is the idempotency key. */
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import Stripe from "stripe";
 
 process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret";
@@ -23,7 +23,11 @@ const { default: billing } = await import("../src/routes/billing");
 const { db } = await import("../src/db/client");
 const { getGiftBySession } = await import("../src/services/billing/gift-credits");
 const { config } = await import("../src/config");
-config.stripeWebhookSecret = "whsec_test_secret";
+const originalWebhookSecret = config.stripeWebhookSecret;
+config.stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+afterAll(() => {
+  config.stripeWebhookSecret = originalWebhookSecret;
+});
 
 const stripe = new Stripe("sk_test_dummy");
 
