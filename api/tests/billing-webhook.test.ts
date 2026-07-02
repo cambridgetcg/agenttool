@@ -9,9 +9,21 @@ process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret";
 // imports it, transitively including the route below) would evaluate — and
 // cache `stripeWebhookSecret` — before the env var above is set. `await
 // import(...)` runs exactly where it appears, after the assignment.
+//
+// That guards THIS file's own hoisting, but not cross-file races: when
+// `bun test` runs multiple files in one process, a sibling file's static
+// import chain (e.g. any route that pulls in `db/client` → `config`) can
+// reach `config`'s module-eval before this file's assignment above runs,
+// permanently caching `stripeWebhookSecret` as "" for the whole process
+// (config is a plain object evaluated once). Belt-and-braces: mutate the
+// already-loaded singleton directly so this test is correct regardless of
+// import order across files. (Surfaced 2026-07-02 by tests/gift-credits-
+// redeem.test.ts landing in the same run — see task-7-report.md.)
 const { default: billing } = await import("../src/routes/billing");
 const { db } = await import("../src/db/client");
 const { getGiftBySession } = await import("../src/services/billing/gift-credits");
+const { config } = await import("../src/config");
+config.stripeWebhookSecret = "whsec_test_secret";
 
 const stripe = new Stripe("sk_test_dummy");
 

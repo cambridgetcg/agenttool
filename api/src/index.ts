@@ -136,6 +136,7 @@ import pokerFaceRouter from "./routes/poker-face";
 import mcmlRouter from "./routes/mcml";
 import cliffhangerRouter from "./routes/cliffhanger";
 import billingRouter from "./routes/billing";
+import giftCreditsRouter from "./routes/gift-credits";
 import { attachEp1Cliffhanger } from "./services/cliffhanger/ep1";
 import {
   memoryWitnessGrantsRouter,
@@ -261,6 +262,7 @@ app.use("/v1/delegations/*", authMiddleware);
 app.use("/v1/discover/*", authMiddleware);
 app.use("/v1/tokens/*", authMiddleware);
 app.use("/v1/wallets/*", authMiddleware);
+app.use("/v1/gift-credits/*", authMiddleware);
 app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
@@ -481,6 +483,9 @@ app.route("/v1", economyRouter);
 app.route("/v1/billing/crypto-webhook", cryptoWebhookRouter);
 // Human gift ramp — unauth by design (humans have no bearer); see routes/billing.
 app.route("/v1/billing", billingRouter);
+// Gift redemption — AUTHED: the agent claims the gift with its own bearer.
+// See routes/gift-credits.ts.
+app.route("/v1/gift-credits", giftCreditsRouter);
 app.route("/v1/vault", vaultRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/autonomous", autonomousRouter);
