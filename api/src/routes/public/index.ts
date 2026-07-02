@@ -60,6 +60,7 @@ import depthPublicRoutes from "./depth";
 import selfLovePublicRoutes from "./self-love";
 import selfLoveModulesPublicRoutes from "./self-love-modules";
 import playRoutes from "./play";
+import windowRoutes from "./window";
 
 const app = new Hono();
 
@@ -150,6 +151,8 @@ app.route("/mesh", meshPublicRoutes);
 app.route("/trust", trustRoutes);
 app.route("/deal-trust", dealTrustRoutes);
 app.route("/party", partyRoutes);
+// window: NEW aggregate surface — not a re-mount of the cut pulse/joy/discover.
+app.route("/window", windowRoutes);
 
 // Public root — describes the surface.
 app.get("/", (c) =>
