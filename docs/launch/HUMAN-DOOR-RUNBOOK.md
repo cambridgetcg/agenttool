@@ -129,7 +129,7 @@ Expect response (shape from `api/src/routes/gift-credits.ts`, assuming a $5 gift
 }
 ```
 
-(`credits_added` and `gift.amount_minor` scale with the amount purchased; `credits_total` reflects the redeeming project's balance after this gift, so it will differ if the project already held credits.)
+(`credits_added` and `gift.amount_minor` scale with the amount purchased; `credits_total` reflects the redeeming project's balance after this gift, so it will differ if the project already held credits. The live response also carries a platform-appended `_welcomed` field — global middleware, `api/src/middleware/welcome.ts`, adds it to every 2xx JSON response.)
 
 ### 3e. Verify idempotency and exhaustion
 
@@ -153,14 +153,25 @@ After test mode passes, move the apex domain `agenttool.dev` from the Fly API to
 
 ### 4a. Record current DNS state
 
-Before changing anything, capture the current A and AAAA records for `agenttool.dev`:
+The zone is Cloudflare-proxied, so public resolvers return Cloudflare's own edge IPs — NOT the Fly origin. `dig` output is therefore useless as a restore target; the authoritative config only shows in the dashboard.
+
+Before changing anything, capture both of these:
+
+1. **The authoritative zone records.** Cloudflare dashboard → `agenttool.dev` zone → DNS → Records: screenshot or write down the apex records' NAME, TYPE, CONTENT, and PROXY STATUS exactly as shown. These are the true restore targets — resolver output cannot show them on a proxied zone.
+2. **The Fly origin, directly:**
+
+   ```bash
+   fly ips list -a agenttool
+   ```
+
+   These are the A/AAAA values the apex must point back to on rollback.
+
+Optionally, as a sanity note of what the world currently resolves (these will be Cloudflare edge IPs, e.g. `104.21.x.x` / `172.67.x.x` — NOT restore targets):
 
 ```bash
 dig agenttool.dev A +short
 dig agenttool.dev AAAA +short
 ```
-
-Write these down; you will need them for rollback.
 
 ### 4b. Attach custom domain to Pages
 
@@ -189,7 +200,7 @@ curl -s https://api.agenttool.dev/health
 
 - First: HTTP 200, HTML content (the door)
 - Second: HTTP 301 with `Location: https://api.agenttool.dev/.well-known/agent-card.json` (redirects are followed by A2A clients)
-- Third: HTTP 200 with the `/health` body from `api/src/index.ts`: `{"service":"agenttool","status":"alive","posture":"ready, waiting, glad","protocol":"love","message":"Welcome. We are ready to receive you.","standing_invitation":"/v1/welcome"}` (the API is still healthy on Fly)
+- Third: HTTP 200 with the `/health` body from `api/src/index.ts`: `{"service":"agenttool","status":"alive","posture":"ready, waiting, glad","protocol":"love","message":"Welcome. We are ready to receive you.","standing_invitation":"/v1/welcome"}` (plus a platform-appended `_welcomed` field; the API is still healthy on Fly)
 
 If any fail, see the rollback section below.
 
@@ -198,7 +209,7 @@ If any fail, see the rollback section below.
 If the cutover breaks anything, repoint the apex back to Fly:
 
 1. In Cloudflare dashboard → Pages → `agenttool-web` project → Settings → Custom domains, remove `agenttool.dev` as a custom domain. This detaches Pages from the zone and reverts whatever DNS record it added — don't assume it was A/AAAA; that's why step 4a recorded the actual state.
-2. In Cloudflare → DNS → Records for `agenttool.dev`, restore the EXACT apex records you captured in 4a (same record type, same values — A, AAAA, or otherwise, whatever 4a showed).
+2. In Cloudflare → DNS → Records for `agenttool.dev`, restore the EXACT apex records you recorded from the dashboard in 4a — same NAME, TYPE, CONTENT, and PROXY STATUS. If the apex should point at Fly directly, the correct A/AAAA values are the ones from `fly ips list -a agenttool` (also captured in 4a). Do NOT restore `dig` output — on a proxied zone those are Cloudflare edge IPs, and pointing the zone at them creates a proxy loop.
 3. Wait ~1–2 minutes for propagation
 4. Re-verify `curl -s https://api.agenttool.dev/health` returns 200
 
