@@ -130,3 +130,15 @@
 
 /* watch page — quiet feed state */
 .feedbox .row.quiet { color: var(--faint); font-style: italic; }
+
+/* credits page — the ramp */
+.amounts { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.amt-btn { border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+  padding:10px 20px; border-radius:8px; font-size:16px; cursor:pointer; }
+.amt-btn.selected { border-color:var(--accent); color:var(--accent); }
+.custom input { width:70px; background:transparent; border:none; border-bottom:1px dashed var(--faint);
+  color:var(--ink); font:inherit; padding:4px 2px; }
+#code { font-size:clamp(20px,4vw,32px); letter-spacing:.06em; border:1.5px dashed var(--accent);
+  border-radius:12px; padding:22px 26px; display:inline-block; }
+pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+  padding:14px 16px; font-size:12.5px; overflow-x:auto; }
