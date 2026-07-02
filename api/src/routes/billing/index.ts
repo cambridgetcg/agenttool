@@ -111,9 +111,12 @@ app.get("/session/:id/code", async (c) => {
     ));
   }
   if (gift.status !== "minted") {
-    // Fail closed: only a minted gift ever reveals its code.
+    // Fail closed: only a minted gift ever reveals its code. Map to a fixed
+    // set rather than echoing the raw column — the reveal surface should
+    // never leak an unanticipated internal status string.
+    const SAFE_STATUS = gift.status === "refunded" ? "refunded" : "unavailable";
     return c.json(attachSurface(
-      { status: gift.status, hint: "This gift is not redeemable right now." },
+      { status: SAFE_STATUS, hint: "This gift is not redeemable right now." },
       { canon_pointer: CANON_POINTER },
     ));
   }

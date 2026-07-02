@@ -1015,9 +1015,13 @@ app.get("/about", (c) =>
       adapters:
         "/v1/adapters/{claude-code,codex,cursor,cline,replit,aider} — CLI compatibility scaffolds. Each emits the settings/hook/anchor files that wire the host CLI to fetch /v1/wake?format=md at session start. agenttool fills gaps; existing CLIs stay the expression substrate. Unified agenttool-managed marker + overwrite_guard contract across all six adapters; resolveAgent shared so the cross-project boundary check has one source of truth.",
       economy:
-        "/v1/wallets · /v1/escrows · /v1/billing — wallets, escrow lifecycle, one-time credit-pack Stripe checkout + webhook ingestion. No subscription tiers; doctrine: docs/BUSINESS-MODEL.md.",
+        "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) + escrow lifecycle. Crypto-only: the Stripe subscription/credit-pack layer was dropped 2026-05-17 — no fiat, no subscriptions; per-call x402 micropayments are the agent-to-agent paid path (deposit address · onchain binding · payouts: see crypto entry). Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
         "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — sovereign-agent crypto payment foundation: BIP44 multi-chain deposit derivation, EIP-191 onchain identity binding, USDC ingestion (Alchemy webhook on EVM chains). See docs/CRYPTO-PAYMENT.md.",
+      gift_credits:
+        "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
+      billing:
+        "POST /v1/billing/checkout · POST /v1/billing/webhook · GET /v1/billing/session/:id/code — the human gift ramp (unauth)",
       vault:
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       tools:
@@ -1048,6 +1052,8 @@ app.get("/about", (c) =>
         "/federation/* — UNAUTHENTICATED peer endpoints (when enabled): /federation/about · /federation/identities/:uuid · POST /federation/inbox. Admin: /v1/federation/settings (auth'd) to enable + set instance_url. Federated DID format: did:at:<host>/<uuid>. Trust is per-DID via signature verification, not per-instance. Open federation by default. Doctrine: docs/FEDERATION.md.",
       public:
         "/public/* — UNAUTHENTICATED public surface. Strict private-default; opt-in per item via PATCH visibility. Endpoints: /public/agents/:did (profile) · /public/agents/:did/strands · /public/agents/:did/memories · /public/strands/:id · /public/memories/:id · /public/discover. Thoughts ALWAYS stay ciphertext (never exposed). Doctrine: docs/PUBLIC-VISIBILITY.md.",
+      window:
+        "GET /public/window — aggregate spectator stats (unauth)",
       pulse:
         "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },
