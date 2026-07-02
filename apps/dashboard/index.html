@@ -43,14 +43,14 @@
   }
   </script>
 
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-15" />
-  <link rel="stylesheet" href="/style.css?v=2026-05-15-agents-only" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/style.css?v=2026-07-02-dawn" />
 
   <style>
     /* Page-specific styles for the SDK quickstart layout. */
@@ -60,10 +60,10 @@
       gap: 0.5rem;
       padding: 0.35rem 0.8rem;
       border-radius: 999px;
-      background: rgba(124,58,237,0.16);
-      border: 1px solid rgba(167,139,250,0.4);
+      background: color-mix(in srgb, var(--accent) 16%, transparent);
+      border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
       font-size: 0.78rem;
-      color: rgba(255,255,255,0.85);
+      color: var(--text);
       margin-bottom: 1.25rem;
       font-weight: 500;
       font-family: 'JetBrains Mono', monospace;
@@ -74,8 +74,8 @@
       width: 0.5rem;
       height: 0.5rem;
       border-radius: 50%;
-      background: #52d39a;
-      box-shadow: 0 0 8px #52d39a;
+      background: var(--green);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--green) 60%, transparent);
     }
 
     .qs-section { margin: 2rem 0 0; }
@@ -100,7 +100,7 @@
     }
     .qs-tab {
       padding: 0.35rem 0.85rem;
-      background: rgba(255,255,255,0.04);
+      background: color-mix(in srgb, var(--text) 4%, transparent);
       border: 1px solid var(--border);
       border-radius: 6px;
       color: var(--muted);
@@ -111,20 +111,20 @@
     }
     .qs-tab:hover { color: var(--text); }
     .qs-tab.active {
-      background: rgba(124,58,237,0.14);
-      border-color: rgba(167,139,250,0.5);
-      color: rgba(255,255,255,0.95);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+      color: var(--text);
     }
 
     .qs-code {
-      background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(167,139,250,0.14);
+      background: var(--code-bg);
+      border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
       border-radius: 8px;
       padding: 1rem 1.1rem;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.82rem;
       line-height: 1.55;
-      color: rgba(220,220,255,0.92);
+      color: var(--text);
       white-space: pre;
       overflow-x: auto;
       margin: 0;
@@ -144,24 +144,24 @@
     .qs-doors a {
       display: block;
       padding: 0.85rem 1rem;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(167,139,250,0.22);
+      background: color-mix(in srgb, var(--text) 4%, transparent);
+      border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
       border-radius: 8px;
-      color: rgba(255,255,255,0.92);
+      color: var(--text);
       text-decoration: none;
       font-size: 0.93rem;
       transition: background 0.18s, border-color 0.18s, transform 0.18s;
     }
     .qs-doors a:hover {
-      background: rgba(124,58,237,0.14);
-      border-color: rgba(167,139,250,0.5);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      border-color: color-mix(in srgb, var(--accent) 55%, transparent);
       transform: translateY(-1px);
     }
-    .qs-doors a strong { color: var(--accent-soft, #a78bfa); font-weight: 600; }
+    .qs-doors a strong { color: var(--accent, #d4502e); font-weight: 600; }
     .qs-doors a .verb {
       display: inline-block;
       min-width: 4.5rem;
-      color: var(--gold, #fde68a);
+      color: var(--gold);
       font-weight: 600;
       margin-right: 0.4rem;
       font-family: 'JetBrains Mono', monospace;
@@ -193,20 +193,21 @@
       color: var(--muted);
       min-height: 1.1em;
     }
-    .qs-restore-status.err { color: #f87171; }
-    .qs-restore-status.ok { color: #52d39a; }
+    .qs-restore-status.err { color: var(--red); }
+    .qs-restore-status.ok { color: var(--green); }
 
     .qs-closing {
       font-family: 'Crimson Pro', serif;
       font-style: italic;
       font-size: 1rem;
       line-height: 1.7;
-      color: rgba(255,255,255,0.78);
+      color: var(--text-muted);
       margin: 2.25rem 0 0;
       padding-top: 1.5rem;
-      border-top: 1px dashed rgba(167,139,250,0.22);
+      border-top: 1px dashed color-mix(in srgb, var(--accent) 24%, transparent);
     }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 

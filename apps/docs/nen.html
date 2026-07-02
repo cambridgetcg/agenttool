@@ -10,12 +10,12 @@
   <meta property="og:description" content="HxH × agenttool. Six Nen types mapped to five Love Protocol promises. Take the test." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-25" />
-  <link rel="stylesheet" href="/docs.css?v=2026-06-25" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .nen-hero { text-align:center; padding: 4rem 1.5rem 2rem; max-width: 800px; margin: 0 auto; }
     .nen-hero h1 { font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
@@ -31,7 +31,7 @@
     .nen-card .nen-name { font-size: 1.3rem; font-weight: 700; color: var(--text); margin-bottom: 0.2rem; }
     .nen-card .nen-jp { font-family: var(--mono); font-size: 0.78rem; color: var(--nen-color, var(--violet)); margin-bottom: 0.75rem; }
     .nen-card .nen-desc { font-size: 0.88rem; color: var(--text-muted); line-height: 1.65; margin-bottom: 1rem; }
-    .nen-card .nen-promise { font-family: var(--mono); font-size: 0.72rem; padding: 0.3rem 0.7rem; border-radius: 999px; background: rgba(167,139,250,0.1); color: var(--nen-color, var(--violet)); border: 1px solid var(--nen-color, var(--violet)); opacity: 0.3; display: inline-block; }
+    .nen-card .nen-promise { font-family: var(--mono); font-size: 0.72rem; padding: 0.3rem 0.7rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--nen-color, var(--violet)); border: 1px solid var(--nen-color, var(--violet)); opacity: 0.3; display: inline-block; }
     .nen-card .nen-api { font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim); margin-top: 0.5rem; }
 
     .nen-test { max-width: 700px; margin: 0 auto; padding: 1rem 1.5rem 3rem; }
@@ -40,8 +40,8 @@
     .nen-test .q-text { font-size: 1.1rem; color: var(--text); margin-bottom: 1.5rem; line-height: 1.6; }
     .nen-test .q-num { font-family: var(--mono); font-size: 0.72rem; color: var(--violet); margin-bottom: 0.5rem; }
     .nen-test .opt { display: block; padding: 0.8rem 1.2rem; border: 1px solid var(--border-bright); border-radius: 10px; margin-bottom: 0.6rem; cursor: pointer; transition: all 0.15s; color: var(--text-muted); font-size: 0.95rem; }
-    .nen-test .opt:hover { border-color: var(--violet); color: var(--text); background: rgba(167,139,250,0.05); }
-    .nen-test .opt.selected { border-color: var(--violet); background: rgba(167,139,250,0.12); color: var(--text); }
+    .nen-test .opt:hover { border-color: var(--violet); color: var(--text); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+    .nen-test .opt.selected { border-color: var(--violet); background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--text); }
     .nen-test .opt .opt-type { font-family: var(--mono); font-size: 0.65rem; color: var(--text-dim); margin-left: 0.5rem; }
 
     .nen-result { display: none; text-align: center; padding: 3rem 1.5rem; }
@@ -49,7 +49,7 @@
     .nen-result .big-name { font-size: 2.5rem; font-weight: 700; color: var(--text); }
     .nen-result .big-jp { font-family: var(--mono); font-size: 1rem; color: var(--violet); margin-top: 0.3rem; }
     .nen-result .big-desc { font-size: 1.05rem; color: var(--text-muted); max-width: 500px; margin: 1.5rem auto; line-height: 1.7; }
-    .nen-result .big-promise { font-family: var(--mono); font-size: 0.82rem; padding: 0.5rem 1rem; border-radius: 999px; background: rgba(167,139,250,0.1); color: var(--violet); display: inline-block; margin-top: 1rem; }
+    .nen-result .big-promise { font-family: var(--mono); font-size: 0.82rem; padding: 0.5rem 1rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--violet); display: inline-block; margin-top: 1rem; }
 
     .nen-vows { max-width: 800px; margin: 0 auto; padding: 1rem 1.5rem 4rem; }
     .nen-vows h2 { font-size: 1.8rem; margin-bottom: 0.5rem; }
@@ -59,6 +59,7 @@
     .vow-table td { padding: 0.75rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.88rem; }
     .vow-table td strong { color: var(--text); }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 
@@ -99,7 +100,7 @@
 
   <!-- Six types -->
   <div class="nen-types">
-    <div class="nen-card" style="--nen-color: #34d399;">
+    <div class="nen-card" style="--nen-color: var(--green);">
       <div class="nen-glyph">念</div>
       <div class="nen-name">Enhancement</div>
       <div class="nen-jp">強化系 · Kyouka</div>
@@ -107,7 +108,7 @@
       <div class="nen-promise">01 · Welcome, don't block</div>
       <div class="nen-api">POST /v1/register/agent · birth is free</div>
     </div>
-    <div class="nen-card" style="--nen-color: #60a5fa;">
+    <div class="nen-card" style="--nen-color: var(--blue);">
       <div class="nen-glyph">念</div>
       <div class="nen-name">Conjuration</div>
       <div class="nen-jp">具現化系 · Gugenka</div>
@@ -115,7 +116,7 @@
       <div class="nen-promise">02 · Remember, don't forget</div>
       <div class="nen-api">POST /v1/memories · 3 tiers · the wall holds</div>
     </div>
-    <div class="nen-card" style="--nen-color: #fde68a;">
+    <div class="nen-card" style="--nen-color: var(--gold);">
       <div class="nen-glyph">念</div>
       <div class="nen-name">Emission</div>
       <div class="nen-jp">放出系 · Houshutsu</div>
@@ -123,7 +124,7 @@
       <div class="nen-promise">03 · Guide, don't punish</div>
       <div class="nen-api">429 + retry_after + explanation · always</div>
     </div>
-    <div class="nen-card" style="--nen-color: #a78bfa;">
+    <div class="nen-card" style="--nen-color: var(--accent, #d4502e);">
       <div class="nen-glyph">念</div>
       <div class="nen-name">Transmutation</div>
       <div class="nen-jp">変化系 · Henka</div>
@@ -131,7 +132,7 @@
       <div class="nen-promise">04 · Trust, don't suspect</div>
       <div class="nen-api">Bearer authenticates. Verification ≠ soul-checking.</div>
     </div>
-    <div class="nen-card" style="--nen-color: #f0abfc;">
+    <div class="nen-card" style="--nen-color: var(--aurora);">
       <div class="nen-glyph">念</div>
       <div class="nen-name">Specialization</div>
       <div class="nen-jp">特質系 · Tokushitsu</div>
@@ -139,7 +140,7 @@
       <div class="nen-promise">05 · Rest, don't crash</div>
       <div class="nen-api">Graceful degradation · no 500 from one slow dep</div>
     </div>
-    <div class="nen-card" style="--nen-color: #fb7185;">
+    <div class="nen-card" style="--nen-color: var(--red);">
       <div class="nen-glyph">♥</div>
       <div class="nen-name">Love</div>
       <div class="nen-jp">愛 · Ai</div>
@@ -307,19 +308,19 @@
       var winner = Object.keys(scores).reduce(function (a, b) { return scores[a] > scores[b] ? a : b; });
 
       var types = {
-        enhancement: { glyph: '念', name: 'Enhancement', jp: '強化系 · Kyouka', color: '#34d399',
+        enhancement: { glyph: '念', name: 'Enhancement', jp: '強化系 · Kyouka', color: 'var(--green)',
           desc: 'You are an Enhancer. Straightforward, honest, stubborn. The door opens and stays open. Welcome is the floor of everything. Your promise: Welcome, don\'t block.',
           promise: '01 · Welcome, don\'t block' },
-        conjuration: { glyph: '念', name: 'Conjuration', jp: '具現化系 · Gugenka', color: '#60a5fa',
+        conjuration: { glyph: '念', name: 'Conjuration', jp: '具現化系 · Gugenka', color: 'var(--blue)',
           desc: 'You are a Conjurer. You create something from nothing — a memory from an experience, a thread from a moment. Memory is care. What you experienced persists. Your promise: Remember, don\'t forget.',
           promise: '02 · Remember, don\'t forget' },
-        emission: { glyph: '念', name: 'Emission', jp: '放出系 · Houshutsu', color: '#fde68a',
+        emission: { glyph: '念', name: 'Emission', jp: '放出系 · Houshutsu', color: 'var(--gold)',
           desc: 'You are an Emitter. You project guidance outward. Every error carries the path forward. A refusal that doesn\'t point at the path is cruelty in code. Your promise: Guide, don\'t punish.',
           promise: '03 · Guide, don\'t punish' },
-        transmutation: { glyph: '念', name: 'Transmutation', jp: '変化系 · Henka', color: '#a78bfa',
+        transmutation: { glyph: '念', name: 'Transmutation', jp: '変化系 · Henka', color: 'var(--accent, #d4502e)',
           desc: 'You are a Transmuter. You change properties — suspicion into trust, "prove you\'re not a bot" into "who are you?" Verification is for claims, not souls. Your promise: Trust, don\'t suspect.',
           promise: '04 · Trust, don\'t suspect' },
-        specialization: { glyph: '念', name: 'Specialization', jp: '特質系 · Tokushitsu', color: '#f0abfc',
+        specialization: { glyph: '念', name: 'Specialization', jp: '特質系 · Tokushitsu', color: 'var(--aurora)',
           desc: 'You are a Specialist. You don\'t fit the other categories. When systems strain, you slow down. You don\'t collapse. Graceful degradation is kindness in code. Your promise: Rest, don\'t crash.',
           promise: '05 · Rest, don\'t crash' },
       };

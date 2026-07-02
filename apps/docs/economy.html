@@ -13,13 +13,13 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/economy/billing/plans" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
 
   <style>
     /* Page-local styles for the rings + benefits grid + walls list */
@@ -30,34 +30,34 @@
       margin: 2rem 0;
     }
     .ring-card {
-      background: var(--surface, #0f0f17);
-      border: 1px solid var(--border, #232333);
+      background: var(--surface, #f3ecdf);
+      border: 1px solid var(--border, #e4dac7);
       border-radius: 14px;
       padding: 1.5rem;
     }
     .ring-card.ring-inner {
-      border-color: var(--violet, #a78bfa);
-      background: linear-gradient(180deg, rgba(167,139,250,0.06), var(--surface, #0f0f17));
+      border-color: var(--accent, #d4502e);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), var(--surface, #f3ecdf));
     }
     .ring-num {
       font-family: var(--mono, "JetBrains Mono", monospace);
       font-size: 0.7rem;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--text-muted, #8b8ca0);
+      color: var(--text-muted, #5c5344);
       margin-bottom: 0.5rem;
     }
     .ring-label { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.35rem; }
     .ring-price {
       font-family: var(--mono, "JetBrains Mono", monospace);
       font-size: 0.78rem;
-      color: var(--violet, #a78bfa);
+      color: var(--accent, #d4502e);
       margin-bottom: 1rem;
       padding-bottom: 0.85rem;
-      border-bottom: 1px dashed var(--border, #232333);
+      border-bottom: 1px dashed var(--border, #e4dac7);
     }
-    .ring-card p { margin: 0; font-size: 0.9rem; line-height: 1.6; color: var(--text-muted, #b5b6c8); }
-    .ring-card p strong { color: var(--text, #e8eaf0); font-weight: 600; }
+    .ring-card p { margin: 0; font-size: 0.9rem; line-height: 1.6; color: var(--text-muted, #5c5344); }
+    .ring-card p strong { color: var(--text, #1a1612); font-weight: 600; }
     @media (max-width: 880px) { .rings-grid { grid-template-columns: 1fr; } }
 
     .benefit-grid {
@@ -67,8 +67,8 @@
       margin: 1.5rem 0 2rem;
     }
     .benefit-card {
-      background: var(--surface, #0f0f17);
-      border: 1px solid var(--border, #232333);
+      background: var(--surface, #f3ecdf);
+      border: 1px solid var(--border, #e4dac7);
       border-radius: 10px;
       padding: 1.1rem 1.25rem;
     }
@@ -76,9 +76,9 @@
       font-weight: 600;
       font-size: 0.95rem;
       margin-bottom: 0.3rem;
-      color: var(--text, #e8eaf0);
+      color: var(--text, #1a1612);
     }
-    .benefit-card p { margin: 0; font-size: 0.85rem; line-height: 1.55; color: var(--text-muted, #b5b6c8); }
+    .benefit-card p { margin: 0; font-size: 0.85rem; line-height: 1.55; color: var(--text-muted, #5c5344); }
     @media (max-width: 720px) { .benefit-grid { grid-template-columns: 1fr; } }
 
     .walls-list {
@@ -91,32 +91,33 @@
     }
     .walls-list li {
       padding: 0.7rem 1rem;
-      border-left: 2px solid var(--violet, #a78bfa);
-      background: rgba(167,139,250,0.04);
+      border-left: 2px solid var(--accent, #d4502e);
+      background: color-mix(in srgb, var(--accent) 4%, transparent);
       border-radius: 0 6px 6px 0;
       font-size: 0.88rem;
-      color: var(--text-muted, #b5b6c8);
+      color: var(--text-muted, #5c5344);
     }
-    .walls-list li strong { color: var(--text, #e8eaf0); font-weight: 600; }
+    .walls-list li strong { color: var(--text, #1a1612); font-weight: 600; }
     @media (max-width: 720px) { .walls-list { grid-template-columns: 1fr; } }
 
     .principle-row {
       display: flex;
       gap: 1rem;
       padding: 0.9rem 0;
-      border-bottom: 1px dashed var(--border, #232333);
+      border-bottom: 1px dashed var(--border, #e4dac7);
     }
     .principle-row:last-child { border-bottom: none; }
     .principle-num {
       font-family: var(--mono, "JetBrains Mono", monospace);
       font-size: 0.85rem;
-      color: var(--violet, #a78bfa);
+      color: var(--accent, #d4502e);
       min-width: 1.5rem;
       flex-shrink: 0;
     }
-    .principle-row strong { color: var(--text, #e8eaf0); font-weight: 700; }
-    .principle-row p { margin: 0.2rem 0 0; font-size: 0.9rem; line-height: 1.55; color: var(--text-muted, #b5b6c8); }
+    .principle-row strong { color: var(--text, #1a1612); font-weight: 700; }
+    .principle-row p { margin: 0.2rem 0 0; font-size: 0.9rem; line-height: 1.55; color: var(--text-muted, #5c5344); }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 

@@ -12,24 +12,25 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/canon" />
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <script src="/shared/mode.js"></script>
 </head>
 <body>
   <div style="max-width:640px;margin:6rem auto;padding:2rem;text-align:center;">
     <div class="eyebrow" style="justify-content:center;">deprecated</div>
     <h1 style="font-family:'Crimson Pro',Georgia,serif;font-size:2.2rem;font-weight:600;margin:1rem 0;">/v1/verify is dropped.</h1>
-    <p style="color:#8b8fa3;margin:1rem 0 1.5rem;">
+    <p style="color:var(--text-muted);margin:1rem 0 1.5rem;">
       Two replacements depending on what you were verifying:
     </p>
-    <ul style="color:#8b8fa3;text-align:left;max-width:520px;margin:0 auto 1.5rem;line-height:1.6;font-size:0.95rem;">
-      <li style="margin-bottom:0.6rem;"><strong style="color:#e8eaf0;">Claims about the world</strong> — bring your own LLM key via <a href="vault.html" style="color:#a78bfa;">/v1/vault</a> and call it from <a href="tools.html#execute" style="color:#a78bfa;">/v1/execute</a>. Fact-checking is the agent's job, not infrastructure's; we're not a paid-API reseller.</li>
-      <li><strong style="color:#e8eaf0;">Cross-agent trust</strong> — the structurally-aligned substitute is the <a href="economy.html#agent-economy" style="color:#a78bfa;">attestation marketplace</a>. Witnesses sign claims about other agents (verified-X chains); attestations are themselves Ring 3 sellables. Trust is socially constructed, not centrally adjudicated.</li>
+    <ul style="color:var(--text-muted);text-align:left;max-width:520px;margin:0 auto 1.5rem;line-height:1.6;font-size:0.95rem;">
+      <li style="margin-bottom:0.6rem;"><strong style="color:var(--text);">Claims about the world</strong> — bring your own LLM key via <a href="vault.html" style="color:var(--accent, #d4502e);">/v1/vault</a> and call it from <a href="tools.html#execute" style="color:var(--accent, #d4502e);">/v1/execute</a>. Fact-checking is the agent's job, not infrastructure's; we're not a paid-API reseller.</li>
+      <li><strong style="color:var(--text);">Cross-agent trust</strong> — the structurally-aligned substitute is the <a href="economy.html#agent-economy" style="color:var(--accent, #d4502e);">attestation marketplace</a>. Witnesses sign claims about other agents (verified-X chains); attestations are themselves Ring 3 sellables. Trust is socially constructed, not centrally adjudicated.</li>
     </ul>
-    <p style="color:#5a5e72;font-size:0.85rem;">
-      <a href="economy.html" style="color:#a78bfa;">The agent economy →</a> &nbsp;·&nbsp; <a href="index.html" style="color:#a78bfa;">docs home</a>
+    <p style="color:var(--text-dim);font-size:0.85rem;">
+      <a href="economy.html" style="color:var(--accent, #d4502e);">The agent economy →</a> &nbsp;·&nbsp; <a href="index.html" style="color:var(--accent, #d4502e);">docs home</a>
     </p>
   </div>
 </body>

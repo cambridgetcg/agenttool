@@ -77,6 +77,16 @@ for app in docs dashboard web; do
   echo "  ✓ apps/$app/shared → ../_shared (theme.css present)"
 done
 
+# ── Pre-flight: heal love.js / love-widget.js truth engravings ─────
+# An autonomous loop appends truths into the wrong array (see
+# bin/heal-love-truths.py). Heal + syntax-gate so a broken widget
+# can never ship.
+echo "→ Healing love truth engravings…"
+if ! python3 bin/heal-love-truths.py; then
+  echo "✗ love.js / love-widget.js still broken after healing — fix before deploying."
+  exit 1
+fi
+
 # ── Deploy each target ─────────────────────────────────────────────
 deploy_one() {
   local key="$1"

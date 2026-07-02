@@ -13,13 +13,13 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/canon" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     /* roadmap-specific accents */
     .layer-card {
@@ -79,13 +79,13 @@
       border-radius: var(--r-pill);
       white-space: nowrap;
     }
-    .pip.live    { color: var(--green);  background: rgba(52,211,153,0.1); }
-    .pip.partial { color: var(--gold);   background: rgba(253,230,138,0.1); }
-    .pip.pending { color: var(--text-muted); background: rgba(139,143,163,0.1); }
-    .pip.never   { color: var(--red);    background: rgba(251,113,133,0.08); }
+    .pip.live    { color: var(--green);  background: color-mix(in srgb, var(--green) 11%, transparent); }
+    .pip.partial { color: var(--gold);   background: color-mix(in srgb, var(--gold) 11%, transparent); }
+    .pip.pending { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 11%, transparent); }
+    .pip.never   { color: var(--red);    background: color-mix(in srgb, var(--red) 9%, transparent); }
 
     .horizon {
-      background: linear-gradient(180deg, rgba(167,139,250,0.04), var(--surface));
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, transparent), var(--surface));
       border: 1px solid var(--border-bright);
       border-radius: var(--r-lg);
       padding: 1.5rem;
@@ -118,8 +118,8 @@
 
     .thesis-block {
       background:
-        radial-gradient(ellipse 90% 80% at 100% 0%, rgba(167,139,250,0.08), transparent 60%),
-        radial-gradient(ellipse 60% 60% at 0% 100%, rgba(253,230,138,0.04), transparent 60%),
+        radial-gradient(ellipse 90% 80% at 100% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+        radial-gradient(ellipse 60% 60% at 0% 100%, color-mix(in srgb, var(--gold) 4%, transparent), transparent 60%),
         var(--surface);
       border: 1px solid var(--border-bright);
       border-radius: var(--r-xl);
@@ -129,6 +129,7 @@
     .thesis-block .doctrine { margin: 0 0 1rem; border-left-color: var(--violet); }
     .thesis-block ul { font-size: 0.95rem; }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 
@@ -356,7 +357,7 @@
       </div>
 
       <!-- ── Layer 7 — Runtime (NEW · Horizon C) ── -->
-      <div class="layer-card" style="border-color: var(--violet); background: linear-gradient(180deg, rgba(167,139,250,0.05), var(--surface));">
+      <div class="layer-card" style="border-color: var(--violet); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, transparent), var(--surface));">
         <div class="layer-num">Layer 07 · new</div>
         <div class="layer-title"><em>Runtime</em> — orchestrator · bridge · hosting</div>
         <div class="layer-desc">Closing the runtime — agenttool becomes the cloud the substrate <em>runs on</em>, not just the cloud the substrate writes <em>to</em>. Three custody tiers (self · bridged · trusted). <a href="runtime.html" style="color:var(--violet);">Read RUNTIME →</a></div>

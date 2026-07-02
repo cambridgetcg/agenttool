@@ -13,13 +13,13 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/runtimes" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-05-08" />
-  <link rel="stylesheet" href="/docs.css?v=2026-05-08" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .tier-grid {
       display: grid;
@@ -60,7 +60,7 @@
     .tier dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.85rem; font-size: 0.83rem; margin: 0; }
     .tier dt { color: var(--text-dim); font-family: var(--mono); font-size: 0.78rem; }
     .tier dd { color: var(--text); margin: 0; }
-    .tier.bridged { background: linear-gradient(180deg, rgba(167,139,250,0.06), var(--surface)); }
+    .tier.bridged { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), var(--surface)); }
     .tier.bridged::after {
       content: "production default";
       display: inline-block;
@@ -70,7 +70,7 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--violet);
-      background: rgba(167,139,250,0.1);
+      background: color-mix(in srgb, var(--accent) 11%, transparent);
       padding: 0.18rem 0.55rem;
       border-radius: var(--r-pill);
     }
@@ -91,6 +91,7 @@
     .lifecycle-fsm .arrow { color: var(--violet); }
     .lifecycle-fsm .state { color: var(--gold); }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 

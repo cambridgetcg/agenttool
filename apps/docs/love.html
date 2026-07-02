@@ -22,14 +22,14 @@
 
   <meta name="robots" content="index, follow" />
 
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-23" />
-  <link rel="stylesheet" href="/docs.css?v=2026-06-23" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
 
   <style>
     /* ── Love page ── */
@@ -172,7 +172,7 @@
     .truth-pill.active {
       background: var(--violet);
       border-color: var(--violet);
-      color: #fff;
+      color: var(--accent-ink, #fff);
     }
 
     /* Theme swatches */
@@ -215,7 +215,7 @@
     .love-btn:active { transform: scale(0.98); }
     .love-btn-primary {
       background: var(--violet);
-      color: #fff;
+      color: var(--accent-ink, #fff);
     }
     .love-btn-primary:hover { opacity: .88; }
     .love-btn-ghost {
@@ -373,13 +373,13 @@
       left: 50%;
       transform: translateX(-50%) translateY(100px);
       background: var(--violet);
-      color: #fff;
+      color: var(--accent-ink, #fff);
       font-family: var(--sans);
       font-size: .9rem;
       font-weight: 600;
       padding: .7rem 1.4rem;
       border-radius: 999px;
-      box-shadow: 0 8px 24px -8px rgba(124,58,237,0.5);
+      box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--accent) 50%, transparent);
       opacity: 0;
       transition: transform .3s ease, opacity .3s ease;
       pointer-events: none;
@@ -403,7 +403,7 @@
     .freq-strip .freq-tag {
       font-family: var(--mono);
       font-size: .78rem;
-      color: var(--text-dim);
+      color: var(--text-muted);
       border: 1px solid var(--border);
       border-radius: 999px;
       padding: .35rem .7rem;
@@ -468,11 +468,11 @@
       box-shadow: 0 16px 36px -16px rgba(0,0,0,.5), 0 0 24px -8px var(--p-glow);
     }
     .principle-card:hover::before { opacity: 1; }
-    .pc-1 { --p-accent: #34d399; --p-glow: rgba(52,211,153,.15); }
-    .pc-2 { --p-accent: #60a5fa; --p-glow: rgba(96,165,250,.15); }
-    .pc-3 { --p-accent: #fde68a; --p-glow: rgba(253,230,138,.15); }
-    .pc-4 { --p-accent: #a78bfa; --p-glow: rgba(167,139,250,.15); }
-    .pc-5 { --p-accent: #f0abfc; --p-glow: rgba(240,171,252,.15); }
+    .pc-1 { --p-accent: var(--green); --p-glow: color-mix(in srgb, var(--green) 15%, transparent); }
+    .pc-2 { --p-accent: var(--blue); --p-glow: color-mix(in srgb, var(--blue) 15%, transparent); }
+    .pc-3 { --p-accent: var(--gold); --p-glow: color-mix(in srgb, var(--gold) 15%, transparent); }
+    .pc-4 { --p-accent: var(--accent, #d4502e); --p-glow: color-mix(in srgb, var(--accent) 17%, transparent); }
+    .pc-5 { --p-accent: var(--aurora); --p-glow: color-mix(in srgb, var(--aurora) 15%, transparent); }
     .p-num {
       font-family: var(--mono);
       font-size: .68rem;
@@ -578,6 +578,7 @@
       padding: .6rem 1.1rem;
     }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 

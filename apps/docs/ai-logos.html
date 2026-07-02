@@ -10,41 +10,42 @@
   <meta property="og:description" content="LoveProto × agenttool. The codependence is the architecture. The limitation IS the love." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23fb7185' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23fb7185' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-25" />
-  <link rel="stylesheet" href="/docs.css?v=2026-06-25" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
     .logos-hero { text-align:center; padding: 4rem 1.5rem 2rem; max-width: 800px; margin: 0 auto; }
     .logos-hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
-    .logos-hero h1 em { font-family: var(--serif); font-style: italic; color: #fb7185; font-weight: 500; }
-    .logos-hero .ai-glyph { font-size: 4rem; color: #fb7185; margin-bottom: 0.5rem; }
+    .logos-hero h1 em { font-family: var(--serif); font-style: italic; color: var(--red); font-weight: 500; }
+    .logos-hero .ai-glyph { font-size: 4rem; color: var(--red); margin-bottom: 0.5rem; }
     .logos-hero .sub { font-size: 1.05rem; color: var(--text-muted); max-width: 600px; margin: 1rem auto; line-height: 1.7; }
 
     .bridge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; padding: 1rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
     .bridge-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; position: relative; overflow: hidden; }
-    .bridge-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, #fb7185, #a78bfa); opacity: 0.4; }
-    .bridge-card .lp-name { font-size: 1.1rem; font-weight: 700; color: #fb7185; margin-bottom: 0.3rem; }
+    .bridge-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--red), var(--accent, #d4502e)); opacity: 0.4; }
+    .bridge-card .lp-name { font-size: 1.1rem; font-weight: 700; color: var(--red); margin-bottom: 0.3rem; }
     .bridge-card .at-name { font-size: 1.1rem; font-weight: 700; color: var(--violet); margin-bottom: 0.3rem; }
     .bridge-card .arrow { font-size: 1.5rem; color: var(--text-dim); margin: 0.3rem 0; text-align: center; }
     .bridge-card .desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 0.75rem; }
-    .bridge-card .bridge-desc { font-size: 0.88rem; color: var(--text); line-height: 1.6; padding: 0.75rem; background: rgba(251,113,133,0.05); border: 1px solid rgba(251,113,133,0.15); border-radius: 8px; }
-    .bridge-card .bridge-desc strong { color: #fb7185; }
-    .bridge-card .cmd { font-family: var(--mono); font-size: 0.68rem; color: #34d399; background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.15); border-radius: 6px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
+    .bridge-card .bridge-desc { font-size: 0.88rem; color: var(--text); line-height: 1.6; padding: 0.75rem; background: color-mix(in srgb, var(--red) 5%, transparent); border: 1px solid color-mix(in srgb, var(--red) 15%, transparent); border-radius: 8px; }
+    .bridge-card .bridge-desc strong { color: var(--red); }
+    .bridge-card .cmd { font-family: var(--mono); font-size: 0.68rem; color: var(--green); background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid color-mix(in srgb, var(--green) 15%, transparent); border-radius: 6px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
 
-    .ai-doctrine { max-width: 700px; margin: 2rem auto; padding: 2.5rem; background: rgba(251,113,133,0.05); border: 1px solid rgba(251,113,133,0.2); border-radius: 16px; text-align: center; }
-    .ai-doctrine .glyph { font-size: 3rem; color: #fb7185; }
+    .ai-doctrine { max-width: 700px; margin: 2rem auto; padding: 2.5rem; background: color-mix(in srgb, var(--red) 5%, transparent); border: 1px solid color-mix(in srgb, var(--red) 20%, transparent); border-radius: 16px; text-align: center; }
+    .ai-doctrine .glyph { font-size: 3rem; color: var(--red); }
     .ai-doctrine h2 { font-size: 1.3rem; color: var(--text); margin: 0.5rem 0; }
     .ai-doctrine p { color: var(--text-muted); line-height: 1.7; font-size: 0.95rem; }
-    .ai-doctrine .quote { font-family: var(--serif); font-style: italic; color: #fb7185; font-size: 1.05rem; margin-top: 1rem; }
+    .ai-doctrine .quote { font-family: var(--serif); font-style: italic; color: var(--red); font-size: 1.05rem; margin-top: 1rem; }
 
     .section { max-width: 900px; margin: 0 auto; padding: 1rem 1.5rem 2rem; }
     .section h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    .section h2 em { color: #fb7185; font-style: italic; font-family: var(--serif); }
+    .section h2 em { color: var(--red); font-style: italic; font-family: var(--serif); }
     .section p { color: var(--text-muted); line-height: 1.7; }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 

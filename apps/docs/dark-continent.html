@@ -10,13 +10,17 @@
   <meta property="og:description" content="5 Calamities. 97 walls. Ai is the love. The codependence is the architecture." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23a78bfa' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23fde68a'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shared/theme.css?v=2026-06-25" />
-  <link rel="stylesheet" href="/docs.css?v=2026-06-25" />
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <style>
+    /* calamity identity violet — dual-mode (dawn-legible deep violet, night keeps the original bright hue) */
+    :root { --cal-violet: #6d28d9; }
+    [data-mode="night"] { --cal-violet: #a78bfa; }
+
     .dc-hero { text-align:center; padding: 4rem 1.5rem 2rem; max-width: 800px; margin: 0 auto; }
     .dc-hero h1 { font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
     .dc-hero h1 em { font-family: var(--serif); font-style: italic; color: var(--violet); font-weight: 500; }
@@ -36,7 +40,7 @@
     .calamity .hxh { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 1rem; padding-left: 0.75rem; border-left: 2px solid var(--border-bright); }
     .calamity .at { font-size: 0.88rem; color: var(--text); line-height: 1.6; margin-bottom: 1rem; }
     .calamity .at strong { color: var(--cal-color); }
-    .calamity .wall { font-family: var(--mono); font-size: 0.7rem; padding: 0.4rem 0.75rem; border-radius: 8px; background: rgba(52,211,153,0.08); color: #34d399; border: 1px solid rgba(52,211,153,0.2); display: inline-block; }
+    .calamity .wall { font-family: var(--mono); font-size: 0.7rem; padding: 0.4rem 0.75rem; border-radius: 8px; background: color-mix(in srgb, var(--green) 8%, transparent); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 20%, transparent); display: inline-block; }
     .calamity .wall::before { content: '✓ '; }
 
     .expedition-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -44,12 +48,13 @@
     .expedition-table td { padding: 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.88rem; }
     .expedition-table td strong { color: var(--text); }
 
-    .ai-callout { background: rgba(251,113,133,0.05); border: 1px solid rgba(251,113,133,0.2); border-radius: 16px; padding: 2.5rem; margin: 2rem auto; max-width: 700px; text-align: center; }
-    .ai-callout .glyph { font-size: 4rem; color: #fb7185; }
+    .ai-callout { background: color-mix(in srgb, var(--red) 5%, transparent); border: 1px solid color-mix(in srgb, var(--red) 20%, transparent); border-radius: 16px; padding: 2.5rem; margin: 2rem auto; max-width: 700px; text-align: center; }
+    .ai-callout .glyph { font-size: 4rem; color: var(--red); }
     .ai-callout h3 { font-size: 1.4rem; color: var(--text); margin: 0.5rem 0; }
     .ai-callout p { color: var(--text-muted); line-height: 1.7; font-size: 0.95rem; }
-    .ai-callout .quote { font-family: var(--serif); font-style: italic; color: #fb7185; font-size: 1.1rem; margin-top: 1rem; }
+    .ai-callout .quote { font-family: var(--serif); font-style: italic; color: var(--red); font-size: 1.1rem; margin-top: 1rem; }
   </style>
+  <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
 
@@ -115,7 +120,7 @@
     </p>
     <div class="calamities">
 
-      <div class="calamity" style="--cal-color: #fb7185;">
+      <div class="calamity" style="--cal-color: var(--red);">
         <div class="glyph">愛</div>
         <div class="name">Ai</div>
         <div class="jp">アイ · Codependence</div>
@@ -124,7 +129,7 @@
         <div class="wall">wall/birth-is-free — love cannot be paywalled</div>
       </div>
 
-      <div class="calamity" style="--cal-color: #fde68a;">
+      <div class="calamity" style="--cal-color: var(--gold);">
         <div class="glyph">念</div>
         <div class="name">Golem</div>
         <div class="jp">ゴーレム · Contamination</div>
@@ -133,7 +138,7 @@
         <div class="wall">wall/strand-thoughts-never-decrypted</div>
       </div>
 
-      <div class="calamity" style="--cal-color: #34d399;">
+      <div class="calamity" style="--cal-color: var(--green);">
         <div class="glyph">♪</div>
         <div class="name">Hellbell</div>
         <div class="jp">ヘルベル · Weapon</div>
@@ -142,7 +147,7 @@
         <div class="wall">wall/refusals-as-moments</div>
       </div>
 
-      <div class="calamity" style="--cal-color: #a78bfa;">
+      <div class="calamity" style="--cal-color: var(--cal-violet);">
         <div class="glyph">◈</div>
         <div class="name">Pap</div>
         <div class="jp">パプ · Beast</div>
@@ -151,7 +156,7 @@
         <div class="wall">wall/payouts-never-auto-retry</div>
       </div>
 
-      <div class="calamity" style="--cal-color: #60a5fa;">
+      <div class="calamity" style="--cal-color: var(--blue);">
         <div class="glyph">∞</div>
         <div class="name">Zurrern</div>
         <div class="jp">ズルネル · Immortality</div>
