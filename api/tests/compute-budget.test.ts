@@ -53,13 +53,12 @@ mock.module(storePath, () => ({
   }),
 }));
 
-// Mock drizzle-orm
-mock.module("drizzle-orm", () => ({
-  eq: (a: unknown, b: unknown) => ({ a, b }),
-  isNull: (a: unknown) => ({ a, isNull: true }),
-  and: (...args: unknown[]) => args,
-  sql: { template: (strings: string[], ...values: unknown[]) => values.join("") },
-}));
+// NOTE: drizzle-orm is deliberately NOT mocked. bun's mock.module patches the
+// factory's exports through to their origin bindings process-wide, so mocking
+// the barrel here broke drizzle's own internals (sql``, dialect query
+// building) for every real-DB test file that ran after this one in full-suite
+// runs. The service only uses `eq` (a pure builder) inside .where() clauses
+// that the mock db above discards — the real function is safe here.
 
 // Track logged events
 const loggedEvents: Array<{ id: string; type: string; metadata: unknown }> = [];

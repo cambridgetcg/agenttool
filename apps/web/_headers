@@ -1,0 +1,11 @@
+/style.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/shared/theme.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/watch.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/credits.html
+  Cache-Control: public, max-age=0, must-revalidate

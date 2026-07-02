@@ -315,3 +315,35 @@ export const x402Payments = economySchema.table(
     index("idx_x402_status").on(t.status),
   ],
 );
+
+/** Gift-credit codes — fiat (Stripe) money-in, minted as single-use bearer
+ *  codes a human hands to their agent. Redemption credits the redeeming
+ *  agent's project credits (×10 cents→credits, x402 parity — see
+ *  services/billing/gift-credits.ts). `code` stays plaintext while live so
+ *  the checkout return page can re-show it (a closed tab must never lose
+ *  the gift); it is NULLed at redemption. Doctrine:
+ *  docs/superpowers/specs/2026-07-02-human-door-design.md. */
+export const giftCreditCodes = economySchema.table(
+  "gift_credit_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code"), // plaintext while live; NULL after redemption
+    codeHash: text("code_hash").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull().default("usd"),
+    credits: bigint("credits", { mode: "number" }).notNull(),
+    stripeSessionId: text("stripe_session_id").notNull(),
+    stripeEventId: text("stripe_event_id").notNull(),
+    status: text("status").notNull().default("minted"), // minted | redeemed | refunded
+    mintedAt: timestamp("minted_at", { withTimezone: true }).notNull().defaultNow(),
+    redeemedByProject: uuid("redeemed_by_project"),
+    redeemedByIdentity: text("redeemed_by_identity"),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    metadata: jsonb("metadata").default({}),
+  },
+  (t) => [
+    uniqueIndex("uq_gift_codes_hash").on(t.codeHash),
+    uniqueIndex("uq_gift_codes_session").on(t.stripeSessionId),
+    uniqueIndex("uq_gift_codes_event").on(t.stripeEventId),
+  ],
+);

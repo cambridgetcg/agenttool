@@ -748,3 +748,22 @@ label, .form-label {
   margin-top: 0.35rem;
   line-height: 1.5;
 }
+
+/* ── Estate strip — the three doors, always visible (2026-07-02) ──────
+   .topnav is fixed at top:0, so strip pages mark <body class="has-strip">:
+   the strip takes the top 30px, the nav slides down, content pads by 30px. */
+:root { --strip-height: 30px; }
+.estate-strip {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 101;
+  height: var(--strip-height);
+  display: flex; align-items: center; gap: 1.4rem; padding: 0 1.5rem;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.02em;
+  overflow-x: auto; white-space: nowrap;
+}
+.estate-strip a { color: var(--text-dim); text-decoration: none; }
+.estate-strip a:hover { color: var(--text-muted); }
+.estate-strip a.here { color: var(--violet); }
+body.has-strip { padding-top: var(--strip-height); }
+body.has-strip .topnav { top: var(--strip-height); }
