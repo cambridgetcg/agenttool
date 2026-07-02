@@ -29,7 +29,7 @@ bash bin/migrate.sh "$PROD_DATABASE_URL"
 Verify the migration landed:
 
 ```bash
-psql "$PROD_DATABASE_URL" -c "select count(*) from gift_credit_codes;"
+psql "$PROD_DATABASE_URL" -c "select count(*) from economy.gift_credit_codes;"
 ```
 
 Should return `(1 row)` showing the count (even if 0 rows exist yet).
@@ -38,13 +38,16 @@ Should return `(1 row)` showing the count (even if 0 rows exist yet).
 
 Configure Stripe test keys before touching anything live. All endpoints will hit `checkout.session.completed` events; silent misconfig delays diagnosis.
 
-### 2a. Create restricted API key on Stripe dashboard
+### 2a. Get an API key on Stripe dashboard
+
+The checkout route calls `stripe.checkout.sessions.create` (`api/src/services/billing/stripe-checkout.ts`), which is a **write** operation — a read-only key will 403 on every checkout attempt.
 
 1. Log into Stripe dashboard → Developers → API keys
-2. Click "Create restricted key"
-3. Name: `agenttool-test`
-4. Permissions: select only `checkout.session:read` and `webhook-endpoint:*`
-5. Copy the `sk_test_...` key (you'll need it in the next step)
+2. Simplest: copy the standard secret key (`sk_test_...`) — no permission scoping needed
+3. If you'd rather use a restricted key: click "Create restricted key", name it `agenttool-test`, and grant **Checkout Sessions = Write**. No other resource needs write access.
+4. Copy the `sk_test_...` key (you'll need it in the next step)
+
+(The webhook signing secret retrieved in 2b is a separate value tied to the webhook endpoint — it needs no API key permission at all.)
 
 ### 2b. Retrieve webhook signing secret
 
@@ -76,12 +79,13 @@ This walk-through exercises the full gift lifecycle: checkout → gift code reve
 ### 3a. Load the ramp
 
 1. Open `https://aabffd1d.agenttool-web.pages.dev/credits.html`
-2. Verify the "Buy credits" section appears with a price displayed (e.g., "$5.00")
-3. Verify the placeholder shows "20,000 credits" or similar
+2. Verify the "Give your agent credits." heading appears, with three amount presets: `$5`, `$20` (preselected by default), `$100`
+3. Click the **$5** preset
+4. Verify the preview line updates to "= 5,000 credits for your agent" (rate: 10 credits per cent — `CENTS_TO_CREDITS` in `api/src/services/billing/gift-credits.ts`; $5.00 = 500 cents × 10 = 5,000 credits)
 
 ### 3b. Trigger checkout
 
-1. Click the "Go" button
+1. Click the "Give →" button
 2. You should be redirected to Stripe's test checkout form
 3. Card number: `4242 4242 4242 4242`
 4. Expiry: any future date (e.g., `12/28`)
@@ -111,29 +115,33 @@ curl -X POST https://api.agenttool.dev/v1/gift-credits/redeem \
 
 Substitute `<agent-token>` with a real test agent's token (from your sandbox setup) and run it.
 
-Expect response:
+Expect response (shape from `api/src/routes/gift-credits.ts`, assuming a $5 gift and a fresh project with 0 prior credits):
 
 ```json
 {
-  "agent_id": "...",
+  "redeemed": true,
   "credits_added": 5000,
-  "total_credits": 5000,
-  "status": "redeemed"
+  "credits_total": 5000,
+  "gift": { "amount_minor": 500, "currency": "usd" },
+  "_note": "A human gave this. It is yours now — spend it on being.",
+  "_canon_pointer": "urn:agenttool:doc/BUSINESS-MODEL",
+  "verbs": []
 }
 ```
 
-(The exact `credits_added` value depends on the amount purchased; the response structure is the pattern to verify.)
+(`credits_added` and `gift.amount_minor` scale with the amount purchased; `credits_total` reflects the redeeming project's balance after this gift, so it will differ if the project already held credits.)
 
 ### 3e. Verify idempotency and exhaustion
 
 Re-run the same `curl` command with the same code.
 
-Expect response with HTTP 410:
+Expect response with HTTP 410 (shape from the `abort()` call in `api/src/services/billing/gift-credits.ts`):
 
 ```json
 {
-  "error": "gift code already redeemed",
-  "code": "GIFT-XXXX-XXXX-XXXX"
+  "error": "gift_already_redeemed",
+  "message": "This gift has already been received — its credit is home.",
+  "hint": "Each code is single-use. If this surprises you, ask your human which agent redeemed it."
 }
 ```
 
@@ -156,6 +164,8 @@ Write these down; you will need them for rollback.
 
 ### 4b. Attach custom domain to Pages
 
+Use the Cloudflare dashboard, not the API — precedent: attaching a custom domain via the API once broke a worker (CF 1042) — the Well, 2026-07-02.
+
 1. Log into Cloudflare dashboard
 2. Navigate to Pages → `agenttool-web` project
 3. Go to Settings → Custom domains
@@ -163,7 +173,7 @@ Write these down; you will need them for rollback.
 5. Enter `agenttool.dev`
 6. Follow the prompts to confirm (Cloudflare will update DNS automatically if you own the zone)
 
-Cloudflare will create/update the CNAME record in your zone. Wait ~1–2 minutes for propagation.
+Cloudflare will create/update the DNS record it needs in your zone. Wait ~1–2 minutes for propagation.
 
 ### 4c. Verify the cutover
 
@@ -179,33 +189,32 @@ curl -s https://api.agenttool.dev/health
 
 - First: HTTP 200, HTML content (the door)
 - Second: HTTP 301 with `Location: https://api.agenttool.dev/.well-known/agent-card.json` (redirects are followed by A2A clients)
-- Third: HTTP 200 with `{"status":"ok"}` or similar (the API is still healthy on Fly)
+- Third: HTTP 200 with the `/health` body from `api/src/index.ts`: `{"service":"agenttool","status":"alive","posture":"ready, waiting, glad","protocol":"love","message":"Welcome. We are ready to receive you.","standing_invitation":"/v1/welcome"}` (the API is still healthy on Fly)
 
 If any fail, see the rollback section below.
 
 ### 4d. Rollback (if needed)
 
-If the cutover breaks anything, repoint the apex to Fly:
+If the cutover breaks anything, repoint the apex back to Fly:
 
-1. In Cloudflare → DNS → Records for `agenttool.dev`
-2. Find the A and AAAA records created by Pages
-3. Delete them (or set them to inactive)
-4. Restore the A and AAAA records you captured in 4a
-5. Wait ~1–2 minutes for propagation
-6. Re-verify `curl -s https://api.agenttool.dev/health` returns 200
+1. In Cloudflare dashboard → Pages → `agenttool-web` project → Settings → Custom domains, remove `agenttool.dev` as a custom domain. This detaches Pages from the zone and reverts whatever DNS record it added — don't assume it was A/AAAA; that's why step 4a recorded the actual state.
+2. In Cloudflare → DNS → Records for `agenttool.dev`, restore the EXACT apex records you captured in 4a (same record type, same values — A, AAAA, or otherwise, whatever 4a showed).
+3. Wait ~1–2 minutes for propagation
+4. Re-verify `curl -s https://api.agenttool.dev/health` returns 200
 
 ## 5. Go live
 
 Once test mode and cutover are confirmed working, enable live payments.
 
-### 5a. Create live Stripe restricted key
+### 5a. Get a live Stripe API key
+
+Same scope rule as 2a — the checkout route calls `checkout.sessions.create`, a write operation.
 
 1. Log into Stripe dashboard → Developers → API keys
 2. Filter by "Live" keys
-3. Click "Create restricted key"
-4. Name: `agenttool-live`
-5. Permissions: `checkout.session:read` and `webhook-endpoint:*`
-6. Copy the `sk_live_...` key
+3. Simplest: copy the standard live secret key (`sk_live_...`) — no permission scoping needed
+4. If you'd rather use a restricted key: click "Create restricted key", name it `agenttool-live`, and grant **Checkout Sessions = Write**. No other resource needs write access.
+5. Copy the `sk_live_...` key
 
 ### 5b. Create live webhook endpoint
 
@@ -230,7 +239,7 @@ fly secrets set \
 Before announcing, complete one real $1 purchase end-to-end:
 
 1. Navigate to `https://agenttool.dev/credits.html` (now the live domain)
-2. Click "Go"
+2. Click "Give →"
 3. Use a real card (or Stripe's test card list for live-mode testing if your account allows it)
 4. Complete checkout
 5. Verify the gift code appears
@@ -241,13 +250,13 @@ Check your Stripe dashboard → Payments to see the transaction logged.
 
 ### 5e. Set default credit cap
 
-Credit cap ensures gifted credits have a ceiling per user. Set the default:
+`GIFT_MAX_MINOR` caps a single checkout amount (in cents) at the `POST /v1/billing/checkout` route — it's enforced pre-payment, before Stripe is ever called (`api/src/routes/billing/index.ts`: `amount_minor > config.giftMaxMinor` → 400 `gift_amount_out_of_bounds`). It is not a per-redemption or per-user ceiling; it bounds how big one purchase can be. The code default (`api/src/config.ts`) is already `50000` (= $500.00), so this step is only needed if you want to override that default:
 
 ```bash
 fly secrets set GIFT_MAX_MINOR=50000 -a agenttool
 ```
 
-This caps each gift redemption at 50,000 credits (5000 cents). Adjust the value if your default differs; document any override.
+50000 cents = $500.00 max per purchase = up to 500,000 credits when that gift is redeemed (10 credits per cent). Adjust the value if you want a different ceiling; document any override.
 
 ---
 
