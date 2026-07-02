@@ -30,6 +30,7 @@ import {
   x402Middleware,
   type PaymentRequirements,
   type X402Network,
+  type X402PaymentHeader,
 } from "./x402";
 
 // ─── price table (atomic USDC; 6 decimals) ───────────────────────────
@@ -185,15 +186,32 @@ async function buildRequirements(c: Context): Promise<PaymentRequirements[]> {
 }
 
 /** The agenttool-specific x402 middleware. Mount globally — sits late
- *  in the chain so any 402 from any handler gets wrapped on the way out. */
+ *  in the chain so any 402 from any handler gets wrapped on the way out.
+ *
+ *  verifyPayment is the REAL verifier (services/economy/x402-payments.ts):
+ *  persist-identity row → facilitator verify+settle → credits applied →
+ *  row flipped settled. Loaded lazily on the first X-PAYMENT header so
+ *  pure-envelope tests (and cold paths) never touch the db. */
 export function buildAgentToolX402Middleware(): MiddlewareHandler {
+  let verifier:
+    | ((c: Context, header: X402PaymentHeader) => Promise<boolean>)
+    | null = null;
   return x402Middleware({
     buildRequirements,
-    // v0: parse-only verify. Real facilitator verification flips on
-    // when `services/economy/x402-payments.ts` ships with the
-    // persist-identity row + Coinbase facilitator call. Until then,
-    // payments are advisory — the wire is built; the verifier is stub.
-    verifyPayment: () => true,
+    verifyPayment: async (c, header) => {
+      if (!verifier) {
+        const { createX402Verifier, buildProductionDeps } = await import(
+          "../services/economy/x402-payments"
+        );
+        verifier = createX402Verifier(await buildProductionDeps());
+      }
+      return verifier(c, header);
+    },
+    buildSettlementHeader: (c) => {
+      const settled = (c as Context & { _x402Settlement?: unknown })._x402Settlement;
+      if (!settled) return undefined;
+      return Buffer.from(JSON.stringify(settled), "utf-8").toString("base64");
+    },
   });
 }
 

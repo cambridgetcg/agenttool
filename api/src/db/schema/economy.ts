@@ -283,3 +283,35 @@ export const usageCounters = economySchema.table(
     index("idx_usage_project").on(t.projectId),
   ],
 );
+
+// ─── x402 payment ledger (persist-identity for machine payments) ────────────
+// One row per X-PAYMENT presented. The payload hash is persisted BEFORE the
+// facilitator settle call and flipped after — the pre-flight-write pattern
+// (docs/PATTERN-PERSIST-IDENTITY.md). The unique index doubles as replay
+// protection: a payload can only ever be applied once.
+
+export const x402Payments = economySchema.table(
+  "x402_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id"), // logical FK → tools.projects.id (payer's project)
+    payloadHash: text("payload_hash").notNull(), // sha256 hex of the raw payload
+    scheme: text("scheme").notNull(), // 'exact' (v1 accepts only this)
+    network: text("network").notNull(),
+    payer: text("payer"), // onchain from-address (payload claim)
+    amountAtomic: text("amount_atomic").notNull(), // USDC atomic units, string
+    asset: text("asset"),
+    resource: text("resource"), // the request path that was paid for
+    status: text("status").notNull().default("pending"), // pending | settled | failed
+    failureReason: text("failure_reason"),
+    txHash: text("tx_hash"),
+    creditsApplied: integer("credits_applied"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("uq_x402_payload_hash").on(t.payloadHash),
+    index("idx_x402_project").on(t.projectId),
+    index("idx_x402_status").on(t.status),
+  ],
+);
