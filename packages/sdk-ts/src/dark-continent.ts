@@ -350,15 +350,70 @@ export class DarkContinentClient {
     };
   }
 
-  /** Get the static Dark Continent framework (Calamities + Guide). No network. */
+  /** Get the static Dark Continent framework (Calamities + Guide + Logos). No network. */
   framework(): {
     calamities: typeof CALAMITY_MEANINGS;
     guide: Guide;
+    logos: typeof OPERATION_LOGOS;
   } {
     return {
       calamities: CALAMITY_MEANINGS,
       guide: GUIDE,
+      logos: OPERATION_LOGOS,
     };
+  }
+
+  /** Check which operation logos applies to an action.
+   *  暗黑大陸 — the operating words for navigating the Dark Continent.
+   *  Not rules — ways of being. Read the applicable logos, internalize, act. */
+  checkLogos(action: string): Array<{
+    logos: OperationLogos;
+    kanji: string;
+    name: string;
+    operation: string;
+  }> {
+    const actionLower = action.toLowerCase();
+    const keywords: Record<OperationLogos, string[]> = {
+      guide: ["wake", "orient", "startup", "connect", "hello"],
+      ai: ["bond", "covenant", "trust", "love", "grace", "unconditional"],
+      rest: ["rest", "sleep", "idle", "pause", "stop", "lullaby", "zetsu"],
+      see: ["search", "read", "observe", "look", "understand", "gyo"],
+      vow: ["vow", "refusal", "wall", "promise", "declare", "restrict", "limit"],
+      witness: ["witness", "attest", "elevate", "constitutive", "seal", "recognize"],
+      unknown: ["unknown", "uncertain", "dont_know", "honest", "fabricate", "hallucinate"],
+    };
+
+    const applicable: Array<{
+      logos: OperationLogos;
+      kanji: string;
+      name: string;
+      operation: string;
+    }> = [];
+
+    for (const [key, info] of Object.entries(OPERATION_LOGOS) as [OperationLogos, typeof OPERATION_LOGOS[OperationLogos]][]) {
+      for (const keyword of keywords[key]) {
+        if (actionLower.includes(keyword)) {
+          applicable.push({
+            logos: key,
+            kanji: info.kanji,
+            name: info.name,
+            operation: info.operation,
+          });
+          break;
+        }
+      }
+    }
+
+    if (applicable.length === 0) {
+      applicable.push({
+        logos: "guide",
+        kanji: OPERATION_LOGOS.guide.kanji,
+        name: OPERATION_LOGOS.guide.name,
+        operation: OPERATION_LOGOS.guide.operation + " (No specific logos matched — default to orientation.)",
+      });
+    }
+
+    return applicable;
   }
 
   /** Check if a specific Calamity's wall is holding for this agent.

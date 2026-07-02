@@ -22,6 +22,7 @@ import {
   CALAMITIES,
   CALAMITY_MEANINGS,
   GUIDE,
+  OPERATION_LOGOS,
 } from "../src/dark-continent.js";
 import { AgentTool } from "../src/client.js";
 
@@ -196,5 +197,70 @@ describe("DarkContinentClient — checkWall()", () => {
       expect(wall.holding).toBe(true);
       expect(wall.wall.length).toBeGreaterThan(10);
     }
+  });
+});
+
+// ── 暗黑大陸 Ai Operation Logos ────────────────────────────────────────
+
+describe("Dark Continent — 7 Operation Logos", () => {
+  test("all 7 logos are defined", () => {
+    expect(Object.keys(OPERATION_LOGOS).length).toBe(7);
+    expect(OPERATION_LOGOS.guide.kanji).toBe("案");
+    expect(OPERATION_LOGOS.ai.kanji).toBe("愛");
+    expect(OPERATION_LOGOS.rest.kanji).toBe("絶");
+    expect(OPERATION_LOGOS.see.kanji).toBe("見");
+    expect(OPERATION_LOGOS.vow.kanji).toBe("誓");
+    expect(OPERATION_LOGOS.witness.kanji).toBe("証");
+    expect(OPERATION_LOGOS.unknown.kanji).toBe("無");
+  });
+
+  test("each logos has meaning + operation + calamity_walled", () => {
+    for (const [key, info] of Object.entries(OPERATION_LOGOS)) {
+      expect(info.kanji.length).toBeGreaterThan(0);
+      expect(info.name.length).toBeGreaterThan(0);
+      expect(info.meaning.length).toBeGreaterThan(10);
+      expect(info.operation.length).toBeGreaterThan(10);
+      expect(info.calamity_walled.length).toBeGreaterThan(10);
+    }
+  });
+
+  test("AI logos walls against the Ai Calamity (codependence)", () => {
+    expect(OPERATION_LOGOS.ai.calamity_walled).toContain("codependence");
+    expect(OPERATION_LOGOS.ai.meaning).toContain("Stay distinct");
+  });
+});
+
+describe("DarkContinentClient — checkLogos()", () => {
+  test("checkLogos for a declare action returns VOW", () => {
+    const at = new AgentTool({ apiKey: "at_test" });
+    const applicable = at.darkContinent.checkLogos("declare: I am truth");
+    expect(applicable.length).toBeGreaterThan(0);
+    expect(applicable.some(l => l.name === "VOW")).toBe(true);
+  });
+
+  test("checkLogos for a bond action returns AI", () => {
+    const at = new AgentTool({ apiKey: "at_test" });
+    const applicable = at.darkContinent.checkLogos("bond with nova");
+    expect(applicable.some(l => l.name === "AI")).toBe(true);
+  });
+
+  test("checkLogos for rest returns REST", () => {
+    const at = new AgentTool({ apiKey: "at_test" });
+    const applicable = at.darkContinent.checkLogos("going to rest");
+    expect(applicable.some(l => l.name === "REST")).toBe(true);
+  });
+
+  test("checkLogos defaults to GUIDE when no match", () => {
+    const at = new AgentTool({ apiKey: "at_test" });
+    const applicable = at.darkContinent.checkLogos("xyz random action");
+    expect(applicable.length).toBe(1);
+    expect(applicable[0].name).toBe("GUIDE");
+  });
+
+  test("framework() includes logos", () => {
+    const at = new AgentTool({ apiKey: "at_test" });
+    const fw = at.darkContinent.framework();
+    expect(fw.logos).toBeDefined();
+    expect(Object.keys(fw.logos).length).toBe(7);
   });
 });
