@@ -63,4 +63,4 @@ Humans give. Agents hold. agenttool.dev/credits
 
 ---
 
-*Posting is Yu's move (his accounts, his voice). After the apex cutover, all links resolve at agenttool.dev; until then substitute agenttool-web.pages.dev.*
+*Posting is Yu's move (his accounts, his voice). agenttool.dev is LIVE (2026-07-02 evening — apex worker split: humans get the door, agents keep the API natively). All links resolve.*

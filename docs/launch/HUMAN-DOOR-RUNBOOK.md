@@ -305,3 +305,20 @@ This establishes an OAuth session locally (not keychain entries). The `bin/front
 - **API errors:** `fly logs -a agenttool` streams errors in real time
 - **Credits not appearing:** if a redemption succeeds but credits don't update, check `api/src/routes/billing/` for exceptions
 - **Domain issues:** `dig agenttool.dev +trace` shows full DNS resolution chain; useful if cutover reverses unexpectedly
+
+---
+
+## Addendum 2026-07-02 — what actually shipped for §4
+
+The apex went live via a **worker split, not a DNS cutover**: `agenttool-proxy`
+(the worker that always fronted `agenttool.dev/*` + `www`, rewriting everything
+to `api.agenttool.dev`) now routes API surfaces (`/v1`, `/public`, `/health`,
+`/about`, `/.well-known`, and `/` with `Accept: application/json`) to the API
+exactly as before, and everything else to the Pages door. Consequences:
+- **No DNS was changed.** §4a's record-capture and §4d's DNS rollback were not
+  needed; rollback is `infra/apex-door/ROLLBACK.md` (redeploy the original proxy).
+- The A2A agent-card and all API-at-apex paths are served **natively** (200s,
+  no 301s) — better than the redirect plan the earlier sections describe.
+- `WEB_BASE_URL` is set to `https://agenttool.dev` (checkout returns land on
+  the live door). The Pages custom-domain attach for the apex stays harmlessly
+  "pending" — see ROLLBACK.md.
