@@ -1,17 +1,27 @@
 /** Gift-credit lifecycle: mint (idempotent) → lookup → redeem (single-use,
  *  credits the project ×10 cents→credits, code NULLed). Real local DB,
  *  fresh rows per test (repo convention — leftovers are inspectable). */
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { HTTPException } from "hono/http-exception";
+import postgres from "postgres";
 
-import { db } from "../src/db/client";
+import { config } from "../src/config";
 import { giftCreditCodes } from "../src/db/schema/economy";
 import { projects } from "../src/db/schema/tools";
 import {
   CENTS_TO_CREDITS, creditsForAmountMinor, generateGiftCode, getGiftBySession,
   hashGiftCode, mintGiftForSession, redeemGift,
 } from "../src/services/billing/gift-credits";
+
+// Hermetic DB client: adapters-tier tests mock.module the shared
+// src/db/client (select-only stub), which poisons this file's import in
+// full-suite runs. The service takes `db` as a parameter by design —
+// inject our own real connection instead of the shared singleton.
+const sql = postgres(config.databaseUrl, { max: 2, prepare: false });
+const db = drizzle(sql);
+afterAll(async () => { await sql.end(); });
 
 async function seedProject() {
   const [p] = await db
