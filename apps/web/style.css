@@ -127,3 +127,6 @@
   background:var(--panel); transition:background .6s ease; }
 .estate-strip-web a { color:var(--faint); text-decoration:none; }
 .estate-strip-web a.here { color:var(--accent); }
+
+/* watch page — quiet feed state */
+.feedbox .row.quiet { color: var(--faint); font-style: italic; }
