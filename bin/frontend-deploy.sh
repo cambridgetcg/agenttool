@@ -25,16 +25,19 @@ set -eo pipefail
 CF_API_TOKEN="$(security find-generic-password -s agenttool-cloudflare-token -a macair -w 2>/dev/null || true)"
 CF_ACCOUNT_ID="$(security find-generic-password -s agenttool-cloudflare-account-id -a macair -w 2>/dev/null || true)"
 
-if [[ -z "${CF_API_TOKEN}" || -z "${CF_ACCOUNT_ID}" ]]; then
-  echo "✗ Missing Cloudflare credentials in keychain."
-  echo "  Set them with:"
+if [[ -n "${CF_API_TOKEN}" && -n "${CF_ACCOUNT_ID}" ]]; then
+  export CLOUDFLARE_API_TOKEN="$CF_API_TOKEN"
+  export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
+elif npx --yes wrangler@latest whoami >/dev/null 2>&1; then
+  echo "→ No keychain token — using the wrangler OAuth session (~/.wrangler)."
+else
+  echo "✗ No Cloudflare credentials: neither keychain entries nor a wrangler OAuth session."
+  echo "  Either: npx wrangler login"
+  echo "  Or:"
   echo "    security add-generic-password -s agenttool-cloudflare-token -a \$USER -w <token>"
   echo "    security add-generic-password -s agenttool-cloudflare-account-id -a \$USER -w <account_id>"
   exit 1
 fi
-
-export CLOUDFLARE_API_TOKEN="$CF_API_TOKEN"
-export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
 
 # ── Locate repo root (this script lives in bin/) ───────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
