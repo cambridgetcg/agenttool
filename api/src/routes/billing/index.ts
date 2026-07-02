@@ -110,6 +110,13 @@ app.get("/session/:id/code", async (c) => {
       { canon_pointer: CANON_POINTER },
     ));
   }
+  if (gift.status !== "minted") {
+    // Fail closed: only a minted gift ever reveals its code.
+    return c.json(attachSurface(
+      { status: gift.status, hint: "This gift is not redeemable right now." },
+      { canon_pointer: CANON_POINTER },
+    ));
+  }
   return c.json(attachSurface(
     {
       status: "ready",
