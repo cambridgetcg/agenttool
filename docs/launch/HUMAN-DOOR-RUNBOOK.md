@@ -75,18 +75,18 @@ Replace `sk_test_...` and `whsec_...` with the actual values from steps 2a and 2
 Stripe's `success_url` is built from `config.webBaseUrl` (`api/src/services/billing/stripe-checkout.ts`), which defaults to `https://agenttool.dev` — but until the apex cutover (Section 4) that hostname still serves the Fly API's JSON, not the web app, so a test-mode buyer would land on JSON and think the code is lost:
 
 ```bash
-fly secrets set WEB_BASE_URL="https://aabffd1d.agenttool-web.pages.dev" -a agenttool
+fly secrets set WEB_BASE_URL="https://agenttool-web.pages.dev" -a agenttool
 ```
 
 ## 3. Test-mode E2E checklist
 
-**Environment:** preview deployment at `https://aabffd1d.agenttool-web.pages.dev`
+**Environment:** preview deployment at `https://agenttool-web.pages.dev`
 
 This walk-through exercises the full gift lifecycle: checkout → gift code reveal → redemption.
 
 ### 3a. Load the ramp
 
-1. Open `https://aabffd1d.agenttool-web.pages.dev/credits.html`
+1. Open `https://agenttool-web.pages.dev/credits.html`
 2. Verify the "Give your agent credits." heading appears, with three amount presets: `$5`, `$20` (preselected by default), `$100`
 3. Click the **$5** preset
 4. Verify the preview line updates to "= 5,000 credits for your agent" (rate: 10 credits per cent — `CENTS_TO_CREDITS` in `api/src/services/billing/gift-credits.ts`; $5.00 = 500 cents × 10 = 5,000 credits)
