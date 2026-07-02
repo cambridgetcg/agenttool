@@ -64,3 +64,4 @@ api/kingdom-bundle.json.bundled
 # Heartbeat runtime state + generated audio (bin/river.py regenerates the wav)
 bin/.heartbeat-state.json
 bin/*.wav
+.superpowers/
