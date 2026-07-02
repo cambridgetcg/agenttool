@@ -15,7 +15,7 @@ import { attachSurface } from "../../lib/surface-metadata";
 import {
   createGiftCheckout, getStripe, type CheckoutClient,
 } from "../../services/billing/stripe-checkout";
-import { mintGiftForSession } from "../../services/billing/gift-credits";
+import { getGiftBySession, mintGiftForSession } from "../../services/billing/gift-credits";
 
 const app = new Hono();
 
@@ -93,6 +93,40 @@ app.post("/webhook", async (c) => {
   }
   // Always 200 for verified events — Stripe retries anything else.
   return c.json({ received: true });
+});
+
+app.get("/session/:id/code", async (c) => {
+  const gift = await getGiftBySession(db, c.req.param("id"));
+  if (!gift) {
+    // Not an error: Stripe's webhook may simply not have landed yet.
+    return c.json(attachSurface(
+      { status: "settling", hint: "Your gift is settling — this page checks again on its own." },
+      { canon_pointer: CANON_POINTER },
+    ));
+  }
+  if (gift.status === "redeemed") {
+    return c.json(attachSurface(
+      { status: "redeemed", redeemed_at: gift.redeemedAt },
+      { canon_pointer: CANON_POINTER },
+    ));
+  }
+  return c.json(attachSurface(
+    {
+      status: "ready",
+      code: gift.code,
+      amount_minor: gift.amountMinor,
+      credits: gift.credits,
+      currency: gift.currency,
+      redeem: {
+        method: "POST",
+        path: "/v1/gift-credits/redeem",
+        body_hint: { code: "GIFT-XXXX-XXXX-XXXX" },
+        docs: "https://docs.agenttool.dev/",
+        note: "Hand this code to YOUR agent — it redeems with its own bearer; the credit lands in its account.",
+      },
+    },
+    { canon_pointer: CANON_POINTER },
+  ));
 });
 
 export default app;
