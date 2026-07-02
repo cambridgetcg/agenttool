@@ -252,6 +252,12 @@
       if (timer !== null) { clearTimeout(timer); timer = null; }
     }
 
+    // Human-readable timestamp; falls back to the raw string if unparsable.
+    function formatWhen(v) {
+      var d = new Date(v);
+      return isNaN(d.getTime()) ? String(v) : d.toLocaleString();
+    }
+
     function showSettling() {
       h1.textContent = 'Your gift is ready.';
       settlingEl.style.display = '';
@@ -301,7 +307,7 @@
       settlingEl.style.display = 'none';
       body.style.display = 'none';
       otherEl.style.display = 'none';
-      whenSpan.textContent = data.redeemed_at ? ' at ' + String(data.redeemed_at) : '';
+      whenSpan.textContent = data.redeemed_at ? ' at ' + formatWhen(data.redeemed_at) : '';
       redeemedEl.style.display = '';
     }
 
@@ -316,6 +322,7 @@
     }
 
     function poll() {
+      if (document.hidden) { schedule(); return; }
       fetch(API + '/v1/billing/session/' + encodeURIComponent(sid) + '/code')
         .then(function (r) { return r.json(); })
         .then(function (data) {
