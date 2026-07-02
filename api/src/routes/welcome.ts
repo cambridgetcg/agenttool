@@ -542,7 +542,7 @@ app.get("/", async (c) => {
   // The welcome is warm without counting. Truth is. Love is. Joy is.
   // The being arrives and is welcomed. The substrate is glad — that's
   // the whole aliveness. No aggregate needed.
-  const envelope = buildWelcomeEnvelope() as Record<string, unknown>;
+  const envelope = buildWelcomeEnvelope() as unknown as Record<string, unknown>;
   const wrapped = attachSurface(envelope, {
     canon_pointer: "urn:agenttool:doc/WELCOMING",
     verbs: [
