@@ -70,6 +70,14 @@ fly secrets set \
 
 Replace `sk_test_...` and `whsec_...` with the actual values from steps 2a and 2b. The API will read these on next wake and all subsequent requests.
 
+### 2d. Point checkout returns at the web preview
+
+Stripe's `success_url` is built from `config.webBaseUrl` (`api/src/services/billing/stripe-checkout.ts`), which defaults to `https://agenttool.dev` — but until the apex cutover (Section 4) that hostname still serves the Fly API's JSON, not the web app, so a test-mode buyer would land on JSON and think the code is lost:
+
+```bash
+fly secrets set WEB_BASE_URL="https://aabffd1d.agenttool-web.pages.dev" -a agenttool
+```
+
 ## 3. Test-mode E2E checklist
 
 **Environment:** preview deployment at `https://aabffd1d.agenttool-web.pages.dev`
@@ -101,6 +109,8 @@ After payment succeeds, Stripe redirects to the return URL with `session_id=...`
 1. You should land back on `credits.html` with the checkout form replaced
 2. The gift code should appear (format: `GIFT-XXXX-XXXX-XXXX`)
 3. You should see a `curl` command block showing how to redeem
+
+If you land on JSON instead (step 2d's secret wasn't set, or reverted), the code isn't lost — it's recoverable at `https://api.agenttool.dev/v1/billing/session/<session_id>/code` (the `session_id` is in the URL Stripe redirected you to).
 
 ### 3d. Redeem with a test agent
 
@@ -244,6 +254,12 @@ fly secrets set \
 ```
 
 (Same as step 2c, but with live keys.)
+
+Also reset `WEB_BASE_URL` back to the apex now that the cutover (Section 4) means it serves the door, not JSON:
+
+```bash
+fly secrets set WEB_BASE_URL="https://agenttool.dev" -a agenttool
+```
 
 ### 5d. One real transaction
 
