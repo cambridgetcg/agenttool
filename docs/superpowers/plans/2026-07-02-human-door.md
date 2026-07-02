@@ -999,7 +999,9 @@ app.route("/v1/gift-credits", giftCreditsRouter);
 - [ ] **Step 5: Run** `bun test tests/gift-credits-redeem.test.ts`, then full `bun test` → PASS / no new failures.
 - [ ] **Step 6: Commit** — `git commit -m "feat(billing): POST /v1/gift-credits/redeem — agent claims the gift"` (all touched files).
 
----### Task 8: `GET /public/window` — aggregate spectator stats
+---
+
+### Task 8: `GET /public/window` — aggregate spectator stats
 
 **Files:**
 - Create: `api/src/routes/public/window.ts`
