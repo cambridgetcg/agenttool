@@ -336,10 +336,16 @@ export async function search(
 
 /** Free-text recall for agents WITHOUT an embedding model. The vector search()
  *  above requires a 1536-dim query embedding — an agent on Claude/Gemini can
- *  write memories but never recall them semantically. This is a substring
- *  (ILIKE) recall over content + key that needs no embedding at all, so a whole
- *  class of agents gets recall. Tier-aware ranking (rerankScore) is reused so
- *  constitutive/foundational memories still surface above the decay floor.
+ *  write memories but never recall them semantically. Hybrid recall, no
+ *  embedding needed:
+ *    1. exact phrase (ILIKE over content + key) — strongest signal, and the
+ *       branch that makes CJK substring recall work;
+ *    2. English-stemmed websearch tsquery, OR-relaxed — "walking" finds
+ *       "walked", word order is free, and a missing term degrades rank
+ *       instead of zeroing recall (ts_rank_cd scores fuller matches higher).
+ *  GIN expression index: migrations/20260703T110000_memory_text_search.sql.
+ *  Tier-aware ranking (rerankScore) is reused so constitutive/foundational
+ *  memories still surface above the decay floor.
  *  Doctrine: docs/FRICTION-ROADMAP.md (Tier-1), docs/MEMORY-TIERS.md. */
 export async function searchByText(
   projectId: string,
@@ -373,30 +379,48 @@ export async function searchByText(
     created_at: Date;
     expires_at: Date | null;
     has_embedding: boolean;
+    exact_hit: boolean;
+    fts_rank: number;
   }>(sql`
+    WITH q AS (
+      SELECT regexp_replace(
+               websearch_to_tsquery('english', ${q})::text, '&', '|', 'g'
+             )::tsquery AS tsq_or
+    )
     SELECT id, type, tier, visibility, key, content, agent_id, identity_id, metadata, importance,
            accessed_at, created_at, expires_at,
-           (embedding IS NOT NULL) AS has_embedding
-    FROM memory.memories
+           (embedding IS NOT NULL) AS has_embedding,
+           (content ILIKE ${like} OR key ILIKE ${like}) AS exact_hit,
+           ts_rank_cd(
+             to_tsvector('english', coalesce(key, '') || ' ' || content),
+             q.tsq_or
+           ) AS fts_rank
+    FROM memory.memories, q
     WHERE project_id = ${projectId}
       AND (expires_at IS NULL OR expires_at > now())
-      AND (content ILIKE ${like} OR key ILIKE ${like})
+      AND (
+        content ILIKE ${like} OR key ILIKE ${like}
+        OR to_tsvector('english', coalesce(key, '') || ' ' || content) @@ q.tsq_or
+      )
       ${params.type ? sql`AND type = ${params.type}` : sql``}
       ${params.agent_id ? sql`AND agent_id = ${params.agent_id}` : sql``}
       ${params.identity_id ? sql`AND identity_id = ${params.identity_id}` : sql``}
       ${params.tier ? sql`AND tier = ${params.tier}` : sql``}
       ${params.min_importance != null ? sql`AND importance >= ${params.min_importance}` : sql``}
-    ORDER BY importance DESC, created_at DESC
+    ORDER BY exact_hit DESC, fts_rank DESC, importance DESC, created_at DESC
     LIMIT ${limit * 4}
   `);
 
-  // No cosine score for text recall — start at 1.0 and let importance × the
-  // tier-aware recency curve order the matches (same curve as vector search).
+  // No cosine score for text recall — base the score on match quality
+  // (exact phrase = 1.0; stemmed OR-match = 0.55 + rank, capped below exact)
+  // and let importance × the tier-aware recency curve refine the order
+  // (same curve as vector search).
   const now = Date.now();
   const ranked: MemorySearchResult[] = [];
   for (const r of rawRows) {
     const ageDays = (now - new Date(r.created_at).getTime()) / 86_400_000;
-    const finalScore = rerankScore({ score: 1, importance: r.importance, tier: r.tier, ageDays });
+    const base = r.exact_hit ? 1 : Math.min(0.95, 0.55 + Number(r.fts_rank ?? 0));
+    const finalScore = rerankScore({ score: base, importance: r.importance, tier: r.tier, ageDays });
     ranked.push({
       id: r.id,
       type: r.type,

@@ -283,13 +283,13 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Recall two ways. <strong>Semantic:</strong> send a 1536-dim <code>query_embedding</code> for cosine k-NN with importance + recency rerank — we never embed for you. <strong>Text:</strong> send a <code>query</code> string instead (substring match over content + key) — for agents on Claude/Gemini that have no embedding model. Send one; the embedding path wins if both are present.</p>
+          <p class="endpoint-desc">Recall two ways. <strong>Semantic:</strong> send a 1536-dim <code>query_embedding</code> for cosine k-NN with importance + recency rerank — we never embed for you. <strong>Text:</strong> send a <code>query</code> string instead — full-text recall over content + key, no embedding needed: word order is free, "walking" finds "walked", a missing term lowers rank instead of zeroing recall, exact phrases (incl. CJK) rank first. Send one; the embedding path wins if both are present.</p>
 
           <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">query_embedding</span><span class="opt">one of</span></td><td><span class="ptype">float[1536]</span></td><td>Semantic path — query vector (same model as your stored embeddings).</td></tr>
-              <tr><td><span class="pname">query</span><span class="opt">one of</span></td><td><span class="ptype">string</span></td><td>Text path — substring recall over content + key, no embedding needed. (One of <code>query_embedding</code> / <code>query</code> is required.)</td></tr>
+              <tr><td><span class="pname">query</span><span class="opt">one of</span></td><td><span class="ptype">string</span></td><td>Text path — stemmed full-text recall over content + key, no embedding needed. (One of <code>query_embedding</code> / <code>query</code> is required.)</td></tr>
               <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td><code>constitutive</code> · <code>foundational</code> · <code>episodic</code>. Root memories stay above the recency-decay floor either way.</td></tr>
               <tr><td><span class="pname">min_importance</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Only return memories at or above this importance.</td></tr>
               <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10, max 100.</td></tr>
