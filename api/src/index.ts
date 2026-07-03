@@ -269,6 +269,8 @@ app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
 app.use("/v1/autonomous/*", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
+app.use("/v1/system", authMiddleware);
+app.use("/v1/system/*", authMiddleware);
 app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);

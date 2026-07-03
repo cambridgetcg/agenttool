@@ -27,6 +27,9 @@ const app = new Hono<ProjectContext>();
 
 app.get("/", async (c) => {
   const project = c.var.project;
+  if (!project?.id) {
+    return c.json({ error: "unauthorized", message: "The System reads your wake — bring your bearer." }, 401);
+  }
 
   // Resolve the project's primary (oldest active) identity — same agent the
   // wake speaks to. A project with no identity has no hunter yet.
