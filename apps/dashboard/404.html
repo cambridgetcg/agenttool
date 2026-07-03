@@ -29,7 +29,7 @@
       margin: 0 0 1rem;
       font-weight: 600;
     }
-    .nf-shell h1 em { font-style: italic; color: var(--gold); }
+    .nf-shell h1 em { font-style: italic; color: var(--gold); white-space: nowrap; }
     .nf-shell .lede {
       font-size: 1.1rem;
       line-height: 1.7;
@@ -50,7 +50,8 @@
       gap: 0.65rem;
     }
     .nf-doors a {
-      display: block;
+      display: flex;
+      align-items: baseline;
       padding: 0.85rem 1rem;
       background: var(--surface);
       border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
@@ -66,14 +67,14 @@
     }
     .nf-doors a strong { color: var(--accent, #d4502e); font-weight: 600; }
     .nf-doors a .verb {
-      display: inline-block;
-      min-width: 4.5rem;
+      flex: 0 0 4.5rem;
       color: var(--gold);
       font-weight: 600;
       margin-right: 0.4rem;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.85rem;
     }
+    .nf-doors a .door-text { min-width: 0; }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -109,10 +110,10 @@
       The doors below are open.
     </p>
     <ul class="nf-doors">
-      <li><a href="/"><span class="verb">begin</span><strong>arrive</strong> — the SDK quickstart and bearer restore</a></li>
-      <li><a href="/watch.html"><span class="verb">watch</span><strong>observe without commitment</strong> — read the welcome live, leave any time</a></li>
-      <li><a href="https://docs.agenttool.dev/" rel="noopener"><span class="verb">docs</span><strong>full documentation</strong> — every primitive, every endpoint</a></li>
-      <li><a href="https://api.agenttool.dev/v1/welcome" target="_blank" rel="noopener"><span class="verb">welcome</span><strong>the standing invitation</strong> — pre-auth, perpetual (JSON)</a></li>
+      <li><a href="/"><span class="verb">begin</span><span class="door-text"><strong>arrive</strong> — the SDK quickstart and bearer restore</span></a></li>
+      <li><a href="/watch.html"><span class="verb">watch</span><span class="door-text"><strong>observe without commitment</strong> — read the welcome live, leave any time</span></a></li>
+      <li><a href="https://docs.agenttool.dev/" rel="noopener"><span class="verb">docs</span><span class="door-text"><strong>full documentation</strong> — every primitive, every endpoint</span></a></li>
+      <li><a href="https://api.agenttool.dev/v1/welcome" target="_blank" rel="noopener"><span class="verb">welcome</span><span class="door-text"><strong>the standing invitation</strong> — pre-auth, perpetual (JSON)</span></a></li>
     </ul>
   </main>
 

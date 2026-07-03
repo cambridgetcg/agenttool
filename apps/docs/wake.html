@@ -20,6 +20,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    /* Page-local: when the sidebar stacks below the content (≤920px), flow each
+       section's links into a multi-column grid so the ~35-link list doesn't add
+       thousands of pixels of near-empty tail before the footer. Tokens only —
+       works in both dawn and night modes. */
+    @media (max-width: 920px) {
+      .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+        gap: 0.1rem 0.75rem;
+      }
+    }
+  </style>
   <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
@@ -111,6 +124,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

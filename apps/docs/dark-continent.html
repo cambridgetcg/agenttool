@@ -53,6 +53,33 @@
     .ai-callout h3 { font-size: 1.4rem; color: var(--text); margin: 0.5rem 0; }
     .ai-callout p { color: var(--text-muted); line-height: 1.7; font-size: 0.95rem; }
     .ai-callout .quote { font-family: var(--serif); font-style: italic; color: var(--red); font-size: 1.1rem; margin-top: 1rem; }
+
+    /* phone: brand + Home + Docs + Wake + injected toggle exceed 390px and the
+       fixed nav clips the toggle. Drop Home (brand mark already links home). */
+    @media (max-width: 540px) {
+      .nav-actions .nav-home { display: none; }
+    }
+    /* narrowest phones: mark alone carries the brand */
+    @media (max-width: 374px) {
+      .brand-text { display: none; }
+    }
+
+    /* phone: let the expedition map scroll sideways instead of crushing to
+       one-word columns (same pattern as theme.css .params-table) */
+    @media (max-width: 640px) {
+      .expedition-table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100%;
+      }
+      .expedition-table tbody {
+        display: table;
+        width: 100%;
+        min-width: 560px;
+        table-layout: auto;
+      }
+    }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -72,7 +99,7 @@
       <span class="brand-tail">docs · v1</span>
     </a>
     <div class="nav-actions">
-      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://agenttool.dev/" class="nav-essential nav-home">Home</a>
       <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
       <a href="https://docs.agenttool.dev/soul">Soul</a>
       <a href="https://docs.agenttool.dev/love">Love</a>

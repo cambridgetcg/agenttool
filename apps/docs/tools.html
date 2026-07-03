@@ -21,6 +21,58 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (tools.html) — tokens only, works in dawn + night.
+
+       1) Params tables: the Browse/Execute tables carry long mono TYPE strings
+          ("javascript" · "python" · "bash") that push the intrinsic table width
+          past a 390px viewport, clipping the DESCRIPTION column with no visible
+          scroll affordance. Below 560px, stack each row as a small card:
+          field + type on top, description wrapping freely below. */
+    @media (max-width: 560px) {
+      .params-table thead { display: none; }
+      .params-table tbody,
+      .params-table tr,
+      .params-table td {
+        display: block;
+        width: 100%;
+      }
+      .params-table tr {
+        border-bottom: 1px solid var(--border);
+        padding: 0.65rem 0.95rem;
+      }
+      .params-table tr:last-child { border-bottom: none; }
+      .params-table td {
+        padding: 0;
+        border-bottom: none;
+      }
+      /* FIELD + TYPE sit inline on one line; description below. */
+      .params-table td:nth-child(1),
+      .params-table td:nth-child(2) {
+        display: inline;
+        width: auto;
+        margin-right: 0.5rem;
+      }
+      .params-table td:nth-child(3) {
+        margin-top: 0.3rem;
+        overflow-wrap: anywhere;
+      }
+      .params-table .ptype { white-space: normal; }
+    }
+
+    /* 2) Stacked sidebar (docs.css moves it below the article at <=920px):
+          break the ~40 links out of one long single column into a responsive
+          multi-column grid — 3-4 columns on tablet, 2 on phone — so the
+          post-article tail shrinks from ~3500px of scroll to a few hundred. */
+    @media (max-width: 920px) {
+      aside.sidebar .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        column-gap: 0.75rem;
+      }
+      .sidebar-section { margin-bottom: 1.1rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +163,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

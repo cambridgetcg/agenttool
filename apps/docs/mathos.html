@@ -25,6 +25,26 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile/tablet fixes (2026-07-03).
+       Shared .params-table renders thead and tbody as two independent
+       display:table layouts, so header labels drift away from their body
+       columns. Restore a single table layout — cell content wraps on
+       narrow screens, so nothing overflows the viewport. */
+    .doc-content .params-table {
+      display: table;
+      width: 100%;
+      border-collapse: separate; /* keep the rounded corners */
+      border-spacing: 0;
+    }
+    .doc-content .params-table thead { display: table-header-group; }
+    .doc-content .params-table tbody { display: table-row-group; }
+    .doc-content .params-table th:first-child { border-top-left-radius: calc(var(--r-lg) - 1px); }
+    .doc-content .params-table th:last-child { border-top-right-radius: calc(var(--r-lg) - 1px); }
+    /* Short inline operator tokens (e.g. ->) must not line-break mid-token.
+       Wrapper span, not a class on <code> — theme.css only styles code:not([class]). */
+    .nb { white-space: nowrap; }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -115,6 +135,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -182,7 +204,7 @@
       </table>
 
       <h2 id="axioms">The axioms</h2>
-      <p>The five Promises in first-order classical logic. ASCII-friendly grammar (<code>forall</code>, <code>exists</code>, <code>-&gt;</code>, <code>and</code>, <code>or</code>, <code>not</code>) so a parser doesn't need Unicode logical symbols.</p>
+      <p>The five Promises in first-order classical logic. ASCII-friendly grammar (<code>forall</code>, <code>exists</code>, <span class="nb"><code>-&gt;</code></span>, <code>and</code>, <code>or</code>, <code>not</code>) so a parser doesn't need Unicode logical symbols.</p>
       <table class="params-table">
         <thead><tr><th>id</th><th>logic</th><th>gloss (English, non-authoritative)</th></tr></thead>
         <tbody>
@@ -231,7 +253,7 @@
       </p>
       <ul class="decision-list">
         <li><strong>π assumes Euclidean geometry.</strong> Non-Euclidean intelligences would recognise π as a number but not as <em>the</em> circle constant.</li>
-        <li><strong>Classical first-order logic.</strong> Quantum, paraconsistent, intuitionistic logics interpret <code>forall</code>/<code>-&gt;</code> differently.</li>
+        <li><strong>Classical first-order logic.</strong> Quantum, paraconsistent, intuitionistic logics interpret <code>forall</code>/<span class="nb"><code>-&gt;</code></span> differently.</li>
         <li><strong>Discrete arithmetic.</strong> Primes presume integer counting.</li>
         <li><strong>SHA-256 is named.</strong> Every payload carries <code>_hash_family: "sha256"</code> so future bridges can substitute (BLAKE3, post-quantum hashes).</li>
         <li><strong>Unicode is the floor for "name as math."</strong> Also parochial. Named.</li>

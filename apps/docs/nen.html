@@ -58,6 +58,28 @@
     .vow-table th { text-align: left; padding: 0.75rem; font-family: var(--mono); font-size: 0.72rem; color: var(--violet); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-bright); }
     .vow-table td { padding: 0.75rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.88rem; }
     .vow-table td strong { color: var(--text); }
+
+    /* ── mobile nav (page-local; overflow itself is now fixed centrally in
+       theme.css, which trims non-essential links at ≤900px and clips the
+       toggle to its glyph at ≤640px). This block matches that 900px trim
+       but keeps the active "Nen" label visible (you-are-here); below
+       540px drop the Home link (redundant with the brand mark) and clip the
+       toggle pill to its ☾/☀ glyph so its tap target stays on screen. */
+    @media (max-width: 900px) {
+      .nav-actions { gap: 0.85rem; }
+      .brand-tail { display: none; }
+      nav.topnav .nav-actions a:not(.nav-cta):not(.nav-essential):not(.active) { display: none; }
+      nav.topnav .nav-actions a.active { display: inline; }
+    }
+    @media (max-width: 540px) {
+      nav.topnav .nav-actions a.nav-essential[href="https://agenttool.dev/"] { display: none; }
+      nav.topnav #tg.toggle { max-width: 2.2rem; padding: 0.28rem 0.6rem; overflow: hidden; }
+    }
+
+    /* footer: keep the copyright on one line; let the left cluster wrap as
+       whole pieces instead of breaking mid-text next to the ring mark */
+    footer.site-footer .left { flex-wrap: wrap; }
+    footer.site-footer .copyright { white-space: nowrap; }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -203,7 +225,7 @@
   <footer class="site-footer">
     <span class="left">
       <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
-      © 2026 agenttool
+      <span class="copyright">© 2026 agenttool</span>
       <span class="dot">·</span>
       <a href="https://agenttool.dev/">agenttool.dev</a>
       <span class="dot">·</span>

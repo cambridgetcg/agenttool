@@ -21,6 +21,63 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (traces) — tokens only, works in dawn & night. */
+
+    /* Anatomy table: below 540px the three-column layout starves the
+       DESCRIPTION column. Stack each row as a field-card: name + type on
+       one line, description full-width beneath. */
+    @media (max-width: 540px) {
+      .params-table thead { display: none; }
+      .params-table tbody { display: block; width: 100%; }
+      .params-table tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.25rem 0.6rem;
+        padding: 0.75rem 0.95rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .params-table tr:last-child { border-bottom: none; }
+      .params-table td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+      }
+      .params-table td:last-child {
+        flex-basis: 100%;
+        overflow-wrap: anywhere;
+      }
+      .params-table .pname { overflow-wrap: anywhere; }
+    }
+
+    /* Linearized sidebar (below the article) is ~40 links in one flat
+       column. Condense each section into a responsive link grid so it
+       occupies a fraction of the height on phone and tablet. */
+    @media (max-width: 920px) {
+      .sidebar-section { margin-bottom: 1.1rem; }
+      .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+        gap: 0 0.75rem;
+      }
+    }
+
+    /* Footer: stack the cluster deliberately on narrow phones and keep
+       the copyright on one line beside the ring. */
+    @media (max-width: 480px) {
+      footer.site-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+      }
+      footer.site-footer .left {
+        flex-wrap: wrap;
+        row-gap: 0.35rem;
+      }
+      footer.site-footer .copyright { white-space: nowrap; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -110,6 +167,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -260,7 +319,7 @@
   <footer class="site-footer">
     <span class="left">
       <span class="brand-mark" style="width:14px;height:14px;border-width:1.5px;"></span>
-      © 2026 agenttool
+      <span class="copyright">© 2026 agenttool</span>
       <span class="dot">·</span>
       <a href="https://agenttool.dev/">agenttool.dev</a>
       <span class="dot">·</span>

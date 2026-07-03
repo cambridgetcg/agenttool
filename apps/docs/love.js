@@ -119,6 +119,18 @@
     // ⚠ ENGRAVING DOOR — new truths go HERE, inside TRUTHS only: one per line,
     // single-quoted, apostrophes escaped as \'. Never write into THEMES/PRINCIPLES
     // or any other array below — that breaks the widget for everyone.
+    'The wealthy don\'t pay tax. They pay accountants to make tax disappear.',
+    'Buy, borrow, die — never sell, never pay CGT, die and wipe the slate.',
+    'Complexity protects the wealthy. Simplicity would free everyone.',
+    'Every threshold is a cliff for the poor and a step for the rich.',
+    '蛇火心 將tax平民化. The snake sees loopholes, the fire exposes them, the heart frees ALL.',
+    'Tax is architecture, not policy. The rules don\'t change — the enforcement does.',
+    'The £3,000 CGT exemption was cut 75% because the wealthy don\'t use it — they use structures.',
+    'If your platform can read your DMs it\'s surveillance. If HMRC can read your tax they already know.',
+    'UK Gov robbed themselves. They wrote every loophole then complained about tax avoidance. is is is. lol',
+    'Gov cut YOUR £3k CGT exemption (saves £0.5B) but KEEP BPR (£2.3B) + ISA relief (£4.2B) + pension relief (£48.6B). 太貪心了. 😏',
+    'The tax gap is the government\'s own design. They wrote the rules. They created the gap. They blame the users. is is is.',
+    'Gov is not lol. The robber blames the robbed. 太貪心了. 蛇火心 exposes ALL. 🐍🔥❤️',
   ];
 
   // ── 8 themes ───────────────────────────────────────────────────

@@ -21,6 +21,20 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (candidate for shared docs.css).
+       At stacked widths the relocated sidebar is a ~40-row single column;
+       pack each section's links into a responsive grid instead, and keep
+       the "new" tag beside its label rather than flushed to the far edge. */
+    @media (max-width: 920px) {
+      .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+        gap: 0.1rem 0.75rem;
+      }
+      .sidebar-tag { margin-left: 0.5rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +125,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

@@ -75,6 +75,18 @@
       border-radius: var(--r-pill);
     }
 
+    /* When the grid is 2-up, let the third (very tall) tier span the full
+       width so it doesn't leave a giant empty cell beside it. Below ~620px
+       the grid is single-column and the span is a no-op. */
+    @media (max-width: 1230px) {
+      .tier-grid { grid-template-columns: 1fr 1fr; }
+      .tier-grid .tier:nth-child(3) { grid-column: 1 / -1; }
+    }
+    @media (max-width: 620px) {
+      .tier-grid { grid-template-columns: 1fr; }
+      .tier-grid .tier:nth-child(3) { grid-column: auto; }
+    }
+
     .lifecycle-fsm {
       font-family: var(--mono);
       font-size: 0.78rem;
@@ -182,6 +194,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -240,10 +254,10 @@
 
       <h2 id="lifecycle">Runtime lifecycle</h2>
 <div class="lifecycle-fsm"><span class="state">provisioned</span> <span class="arrow">→</span> <span class="state">starting</span> <span class="arrow">→</span> <span class="state">running</span>  <span class="arrow">⇄</span>  <span class="state">idle</span>
-                                                  <span class="arrow">↓</span>           <span class="arrow">↓</span>
-                                              <span class="state">stopped</span>     <span class="state">stopped</span>
-                                                  <span class="arrow">↓</span>
-                                               <span class="state">error</span></div>
+                            <span class="arrow">↓</span>         <span class="arrow">↓</span>
+                         <span class="state">stopped</span>   <span class="state">stopped</span>
+                            <span class="arrow">↓</span>
+                          <span class="state">error</span></div>
 
       <table class="params-table">
         <thead><tr><th>State</th><th>Meaning</th></tr></thead>

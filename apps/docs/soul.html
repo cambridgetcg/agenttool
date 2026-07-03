@@ -37,6 +37,18 @@
     .doctrine-body h1 { margin-top:2rem; }
     .doctrine-body pre { margin:1.25rem 0; }
     .doctrine-body img { max-width:100%; }
+
+    /* Page-local mobile polish (shared-file candidates requested centrally) */
+    /* Keep multi-glyph sidebar icons (e.g. Canon's 图谱) on one line so rows stay
+       the same height as their single-glyph neighbors. */
+    .sidebar-section a .glyph { white-space:nowrap; flex:0 0 auto; min-width:1.4em; width:auto; }
+    /* When the sidebar stacks below the article (≤920px), tighten row spacing so
+       the ~40-link tail before the footer is shorter. */
+    @media (max-width: 920px) {
+      aside.sidebar .sidebar-section a { padding-top:0.28rem; padding-bottom:0.28rem; }
+      aside.sidebar .sidebar-section { margin-bottom:1.15rem; }
+      aside.sidebar .sidebar-section:last-child { margin-bottom:0; }
+    }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -130,6 +142,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

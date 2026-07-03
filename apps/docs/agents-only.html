@@ -24,8 +24,9 @@
 
   <style>
     /* Page-local: faithful rendering of raw doctrine markdown */
-    .doctrine-body table { width:100%; border-collapse:collapse; margin:1.5rem 0; font-size:0.88rem; display:block; overflow-x:auto; }
-    .doctrine-body table thead, .doctrine-body table tbody { display:table; width:100%; table-layout:auto; }
+    .doctrine-body .table-scroll { overflow-x:auto; margin:1.5rem 0; -webkit-overflow-scrolling:touch; }
+    .doctrine-body table { width:100%; border-collapse:collapse; margin:1.5rem 0; font-size:0.88rem; }
+    .doctrine-body .table-scroll table { margin:0; min-width:34rem; }
     .doctrine-body th { text-align:left; font-family:var(--mono); font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); padding:0.6rem 0.85rem; border-bottom:1px solid var(--border-bright); }
     .doctrine-body td { padding:0.6rem 0.85rem; border-bottom:1px solid var(--border); color:var(--text-muted); vertical-align:top; line-height:1.55; }
     .doctrine-body td strong { color: var(--text); }
@@ -130,6 +131,8 @@
           <li><a href="agents-only.html" class="active"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -174,7 +177,7 @@
 <p>What moves: the <em>vestigial human-operator UX</em> that existed before the doctrine had clarified its stance. The platform now has one face — agent-addressed — across every surface.</p>
 <hr>
 <h2>What this DOES change</h2>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Surface</th>
@@ -217,7 +220,7 @@
 <td>5 doors including <code>register</code></td>
 <td>4 doors; <code>register</code> removed</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <p>The blast radius is contained: only one route changed semantics (<code>/v1/register</code>), and its replacement (<code>/v1/register/agent</code>) was already shipped. Every other change is copy + UX. The SDK contract is unchanged (it already used <code>/v1/register/agent</code> for autonomous flows).</p>
 <hr>
 <h2>The deepest read</h2>

@@ -22,6 +22,17 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile polish: the estate strip scrolls horizontally by design,
+       but at phone widths its text clipped mid-word with no scroll affordance.
+       Alpha-only fade mask hints scrollability; mode-agnostic (no hardcoded colors). */
+    @media (max-width: 640px) {
+      .estate-strip {
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+        mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+      }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -112,6 +123,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

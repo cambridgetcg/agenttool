@@ -21,6 +21,23 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local: stack the publish-a-service field table on narrow phones
+       so the DESCRIPTION column starts on-screen instead of clipping. */
+    @media (max-width: 540px) {
+      .params-table thead { display: none; }
+      .params-table tbody,
+      .params-table tr,
+      .params-table td { display: block; width: 100%; }
+      .params-table tr { border-bottom: 1px solid var(--border); }
+      .params-table tr:last-child { border-bottom: none; }
+      .params-table td { border-bottom: none; padding: 0.2rem 0.95rem; }
+      .params-table td:first-child { padding-top: 0.7rem; }
+      .params-table td:last-child { padding-bottom: 0.7rem; }
+      /* type sits inline right after the name+badge line */
+      .params-table td:nth-child(2) { padding-top: 0; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +128,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

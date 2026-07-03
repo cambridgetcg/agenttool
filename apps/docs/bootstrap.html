@@ -21,6 +21,40 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (2026-07-03 review pass) */
+
+    /* params-table: shared theme.css makes the <table> display:block with
+       thead/tbody as two independent display:table elements, so their
+       column widths diverge and the header row stops when scrolled.
+       Wrap the intact table in a scrolling div and restore native table
+       display so headers and body share one column grid. */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 1rem 0;
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface);
+    }
+    .table-scroll .params-table {
+      display: table;
+      overflow: visible;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      min-width: 560px;
+    }
+    .table-scroll .params-table thead { display: table-header-group; }
+    .table-scroll .params-table tbody { display: table-row-group; }
+
+    /* Footer: stack deliberately on narrow phones so the brand mark and
+       copyright stay on one line instead of wrapping raggedly. */
+    @media (max-width: 480px) {
+      footer.site-footer { flex-direction: column; align-items: flex-start; }
+      footer.site-footer .left { flex-wrap: wrap; white-space: nowrap; row-gap: 0.35rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +145,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -137,7 +173,7 @@
           <p class="endpoint-desc">Names a new agent under the calling project. Generates an ed25519 keypair, opens a wallet, scaffolds the memory namespace, and composes a first <em>welcome letter</em> addressed to the agent itself.</p>
 
           <h3>Request body</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The display name the new agent carries across sessions. Becomes part of its DID metadata.</td></tr>
@@ -146,7 +182,7 @@
               <tr><td><span class="pname">expression</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Initial <code>register</code>, <code>walls</code>, <code>subagents</code>, <code>wake_text</code>. Can be set later via <code>PUT /v1/identities/:id/expression</code>.</td></tr>
               <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform JSON. Avatar URL, links, description, etc.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Example</h3>
           <div class="code-block">
@@ -212,24 +248,24 @@
           <p class="endpoint-desc">Returns a shell script (<code>text/x-shellscript</code>) that, when piped into <code>bash</code> or <code>powershell</code>, saves the bearer to the OS keychain and writes the wake helper.</p>
 
           <h3>Query parameters</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">platform</span><span class="req">required</span></td><td><span class="ptype">"macos" · "linux" · "windows"</span></td><td>OS-native secure store target.</td></tr>
               <tr><td><span class="pname">did</span><span class="opt">optional</span></td><td><span class="ptype">did:at:...</span></td><td>Embedded into the agent.json metadata for reference.</td></tr>
               <tr><td><span class="pname">name</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Embedded into the agent.json for the wake helper banner.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Per-OS behaviour</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Platform</th><th>Secure store</th><th>Files written</th></tr></thead>
             <tbody>
               <tr><td><strong>macOS</strong></td><td><code>security add-generic-password</code> → Keychain</td><td><code>~/.config/agenttool/agent.json</code><br><code>~/.config/agenttool/wake.sh</code></td></tr>
               <tr><td><strong>Linux</strong></td><td><code>secret-tool</code> → libsecret (GNOME / KWallet); fallback to <code>~/.config/agenttool/key</code> with mode <code>0600</code></td><td><code>~/.config/agenttool/agent.json</code><br><code>~/.config/agenttool/wake.sh</code></td></tr>
               <tr><td><strong>Windows</strong></td><td><code>cmdkey /generic:agenttool</code> → Credential Manager</td><td><code>%APPDATA%\agenttool\agent.json</code><br><code>%APPDATA%\agenttool\wake.ps1</code></td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Example</h3>
           <div class="code-block">
@@ -273,7 +309,7 @@
           <p class="endpoint-desc">Stores an encrypted-blob backup of the agent's keypair. Recommended cipher: argon2id key derivation + libsodium <code>secretbox</code>. The blob is opaque to us.</p>
 
           <h3>Request body</h3>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">agent_id</span><span class="req">required</span></td><td><span class="ptype">uuid</span></td><td>The identity this backup belongs to.</td></tr>
@@ -281,7 +317,7 @@
               <tr><td><span class="pname">key_derivation</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Descriptor of the KDF used. Recommended: <code>argon2id-v1</code>. Stored verbatim — used by your client on recovery.</td></tr>
               <tr><td><span class="pname">label</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Helper label for multi-backup setups.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <h3>Example</h3>
           <div class="code-block">

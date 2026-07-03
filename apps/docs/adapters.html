@@ -21,6 +21,34 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local responsive fixes (adapters.html) */
+
+    /* Phone: the 3-column endpoint params table (PARAM / TYPE / DESCRIPTION)
+       squeezes the description cell to 1-2 words per line. Give the inner
+       table a floor width so it scrolls inside .params-table's own
+       overflow-x container (theme.css) instead of crushing the columns. */
+    @media (max-width: 540px) {
+      .endpoint .params-table thead,
+      .endpoint .params-table tbody {
+        min-width: 500px;
+      }
+    }
+
+    /* Stacked (non-desktop) sidebar card: fill the full-width card with
+       multiple columns instead of one narrow ~45-link list. docs.css
+       stacks the sidebar below the article at <=920px. */
+    @media (min-width: 640px) and (max-width: 920px) {
+      aside.sidebar {
+        column-count: 2;
+        column-gap: 2.5rem;
+      }
+      .sidebar-section { break-inside: avoid; }
+    }
+    @media (min-width: 768px) and (max-width: 920px) {
+      aside.sidebar { column-count: 3; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +139,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

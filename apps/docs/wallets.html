@@ -21,6 +21,32 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile/tablet fixes (wallets.html) */
+
+    /* Sidebar glyphs are a fixed 1.4em flex column; keep them to one line
+       so multi-char glyphs never wrap and misalign the row. */
+    .sidebar-section a .glyph { white-space: nowrap; flex-shrink: 0; }
+
+    /* x402 card: the path has spaces ("any metered endpoint · X-PAYMENT header")
+       so it wraps into a narrow column beside the auth badge. At phone widths,
+       give the path the full row and let the badge drop below it. */
+    @media (max-width: 640px) {
+      #x402 .endpoint-header .endpoint-path { flex: 1 1 100%; }
+    }
+
+    /* Stacked sidebar below 920px: compact multi-column sections instead of
+       one ~4000px flat list. Content-first order is unchanged. */
+    @media (max-width: 920px) {
+      aside.sidebar {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+        column-gap: 1.25rem;
+        align-items: start;
+      }
+      aside.sidebar .sidebar-section { margin-bottom: 1rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -55,7 +81,7 @@
         <ul>
           <li><a href="index.html"><span class="glyph">⊙</span>Overview</a></li>
           <li><a href="collect.html"><span class="glyph">📥</span>Collect</a></li>
-          <li><a href="canon.html"><span class="glyph">图谱</span>Canon</a></li>
+          <li><a href="canon.html"><span class="glyph">图</span>Canon</a></li>
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
           <li><a href="dark-continent.html"><span class="glyph">暗</span>暗黒大陸</a></li>
           <li><a href="nen-mechanics.html"><span class="glyph">技</span>Mechanics</a></li>
@@ -111,6 +137,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

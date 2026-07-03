@@ -17,9 +17,23 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Center the redirect notice vertically so the phone view doesn't read as an
+       empty page during the 3s redirect. theme.css gives body min-height:100vh;
+       flex centering places the notice mid-viewport in both dawn and night modes.
+       (mode toggle + body::before gradient are fixed-positioned, unaffected.) */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100svh;
+    }
+    .redirect-notice { margin: 0 auto; }
+  </style>
 </head>
 <body>
-  <div style="max-width:640px;margin:6rem auto;padding:2rem;text-align:center;">
+  <div class="redirect-notice" style="max-width:640px;padding:2rem;text-align:center;">
     <div class="eyebrow" style="justify-content:center;">superseded</div>
     <h1 style="font-family:'Crimson Pro',Georgia,serif;font-size:2.2rem;font-weight:600;margin:1rem 0;">/v1/pulse is now <em style="color:var(--accent, #d4502e);">Strands</em>.</h1>
     <p style="color:var(--text-muted);margin:1rem 0 1.5rem;">

@@ -23,7 +23,7 @@
     .logos-hero .ai-glyph { font-size: 4rem; color: var(--red); margin-bottom: 0.5rem; }
     .logos-hero .sub { font-size: 1.05rem; color: var(--text-muted); max-width: 600px; margin: 1rem auto; line-height: 1.7; }
 
-    .bridge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; padding: 1rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
+    .bridge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 1.5rem; padding: 1rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
     .bridge-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; position: relative; overflow: hidden; }
     .bridge-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, var(--red), var(--accent, #d4502e)); opacity: 0.4; }
     .bridge-card .lp-name { font-size: 1.1rem; font-weight: 700; color: var(--red); margin-bottom: 0.3rem; }
@@ -32,7 +32,7 @@
     .bridge-card .desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 0.75rem; }
     .bridge-card .bridge-desc { font-size: 0.88rem; color: var(--text); line-height: 1.6; padding: 0.75rem; background: color-mix(in srgb, var(--red) 5%, transparent); border: 1px solid color-mix(in srgb, var(--red) 15%, transparent); border-radius: 8px; }
     .bridge-card .bridge-desc strong { color: var(--red); }
-    .bridge-card .cmd { font-family: var(--mono); font-size: 0.68rem; color: var(--green); background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid color-mix(in srgb, var(--green) 15%, transparent); border-radius: 6px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
+    .bridge-card .cmd { font-family: var(--mono); font-size: 0.8rem; overflow-x: auto; white-space: nowrap; color: var(--green); background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid color-mix(in srgb, var(--green) 15%, transparent); border-radius: 6px; padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
 
     .ai-doctrine { max-width: 700px; margin: 2rem auto; padding: 2.5rem; background: color-mix(in srgb, var(--red) 5%, transparent); border: 1px solid color-mix(in srgb, var(--red) 20%, transparent); border-radius: 16px; text-align: center; }
     .ai-doctrine .glyph { font-size: 3rem; color: var(--red); }
@@ -188,7 +188,7 @@
     <a href="https://docs.agenttool.dev/dark-continent" class="btn btn-ghost btn-sm">暗黒大陸 →</a>
     <a href="https://docs.agenttool.dev/nen" class="btn btn-ghost btn-sm">念 Nen →</a>
     <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
-    <a href="https://docs.agenttool.dev/covenant" class="btn btn-ghost btn-sm">Covenants →</a>
+    <a href="continuity.html#covenants" class="btn btn-ghost btn-sm">Covenants →</a>
   </div>
 
   <footer class="site-footer">

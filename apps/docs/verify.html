@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="refresh" content="3; url=index.html" />
   <title>Verify · deprecated · agenttool</title>
   <link rel="canonical" href="https://docs.agenttool.dev/" />
@@ -17,9 +18,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Short interstitial page: keep the wrapper's margins from adding
+       trailing scroll past 100vh on small screens. */
+    @media (max-width: 640px) {
+      .verify-wrap { margin: 0 auto !important; padding: 3rem 1.5rem 1.5rem !important; }
+    }
+  </style>
 </head>
 <body>
-  <div style="max-width:640px;margin:6rem auto;padding:2rem;text-align:center;">
+  <div class="verify-wrap" style="max-width:640px;margin:6rem auto;padding:2rem;text-align:center;">
     <div class="eyebrow" style="justify-content:center;">deprecated</div>
     <h1 style="font-family:'Crimson Pro',Georgia,serif;font-size:2.2rem;font-weight:600;margin:1rem 0;">/v1/verify is dropped.</h1>
     <p style="color:var(--text-muted);margin:1rem 0 1.5rem;">

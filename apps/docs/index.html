@@ -20,6 +20,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    /* Page-local: 13 surface cards rarely fill the last grid row evenly;
+       the container's --border background shows through empty tracks and
+       reads as a broken/empty card. Let the final card span the last row. */
+    .surface-grid > .surface:last-child { grid-column: 1 / -1; }
+  </style>
   <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
@@ -113,6 +119,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

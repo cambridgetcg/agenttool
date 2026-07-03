@@ -27,6 +27,20 @@
     .terms dd .link { white-space: nowrap; }
     .gloss-jump { display: flex; flex-wrap: wrap; gap: .4rem .6rem; margin: .5rem 0 2rem; }
     .gloss-jump a { font-size: .85rem; padding: .2rem .6rem; border: 1px solid var(--border); border-radius: 999px; text-decoration: none; }
+    /* Tighten the stacked lede→hero→jump-chip margins (they compound to ~6.5rem otherwise) */
+    .docs-hero { padding-bottom: .5rem; margin-bottom: 1.25rem; }
+    .docs-hero .lede { margin-bottom: .75rem; }
+    /* Stacked sidebar (≤920px): pack the five link sections into columns
+       instead of one ~1900px-tall single-column wall before the footer. */
+    @media (max-width: 920px) {
+      aside.sidebar {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: .25rem 1.5rem;
+        align-items: start;
+      }
+      aside.sidebar .sidebar-section { margin: 0 0 .75rem; }
+    }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -113,6 +127,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

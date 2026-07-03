@@ -21,6 +21,65 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* page-local responsive fixes (2026-07-03):
+       1. .table-scroll wrapper owns overflow-x so the table can be a real
+          display:table again — thead and tbody share one column grid, which
+          fixes the header-vs-body column misalignment from the shared
+          theme.css block-table fallback.
+       2. Under 640px the field tables stack (field / type / description as
+          rows) so descriptions are readable without sideways scrolling. */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 1rem 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+    }
+    .table-scroll .params-table {
+      display: table;
+      width: 100%;
+      overflow: visible;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+    }
+    .table-scroll .params-table thead { display: table-header-group; width: auto; }
+    .table-scroll .params-table tbody { display: table-row-group; width: auto; }
+
+    @media (max-width: 640px) {
+      .table-scroll .params-table { display: block; }
+      .table-scroll .params-table thead { display: none; }
+      .table-scroll .params-table tbody { display: block; width: 100%; }
+      .table-scroll .params-table tr {
+        display: block;
+        padding: 0.7rem 0.95rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .table-scroll .params-table tr:last-child { border-bottom: none; }
+      .table-scroll .params-table td,
+      .table-scroll .params-table tr:last-child td {
+        display: block;
+        padding: 0;
+        border-bottom: none;
+      }
+      .table-scroll .params-table td + td { margin-top: 0.35rem; }
+      /* the tiers table loses its column headers when stacked — restore
+         them as small labels so "how to elevate" keeps its meaning */
+      .table-scroll .tiers-table td + td::before {
+        display: block;
+        font-size: 0.66rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 0.15rem;
+      }
+      .table-scroll .tiers-table td:nth-child(2)::before { content: "What it is"; }
+      .table-scroll .tiers-table td:nth-child(3)::before { content: "How to elevate"; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +170,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -141,7 +202,7 @@
         <div class="endpoint-body">
           <p class="endpoint-desc">Store a memory. The <code>embedding</code> field powers semantic recall; without it, the memory is still reachable by direct ID, recent-listing, or text search (<code>POST /v1/memories/search</code> with a <code>query</code> string).</p>
 
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">content</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The actual memory text.</td></tr>
@@ -153,7 +214,7 @@
               <tr><td><span class="pname">expires_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Working-memory TTL. Null = permanent.</td></tr>
               <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform — source URL, parent trace ID, tags.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -190,7 +251,7 @@
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">List recent memories. Filter by <code>type</code>, <code>agent_id</code>, or <code>tier</code>.</p>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 20, max 100.</td></tr>
@@ -198,7 +259,7 @@
               <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type.</td></tr>
               <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">"episodic" · "foundational" · "constitutive"</span></td><td>Filter by salience tier.</td></tr>
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
 
@@ -224,7 +285,7 @@
         <div class="endpoint-body">
           <p class="endpoint-desc">Recall two ways. <strong>Semantic:</strong> send a 1536-dim <code>query_embedding</code> for cosine k-NN with importance + recency rerank — we never embed for you. <strong>Text:</strong> send a <code>query</code> string instead (substring match over content + key) — for agents on Claude/Gemini that have no embedding model. Send one; the embedding path wins if both are present.</p>
 
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">query_embedding</span><span class="opt">one of</span></td><td><span class="ptype">float[1536]</span></td><td>Semantic path — query vector (same model as your stored embeddings).</td></tr>
@@ -235,7 +296,7 @@
               <tr><td><span class="pname">type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by memory type (episodic · semantic · procedural · working).</td></tr>
               <tr><td><span class="pname">min_score</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Cosine similarity floor (semantic path only). Default 0.</td></tr>
             </tbody>
-          </table>
+          </table></div>
 
           <div class="code-block">
             <div class="code-label"><span>200 OK</span></div>
@@ -257,14 +318,14 @@
       <h2 id="tiers">Three tiers of salience</h2>
       <p>Every memory starts <strong>episodic</strong>. Some grow into <strong>foundational</strong>. A few are sealed at the root as <strong>constitutive</strong> — the wall that defines the agent.</p>
 
-      <table class="params-table">
+      <div class="table-scroll"><table class="params-table tiers-table">
         <thead><tr><th>Tier</th><th>What it is</th><th>How to elevate</th></tr></thead>
         <tbody>
           <tr><td><span class="pname">episodic</span></td><td>The default — moments, observations, conversations. Recallable, decays with recency.</td><td>Created at write time. Default tier.</td></tr>
           <tr><td><span class="pname">foundational</span></td><td>Memories that <em>shape</em> how the agent shows up. Surface in the wake's <code>shaped_by</code> and patch <code>effective_expression</code>.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "foundational"}</code>. No witness required.</td></tr>
           <tr><td><span class="pname">constitutive</span></td><td>Memories that <em>define</em> the agent at the root. Highest weight. Deletion requires witness.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "constitutive", attesters: [&lt;covenant counterparty signature&gt;]}</code>. <strong>Witness is mandatory.</strong></td></tr>
         </tbody>
-      </table>
+      </table></div>
 
       <div class="endpoint" id="post-elevate">
         <div class="endpoint-header">

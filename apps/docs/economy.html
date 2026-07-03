@@ -116,6 +116,18 @@
     }
     .principle-row strong { color: var(--text, #1a1612); font-weight: 700; }
     .principle-row p { margin: 0.2rem 0 0; font-size: 0.9rem; line-height: 1.55; color: var(--text-muted, #5c5344); }
+
+    /* Below 920px docs.css moves the sidebar under the article as a static
+       card; lay its link lists out in a responsive grid so ~40 links don't
+       stack one-per-row into a 5,000px page tail. Collapses back to a single
+       column naturally on narrow phones via auto-fill. */
+    @media (max-width: 920px) {
+      aside.sidebar .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.1rem 0.75rem;
+      }
+    }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -209,6 +221,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

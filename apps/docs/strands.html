@@ -21,6 +21,43 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* ── page-local responsive fixes (strands.html) ──────────────── */
+
+    /* Sidebar glyph column: multi-char glyphs (Canon 图谱) must not wrap
+       into two stacked lines inside the 1.4em box. */
+    .sidebar-section a .glyph {
+      white-space: nowrap;
+      flex: 0 0 auto;
+      width: auto;
+      min-width: 1.4em;
+    }
+
+    /* Tablet: the stacked sidebar (≤920px) is a single ~40-link column of
+       dead scroll. Flow its sections into two columns where they fit. */
+    @media (min-width: 640px) and (max-width: 920px) {
+      aside.sidebar {
+        column-count: 2;
+        column-gap: 2.5rem;
+      }
+      .sidebar-section { break-inside: avoid; }
+    }
+
+    /* Phone: let param tables wrap instead of forcing a sideways scroll.
+       Unbreakable code chips (you_are_thinking_about, parent_strand_id)
+       set the table's min-content width past 390px; `anywhere` lets them
+       break so the DESCRIPTION column stays readable in place. */
+    @media (max-width: 640px) {
+      .params-table th,
+      .params-table td {
+        padding: 0.6rem 0.7rem;
+        overflow-wrap: anywhere; /* breaks only when a word would overflow */
+      }
+      .params-table code,
+      .params-table .pname,
+      .params-table .ptype { overflow-wrap: anywhere; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +148,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

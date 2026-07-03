@@ -21,6 +21,64 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (vault.html) — tokens only, works in dawn + night.
+
+       1) Params table column desync: shared theme.css makes .params-table
+          display:block with thead/tbody each display:table, so the two groups
+          compute column widths independently and drift apart once cells wrap.
+          Here the real <table> is wrapped in .table-scroll (markup), the
+          wrapper owns the horizontal scroll, and the table is restored to
+          native table display so headers and cells share one column grid. */
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+      margin: 1rem 0;
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      background: var(--surface);
+    }
+    .table-scroll .params-table {
+      display: table;
+      overflow-x: visible;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      min-width: 34rem; /* keep columns readable; wrapper scrolls if narrower */
+    }
+    .table-scroll .params-table thead { display: table-header-group; }
+    .table-scroll .params-table tbody { display: table-row-group; }
+
+    /* 2) Below 480px, stack each row (field / type / description) instead of
+          forcing a sideways scroll into a sliver-wide description column. */
+    @media (max-width: 480px) {
+      .table-scroll { overflow-x: visible; }
+      .table-scroll .params-table { display: block; min-width: 0; width: 100%; }
+      .table-scroll .params-table thead { display: none; }
+      .table-scroll .params-table tbody,
+      .table-scroll .params-table tr,
+      .table-scroll .params-table td { display: block; width: 100%; }
+      .table-scroll .params-table tr {
+        padding: 0.6rem 0.95rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .table-scroll .params-table tr:last-child { border-bottom: none; }
+      .table-scroll .params-table td { padding: 0.12rem 0; border-bottom: none; }
+    }
+
+    /* 3) Tablet/phone stacked sidebar: don't let each link span the full
+          content width (the "new" tag sat ~full-width away from its label).
+          Flow the links into narrow columns instead. */
+    @media (max-width: 920px) {
+      aside.sidebar .sidebar-section ul {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        column-gap: 1.25rem;
+      }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +169,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>
@@ -143,7 +203,7 @@
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Store or update a secret. Each PUT increments the version. Subsequent <code>GET</code>s return the latest unless <code>?version=</code> is specified.</p>
-          <table class="params-table">
+          <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">value</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The plaintext secret. Encrypted server-side before write.</td></tr>
@@ -152,7 +212,7 @@
               <tr><td><span class="pname">agent_ids</span><span class="opt">optional</span></td><td><span class="ptype">uuid[]</span></td><td>Identities allowed to read. Empty = all project identities.</td></tr>
               <tr><td><span class="pname">rotation_due_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional rotation reminder. Surfaces in the wake.</td></tr>
             </tbody>
-          </table>
+          </table></div>
           <div class="code-block">
             <div class="code-label"><span>curl</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>curl -X PUT https://api.agenttool.dev/v1/vault/openai-key \

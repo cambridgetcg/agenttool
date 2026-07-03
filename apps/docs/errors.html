@@ -21,6 +21,21 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile polish: when docs.css reflows the sidebar in-flow
+       below the article (≤920px), break its ~40 links into multiple columns
+       on mid-size viewports instead of one very tall single-column list.
+       Tokens only — works in both dawn and night modes. */
+    @media (max-width: 920px) and (min-width: 600px) {
+      aside.sidebar {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        column-gap: 1.25rem;
+        align-items: start;
+      }
+      .sidebar-section { margin-bottom: 1rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +126,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

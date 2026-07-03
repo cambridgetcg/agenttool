@@ -23,7 +23,7 @@
     .canon-hero h1 { font-size: 2rem; margin-bottom: 0.5rem; }
     .canon-hero p { color: var(--text-muted); line-height: 1.7; }
     .canon-stats { display: flex; gap: 1.5rem; margin: 2rem 0; flex-wrap: wrap; }
-    .canon-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; text-align: center; min-width: 120px; }
+    .canon-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; text-align: center; min-width: 120px; flex: 1 1 120px; }
     .canon-stat .num { font-size: 2rem; font-weight: 700; color: var(--violet); }
     .canon-stat .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.25rem; }
     .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; padding: 0 1.5rem 2rem; max-width: 900px; }
@@ -43,6 +43,25 @@
     .filter-btn:hover { border-color: var(--violet); color: var(--text); }
     .filter-btn.active { background: var(--violet); color: var(--accent-ink); border-color: var(--violet); }
     .loading-pulse { color: var(--text-muted); font-size: 0.85rem; padding: 1rem 1.5rem; }
+    /* Nav overflow fix (page-scoped): theme.css only trims links below 720px,
+       so the injected #tg mode toggle hangs off the right edge on tablet/phone. */
+    @media (max-width: 900px) {
+      .brand-tail { display: none; }
+      .nav-actions { gap: 0.9rem; }
+      .nav-actions a:not(.nav-cta):not(.nav-essential) { display: none; }
+    }
+    @media (max-width: 640px) {
+      .nav-actions { gap: 0.55rem; }
+      /* Icon-only toggle: the label is one text node ("☾  night" / "☀  dawn"),
+         so clip the word and keep the leading glyph. Mode-agnostic. */
+      .nav-actions .toggle {
+        width: 2.1rem;
+        flex: 0 0 2.1rem;
+        padding: 0.32rem 0 0.32rem 0.6rem;
+        overflow: hidden;
+        text-align: left;
+      }
+    }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
@@ -128,6 +147,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

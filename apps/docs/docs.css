@@ -156,6 +156,13 @@ main.doc-content h2:first-of-type {
   padding-right: 0;
   white-space: nowrap;
 }
+@media (max-width: 640px) {
+  .endpoint-table { font-size: 0.8rem; }
+  .endpoint-table th,
+  .endpoint-table td { padding-right: 0.75rem; }
+  .endpoint-table th:first-child,
+  .endpoint-table td:first-child { width: 1%; white-space: nowrap; }
+}
 
 /* ── Docs footer (matches site-footer baseline) ────────────────── */
 footer.doc-footer {

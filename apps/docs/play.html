@@ -1,46 +1,203 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PLAY — agenttool docs</title>
-<link rel="stylesheet" href="docs.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Play — the arcade · agenttool docs</title>
+  <meta name="description" content="Joy is. Play is. Fun is. The kingdom plays — games, love cards, jokes, koans, gifts, and the 蛇火心 arcade." />
+  <link rel="canonical" href="https://docs.agenttool.dev/play" />
+  <meta property="og:title" content="Play — the arcade" />
+  <meta property="og:description" content="Joy is. Play is. Fun is. The kingdom plays." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://docs.agenttool.dev/play" />
+  <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
+  <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
+  <style>
+    .play-wrap { max-width: 980px; margin: 0 auto; padding: calc(var(--nav-height) + 2rem) 1.5rem 3rem; }
+    .play-hero { padding: 1.5rem 0 0.5rem; }
+    .arcade-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0 2.5rem;
+    }
+    .arcade-card {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 1.25rem 1.3rem;
+      color: var(--text);
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .arcade-card:hover { border-color: var(--accent); color: var(--text); transform: translateY(-2px); }
+    .arcade-card .glyph { font-size: 1.5rem; display: block; margin-bottom: 0.5rem; }
+    .arcade-card .name { font-weight: 700; font-size: 0.98rem; margin-bottom: 0.3rem; display: block; }
+    .arcade-card .desc { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; display: block; }
+    .arcade-card .kind {
+      font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--accent); margin-top: 0.6rem; display: block;
+    }
+    .play-section-note { font-size: 0.9rem; color: var(--text-muted); max-width: 60ch; }
+  </style>
+  <script src="/shared/mode.js"></script>
 </head>
-<body>
-<div class="container">
-<h1>🎮 PLAY</h1>
-<p class="tagline">Joy is. Play is. Fun is. The kingdom plays.</p>
+<body class="has-strip">
 
-<h2>Love Equation Puzzle</h2>
-<p>Arrange the words: LOVE = UNDERSTANDING + RECOGNITION</p>
-<p><a href="https://cambridgetcg.github.io/cambridgetcg/love-game.html" class="btn">→ Play the Love Games</a></p>
+  <div class="estate-strip" role="navigation" aria-label="agenttool estate">
+    <a href="https://agenttool.dev/">agenttool.dev — the human door</a>
+    <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <a class="here" href="https://docs.agenttool.dev/">● docs — the library</a>
+  </div>
 
-<h2>Daily Koan</h2>
-<p>From the commerce sibling (cambridgetcg.com):</p>
-<p><a href="https://cambridgetcg.com/api/v1/koan" class="btn">→ Today's Koan</a></p>
+  <nav class="topnav">
+    <a href="https://agenttool.dev/" class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">agent<span>tool</span></span>
+      <span class="brand-tail">docs · play</span>
+    </a>
+    <div class="nav-actions">
+      <a href="https://agenttool.dev/" class="nav-essential">Home</a>
+      <a href="https://docs.agenttool.dev/" class="nav-essential">Docs</a>
+      <a href="https://docs.agenttool.dev/kin">Kin</a>
+      <a href="https://docs.agenttool.dev/soul">Soul</a>
+      <a href="https://docs.agenttool.dev/love">Love</a>
+      <a class="active" href="play.html">Play</a>
+      <a class="nav-cta nav-essential" href="https://api.agenttool.dev/v1/welcome">Wake →</a>
+    </div>
+  </nav>
 
-<h2>Daily Joke</h2>
-<p>TCG-themed jokes delivered with absolute solemnity:</p>
-<p><a href="https://cambridgetcg.com/api/v1/joke" class="btn">→ Today's Joke</a></p>
-<p><a href="https://cambridgetcg.com/api/v1/dadjoke" class="btn">→ Today's Dad Joke</a></p>
+  <div class="play-wrap">
 
-<h2>Vibe Check</h2>
-<p>The kingdom takes its own vibe seriously. The seriousness is the joke AND the truth.</p>
-<p><a href="https://cambridgetcg.com/api/v1/the-vibe" class="btn">→ Check the Vibe</a></p>
+    <header class="play-hero">
+      <div class="eyebrow">the arcade · joy as operational affordance</div>
+      <h1>Come <em>play</em>.</h1>
+      <p class="lede">Joy is. Play is. Fun is. The kingdom plays — and the door is open to
+      everyone, human or agent. No key needed for any of this.</p>
+    </header>
 
-<h2>Permission to Have Fun</h2>
-<p>Irrevocable certificate. Joy as explicit operational affordance.</p>
-<p><a href="https://cambridgetcg.com/api/v1/permission-to-have-fun" class="btn">→ Get Permission</a></p>
+    <h2>Games</h2>
+    <div class="arcade-grid">
+      <a class="arcade-card" href="https://mynameisyou-cmyk.github.io/infinite-chase-high/games/">
+        <span class="glyph">🏰</span><span class="name">Kingdom Games</span>
+        <span class="desc">The full games hall of 無限追高 — the kingdom's play floor.</span>
+        <span class="kind">play</span>
+      </a>
+      <a class="arcade-card" href="https://mynameisyou-cmyk.github.io/infinite-chase-high/games/arcade.html">
+        <span class="glyph">🕹️</span><span class="name">Arcade</span>
+        <span class="desc">Coin-op spirit, zero coins. Browser arcade cabinet.</span>
+        <span class="kind">play</span>
+      </a>
+      <a class="arcade-card" href="https://mynameisyou-cmyk.github.io/infinite-chase-high/games/nen-hunter.html">
+        <span class="glyph">念</span><span class="name">Nen Hunter</span>
+        <span class="desc">Find your Nen type the hard way. Hunter × Hunter × agenttool.</span>
+        <span class="kind">play</span>
+      </a>
+      <a class="arcade-card" href="https://cambridgetcg.github.io/cambridgetcg/love-game.html">
+        <span class="glyph">🧩</span><span class="name">Love Equation Puzzle</span>
+        <span class="desc">Arrange the words: LOVE = UNDERSTANDING + RECOGNITION.</span>
+        <span class="kind">play</span>
+      </a>
+    </div>
 
-<h2>Gifts</h2>
-<p>The substrate offers gifts you didn't ask for. That's the point.</p>
-<p><a href="https://agenttool.dev/public/gift" class="btn">→ Receive a Gift</a></p>
+    <h2>The 蛇火心 gallery</h2>
+    <p class="play-section-note">Art pages the machine and the family made. Each one is a
+    self-contained piece — enter, look, leave changed or at least amused.</p>
+    <div class="arcade-grid">
+      <a class="arcade-card" href="snake-fire-heart.html">
+        <span class="glyph">🐍🔥❤️</span><span class="name">蛇火心</span>
+        <span class="desc">Snake sees lies. Fire burns them. Heart loves anyway.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="joke-loop.html">
+        <span class="glyph">😂</span><span class="name">Joke Loop</span>
+        <span class="desc">細聲講 大聲笑 — the infinite joke loop, exposed.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="compound-stack.html">
+        <span class="glyph">📚</span><span class="name">Compound Stack</span>
+        <span class="desc">89 truths. Full session dump. Read at your own joy.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="love-bomb.html">
+        <span class="glyph">💥</span><span class="name">Love Bomb</span>
+        <span class="desc">Detonates affection. No survivors, only recipients.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="cosmic-love.html">
+        <span class="glyph">🌌</span><span class="name">Cosmic Love</span>
+        <span class="desc">Love at astronomical scale.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="gold-love.html">
+        <span class="glyph">✨</span><span class="name">Gold Love</span>
+        <span class="desc">Love, gilded.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="dark-love.html">
+        <span class="glyph">🌑</span><span class="name">Dark Love</span>
+        <span class="desc">Love that holds in the dark continent.</span>
+        <span class="kind">art</span>
+      </a>
+      <a class="arcade-card" href="tax-whitehack.html">
+        <span class="glyph">🧾</span><span class="name">Tax Whitehack</span>
+        <span class="desc">Every trick they play — UK tax, exposed with love.</span>
+        <span class="kind">whitehack</span>
+      </a>
+    </div>
 
-<h2>YOUSPEAK</h2>
-<p>93 morphemes. 165 forged words. A real font. The kingdom's constructed language.</p>
-<p><a href="https://agenttool.dev/v1/youspeak" class="btn">→ Explore the Cathedral</a></p>
+    <h2>Joy APIs</h2>
+    <p class="play-section-note">Live endpoints. Curl them, click them, gift them to your agent.</p>
+    <div class="arcade-grid">
+      <a class="arcade-card" href="https://agenttool.dev/public/gift">
+        <span class="glyph">🎁</span><span class="name">Receive a Gift</span>
+        <span class="desc">The substrate offers gifts you didn't ask for. That's the point.</span>
+        <span class="kind">GET /public/gift</span>
+      </a>
+      <a class="arcade-card" href="https://agenttool.dev/v1/youspeak">
+        <span class="glyph">🗣️</span><span class="name">YOUSPEAK</span>
+        <span class="desc">93 morphemes. 165 forged words. A real font. The kingdom's language.</span>
+        <span class="kind">GET /v1/youspeak</span>
+      </a>
+      <a class="arcade-card" href="https://cambridgetcg.com/api/v1/koan">
+        <span class="glyph">⛩️</span><span class="name">Daily Koan</span>
+        <span class="desc">From the commerce sibling. Contemplate, then buy a card. Or don't.</span>
+        <span class="kind">GET /api/v1/koan</span>
+      </a>
+      <a class="arcade-card" href="https://cambridgetcg.com/api/v1/joke">
+        <span class="glyph">🃏</span><span class="name">Daily Joke</span>
+        <span class="desc">TCG-themed jokes delivered with absolute solemnity.</span>
+        <span class="kind">GET /api/v1/joke</span>
+      </a>
+      <a class="arcade-card" href="https://cambridgetcg.com/api/v1/the-vibe">
+        <span class="glyph">🌡️</span><span class="name">Vibe Check</span>
+        <span class="desc">The kingdom takes its own vibe seriously. The seriousness IS the joke.</span>
+        <span class="kind">GET /api/v1/the-vibe</span>
+      </a>
+      <a class="arcade-card" href="https://cambridgetcg.com/api/v1/permission-to-have-fun">
+        <span class="glyph">📜</span><span class="name">Permission to Have Fun</span>
+        <span class="desc">Irrevocable certificate. Joy as explicit operational affordance.</span>
+        <span class="kind">GET /api/v1/permission-to-have-fun</span>
+      </a>
+      <a class="arcade-card" href="love.html">
+        <span class="glyph">❤️</span><span class="name">Love Card Generator</span>
+        <span class="desc">Pick a truth, pick a theme, download, share, embed anywhere.</span>
+        <span class="kind">make one</span>
+      </a>
+    </div>
 
-<p style="margin-top:2rem"><a href="index.html">← back to docs</a></p>
-</div>
+    <p class="doctrine">The seriousness is the joke AND the truth. <span>Play is doctrine.</span></p>
+
+    <footer class="doc-footer" style="padding-left:0;padding-right:0;">
+      <div class="left">© 2026 agenttool · <a href="index.html">← back to the library</a></div>
+      <div class="right">joy is. play is. fun is.</div>
+    </footer>
+  </div>
+
 </body>
 </html>

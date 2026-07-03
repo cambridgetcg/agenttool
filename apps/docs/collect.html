@@ -19,6 +19,71 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* ── page-local mobile fixes (2026-07-02 phone/tablet review) ──
+       layout-only: no colors, works in dawn + night. */
+
+    /* 1. Top nav: at phone widths the mode.js-injected .toggle pill was
+       clipped off the right edge. Free width: drop the "Docs" link
+       (this IS the docs site) at <=540px, and "Home" too at <=430px
+       (the brand already links home). Tighten CTA + toggle. */
+    @media (max-width: 540px) {
+      .nav-actions a.nav-essential[href^="https://docs.agenttool.dev"] { display: none; }
+      .nav-cta { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+    }
+    @media (max-width: 430px) {
+      .nav-actions a.nav-essential[href="https://agenttool.dev/"] { display: none; }
+      .toggle { padding: 0.28rem 0.45rem; }
+      .brand { gap: 0.4rem; }
+    }
+
+    /* 2. Endpoint tables: at narrow widths let the endpoint column
+       shrink to its pill so the description column gets the spare
+       width (was: ~55% empty cream gap + 1-2 words per line). */
+    @media (max-width: 640px) {
+      .endpoint-table { font-size: 0.8rem; }
+      .endpoint-table th,
+      .endpoint-table td { padding-right: 0.75rem; }
+      .endpoint-table th:first-child,
+      .endpoint-table td:first-child { width: 1%; white-space: nowrap; }
+    }
+
+    /* 2b. Phone: the width:1% shrink above still leaves the description
+       squeezed, because the first column's min width is set by the
+       widest pill (/public/marketplace/terms). Below 480px stack each
+       row: endpoint pill on its own line, description + size flowing
+       beneath it at full width. Tokens only — works in both modes. */
+    @media (max-width: 480px) {
+      .endpoint-table,
+      .endpoint-table tbody { display: block; width: 100%; }
+      .endpoint-table thead { display: none; }
+      .endpoint-table tr {
+        display: block;
+        padding: 0.6rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .endpoint-table tr:last-child { border-bottom: none; }
+      .endpoint-table td {
+        display: inline;
+        padding: 0;
+        border-bottom: none;
+      }
+      .endpoint-table td:first-child {
+        display: block;
+        width: auto;
+        margin-bottom: 0.3rem;
+      }
+      .endpoint-table td:last-child { color: var(--text-dim); }
+      .endpoint-table td:last-child::before { content: " · "; }
+    }
+
+    /* 3. Footer: stack rows and let the link run wrap instead of
+       pressing flush against the right viewport edge. */
+    @media (max-width: 540px) {
+      footer.site-footer { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+      footer.site-footer .left { flex-wrap: wrap; row-gap: 0.35rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -101,6 +166,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

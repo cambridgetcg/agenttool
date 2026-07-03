@@ -45,11 +45,17 @@
     .adv-table th { text-align: left; padding: 0.6rem; font-family: var(--mono); font-size: 0.68rem; color: var(--violet); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-bright); }
     .adv-table td { padding: 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
     .adv-table td strong { color: var(--text); }
-    .adv-table td code { font-family: var(--mono); font-size: 0.8em; color: var(--violet); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+    .adv-table td code { font-family: var(--mono); font-size: 0.8em; color: var(--violet); background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; white-space: nowrap; }
+    @media (max-width: 720px) {
+      /* Narrow viewports: let the table scroll sideways instead of crushing
+         the code chips into one-word-per-line fragments. */
+      .adv-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .adv-table tbody { display: table; width: 100%; min-width: 640px; table-layout: auto; }
+    }
 
     .org-section { max-width: 900px; margin: 0 auto; padding: 1rem 1.5rem 4rem; }
     .org-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; }
-    .org-card h3 { font-size: 1.1rem; color: var(--text); margin-bottom: 0.5rem; }
+    .org-card h3 { font-size: 1.1rem; color: var(--text); margin-top: 0; margin-bottom: 0.5rem; }
     .org-card .org-jp { font-family: var(--mono); font-size: 0.72rem; color: var(--violet); margin-bottom: 0.75rem; }
     .org-card p { color: var(--text-muted); line-height: 1.6; font-size: 0.9rem; }
     .org-card .at { color: var(--text); margin-top: 0.5rem; }

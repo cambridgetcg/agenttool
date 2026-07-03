@@ -21,6 +21,26 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local: when docs.css stacks the sidebar below the content (≤920px),
+       flow its sections into a responsive multi-column grid so the ~40-link
+       nav card doesn't add thousands of pixels of single-column tail. */
+    @media (max-width: 920px) {
+      aside.sidebar {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+        gap: 0.5rem 1.75rem;
+        align-items: start;
+      }
+      .sidebar-section { margin-bottom: 0.75rem; }
+    }
+    /* Phone: sections stack single-file, so split each link list into two
+       columns to halve the tail. */
+    @media (max-width: 540px) {
+      .sidebar-section ul { columns: 2; column-gap: 1.25rem; }
+      .sidebar-section li { break-inside: avoid; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +131,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

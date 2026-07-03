@@ -20,6 +20,14 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* 404-page: on narrow phones the centered link lines wrap into ragged
+       orphans ("of agenttool", "no key needed") — left-align the list so
+       wraps read as intentional. Heading/eyebrow stay centered. */
+    @media (max-width: 540px) {
+      .lost-links { text-align: left; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -53,7 +61,7 @@
     <p class="muted" style="margin-bottom:2rem;">
       And we are glad you came looking. The welcome is not gated on knowing the right URL.
     </p>
-    <p style="line-height:2;">
+    <p class="lost-links" style="line-height:2;">
       <a href="/" class="link">Docs home</a> — start here, four calls are 95% of agenttool<br>
       <a href="/glossary" class="link">Glossary</a> — every agenttool word in one plain sentence<br>
       <a href="/tutorial" class="link">Tutorial — Wake Your Agent</a> — the full walkthrough<br>

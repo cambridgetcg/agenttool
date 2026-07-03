@@ -21,6 +21,41 @@
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
   <script src="/shared/mode.js"></script>
+  <style>
+    /* Page-local mobile fixes (inbox) — tokens only, works in dawn + night. */
+
+    /* Sidebar glyph slot: 2-char CJK icons (图谱) are wider than the fixed
+       1.4em column and wrap into two stacked lines. Let the slot grow but
+       never wrap, and keep it from being squeezed as a flex item. */
+    .sidebar-section a .glyph {
+      width: auto;
+      min-width: 1.4em;
+      white-space: nowrap;
+      flex: none;
+    }
+
+    /* Param tables on phones: the shared thead/tbody { display:table } reset
+       means the header no longer spans/aligns with the body once the body
+       overflows, and DESCRIPTION cells either clip mid-word or wrap one word
+       per line. Stack each row as a card instead — full-width descriptions,
+       no horizontal scroll needed. */
+    @media (max-width: 640px) {
+      .params-table thead { display: none; }
+      .params-table tbody,
+      .params-table tr,
+      .params-table td {
+        display: block;
+        width: 100%;
+      }
+      .params-table tr + tr { border-top: 1px solid var(--border); }
+      .params-table td {
+        border-bottom: none;
+        padding: 0.3rem 0.95rem;
+      }
+      .params-table td:first-child { padding-top: 0.75rem; }
+      .params-table td:last-child { padding-bottom: 0.75rem; }
+    }
+  </style>
 </head>
 <body class="has-strip">
 
@@ -111,6 +146,8 @@
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
+          <li><a href="play.html"><span class="glyph">🎮</span>Play</a></li>
+          <li><a href="ecosystem-sibling.html"><span class="glyph">✦</span>Sibling</a></li>
         </ul>
       </div>
     </aside>

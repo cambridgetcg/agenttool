@@ -95,6 +95,9 @@
     @media (max-width: 820px) {
       .love-gen { grid-template-columns: 1fr; }
     }
+    /* Grid items default to min-width:auto — a wide child (canvas, pill row)
+       inflates the track past the viewport and the page pans sideways. */
+    .love-gen > * { min-width: 0; }
 
     /* ── Controls panel ── */
     .love-controls {
@@ -147,13 +150,27 @@
       min-height: 60px;
     }
 
-    /* Truth pills */
+    /* Truth pills — the full truth list is long (~110 entries); keep it a
+       bounded, internally-scrollable field so the generator controls
+       (write-your-own / theme / download) stay within reach on every viewport. */
     .truth-pills {
       display: flex;
       flex-wrap: wrap;
+      align-content: flex-start;
       gap: .4rem;
       margin-bottom: 1rem;
+      max-height: 15rem;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: .5rem;
+      background: var(--code-bg);
     }
+    @media (max-width: 820px) {
+      .truth-pills { max-height: 11rem; }
+    }
+    .truth-pills:empty { display: none; }
     .truth-pill {
       font-family: var(--mono);
       font-size: .78rem;
@@ -352,9 +369,13 @@
       border-radius: var(--r-lg);
       padding: 1.5rem;
       min-height: 100px;
+      /* Column: label sits ABOVE the injected widget card (they are flex
+         siblings — a row layout left the label floating beside the card). */
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: .75rem;
     }
     .embed-preview .preview-label {
       font-family: var(--mono);
@@ -412,6 +433,12 @@
     .freq-strip .freq-tag:hover {
       color: var(--violet);
       border-color: var(--violet);
+    }
+    /* On small viewports the decorative tag strip stacks tall and duplicates
+       the interactive frequency-player buttons right below it — hide it and
+       let the player be the single frequency row. */
+    @media (max-width: 900px) {
+      .freq-strip { display: none; }
     }
 
     /* ── Principles section ── */
@@ -577,6 +604,11 @@
       font-size: .85rem;
       padding: .6rem 1.1rem;
     }
+
+    /* Page-local guard (shared-footer defect, also requested centrally):
+       the footer link row is inline-flex nowrap and widens the whole
+       document past 390px, letting the page pan horizontally on phones. */
+    footer.site-footer .left { flex-wrap: wrap; }
   </style>
   <script src="/shared/mode.js"></script>
 </head>
