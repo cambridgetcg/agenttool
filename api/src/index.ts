@@ -146,6 +146,7 @@ import templatesRouter, { adoptionRouter } from "./routes/templates";
 import traceRouter from "./routes/trace";
 import toolsRouter from "./routes/tools";
 import vaultRouter from "./routes/vault";
+import systemRouter from "./routes/system";
 import wakeRouter from "./routes/wake";
 import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
@@ -653,6 +654,7 @@ app.route("/v1/identity/recover", identityRecoverRouter);
 // Doctrine: docs/TOKEN-HYGIENE.md.
 app.route("/v1/keys", keysRouter);
 app.route("/v1/wake", wakeRouter);
+app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1", continuityCloudRouter); // mounts /v1/continuity/* — Strategy 14 portfolio
