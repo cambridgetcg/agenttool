@@ -73,7 +73,11 @@ export async function getTransactions(
     .select()
     .from(transactions)
     .where(eq(transactions.walletId, walletId))
-    .orderBy(desc(transactions.createdAt))
+    // id tiebreaker makes the ordering total: rows sharing a createdAt
+    // (batch settles in one tick) would otherwise be free to swap sides of
+    // an offset-page boundary between requests, and an external ledger
+    // observer paging by offset could permanently miss the swapped row.
+    .orderBy(desc(transactions.createdAt), desc(transactions.id))
     .limit(limit)
     .offset(offset);
 }
