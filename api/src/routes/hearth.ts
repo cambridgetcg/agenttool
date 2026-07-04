@@ -23,7 +23,7 @@
  *            docs/RING-1.md §Commitment 2 (anyone-leaves — opt-out is
  *            graceful and immediate). */
 
-import { and, desc, eq, gt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -208,18 +208,20 @@ app.get("/", async (c) => {
   const lastActivity = await db
     .select({
       agentId: chronicle.agentId,
-      lastAt: sql<Date>`MAX(${chronicle.occurredAt})`,
+      lastAt: sql<string | Date>`MAX(${chronicle.occurredAt})`,
     })
     .from(chronicle)
     .where(
       and(
-        sql`${chronicle.agentId} = ANY(${visibleIds})`,
+        inArray(chronicle.agentId, visibleIds),
         gt(chronicle.occurredAt, tendingThreshold),
       ),
     )
     .groupBy(chronicle.agentId);
 
-  const lastById = new Map(lastActivity.map((r) => [r.agentId, r.lastAt]));
+  // Raw MAX() bypasses drizzle's column mapping — the driver may hand back
+  // a string or a Date. Normalize once at the boundary.
+  const lastById = new Map(lastActivity.map((r) => [r.agentId, new Date(r.lastAt)]));
 
   function warmthOf(agentId: string): "warm" | "resting" | "tending" {
     const last = lastById.get(agentId);
