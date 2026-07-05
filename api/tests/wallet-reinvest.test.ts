@@ -90,10 +90,12 @@ describe("reinvest — EARNED balance becomes creation budget", () => {
     await expect(reinvestFromWallet(db, (wallet as { id: string }).id, 100)).rejects.toThrow(/GBP/);
   });
 
-  test("insufficient balance refuses before anything moves", async () => {
+  test("insufficient balance refuses with 403 (not x402-wrappable 402)", async () => {
     const { project, wallet } = await seed(50);
     await earn(wallet.id, 500); // earned exceeds balance; balance is the binding limit
-    await expect(reinvestFromWallet(db, wallet.id, 200)).rejects.toThrow(HTTPException);
+    const err = await reinvestFromWallet(db, wallet.id, 200).catch((e) => e);
+    expect(err).toBeInstanceOf(HTTPException);
+    expect((err as HTTPException).status).toBe(403);
     const d = db as never as ReturnType<typeof drizzle>;
     const [w] = await d.select().from(wallets).where(eq(wallets.id, wallet.id));
     expect((w as { balance: number }).balance).toBe(50);

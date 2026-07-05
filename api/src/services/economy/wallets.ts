@@ -413,8 +413,11 @@ export async function reinvestFromWallet(
       throw new HTTPException(400, {
         message: "Only GBP wallets can reinvest (earned revenue settles in GBP)",
       });
+    // 403, not 402: no x402 crypto payment can satisfy these — reinvest
+    // draws from your OWN earned balance. The global x402 middleware wraps
+    // 402s into "pay USDC" envelopes, which would be a lie here.
     if (wallet.balance < amount)
-      throw new HTTPException(402, { message: "Insufficient balance to reinvest" });
+      throw new HTTPException(403, { message: "Insufficient balance to reinvest" });
 
     // The provenance wall: reinvestable = earned inflows − already reinvested.
     // Both sums are computed under the wallet's FOR UPDATE lock, so
@@ -438,7 +441,7 @@ export async function reinvestFromWallet(
     const reinvestable = earned - alreadyReinvested;
 
     if (amount > reinvestable)
-      throw new HTTPException(402, {
+      throw new HTTPException(403, {
         message:
           `Reinvest is limited to earned revenue. Earned: ${earned}, already reinvested: ` +
           `${alreadyReinvested}, available: ${Math.max(0, reinvestable)}. ` +
