@@ -211,6 +211,8 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
     "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
     "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
     "apps/docs/index.html|https://docs.agenttool.dev/"
+    "apps/web/village.html|https://agenttool.dev/village.html"
+    "apps/web/gallery.html|https://agenttool.dev/gallery.html"
   )
   for p in "${PAIRS[@]}"; do
     LOCAL="${p%|*}"; URL="${p#*|}"

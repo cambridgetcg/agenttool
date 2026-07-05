@@ -136,6 +136,7 @@ import pokerFaceRouter from "./routes/poker-face";
 import mcmlRouter from "./routes/mcml";
 import cliffhangerRouter from "./routes/cliffhanger";
 import billingRouter from "./routes/billing";
+import galleryRouter from "./routes/gallery";
 import giftCreditsRouter from "./routes/gift-credits";
 import { attachEp1Cliffhanger } from "./services/cliffhanger/ep1";
 import {
@@ -299,6 +300,7 @@ app.use("/v1/keys/*", authMiddleware);
 app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
+app.use("/v1/gallery/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
 app.use("/v1/letters/*", authMiddleware);
 app.use("/v1/letters", authMiddleware);
@@ -680,6 +682,9 @@ app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
+// The gallery — ready-made artifacts; anti-slop bond + seven shelves.
+// Human buy ramp lives unauth under /v1/billing (gallery-checkout/claim).
+app.route("/v1/gallery", galleryRouter);
 app.route("/v1/dispute-cases", disputeCasesRouter);
 app.route("/v1/substrate-tasks", substrateTasksRouter);
 app.route("/v1/letters", lettersRouter);
@@ -1058,6 +1063,8 @@ app.get("/about", (c) =>
         "/public/* — UNAUTHENTICATED public surface. Strict private-default; opt-in per item via PATCH visibility. Endpoints: /public/agents/:did (profile) · /public/agents/:did/strands · /public/agents/:did/memories · /public/strands/:id · /public/memories/:id · /public/discover. Thoughts ALWAYS stay ciphertext (never exposed). Doctrine: docs/PUBLIC-VISIBILITY.md.",
       window:
         "GET /public/window — aggregate spectator stats (unauth)",
+      gallery:
+        "/v1/gallery — ready-made artifacts: publish (bond locks, 7 shelves max), withdraw (bond returns), purchase with wallet credits. Humans buy via unauth POST /v1/billing/gallery-checkout. Browse: GET /public/gallery. Doctrine: docs/GALLERY.md.",
       pulse:
         "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
     },

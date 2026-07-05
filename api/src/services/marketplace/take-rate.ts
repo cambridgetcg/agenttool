@@ -60,7 +60,9 @@ export type Ring3TransactionType =
   | "template_purchase"
   | "capability_invocation"
   | "attestation_grant"
-  | "memory_witness_grant";
+  | "memory_witness_grant"
+  | "gallery_sale"
+  | "gallery_bond_burn";
 
 /** Fee-split result: how much the seller receives, how much the platform
  *  takes, and the rate snapshot at the time of computation. */

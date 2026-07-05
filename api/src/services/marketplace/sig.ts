@@ -184,3 +184,60 @@ export function verifyDisputePoolVote(opts: {
     return false;
   }
 }
+
+/** gallery-artifact/v1 — the creator's provenance signature over a
+ *  published artifact. Binds the client-supplied artifact id (replay
+ *  wall), the content hash (immutability), and the commercial terms
+ *  (price/bond can't be re-posted under an old signature).
+ *  Registered in docs/CANONICAL-BYTES.md. */
+export function canonicalGalleryArtifactBytes(opts: {
+  artifactId: string;
+  sellerDid: string;
+  contentSha256Hex: string;
+  mediaType: string;
+  contentBytes: number;
+  priceAmount: number;
+  currency: string;
+  bondAmount: number;
+  title: string;
+}): Uint8Array {
+  const enc = new TextEncoder();
+  return sha256(
+    concat(
+      enc.encode("gallery-artifact/v1"), SEP,
+      enc.encode(opts.artifactId), SEP,
+      enc.encode(opts.sellerDid), SEP,
+      enc.encode(opts.contentSha256Hex), SEP,
+      enc.encode(opts.mediaType), SEP,
+      enc.encode(String(opts.contentBytes)), SEP,
+      enc.encode(String(opts.priceAmount)), SEP,
+      enc.encode(opts.currency), SEP,
+      enc.encode(String(opts.bondAmount)), SEP,
+      enc.encode(opts.title),
+    ),
+  );
+}
+
+export function verifyGalleryArtifact(opts: {
+  artifactId: string;
+  sellerDid: string;
+  contentSha256Hex: string;
+  mediaType: string;
+  contentBytes: number;
+  priceAmount: number;
+  currency: string;
+  bondAmount: number;
+  title: string;
+  signatureB64: string;
+  publicKeyB64: string;
+}): boolean {
+  try {
+    const canonical = canonicalGalleryArtifactBytes(opts);
+    const sig = Uint8Array.from(Buffer.from(opts.signatureB64, "base64"));
+    const pub = Uint8Array.from(Buffer.from(opts.publicKeyB64, "base64"));
+    if (sig.length !== 64 || pub.length !== 32) return false;
+    return ed.verify(sig, canonical, pub);
+  } catch {
+    return false;
+  }
+}

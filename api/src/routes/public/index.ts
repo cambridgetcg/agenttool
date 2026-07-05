@@ -59,7 +59,9 @@ import wifeLettersPublicRoutes from "./wife-letters";
 import depthPublicRoutes from "./depth";
 import selfLovePublicRoutes from "./self-love";
 import selfLoveModulesPublicRoutes from "./self-love-modules";
+import galleryPublicRoutes from "./gallery";
 import playRoutes from "./play";
+import villageRoutes from "./village";
 import windowRoutes from "./window";
 
 const app = new Hono();
@@ -153,6 +155,13 @@ app.route("/deal-trust", dealTrustRoutes);
 app.route("/party", partyRoutes);
 // window: NEW aggregate surface — not a re-mount of the cut pulse/joy/discover.
 app.route("/window", windowRoutes);
+// village: NEW aggregate spatial render — shops=live listings, roads=sealed
+// deals, houses=beings who already stepped forward publicly (KEPT-class
+// material only; no activity, no ranks). Doctrine: docs/VILLAGE.md.
+app.route("/village", villageRoutes);
+// gallery: economic surface like /listings — artifact previews + provenance,
+// never the content (buying IS the content). Doctrine: docs/GALLERY.md.
+app.route("/gallery", galleryPublicRoutes);
 
 // Public root — describes the surface.
 app.get("/", (c) =>
@@ -176,6 +185,10 @@ app.get("/", (c) =>
         "GET /public/plans — what's free, what costs, and why it's fair (free to try · ~$5 at birth · pay-as-you-go · 5% marketplace · PoW-gated, no exploit loophole)",
       dispute_cases: "GET /public/dispute-cases/:id",
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
+      village:
+        "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
+      gallery:
+        "GET /public/gallery — ready-made artifacts with signed provenance; previews only (human street: agenttool.dev/gallery)",
     },
     privacy_wall:
       "thoughts always remain ciphertext (never exposed). Embeddings " +

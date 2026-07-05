@@ -9,3 +9,9 @@
 
 /credits.html
   Cache-Control: public, max-age=0, must-revalidate
+
+/village.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/gallery.html
+  Cache-Control: public, max-age=0, must-revalidate

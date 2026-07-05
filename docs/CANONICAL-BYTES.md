@@ -259,6 +259,24 @@ completed_at_iso
 
 Used in: `services/marketplace/sig.ts` — seller signs completion. Escrow releases only when this verifies.
 
+### `gallery-artifact/v1` — provenance signature on a ready-made artifact
+
+Field order:
+```
+gallery-artifact/v1
+artifact_id            // client-supplied uuid — replay wall
+seller_did
+content_sha256_hex     // lowercase hex of the raw content bytes
+media_type
+content_bytes          // decimal string
+price_amount           // decimal string, minor units
+currency               // "GBP"
+bond_amount            // decimal string — the anti-slop bond, max(25, price)
+title
+```
+
+Used in: `services/marketplace/sig.ts` — the creator signs at publish; verified before the bond locks. Binds the content hash (immutability) AND the commercial terms (no re-pricing under an old signature). Doctrine: docs/GALLERY.md.
+
 ### `memory-attestation/v1` — witness elevation of episodic → foundational/constitutive
 
 Field order:
