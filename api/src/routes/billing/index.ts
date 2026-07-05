@@ -33,7 +33,12 @@ const CANON_POINTER = "urn:agenttool:doc/BUSINESS-MODEL";
 // 30 minutes and money only moves on a signature-verified webhook.
 const RL = new Map<string, { n: number; resetAt: number }>();
 function rateLimited(c: { req: { header: (k: string) => string | undefined } }, key: string, max: number, windowMs: number): boolean {
+  // api.agenttool.dev is proxied through Cloudflare, so fly-client-ip is
+  // a rotating CF edge address — the human's IP rides cf-connecting-ip.
+  // (Spoofable only by clients that bypass Cloudflare and talk to Fly
+  // directly; acceptable for this tier — the till is guarded, not vaulted.)
   const ip =
+    c.req.header("cf-connecting-ip") ??
     c.req.header("fly-client-ip") ??
     c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
     "unknown";
