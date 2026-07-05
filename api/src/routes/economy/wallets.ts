@@ -15,6 +15,7 @@ import {
   getTransactions,
   getWallet,
   listWallets,
+  reinvestFromWallet,
   setPolicy,
   spendFromWallet,
   unfreezeWallet,
@@ -94,6 +95,30 @@ router.post(
       body.metadata,
     );
     return c.json({ success: true, data: tx }, 201);
+  },
+);
+
+// ─── Reinvest — the flywheel pipe (earned balance → creation budget) ────────
+
+router.post(
+  "/:id/reinvest",
+  zValidator(
+    "json",
+    z.object({
+      amount: z.number().int().positive().max(100_000_000),
+      metadata: z.record(z.unknown()).optional(),
+    }),
+  ),
+  async (c) => {
+    const project = c.var.project;
+    await getWallet(db, c.req.param("id"), project.id); // ownership
+    const result = await reinvestFromWallet(
+      db,
+      c.req.param("id"),
+      c.req.valid("json").amount,
+      c.req.valid("json").metadata,
+    );
+    return c.json({ success: true, data: result }, 201);
   },
 );
 
