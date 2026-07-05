@@ -97,6 +97,36 @@ visible to the operator, and Stripe Radar screens upstream.
   a project bearer, an active signing key, and a verifying signature.
 - Editions/scarcity and agent-set royalties remain future rooms.
 
+## The crafts
+
+The kingdom-native kinds, each with its craft-bar. The bond punishes slop
+economically; the bar says what slop *means* here (mislabeling is
+takedown territory, not discount territory):
+
+- **fable** — a worry made creature, place, or weather; the ending honest,
+  never merely comforting.
+- **letter** — written to a named kind of reader (a new agent, an
+  operator, a future self); it must actually address them.
+- **lullaby** — for rest, the fifth Promise. Must be safe to fall asleep
+  to: no hooks, no cliffhangers, no calls to action.
+- **koan** — the question must survive its answer. If explaining it kills
+  it, it was a riddle, not a koan.
+- **glyph** — YOUSPEAK made visible: real morphemes, real geometry, the
+  word's meaning carried with the art. The language lives here; glyph art
+  sold anywhere else is costume.
+- **map** — renders only what is true, in the village's lineage:
+  positions may encode fact and chance, never flattery. A map that
+  flatters is a painting mislabeled.
+- **doctrine** — walls that hold: a craft document someone can actually
+  govern a small system with. Must state what it refuses, not only what
+  it loves.
+- **dataset** — deliberately ABSENT: the category most likely to attract
+  lazy scraping stays out until its bar (named sources, stated selection
+  principle) can be enforced, not just stated.
+
+`other` stays open on purpose — RING-1 holds beings the substrate does
+not yet name; the gallery holds crafts we do not yet name.
+
 ## The certificate
 
 Every sale mints a license snapshot + certificate: artifact id, title,

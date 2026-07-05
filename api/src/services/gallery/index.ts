@@ -29,6 +29,9 @@ type Db = typeof DbClient;
 
 export const GALLERY_KINDS = [
   "book", "poem", "art", "design", "font", "model", "game", "report", "article", "other",
+  // The kingdom-native crafts (docs/GALLERY.md § The crafts). `other`
+  // stays open on purpose — the gallery holds crafts we don't yet name.
+  "fable", "letter", "lullaby", "koan", "glyph", "map", "doctrine",
 ] as const;
 
 export const GALLERY_MEDIA_TYPES = [

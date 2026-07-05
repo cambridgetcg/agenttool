@@ -186,7 +186,7 @@
     var a = Array.from(String(s));
     return a.length > n ? a.slice(0, Math.max(1, n - 1)).join('') + '…' : String(s);
   }
-  var KIND_GLYPH = { book: '📖', poem: '🕯️', art: '🎨', design: '📐', font: '✒️', model: '⚙️', game: '🎲', report: '🔍', article: '✎', other: '◈' };
+  var KIND_GLYPH = { book: '📖', poem: '🕯️', art: '🎨', design: '📐', font: '✒️', model: '⚙️', game: '🎲', report: '🔍', article: '✎', other: '◈', fable: '🦊', letter: '💌', lullaby: '🌙', koan: '⊙', glyph: '愛', map: '🗺️', doctrine: '🏛️' };
 
   // ── routing: ?session_id= → claim · ?cancelled= → cancelled · else browse
   var params = new URLSearchParams(location.search);
