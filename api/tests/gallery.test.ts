@@ -28,6 +28,7 @@ import {
   bondFor,
   publishArtifact,
   purchaseWithWallet,
+  reverseGallerySale,
   settleStripeSale,
   SHELF_LIMIT,
   takedownArtifact,
@@ -319,6 +320,86 @@ describe("gallery service — sales", () => {
       .from(gallerySales)
       .where(eq(gallerySales.stripeSessionId, sessionId));
     expect((salesRows as unknown[]).length).toBe(1);
+  });
+
+  test("refund reverses the sale: license dies, net clawed back, idempotent", async () => {
+    const seller = await seedSeller(10_000);
+    const artifact = await publish(seller, 1_000);
+    const pi = `pi_test_${crypto.randomUUID()}`;
+    const settled = await settleStripeSale(db, {
+      stripeSessionId: `cs_test_${crypto.randomUUID()}`,
+      stripeEventId: `evt_${crypto.randomUUID()}`,
+      stripePaymentIntent: pi,
+      artifactId: artifact.id,
+      amountMinor: 1_000,
+    });
+    expect(settled).not.toBeNull();
+    const afterSale = await walletBalance(seller.wallet.id);
+
+    const reversed = await reverseGallerySale(db, {
+      stripePaymentIntent: pi,
+      kind: "refund",
+      stripeEventId: `evt_${crypto.randomUUID()}`,
+    });
+    expect(reversed.outcome).toBe("reversed");
+    expect(reversed.clawed).toBe(settled!.sellerNet);
+    expect(reversed.shortfall).toBe(0);
+    expect(await walletBalance(seller.wallet.id)).toBe(afterSale - settled!.sellerNet);
+
+    // license is dead
+    const [sale] = await (db as never as ReturnType<typeof drizzle>)
+      .select()
+      .from(gallerySales)
+      .where(eq(gallerySales.stripePaymentIntent, pi));
+    expect((sale as { claimToken: string | null }).claimToken).toBeNull();
+    expect((sale as { refundKind: string | null }).refundKind).toBe("refund");
+
+    // replay is a no-op
+    const replay = await reverseGallerySale(db, {
+      stripePaymentIntent: pi,
+      kind: "refund",
+      stripeEventId: `evt_${crypto.randomUUID()}`,
+    });
+    expect(replay.outcome).toBe("already_reversed");
+    expect(await walletBalance(seller.wallet.id)).toBe(afterSale - settled!.sellerNet);
+  });
+
+  test("chargeback clawback stops at zero — shortfall recorded, never negative", async () => {
+    const seller = await seedSeller(1_000);
+    const artifact = await publish(seller, 1_000); // bond 1000 → balance 0
+    const pi = `pi_test_${crypto.randomUUID()}`;
+    const settled = await settleStripeSale(db, {
+      stripeSessionId: `cs_test_${crypto.randomUUID()}`,
+      stripeEventId: `evt_${crypto.randomUUID()}`,
+      stripePaymentIntent: pi,
+      artifactId: artifact.id,
+      amountMinor: 1_000,
+    });
+    // seller balance = net; drain most of it to force a shortfall
+    const net = settled!.sellerNet;
+    await (db as never as ReturnType<typeof drizzle>)
+      .update(wallets)
+      .set({ balance: 100 })
+      .where(eq(wallets.id, seller.wallet.id));
+
+    const reversed = await reverseGallerySale(db, {
+      stripePaymentIntent: pi,
+      kind: "chargeback",
+      stripeEventId: `evt_${crypto.randomUUID()}`,
+    });
+    expect(reversed.outcome).toBe("reversed");
+    expect(reversed.clawed).toBe(100);
+    expect(reversed.shortfall).toBe(net - 100);
+    expect(await walletBalance(seller.wallet.id)).toBe(0);
+  });
+
+  test("unknown payment intent reverses nothing (gift refunds pass through)", async () => {
+    const r = await reverseGallerySale(db, {
+      stripePaymentIntent: `pi_test_${crypto.randomUUID()}`,
+      kind: "refund",
+      stripeEventId: `evt_${crypto.randomUUID()}`,
+    });
+    expect(r.outcome).toBe("no_gallery_sale");
   });
 
   test("sales bump the shelf counter", async () => {

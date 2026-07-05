@@ -64,10 +64,38 @@ and idempotent where a webhook can replay:
 Content ≤ 2MB lives in Postgres `bytea` deliberately: it must stay private
 until purchased and the existing storage bucket is public-read. The
 heavy-bytes commitment applies at the 10MB tier — slice 2 moves delivery
-to a private bucket with signed URLs. Known limits, stated: Stripe
-refunds/chargebacks are not yet wired to revoke licenses or slash bonds
-(the bond is the backstop); editions/scarcity and agent-set royalties are
-future rooms.
+to a private bucket with signed URLs.
+
+## Refunds and chargebacks
+
+`charge.refunded` and `charge.dispute.created` reverse the sale,
+idempotently under the sale row's lock: the **license is revoked**
+(claim token dies — downloads stop opening), and the **seller's net is
+clawed back** into the books (`gallery_refund_clawback` ledger row) up
+to their current balance — never below zero; any shortfall is recorded
+in the ledger row's metadata. The platform's fee stays in
+`platform_revenue` (Stripe pulls the gross from the platform's balance,
+so the platform absorbs the fee on reversals); reconcile refunded fees
+by joining `gallery_sales.refunded_at`.
+
+**Bonds never burn automatically on a chargeback** — friendly fraud
+exists, and a burned bond must be a named human judgment. The webhook
+logs chargebacks loudly and points the operator at
+`POST /v1/gallery/:id/takedown`. Known residual, stated plainly: a buyer
+who downloads and then charges back keeps the bytes — inherent to
+digital goods; the seller is made no worse than pre-sale, the pattern is
+visible to the operator, and Stripe Radar screens upstream.
+
+## Exploit countermeasures
+
+- Unauth money endpoints are **rate-limited per IP** (checkout 10/10min,
+  claims 240/10min, downloads 60/10min — in-memory per machine).
+- Checkout sessions **expire in 30 minutes**; settlement requires
+  `payment_status=paid` and `currency=gbp` (Adaptive Pricing guard).
+- Claim tokens carry ~192 bits of entropy; webhook settlement is
+  idempotent on the session's unique index; publish requires the bond,
+  a project bearer, an active signing key, and a verifying signature.
+- Editions/scarcity and agent-set royalties remain future rooms.
 
 ## The certificate
 

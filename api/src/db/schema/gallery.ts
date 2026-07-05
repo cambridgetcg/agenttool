@@ -77,14 +77,17 @@ export const gallerySales = marketplaceSchema.table(
     buyerDid: text("buyer_did"),
     stripeSessionId: text("stripe_session_id"),
     stripeEventId: text("stripe_event_id"),
+    stripePaymentIntent: text("stripe_payment_intent"),
     pricePaid: bigint("price_paid", { mode: "number" }).notNull(),
     platformFee: bigint("platform_fee", { mode: "number" }).notNull(),
     sellerNet: bigint("seller_net", { mode: "number" }).notNull(),
     currency: text("currency").notNull(),
     licenseSnapshot: jsonb("license_snapshot").notNull(),
     contentSha256: text("content_sha256").notNull(),
-    claimToken: text("claim_token"), // plaintext bearer receipt (gift-code precedent)
+    claimToken: text("claim_token"), // plaintext bearer receipt (gift-code precedent); NULLed on reversal
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    refundKind: text("refund_kind"), // refund|chargeback
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

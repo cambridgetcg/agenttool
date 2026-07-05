@@ -287,6 +287,13 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.status === 'ready' && d.claim_token) { showReady(d); return; }
+          if (d.status === 'refunded') {
+            var t = document.getElementById('claim-title');
+            if (t) t.textContent = 'This purchase was refunded.';
+            var q = document.querySelector('#claim-settling p');
+            if (q) q.textContent = 'The money went back; the license closed with it. The artifact is still on the street if you change your mind.';
+            return;
+          }
           polls++;
           if (polls === 48) { // ~2 minutes — say something honest, keep checking slower
             var q = document.querySelector('#claim-settling p');

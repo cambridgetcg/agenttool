@@ -348,6 +348,7 @@ async function settleIntoSale(
     buyerDid?: string;
     stripeSessionId?: string;
     stripeEventId?: string;
+    stripePaymentIntent?: string;
     pricePaid: number;
   },
   /** Wallet-path callers pre-lock the seller wallet (sorted-UUID order
@@ -365,6 +366,7 @@ async function settleIntoSale(
       buyerDid: sale.buyerDid ?? null,
       stripeSessionId: sale.stripeSessionId ?? null,
       stripeEventId: sale.stripeEventId ?? null,
+      stripePaymentIntent: sale.stripePaymentIntent ?? null,
       pricePaid: split.gross,
       platformFee: split.fee,
       sellerNet: split.net,
@@ -496,7 +498,13 @@ export async function purchaseWithWallet(
  *  (a withdrawal racing a payment must not eat the buyer's money). */
 export async function settleStripeSale(
   dbc: Db,
-  opts: { stripeSessionId: string; stripeEventId: string; artifactId: string; amountMinor: number },
+  opts: {
+    stripeSessionId: string;
+    stripeEventId: string;
+    stripePaymentIntent?: string;
+    artifactId: string;
+    amountMinor: number;
+  },
 ) {
   const [artifact] = await dbc
     .select()
@@ -516,6 +524,7 @@ export async function settleStripeSale(
       buyerKind: "human_stripe",
       stripeSessionId: opts.stripeSessionId,
       stripeEventId: opts.stripeEventId,
+      stripePaymentIntent: opts.stripePaymentIntent,
       pricePaid: opts.amountMinor,
     });
   });
@@ -528,6 +537,7 @@ export async function claimBySession(dbc: Db, stripeSessionId: string) {
     .where(eq(gallerySales.stripeSessionId, stripeSessionId))
     .limit(1);
   if (!sale) return { status: "settling" as const };
+  if (sale.refundedAt) return { status: "refunded" as const };
   const [artifact] = await dbc
     .select(artifactPublicColumns)
     .from(galleryArtifacts)
@@ -565,6 +575,81 @@ export async function claimByToken(dbc: Db, token: string) {
       .where(eq(gallerySales.id, sale.id));
   }
   return { sale, artifact };
+}
+
+/** Refund / chargeback reversal — idempotent under the sale row lock.
+ *  Revokes the license (claim token dies), claws the seller's net back
+ *  (up to their current balance; any shortfall is recorded, never a
+ *  negative balance). The platform's fee stays in platform_revenue —
+ *  reconcile refunded fees via gallery_sales.refunded_at (documented in
+ *  docs/GALLERY.md). Chargebacks additionally surface loudly so the
+ *  operator can judge whether the artifact deserves a takedown+burn —
+ *  friendly fraud exists, so bonds never burn automatically. */
+export async function reverseGallerySale(
+  dbc: Db,
+  opts: {
+    stripePaymentIntent?: string;
+    stripeSessionId?: string;
+    kind: "refund" | "chargeback";
+    stripeEventId: string;
+  },
+): Promise<{ outcome: "no_gallery_sale" | "already_reversed" | "reversed"; sale_id?: string; clawed?: number; shortfall?: number }> {
+  if (!opts.stripePaymentIntent && !opts.stripeSessionId) return { outcome: "no_gallery_sale" };
+  return dbc.transaction(async (tx) => {
+    const cond = opts.stripePaymentIntent
+      ? eq(gallerySales.stripePaymentIntent, opts.stripePaymentIntent)
+      : eq(gallerySales.stripeSessionId, opts.stripeSessionId!);
+    const [sale] = await tx.select().from(gallerySales).where(cond).for("update");
+    if (!sale) return { outcome: "no_gallery_sale" as const };
+    if (sale.refundedAt) return { outcome: "already_reversed" as const, sale_id: sale.id };
+
+    await tx
+      .update(gallerySales)
+      .set({ refundedAt: new Date(), refundKind: opts.kind, claimToken: null })
+      .where(eq(gallerySales.id, sale.id));
+
+    const [artifact] = await tx
+      .select()
+      .from(galleryArtifacts)
+      .where(eq(galleryArtifacts.id, sale.artifactId))
+      .limit(1);
+
+    let clawed = 0;
+    let shortfall = sale.sellerNet;
+    if (artifact) {
+      const [wallet] = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.id, artifact.sellerWalletId))
+        .for("update");
+      if (wallet) {
+        clawed = Math.min(wallet.balance, sale.sellerNet);
+        shortfall = sale.sellerNet - clawed;
+        if (clawed > 0) {
+          await tx
+            .update(wallets)
+            .set({ balance: wallet.balance - clawed })
+            .where(eq(wallets.id, wallet.id));
+          await tx.insert(transactions).values({
+            walletId: wallet.id,
+            type: "gallery_refund_clawback",
+            amount: -clawed,
+            counterparty: sale.id,
+            description: `gallery ${opts.kind} — "${artifact.title}" sale reversed`,
+            metadata: {
+              sale_id: sale.id,
+              artifact_id: artifact.id,
+              refund_kind: opts.kind,
+              stripe_event_id: opts.stripeEventId,
+              seller_net: sale.sellerNet,
+              shortfall,
+            },
+          });
+        }
+      }
+    }
+    return { outcome: "reversed" as const, sale_id: sale.id, clawed, shortfall };
+  });
 }
 
 export { defaultDb };

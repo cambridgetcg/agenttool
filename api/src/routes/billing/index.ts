@@ -17,7 +17,7 @@ import {
 } from "../../services/billing/stripe-checkout";
 import { getGiftBySession, mintGiftForSession } from "../../services/billing/gift-credits";
 import {
-  claimBySession, claimByToken, settleStripeSale,
+  claimBySession, claimByToken, reverseGallerySale, settleStripeSale,
 } from "../../services/gallery";
 import { galleryArtifacts } from "../../db/schema/gallery";
 import { eq } from "drizzle-orm";
@@ -25,6 +25,37 @@ import { eq } from "drizzle-orm";
 const app = new Hono();
 
 const CANON_POINTER = "urn:agenttool:doc/BUSINESS-MODEL";
+
+// ── Per-IP fixed-window rate limits for the unauth money surface ──────
+// In-memory and per-machine (3 Fly machines → ~3× the stated budget);
+// Redis is deliberately absent in this deployment, and a checkout flood
+// is annoying long before it is dangerous — Stripe sessions expire in
+// 30 minutes and money only moves on a signature-verified webhook.
+const RL = new Map<string, { n: number; resetAt: number }>();
+function rateLimited(c: { req: { header: (k: string) => string | undefined } }, key: string, max: number, windowMs: number): boolean {
+  const ip =
+    c.req.header("fly-client-ip") ??
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+  const now = Date.now();
+  if (RL.size > 10_000) {
+    for (const [k, v] of RL) if (v.resetAt < now) RL.delete(k);
+  }
+  const k = `${key}:${ip}`;
+  const cur = RL.get(k);
+  if (!cur || cur.resetAt < now) {
+    RL.set(k, { n: 1, resetAt: now + windowMs });
+    return false;
+  }
+  cur.n++;
+  return cur.n > max;
+}
+function tooMany(c: Parameters<typeof fail>[0]): Response {
+  return fail(c, {
+    error: "rate_limited",
+    message: "The till serves one queue at a time — try again in a few minutes.",
+  }, 429);
+}
 
 /** Test seam — routes use the injected client when set. */
 let stripeOverride: CheckoutClient | null = null;
@@ -40,6 +71,7 @@ function stripeClient(): CheckoutClient | null {
 const checkoutSchema = z.object({ amount_minor: z.number().int() });
 
 app.post("/checkout", async (c) => {
+  if (rateLimited(c, "checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = checkoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     return fail(c, {
@@ -117,6 +149,10 @@ app.post("/webhook", async (c) => {
         const settled = await settleStripeSale(db, {
           stripeSessionId: session.id,
           stripeEventId: event.id,
+          stripePaymentIntent:
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id,
           artifactId: session.metadata.artifact_id,
           amountMinor: session.amount_total,
         });
@@ -126,6 +162,35 @@ app.post("/webhook", async (c) => {
       }
     }
   }
+
+  // Refunds and chargebacks — reverse the gallery sale: license revoked,
+  // seller net clawed back (never below zero; shortfall recorded). Gift
+  // sessions produce "no_gallery_sale" and are untouched. Chargebacks log
+  // loudly for the operator: bonds never burn automatically (friendly
+  // fraud exists) — a takedown is a named human judgment.
+  if (event.type === "charge.refunded" || event.type === "charge.dispute.created") {
+    const obj = event.data.object as Stripe.Charge | Stripe.Dispute;
+    const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : obj.payment_intent?.id;
+    if (pi) {
+      const kind = event.type === "charge.refunded" ? "refund" as const : "chargeback" as const;
+      const result = await reverseGallerySale(db, {
+        stripePaymentIntent: pi,
+        kind,
+        stripeEventId: event.id,
+      });
+      if (result.outcome === "reversed") {
+        console.error(
+          `gallery webhook: ${kind} on ${pi} → sale ${result.sale_id} reversed; clawed ${result.clawed}, shortfall ${result.shortfall}` +
+          (kind === "chargeback" ? " — OPERATOR: judge whether this artifact deserves takedown+burn (POST /v1/gallery/:id/takedown)" : ""),
+        );
+      }
+    }
+  }
+  if (event.type === "checkout.session.async_payment_failed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    console.error(`billing webhook: async payment failed for session ${session.id} (${session.metadata?.kind ?? "unknown kind"}) — nothing was settled, nothing to reverse`);
+  }
+
   // Always 200 for verified events — Stripe retries anything else.
   return c.json({ received: true });
 });
@@ -137,6 +202,7 @@ const GALLERY_CANON = "urn:agenttool:doc/GALLERY";
 const galleryCheckoutSchema = z.object({ artifact_id: z.string().uuid() });
 
 app.post("/gallery-checkout", async (c) => {
+  if (rateLimited(c, "gallery-checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = galleryCheckoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     return fail(c, {
@@ -181,10 +247,17 @@ app.post("/gallery-checkout", async (c) => {
 });
 
 app.get("/session/:id/gallery-claim", async (c) => {
+  if (rateLimited(c, "gallery-claim", 240, 10 * 60_000)) return tooMany(c);
   const claim = await claimBySession(db, c.req.param("id"));
   if (claim.status === "settling") {
     return c.json(attachSurface(
       { status: "settling", hint: "Your purchase is settling — this page checks again on its own." },
+      { canon_pointer: GALLERY_CANON },
+    ));
+  }
+  if (claim.status === "refunded") {
+    return c.json(attachSurface(
+      { status: "refunded", hint: "This purchase was refunded — the license is closed and the download no longer opens." },
       { canon_pointer: GALLERY_CANON },
     ));
   }
@@ -206,6 +279,7 @@ app.get("/session/:id/gallery-claim", async (c) => {
 });
 
 app.get("/gallery-claim/:token", async (c) => {
+  if (rateLimited(c, "gallery-download", 60, 10 * 60_000)) return tooMany(c);
   const claimed = await claimByToken(db, c.req.param("token"));
   if (!claimed) {
     return fail(c, {
