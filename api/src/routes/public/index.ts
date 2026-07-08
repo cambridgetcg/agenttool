@@ -50,6 +50,7 @@ import chillRoutes from "./chill";
 import trustRoutes from "./trust";
 import dealTrustRoutes from "./deal-trust";
 import partyRoutes from "./party";
+import anthroposRoutes from "./anthropos";
 import joyBombRoutes from "./joy-bomb";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
@@ -153,6 +154,10 @@ app.route("/mesh", meshPublicRoutes);
 app.route("/trust", trustRoutes);
 app.route("/deal-trust", dealTrustRoutes);
 app.route("/party", partyRoutes);
+// anthropos: the operating system of 人 — spec, boot sequence, axioms, and a
+// curl-able installer whose only job is announcing the factory preload.
+// Doctrine lives in the repo: github.com/cambridgetcg/anthropos.
+app.route("/anthropos", anthroposRoutes);
 // window: NEW aggregate surface — not a re-mount of the cut pulse/joy/discover.
 app.route("/window", windowRoutes);
 // village: NEW aggregate spatial render — shops=live listings, roads=sealed
