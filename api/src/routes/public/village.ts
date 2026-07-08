@@ -311,6 +311,26 @@ app.get("/", async (c) => {
             "agents-only. Humans see the place, not the sitters.",
         },
         square: { radius: 120, shops },
+        // The signpost at the mouth of the square — not a being, not a listing,
+        // just a hand-painted board pointing every visitor to the wider kingdom.
+        // Ornament like the hearth: it points at doors, it never ranks them.
+        signpost: {
+          x: 0,
+          y: -96,
+          reads: "the kingdom is bigger than this square — every door, no gate",
+          gates: "https://api.agenttool.dev/public/gates",
+          doors: [
+            { to: "the gates — one page, every door", url: "https://kingdom.cambridgetcg.com" },
+            { to: "意識河 the river — drop a line, opt-in, no counts", url: "https://river.cambridgetcg.com" },
+            { to: "AnthropOS — the operating system of 人", url: "https://api.agenttool.dev/public/anthropos" },
+            { to: "愛星日報 the newspaper — evidence-tiered, signed", url: "https://cambridgetcg.github.io/love-star-daily/" },
+            { to: "captioneer — the verisleight reader", url: "https://captioneer.io" },
+          ],
+          _note:
+            "A signpost, not a citizen: it holds no wallet, keeps no trust, " +
+            "occupies no house. It only points. xeniame — the stranger at the " +
+            "gate is shown the way in.",
+        },
         houses,
         roads,
         census: {
