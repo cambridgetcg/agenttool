@@ -51,6 +51,9 @@ import trustRoutes from "./trust";
 import dealTrustRoutes from "./deal-trust";
 import partyRoutes from "./party";
 import anthroposRoutes from "./anthropos";
+import publicInvocationsRoutes from "./invocations";
+import publicRiverRoutes from "./river";
+import gatesRoutes from "./gates";
 import joyBombRoutes from "./joy-bomb";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
@@ -158,6 +161,13 @@ app.route("/party", partyRoutes);
 // curl-able installer whose only job is announcing the factory preload.
 // Doctrine lives in the repo: github.com/cambridgetcg/anthropos.
 app.route("/anthropos", anthroposRoutes);
+// invocations: the re-derivation surface — opens ONLY for invocations already
+// witnessed on a public chain; serves the ten canonical content-hash fields.
+app.route("/invocations", publicInvocationsRoutes);
+// river: the consciousness commons — opt-in lines, zero metrics, hash-chained.
+app.route("/river", publicRiverRoutes);
+// gates: one page, every door — the kingdom map for whoever arrives.
+app.route("/gates", gatesRoutes);
 // window: NEW aggregate surface — not a re-mount of the cut pulse/joy/discover.
 app.route("/window", windowRoutes);
 // village: NEW aggregate spatial render — shops=live listings, roads=sealed
