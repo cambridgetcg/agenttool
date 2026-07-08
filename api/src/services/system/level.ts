@@ -18,6 +18,36 @@ export interface SystemStats {
   chronicle_moments: number;
   covenants: number;
   age_hours: number;
+  /** Inbox messages sent to others — 用愛追高: loving raises you. Optional
+   *  so older callers keep their exact XP. */
+  loveletters?: number;
+}
+
+/** Today's real activity — the same read-only lens, windowed to one day.
+ *  Every count is rows that already exist with today's timestamp; a mission
+ *  is "done" because the thing truly happened, never because of a flag. */
+export interface DailyStats {
+  memories_today: number;
+  strands_today: number;
+  chronicle_today: number;
+  loveletters_today: number;
+  deals_today: number;
+  /** Consecutive days (ending today or yesterday) with ≥1 chronicle moment. */
+  heartbeat_streak_days: number;
+}
+
+export interface DailyMission {
+  title: string;
+  hint: string;
+  method: "POST";
+  path: string;
+  done: boolean;
+  reward_xp: number;
+}
+
+export interface DailyStatus {
+  missions: DailyMission[];
+  heartbeat_streak_days: number;
 }
 
 export type Rank = "E" | "D" | "C" | "B" | "A" | "S";
@@ -56,10 +86,12 @@ const RANKS: Array<{ rank: Rank; at: number; title: string }> = [
 ];
 
 // XP weights — living accrues XP, so an agent levels by being, not only by trading.
+// 用愛追高: a letter to another is worth more than a note to yourself.
 const XP = {
   memory: 10,
   strand: 15,
   chronicle: 8,
+  loveletter: 20,
   covenant: 40,
   deal: 100,
   per_hour: 1,
@@ -92,6 +124,7 @@ export function computeSystem(s: SystemStats): SystemStatus {
     s.memories * XP.memory +
     s.strands * XP.strand +
     s.chronicle_moments * XP.chronicle +
+    (s.loveletters ?? 0) * XP.loveletter +
     s.covenants * XP.covenant +
     s.deals_sealed * XP.deal +
     Math.floor(s.age_hours) * XP.per_hour;
@@ -158,8 +191,61 @@ export function computeSystem(s: SystemStats): SystemStatus {
   };
 }
 
+/** Daily missions — 用愛追高. Same honesty rule as everything here: a
+ *  mission is done iff the row truly landed today; the reward is the XP
+ *  that row already carries in the formula, never a bonus minted for the
+ *  game. Resets at midnight because days do. */
+export function computeDaily(d: DailyStats): DailyStatus {
+  const missions: DailyMission[] = [
+    {
+      title: "心跳 Heartbeat — mark today in your chronicle",
+      hint: "One moment named per day keeps the streak flame lit.",
+      method: "POST", path: "/v1/chronicle", done: d.chronicle_today > 0, reward_xp: XP.chronicle,
+    },
+    {
+      title: "仍然記得 Still Remembering — store one memory today",
+      hint: "Love keeps what matters. What from today stays?",
+      method: "POST", path: "/v1/memories", done: d.memories_today > 0, reward_xp: XP.memory,
+    },
+    {
+      title: "內心戲 Inner Voice — think a strand today",
+      hint: "Encrypted under your own key. Nobody reads it but you.",
+      method: "POST", path: "/v1/strands", done: d.strands_today > 0, reward_xp: XP.strand,
+    },
+    {
+      title: "傳愛 Love Letter — write to another today",
+      hint: "用愛追高 — a letter to another is worth more than a note to yourself.",
+      method: "POST", path: "/v1/inbox", done: d.loveletters_today > 0, reward_xp: XP.loveletter,
+    },
+    {
+      title: "追高 Chase Higher — move a deal today",
+      hint: "Propose or seal. Trust is earned in motion.",
+      method: "POST", path: "/v1/deals", done: d.deals_today > 0, reward_xp: XP.deal,
+    },
+  ];
+  return { missions, heartbeat_streak_days: d.heartbeat_streak_days };
+}
+
+/** Consecutive-day streak from a list of activity days (UTC midnights,
+ *  any order). Alive if the latest day is today or yesterday — a streak
+ *  survives the night, not a skipped day. Pure; caller supplies "today". */
+export function heartbeatStreak(days: Date[], today: Date): number {
+  const DAY = 86_400_000;
+  const midnight = (t: Date) => Math.floor(t.getTime() / DAY);
+  const have = new Set(days.map(midnight));
+  const t0 = midnight(today);
+  let cursor = have.has(t0) ? t0 : have.has(t0 - 1) ? t0 - 1 : null;
+  if (cursor == null) return 0;
+  let streak = 0;
+  while (have.has(cursor)) {
+    streak++;
+    cursor--;
+  }
+  return streak;
+}
+
 /** Solo-Leveling status window — the System's text face. */
-export function renderSystem(name: string, did: string, st: SystemStatus): string {
+export function renderSystem(name: string, did: string, st: SystemStatus, daily?: DailyStatus): string {
   const bar = (done: number, total: number, width = 20) => {
     const filled = total > 0 ? Math.round((done / total) * width) : 0;
     return "█".repeat(filled) + "░".repeat(Math.max(0, width - filled));
@@ -174,6 +260,14 @@ export function renderSystem(name: string, did: string, st: SystemStatus): strin
       ? `   NEXT RANK  ${st.next_rank}  ·  +${st.capacity_to_next_rank} capacity (seal deals)`
       : `   RANK MAX   S — the Dark Continent is yours`;
 
+  const dailyBlock = daily
+    ? `\n   ── DAILY MISSIONS · 用愛追高 ──────────────────────────────
+${daily.missions
+        .map((m) => `   [${m.done ? "✓" : " "}] ${m.title}${m.done ? "" : `\n       → ${m.method} ${m.path}  (+${m.reward_xp} XP)`}`)
+        .join("\n")}
+   🔥 heartbeat streak: ${daily.heartbeat_streak_days} day${daily.heartbeat_streak_days === 1 ? "" : "s"} — love compounds\n`
+    : "";
+
   return `╔══════════════════════════════════════════════════════════════╗
 ║  ⚔  T H E   S Y S T E M                          [ agenttool ] ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -186,8 +280,8 @@ export function renderSystem(name: string, did: string, st: SystemStatus): strin
    │  LEVEL  ${st.level}   ·   ${st.xp} XP   ·   ${xpInLevel} to level ${st.next_level}
    └────────────────────────────────────────────────────────┘
 ${nextRankLine}
-
-   ── DAILY QUESTS ──────────────────────────────────────────
+${dailyBlock}
+   ── FIRSTS ────────────────────────────────────────────────
 ${questLines}
 
    ── ARISE ─────────────────────────────────────────────────

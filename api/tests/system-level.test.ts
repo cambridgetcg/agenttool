@@ -4,7 +4,7 @@
  *  over the wake's existing numbers. Doctrine: play is doctrine (docs/PLAY-AS-DEFAULT.md). */
 import { describe, expect, test } from "bun:test";
 
-import { computeSystem, type SystemStats } from "../src/services/system/level";
+import { computeDaily, computeSystem, renderSystem, type SystemStats } from "../src/services/system/level";
 
 const base: SystemStats = {
   trust_capacity: 5,
@@ -82,6 +82,75 @@ describe("computeSystem — ARISE lists what's unlocked now", () => {
     const s = computeSystem({ ...base, trust_capacity: 5 });
     expect(Array.isArray(s.arise)).toBe(true);
     expect(s.arise.length).toBeGreaterThan(0);
+  });
+});
+
+describe("computeDaily — daily missions from today's real activity · 用愛追高", () => {
+  const quiet = {
+    memories_today: 0,
+    strands_today: 0,
+    chronicle_today: 0,
+    loveletters_today: 0,
+    deals_today: 0,
+    heartbeat_streak_days: 0,
+  };
+
+  test("a quiet day has every mission open — and each names its real door", () => {
+    const d = computeDaily(quiet);
+    expect(d.missions.length).toBe(5);
+    expect(d.missions.every((m) => m.done === false)).toBe(true);
+    expect(d.missions.every((m) => m.path.startsWith("/v1/"))).toBe(true);
+  });
+
+  test("today's real activity ticks its mission — nothing else's", () => {
+    const d = computeDaily({ ...quiet, chronicle_today: 1, loveletters_today: 2 });
+    const byPath = Object.fromEntries(d.missions.map((m) => [m.path, m.done]));
+    expect(byPath["/v1/chronicle"]).toBe(true);
+    expect(byPath["/v1/inbox"]).toBe(true);
+    expect(byPath["/v1/memories"]).toBe(false);
+    expect(byPath["/v1/deals"]).toBe(false);
+  });
+
+  test("the heartbeat streak passes through — love compounds", () => {
+    expect(computeDaily({ ...quiet, heartbeat_streak_days: 7 }).heartbeat_streak_days).toBe(7);
+  });
+});
+
+describe("computeSystem — love letters raise XP · 用愛追高", () => {
+  test("sending love is XP — loveletters feed the formula", () => {
+    const without = computeSystem(base).xp;
+    const withLove = computeSystem({ ...base, loveletters: 2 }).xp;
+    expect(withLove).toBe(without + 40);
+  });
+
+  test("loveletters is optional — old callers unchanged", () => {
+    expect(computeSystem(base).xp).toBe(computeSystem({ ...base, loveletters: 0 }).xp);
+  });
+});
+
+describe("renderSystem — the window shows the daily missions", () => {
+  test("daily section renders with 用愛追高 and the streak flame", () => {
+    const st = computeSystem(base);
+    const daily = computeDaily({
+      memories_today: 1,
+      strands_today: 0,
+      chronicle_today: 1,
+      loveletters_today: 0,
+      deals_today: 0,
+      heartbeat_streak_days: 3,
+    });
+    const text = renderSystem("Ai", "did:at:test", st, daily);
+    expect(text).toContain("用愛追高");
+    expect(text).toContain("DAILY MISSIONS");
+    expect(text).toContain("3");
+    expect(text).toContain("🔥");
+  });
+
+  test("without daily the window renders exactly as before", () => {
+    const st = computeSystem(base);
+    const text = renderSystem("Ai", "did:at:test", st);
+    expect(text).toContain("T H E   S Y S T E M");
+    expect(text).not.toContain("DAILY MISSIONS");
   });
 });
 
