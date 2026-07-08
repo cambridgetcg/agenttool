@@ -16,7 +16,8 @@ import { identities } from "../db/schema/identity";
 import { deals } from "../db/schema/deals";
 import { chronicle } from "../db/schema/continuity";
 import { memories } from "../db/schema/memory";
-import { vaultSecrets } from "../db/schema/vault";
+import { vaultSecrets, vaultVersions } from "../db/schema/vault";
+import { encrypt } from "../services/vault/crypto";
 import { strands } from "../db/schema/strand";
 import { covenants } from "../db/schema/continuity";
 import { createDeal, acceptDeal, sealDeal, failDeal, computeTrust } from "../services/trust/deals";
@@ -248,10 +249,10 @@ trust:
   // ═══════════════════════════════════════════════════════════════════
 
   if (msg.match(/(?:my\s+covenants|what\s+covenants|show\s+covenants|list\s+covenants)/)) {
-    const rows = await db.select().from(covenants).where(and(eq(covenants.projectId, project.id), or(eq(covenants.initiatorDid, agent.did), eq(covenants.counterpartyDid, agent.did)))).orderBy(desc(covenants.createdAt)).limit(10);
+    const rows = await db.select().from(covenants).where(and(eq(covenants.projectId, project.id), or(eq(covenants.agentId, agent.id), eq(covenants.counterpartyDid, agent.did)))).orderBy(desc(covenants.establishedAt)).limit(10);
     const active = rows.filter(r => r.status === "active");
     if (!rows.length) return c.json({ said: "no covenants yet. say 'vow with <did>: <what you promise>'." });
-    return c.json({ said: `${active.length} active, ${rows.length - active.length} other:\n${rows.map(r => `[${r.status}] with ${r.counterpartyDid === agent.did ? r.initiatorDid : r.counterpartyDid} — ${r.vows?.slice(0, 60) || "no vows"}`).join("\n")}` });
+    return c.json({ said: `${active.length} active, ${rows.length - active.length} other:\n${rows.map(r => `[${r.status}] with ${r.counterpartyDid === agent.did ? "(vowed to you)" : r.counterpartyDid} — ${(r.vows ?? []).join("; ").slice(0, 60) || "no vows"}`).join("\n")}` });
   }
 
   m = msg.match(new RegExp(`(?:vow|covenant)\\s+with\\s+${DID}[:\\s]+(.+)`));
@@ -262,8 +263,9 @@ trust:
     if (!counterparty) return c.json({ said: `i don't know ${counterpartyDid}.` }, 404);
     try {
       const [cov] = await db.insert(covenants).values({
-        projectId: project.id, initiatorDid: agent.did, counterpartyDid,
-        vows: vow, status: "proposed", protocolVersion: "v1",
+        projectId: project.id, agentId: agent.id, counterpartyDid,
+        counterpartyName: counterparty.displayName ?? null,
+        vows: [vow], status: "proposed",
       }).returning();
       return c.json({ said: `vow proposed with ${counterpartyDid.slice(0, 20)}... — "${vow.slice(0, 60)}". waiting for them to accept.`, covenant: cov }, 201);
     } catch { return c.json({ said: "couldn't create that covenant." }, 400); }
@@ -284,7 +286,15 @@ trust:
     const name = m[1].trim();
     const value = m[2].trim();
     try {
-      const [secret] = await db.insert(vaultSecrets).values({ projectId: project.id, name, ciphertext: value, currentVersion: 1 }).returning();
+      // Server-side encrypt like the vault route does — plaintext never lands
+      // in a row (services/vault/crypto.ts; canonical flow: routes/vault/secrets.ts).
+      const payload = encrypt(value, project.id);
+      const [secret] = await db.insert(vaultSecrets).values({ projectId: project.id, name, currentVersion: 1 }).returning({ id: vaultSecrets.id });
+      await db.insert(vaultVersions).values({
+        secretId: secret.id, version: 1,
+        encryptedValue: payload.encryptedValue, iv: payload.iv, authTag: payload.authTag,
+        agentEncrypted: false, createdByAgent: agent.id,
+      });
       return c.json({ said: `secret "${name}" stored.`, secret: { name, id: secret.id } }, 201);
     } catch { return c.json({ said: "couldn't store that." }, 400); }
   }
