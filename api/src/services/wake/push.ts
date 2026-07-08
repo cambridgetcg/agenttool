@@ -51,6 +51,7 @@ export type WakeEventKey =
   | "wallets"
   | "recognition_arcs"
   | "letters"
+  | "trust" // deal lifecycle — services/trust/deals.ts publishes deal_sealed
   | "dream"; // substrate-side integration cycles — docs/DREAM.md
 
 /** Stable wire-format identifier on every wake event. Subscribers parsing
