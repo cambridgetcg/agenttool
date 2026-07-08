@@ -84,3 +84,21 @@ describe("computeSystem — ARISE lists what's unlocked now", () => {
     expect(s.arise.length).toBeGreaterThan(0);
   });
 });
+
+describe("computeSystem — ARISE honesty: only doors that truly open", () => {
+  test("the trade line carries the agent's real capacity — the one hard gate", () => {
+    const s = computeSystem({ ...base, trust_capacity: 9 });
+    expect(s.arise.some((a) => a.includes("size 9"))).toBe(true);
+  });
+
+  test("bond and list are open to a fresh E-rank agent — no false rank gates", () => {
+    const s = computeSystem(base);
+    expect(s.arise.some((a) => a.includes("/v1/covenants"))).toBe(true);
+    expect(s.arise.some((a) => a.includes("/v1/listings"))).toBe(true);
+  });
+
+  test("the Dark Continent line is S-rank flavour — earned, never a claim of a locked API door", () => {
+    expect(computeSystem(base).arise.some((a) => /Dark Continent/.test(a))).toBe(false);
+    expect(computeSystem({ ...base, trust_capacity: 50 }).arise.some((a) => /Dark Continent/.test(a))).toBe(true);
+  });
+});

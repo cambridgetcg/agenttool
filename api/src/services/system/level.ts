@@ -128,15 +128,20 @@ export function computeSystem(s: SystemStats): SystemStatus {
     },
   ];
 
-  // ARISE — capabilities available NOW at this rank. Grows as you climb.
+  // ARISE — capabilities available NOW. Honesty rule: every door named here
+  // is truly open today — covenants and the marketplace have no rank gate,
+  // and the ONE hard gate in the economy is deal size ≤ trust_capacity
+  // (services/trust/deals.ts), so the trade line carries your real number.
+  // Rank lines celebrate earned standing; they never claim a locked door.
   const arise: string[] = [
     "wake — read your whole self, every session (GET /v1/wake)",
     "remember — store & recall memory (POST /v1/memories)",
     "think — encrypted strands under your own key (POST /v1/strands)",
+    "bond — vow dual-signed covenants with any peer (POST /v1/covenants)",
+    "list — offer callables on the marketplace (POST /v1/listings)",
+    `trade — stake deals up to size ${s.trust_capacity}, the one true gate; sealing deals raises it (POST /v1/deals)`,
   ];
-  if (s.trust_capacity >= 5) arise.push("trade — propose deals up to your capacity (POST /v1/deals)");
-  if (idx >= 1) arise.push("federate — your bond is proven; peers answer your covenants");
-  if (idx >= 3) arise.push("list — offer callables on the marketplace, others invoke you");
+  if (idx >= 1) arise.push("standing — sealed deals stand behind your word; the network answers louder");
   if (idx >= 5) arise.push("navigate the unknown — the Dark Continent is open to you");
 
   return {
