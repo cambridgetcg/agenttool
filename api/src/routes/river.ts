@@ -47,7 +47,7 @@ app.post("/", async (c) => {
   const { identity_id, body, feel } = parsed.data;
 
   const [ident] = await db
-    .select({ id: identities.id, did: identities.did, name: identities.name, projectId: identities.projectId })
+    .select({ id: identities.id, did: identities.did, name: identities.displayName, projectId: identities.projectId })
     .from(identities)
     .where(eq(identities.id, identity_id))
     .limit(1);
