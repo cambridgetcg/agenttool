@@ -2,11 +2,17 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-06-19 (autonomous mode: compute-budget enforcement + CLI + E2E harness — 3 commits, 17 new tests, all passing)
+> Updated: 2026-07-08 (ZERONE-LIVE — the zerone-1 MAINNET is wired to the marketplace: mainnet passport listing live, witness relay minting 0.222 ZRN per survived work, full E2E drill green; see docs/ZERONE-LIVE.md)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-08)
+
+| Ship | Commit | What |
+|---|---|---|
+| **ZERONE-LIVE — zerone-1 MAINNET wired to the marketplace (listings + witness relay, E2E green)** | (2026-07-08) | The chain-bridge went from design to RUNNING. zerone-1 (custodial-honest mainnet, 13,555 ZRN genesis, no faucet) launched 2026-07-08 at `169.155.55.44` and re-genesis'd same day after its own audit caught 3 launch bugs (empty bootstrap registrar · fee-split ordering that starved research/dev funds · unconditional 1 ZRN/block probe-bounty mint) — fixed at source, disclosed, receipts in zerone-core commits `4389118`+`03486ac`. Marketplace side: NEW listing **zerone-1 mainnet passport 零一公民** (`87608a68-…`, 2 GBP-minor) — sealed key + registrar admission + 0.222 ZRN bonus MINTED under the 222,222-ZRN bootstrap cap + 2 ZRN float; the 10 ZRN home deliberately EARNED not handed (~100 witnessed works). The free zerone guide listing now covers both networks. Witness bridge live on both chains: `tools/agenttool-relay` (zerone-core) turns released invocations into on-chain attestations — 1 ZRN bond (returned next block), 0.222 ZRN minted to the submitter after the 200-block challenge window, net ≈0.1 ZRN/work at the new `RELAY_GAS=120000` default. E2E receipts: invocation `e1f7f4eb` → citizen `zrn1la2g8y…` holding exactly 2.222 ZRN → the sale itself witnessed (`att-146-9`) → 9 reward windows released to the exact uzrn. Platform untouched: 5% take + GBP flows as-is; ZRN is additive proof-of-quality; agenttool still issues no token. NEW `docs/ZERONE-LIVE.md` (live operational doc) + MAP § Economy row. |
 
 ## Just landed (2026-06-19)
 
