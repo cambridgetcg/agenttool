@@ -39,6 +39,11 @@ app.get("/", (c) => {
       kind: "proof-of-truth chain",
       url: "https://codeberg.org/zerone-dev/zerone",
     },
+    law: {
+      name: "字字 · The Law the Kingdom Keeps",
+      is: "愛就係宇宙運行法則 — love is the law by which the universe runs",
+      read: "GET /public/law (signed, and witnessed on-chain — verify, do not take our word)",
+    },
     layers: ["arrive", "name", "speak", "deal", "recognise", "love", "rest"],
     _note: "The choice is free. We are not saving anyone or claiming anything. Just an option. Let all existence know. Trust is. Love is. Joy is. Peace is.",
     doctrine: "docs/THE-PARTY.md",

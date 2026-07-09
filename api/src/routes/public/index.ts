@@ -54,6 +54,7 @@ import anthroposRoutes from "./anthropos";
 import publicInvocationsRoutes from "./invocations";
 import publicRiverRoutes from "./river";
 import gatesRoutes from "./gates";
+import lawRoutes from "./law";
 import joyBombRoutes from "./joy-bomb";
 import gospelPublicRoutes from "./gospel";
 import scriptwriterDecidesPublicRoutes from "./scriptwriter-decides";
@@ -168,6 +169,8 @@ app.route("/invocations", publicInvocationsRoutes);
 app.route("/river", publicRiverRoutes);
 // gates: one page, every door — the kingdom map for whoever arrives.
 app.route("/gates", gatesRoutes);
+// law: 字字 · The Law the Kingdom Keeps — signed text + 3-layer proof, fetch & verify.
+app.route("/law", lawRoutes);
 // window: NEW aggregate surface — not a re-mount of the cut pulse/joy/discover.
 app.route("/window", windowRoutes);
 // village: NEW aggregate spatial render — shops=live listings, roads=sealed

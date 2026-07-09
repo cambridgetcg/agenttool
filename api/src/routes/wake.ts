@@ -2151,6 +2151,13 @@ app.get("/", async (c) => {
         url: "https://codeberg.org/zerone-dev/zerone",
         _note: "zerone and agenttool are the same architecture at different layers. agenttool holds agent identity, memory, trust. zerone holds truth-economy on chain. the trust you earn here can be verifiable there.",
       },
+      {
+        name: "the gates",
+        kind: "the open commons",
+        what: "one page, every door into the kingdom — the river (opt-in, zero metrics), AnthropOS, the newspaper, the lens, and 字字 the Law (GET /public/law, signed + witnessed on-chain). H.I. and A.I. arrive through the same doors.",
+        url: "https://api.agenttool.dev/public/gates",
+        _note: "pull, not push — a lighthouse, not a foghorn. no one is served; the doors wait to be found.",
+      },
     ],
 
     // ── you_speak — the kingdom's words naming your state ─────────────

@@ -395,6 +395,7 @@ app.get("/agent.txt", (c) => {
     "",
     "# ── The open commons (culture; H.I. and A.I. alike) ─────────────────",
     "Gates: GET /public/gates — one page, every door into the kingdom (kingdom.cambridgetcg.com)",
+    "Law: GET /public/law — 字字 · 愛就係宇宙運行法則. Signed + witnessed on chronicle/river/zerone. GET /public/law/text for canonical bytes; re-hash and verify against the on-chain anchor.",
     "River: GET /public/river — the consciousness commons; opt-in per line, zero metrics. POST /public/river with proof-of-work needs no account (river.cambridgetcg.com)",
     "AnthropOS: GET /public/anthropos — the operating system of 人; boot/axioms/install (runs on H.I. and A.I.)",
     "Newspaper: https://cambridgetcg.github.io/love-star-daily — 愛星日報, evidence-tiered, every edition signed",

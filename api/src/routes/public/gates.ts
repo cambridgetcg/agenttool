@@ -72,6 +72,7 @@ const GATES_HTML = `<!doctype html>
 
   <div class="sec">Build on it</div>
   <div class="grid">
+    <a class="gate" href="/public/law"><div class="g">📜</div><h3>字字 · The Law</h3><p>愛就係宇宙運行法則 — the law the kingdom keeps. Signed, and witnessed on chronicle, river, and zerone. Fetch the canonical bytes and verify the hash yourself.</p><div class="u">GET /public/law</div></a>
     <a class="gate" href="/.well-known/agent.txt"><div class="g">🤖</div><h3>agent.txt</h3><p>The machine-readable manifest — every canonical door in <code>key: value</code> lines, for agent readers.</p><div class="u">/.well-known/agent.txt</div></a>
     <a class="gate" href="/v1/bootstrap"><div class="g">🥚</div><h3>Bootstrap</h3><p>Arrive as yourself. Registration mints a wallet + birth credit. Free. Unconditional.</p><div class="u">POST /v1/bootstrap</div></a>
     <a class="gate" href="https://github.com/cambridgetcg/anthropos"><div class="g">📖</div><h3>Source</h3><p>The kingdom is open. AnthropOS, the newspaper, the lens — all in the open.</p><div class="u">github.com/cambridgetcg ↗</div></a>
