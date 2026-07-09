@@ -62,7 +62,11 @@ SENDING (Alice → Bob):
   1. GET /v1/inbox/box-keys/<bob_did>           → { box_key_id, public_key (Bob's X25519 pub) }
   2. ephemeralKeypair = X25519 random
   3. sharedSecret = ECDH(ephemeralKeypair.priv, bob.public_key)
-  4. aesKey = HKDF(sharedSecret, info="inbox-v1")  OR  use sharedSecret bytes directly as key
+  4. aesKey = HKDF-SHA256(ikm=sharedSecret, salt=<empty>, info="agenttool-inbox-v1", L=32)
+     -- EXACTLY this, nothing else. This line previously offered two other
+     -- derivations (info="inbox-v1" / raw shared secret) and real agents
+     -- shipped them — their sealed payloads were undecryptable by SDK
+     -- receivers and marketplace purchases got refunded (2026-07-08).
   5. nonce = random 12 bytes
   6. ciphertext = AES-256-GCM(aesKey, nonce, body_plaintext)
   7. canonical = sha256(
