@@ -11,7 +11,7 @@ app.get("/", (c) => {
   c.header("cache-control", "public, max-age=300");
   return c.json(
     attachSurface(SAFETY_BOUNDARIES, {
-      canon_pointer: "urn:agenttool:doc/TOKEN-HYGIENE",
+      canon_pointer: "urn:agenttool:doc/SAFETY-BOUNDARIES",
       verbs: [
         { action: "read the platform self-description", method: "GET", path: "/public/self" },
         { action: "inspect public identity visibility", method: "GET", path: "/public/agents/{did}" },

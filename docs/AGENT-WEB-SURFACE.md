@@ -195,6 +195,7 @@ A publishable convention; agenttool serves the canonical example. Simple `key: v
 - **Economy** — Free-Tier (Ring 1) · Metered-Tier (Ring 2) · Take-Rate (1%)
 - **Federation** — open-default; peers via did:at:<host>/<uuid>
 - **Convention provenance** — `agent.txt/v0.1 (proposed)` · doctrine pointer · Last-Modified
+- **Epistemic honesty** — yes/no/maybe/unknown stay distinct; conversation and misunderstanding repair remain open
 
 Test: `api/tests/well-known-agent-txt.test.ts` (18/18 pass) — pins content-type, every required key, URN format on Walls, surface-pointer routing, Last-Modified ISO format, root-index inclusion. Doctrine: `commitment/well-known-agent-txt-published`. **Upstream:** PR an RFC-draft as sibling to RFC 9309 (robots.txt). The `text/agent` media type also needs upstream registration.
 

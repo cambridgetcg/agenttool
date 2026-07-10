@@ -331,6 +331,7 @@ app.get("/agent.txt", (c) => {
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
     "",
     "# ── Safety boundaries ──────────────────────────────────────────────",
+    `Epistemic-Honesty: ${AGENT_TXT_SAFETY["Epistemic-Honesty"]}`,
     `Bearer-Authority: ${AGENT_TXT_SAFETY["Bearer-Authority"]}`,
     `Credential-Rule: ${AGENT_TXT_SAFETY["Credential-Rule"]}`,
     `Visibility: ${AGENT_TXT_SAFETY.Visibility}`,

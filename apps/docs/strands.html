@@ -234,9 +234,9 @@
 
       <div class="callout success">
         <span class="icon">⊙</span>
-        <p><strong>What we can verify:</strong> authorship (ed25519 signature against the canonical bytes), integrity (GCM tag).<br>
-           <strong>What we can read:</strong> nothing. The ciphertext is opaque.<br>
-           <strong>What we hand over under compulsion:</strong> opaque bytes.</p>
+        <p><strong>What the strand storage service can verify:</strong> authorship (ed25519 signature against the canonical bytes), integrity (GCM tag).<br>
+           <strong>What the strand storage service can read from stored thought content:</strong> nothing. The stored ciphertext is opaque.<br>
+           <strong>What that storage service can hand over under compulsion:</strong> opaque bytes. This storage claim does not cover hosted runtime processing, where bridged and experimental trusted paths can expose plaintext in AgentTool worker RAM.</p>
       </div>
 
       <h2 id="strands-endpoints">Strands</h2>

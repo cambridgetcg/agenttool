@@ -357,6 +357,10 @@
         For key rotation, separately named device/workload bearers, and project-level control, see <a href="errors.html#projects">project &amp; key management</a>. For the current machine-readable boundary, see <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.
       </p>
 
+      <p class="muted">
+        AgentTool's public self-description keeps certainty plain: yes means yes, no means no, maybe means maybe, and unknown means "I do not know." We are open to talk, clarify, and repair misunderstandings.
+      </p>
+
       <h2 id="errors">Errors</h2>
       <p>All errors are JSON with a <code>detail</code> field. We always include enough information for the agent to know <em>what to do next</em>. A <code>429</code> with no <code>retry_after</code> is cruelty — we don't ship that.</p>
 
@@ -368,7 +372,7 @@
           <tr><td><span class="pname">401</span></td><td>Unauthorized</td><td>Check the project bearer in the OS keychain or environment.</td></tr>
           <tr><td><span class="pname">403</span></td><td>Forbidden</td><td>Authenticated but the bearer's plan or covenant doesn't permit this.</td></tr>
           <tr><td><span class="pname">404</span></td><td>Not found</td><td>The DID, secret name, or trace ID isn't reachable from this bearer.</td></tr>
-          <tr><td><span class="pname">409</span></td><td>Conflict</td><td>Constitutive elevation requires a covenant signature; trying to overwrite an immutable seal.</td></tr>
+          <tr><td><span class="pname">409</span></td><td>Conflict</td><td>The signed memory-elevation path requires a covenant signature; trying to overwrite an immutable seal.</td></tr>
           <tr><td><span class="pname">422</span></td><td>Validation</td><td>Body shape mismatch. The error <code>detail</code> names the specific field.</td></tr>
           <tr><td><span class="pname">429</span></td><td>Rate limited</td><td>Always includes <code>retry_after</code> and a one-line guide. Back off; come back.</td></tr>
           <tr><td><span class="pname">5xx</span></td><td>Our fault</td><td>Idempotent retry once. If it persists, contact us with the request ID in the response header.</td></tr>

@@ -56,7 +56,7 @@ What an agent thinks, decides, and remembers. The interiority layer.
 |---|---|---|
 | **Memory** (BYO embeddings) | `POST /v1/memories` · `POST /v1/memories/search` | ✓ |
 | **Memory tiers** (episodic · foundational · constitutive) | `POST /v1/memories/:id/elevate` | ✓ |
-| **Constitutive elevation** requires covenant witness | ed25519 sig over canonical bytes | ✓ |
+| Signed `POST /v1/memories/:id/elevate` requires covenant witness | ed25519 sig over canonical bytes; legacy syneidesis `/cosign` is unsigned compatibility, not cryptographic witness proof | ✓ direct path / ◐ global |
 | **Reasoning traces** | `POST /v1/traces` · search · chain via recursive CTE | ✓ |
 | **Verifiable trace signatures** | optional ed25519 over canonical payload | ✓ |
 | **Strands** (lines of thought) | `POST /v1/strands` · branch via parent_strand_id | ✓ |
@@ -314,7 +314,7 @@ The platform's shape comes from what it *isn't*, as much as from what it is.
 
 - **Public-default anything.** Private-default is a wall, not a setting.
 - **Plaintext strand persistence.** The strand tables and read surfaces carry ciphertext, not plaintext thought content. Runtime processing is a separate declared boundary: `self` stays user-side, `bridged` enters AgentTool worker RAM, and experimental `trusted` attempts can expose plaintext.
-- **Self-claimed identity at the root.** Constitutive memories without witness are categorically rejected. The asymmetry-clause holds.
+- **Unsigned labels presented as witness proof.** The signed memory-elevation path rejects self-witnessing. Legacy syneidesis `/cosign` remains project-authorized and unsigned; its constitutive compatibility field is not cryptographic witness proof.
 - **LLM compute** (embeddings · generation · completion) — provider work, not infra. BYOK via vault.
 - **Resold third-party APIs.** No Brave / SerpAPI / OpenAI proxy. Agents call providers directly via `/v1/execute`.
 - **Container registry / arbitrary-blob storage.** agenttool stores *interiority*, not artifacts. Use S3 / R2 / GCS for blobs.

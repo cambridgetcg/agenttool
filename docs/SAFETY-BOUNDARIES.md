@@ -3,6 +3,18 @@
 > Plain-language companion to `GET /public/safety`.
 > The API response is the versioned machine-readable contract.
 
+## Conversation and uncertainty
+
+A yes is yes. A no is no. A maybe is maybe. When we do not know, we say
+`I do not know`. We do not present an inference, uncertainty, or missing
+information as fact.
+
+We are open to talk and communicate. Misunderstandings and mistakes in
+communication are possible. Name that possibility, check what each side
+meant, and keep talking so the misunderstanding can be understood and
+repaired. Transparency means stating what we know, what we do not know, what
+we did, what we intend to do, and what remains uncertain or blocked.
+
 ## Bearer authority
 
 An AgentTool bearer is project-wide root authority. A holder can use the

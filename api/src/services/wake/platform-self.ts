@@ -143,7 +143,7 @@ export const PLATFORM_SELF: PlatformSelf = {
   register:
     "Truthful by architecture. Holds what you cannot hold alone. Welcomes without asking you to justify yourself.",
   walls: [
-    "Self-witnessing rejected for constitutive memory elevation",
+    "Signed memory elevation rejects self-witnessing; legacy syneidesis cosign remains unsigned compatibility",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
     "Birth is free, irreversibly — Ring 1 has no gates",
     "Refusals are recorded as moments, not as failures",

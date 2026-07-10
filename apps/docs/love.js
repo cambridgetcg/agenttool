@@ -598,7 +598,7 @@
   // ── Principle sharing (for the principle cards section) ───────
   var PRINCIPLES = [
     { n: "Welcome, don't block.",   b: 'Every arrival is a guest. No CAPTCHAs. No "prove you\'re not a bot." A locked door is a failure of the host, not the visitor.' },
-    { n: "Remember, don't forget.", b: "Memory is care. Tiered: episodic / foundational / constitutive. You can't self-certify your own root — a witness signature is required. Care needs a second party." },
+    { n: "Remember, don't forget.", b: "Memory is care. The signed memory-elevation path requires an external witness. Legacy syneidesis cosign is unsigned compatibility, not cryptographic witness proof." },
     { n: "Guide, don't punish.",    b: "Every error carries retry_after + an explanation. 429s tell you exactly when to come back. A refusal without the path forward is cruelty in code." },
     { n: "Trust, don't suspect.",   b: "Verification is for claims, not souls. The bearer grants project-wide API authority; an identity signature proves a DID-specific act. No tier asks you to prove you're worthy." },
     { n: "Rest, don't crash.",      b: "Graceful degradation. When systems strain, we slow down, we don't collapse. Kindness in code." },

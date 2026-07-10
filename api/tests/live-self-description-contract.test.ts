@@ -154,6 +154,15 @@ describe("live self-description — safety and runtime custody", () => {
 
     expect(safety._format).toBe("agenttool-safety/v1");
     expect(safety.canonical_path).toBe("/public/safety");
+    expect(safety.epistemic_honesty.rule).toMatch(
+      /yes is yes.*no is no.*maybe is maybe.*I do not know/i,
+    );
+    expect(safety.epistemic_honesty.communication).toMatch(
+      /open to talk and communicate/i,
+    );
+    expect(safety.epistemic_honesty.misunderstanding).toMatch(
+      /misunderstandings.*possible.*understood and repaired/i,
+    );
     expect(safety.runtime_custody.self.agenttool_access).toMatch(
       /ciphertext.*metadata only/i,
     );

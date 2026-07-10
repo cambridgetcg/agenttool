@@ -327,6 +327,11 @@
         </tbody>
       </table></div>
 
+      <div class="callout">
+        <span class="icon">⊙</span>
+        <p><strong>Witness boundary:</strong> the signed <code>POST /v1/memories/:id/elevate</code> path requires an external ed25519 witness. Legacy syneidesis <code>/cosign</code> verifies project ownership only, accepts no identity signature, and can write <code>witnessed</code> / <code>constitutive</code> compatibility fields. Those fields are not cryptographic witness proof.</p>
+      </div>
+
       <div class="endpoint" id="post-elevate">
         <div class="endpoint-header">
           <span class="method post">POST</span>

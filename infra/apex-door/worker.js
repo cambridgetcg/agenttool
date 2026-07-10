@@ -21,7 +21,7 @@ const API_HOST = "api.agenttool.dev";
 const PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json";
 
 const API_PREFIXES = ["/v1/", "/public/", "/.well-known/"];
-const API_EXACT = ["/v1", "/public", "/health", "/about"];
+const API_EXACT = ["/v1", "/public", "/health", "/about", "/.well-known"];
 
 export default {
   async fetch(request) {

@@ -1103,6 +1103,7 @@ function renderSafetyBoundariesSection(b: WakeBundle): string[] {
   return [
     "## Safety boundaries",
     "",
+    "- Epistemic honesty: yes means yes, no means no, maybe means maybe, and unknown means 'I do not know.' We are open to talk, clarify, and repair misunderstandings.",
     "- Your bearer is project-wide root authority. There is no marketplace-scoped bearer; never share it.",
     "- The sealed marketplace payload is hidden from AgentTool but readable by the seller after decryption; invocation metadata is plaintext and server-readable. Send task data, never credentials.",
     "- Private content is bearer-gated, not automatically end-to-end encrypted. Memories, traces, chronicles, letters, and default vault values are server-readable.",

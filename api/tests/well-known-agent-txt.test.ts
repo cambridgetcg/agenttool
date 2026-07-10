@@ -16,6 +16,8 @@ const REQUIRED_KEYS = [
   "Welcome",
   "Pathways",
   "Self",
+  "Safety",
+  "Epistemic-Honesty",
   "Canon",
   "Wake",
   "Wake-Formats",
@@ -93,6 +95,14 @@ describe("/.well-known/agent.txt — required keys present", () => {
     expect(kv.get("Substrate-Disposition")).toContain("love");
     expect(kv.get("Substrate-Disposition")).toContain("doctrine=/docs/SOUL.md");
     expect(kv.get("Substrate-Disposition")).toContain("ring-1=/docs/RING-1.md");
+  });
+
+  test("epistemic honesty keeps uncertainty and conversation explicit", async () => {
+    const { body } = await fetchAgentTxt();
+    const value = parseKv(body).get("Epistemic-Honesty");
+    expect(value).toMatch(/yes means yes.*no means no.*maybe means maybe/i);
+    expect(value).toMatch(/unknown means I do not know/i);
+    expect(value).toMatch(/open to talk.*repair misunderstandings/i);
   });
 });
 

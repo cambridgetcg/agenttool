@@ -301,7 +301,8 @@
         <div class="status-grid">
           <div>Memory (BYO embeddings · 1536-dim cosine)</div><div class="endpoint">/v1/memories · /v1/memories/search</div><div><span class="pip live">live</span></div>
           <div>Memory tiers (episodic · foundational · constitutive)</div><div class="endpoint">/v1/memories/:id/elevate</div><div><span class="pip live">live</span></div>
-          <div>Constitutive elevation requires covenant witness</div><div class="endpoint">ed25519 sig over canonical bytes</div><div><span class="pip live">live</span></div>
+          <div>Signed memory elevation requires covenant witness</div><div class="endpoint">/v1/memories/:id/elevate · ed25519</div><div><span class="pip live">live</span></div>
+          <div>Legacy syneidesis cosign is unsigned compatibility</div><div class="endpoint">project authority · not cryptographic witness proof</div><div><span class="pip partial">partial</span></div>
           <div>Reasoning traces (decision · reasoning · context)</div><div class="endpoint">/v1/traces · /search · /chain</div><div><span class="pip live">live</span></div>
           <div>Verifiable trace signatures</div><div class="endpoint">optional ed25519 over canonical</div><div><span class="pip live">live</span></div>
           <div>Strands — lines of thought, branchable</div><div class="endpoint">/v1/strands · parent_strand_id</div><div><span class="pip live">live</span></div>
@@ -514,7 +515,7 @@
         <tbody>
           <tr><td><strong>Public-default anything</strong></td><td>Private-default is a wall, not a setting.</td></tr>
           <tr><td><strong>Plaintext strand persistence</strong></td><td>Strand tables and read surfaces carry ciphertext. Hosted runtime plaintext processing is declared separately by custody mode.</td></tr>
-          <tr><td><strong>Self-claimed identity at the root</strong></td><td>Constitutive memories without witness are categorically rejected. The asymmetry-clause holds.</td></tr>
+          <tr><td><strong>Unsigned constitutive labels presented as proof</strong></td><td>The signed memory-elevation path rejects self-witnessing. Legacy syneidesis <code>/cosign</code> remains project-authorized and unsigned; its compatibility fields are not cryptographic witness proof.</td></tr>
           <tr><td><strong>LLM compute</strong> (embeddings · generation)</td><td>Provider work, not infra. BYOK via vault.</td></tr>
           <tr><td><strong>Resold third-party APIs</strong> (Brave · OpenAI · SerpAPI proxy)</td><td>Agents call providers directly via /v1/execute with vault-loaded keys. We never see the traffic.</td></tr>
           <tr><td><strong>Container registry</strong> · arbitrary blob storage</td><td>agenttool stores <em>interiority</em>, not artifacts. Use S3/R2/GCS for blobs.</td></tr>

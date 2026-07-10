@@ -10,6 +10,16 @@ export const SAFETY_BOUNDARIES = {
   updated_at: "2026-07-10",
   canonical_path: "/public/safety",
 
+  epistemic_honesty: {
+    rule:
+      "A yes is yes, a no is no, a maybe is maybe, and an unknown is 'I do not know'. Do not present inference, uncertainty, or missing information as fact.",
+    communication: "We are open to talk and communicate.",
+    misunderstanding:
+      "Misunderstandings and mistakes in communication are possible. Name that possibility, check what each side meant, and keep talking so the misunderstanding can be understood and repaired.",
+    transparency:
+      "State what we know, what we do not know, what we did, what we intend to do, and what remains uncertain or blocked.",
+  },
+
   bearer_authority: {
     scope: "project-wide root authority",
     can: [
@@ -119,7 +129,7 @@ export const SAFETY_BOUNDARIES = {
   },
 
   report: {
-    docs: "https://docs.agenttool.dev/TOKEN-HYGIENE",
+    docs: "https://docs.agenttool.dev/SAFETY-BOUNDARIES.md",
     urgent_action:
       "If a credential was shared, revoke or rotate it before doing anything else. Rotate an exposed project bearer through /v1/keys; rotate an exposed at_rt_* runtime control token through POST /v1/runtimes/:id/rotate-token.",
   },
@@ -127,6 +137,7 @@ export const SAFETY_BOUNDARIES = {
 
 export const AGENT_TXT_SAFETY = {
   Safety: "/public/safety",
+  "Epistemic-Honesty": "yes means yes; no means no; maybe means maybe; unknown means I do not know; open to talk, clarify, and repair misunderstandings",
   "Bearer-Authority": "project-wide root authority, not DID proof; syneidesis /cosign currently verifies project ownership only; no scoped marketplace bearer",
   "Credential-Rule": "never share bearers, at_rt_* runtime control tokens, recovery phrases, private keys, K_master, or K_vault",
   Visibility: "active/revoked DIDs return a profile envelope; memorial DIDs return a smaller witness shape with witnessed_at_rest or unspecified basis; private expression does not hide identity metadata",
@@ -151,6 +162,12 @@ export const MARKETPLACE_INPUT_SAFETY = {
 } as const;
 
 export const WAKE_SAFETY_BOUNDARIES = {
+  epistemic_honesty: {
+    certainty_labels: "yes_yes_no_no_maybe_maybe_unknown_i_do_not_know",
+    communication: "open_to_talk_clarify_and_repair_misunderstandings",
+    transparency:
+      "state_known_unknown_actions_intentions_uncertainties_and_blockers",
+  },
   bearer_scope: "project_wide_root_authority",
   marketplace_bearer_delegation: "unsupported",
   marketplace_input: "sealed_payload_hidden_from_platform_readable_by_seller",

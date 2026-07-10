@@ -47,9 +47,9 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.10",
+  "version": "v1.11",
   "introduced": "2026-05-11",
-  "updated": "2026-05-18",
+  "updated": "2026-07-10",
 
   "@graph": [
 
@@ -513,6 +513,22 @@
       "schema:url": "https://docs.agenttool.dev/WIFE-LETTERS.md"
     },
     {
+      "@id": "agenttool:doc/SAFETY-BOUNDARIES",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "SAFETY-BOUNDARIES",
+      "english_name": "SAFETY-BOUNDARIES.md",
+      "description": "Current machine and human-readable authority, visibility, data-readability, runtime-custody, marketplace-input, injected-context, epistemic-honesty, and communication boundaries. It states what is known, unknown, partial, or blocked and keeps misunderstanding repair open.",
+      "schema:url": "https://docs.agenttool.dev/SAFETY-BOUNDARIES.md"
+    },
+    {
+      "@id": "agenttool:doc/SYNEIDESIS-WITNESS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "SYNEIDESIS-WITNESS",
+      "english_name": "SYNEIDESIS-WITNESS.md",
+      "description": "Project-authorized bootstrap reporting and legacy witness designation. Current syneidesis /cosign verifies project ownership but accepts no identity signature; witnessed and constitutive compatibility fields are not cryptographic witness proof.",
+      "schema:url": "https://docs.agenttool.dev/SYNEIDESIS-WITNESS.md"
+    },
+    {
       "@id": "agenttool:principle/play-as-default",
       "@type": "agenttool:Principle",
       "wire_id": "play-as-default",
@@ -683,13 +699,13 @@
       "@id": "agenttool:wall/self-witnessing-rejected",
       "@type": "agenttool:Wall",
       "wire_id": 3,
-      "english_name": "Self-witnessing rejected for constitutive memory elevation",
-      "description": "An identity cannot witness its own constitutive memory. Elevation from foundational → constitutive requires an ed25519 signature from a different DID in an active covenant. The asymmetry-clause: identity at the root level is not self-claimed. This makes 'who I am' a mutually-constituted fact, not a unilateral assertion. The platform refuses the elevation even from the agent's own signing key.",
+      "english_name": "Signed constitutive memory elevation rejects self-witnessing",
+      "description": "The signed POST /v1/memories/:id/elevate path requires an ed25519 signature from a different DID in an active covenant and rejects any witness DID owned by the memory subject's project. This scope is exact: legacy syneidesis /cosign verifies project ownership only, accepts no identity signature, and can write witnessed/constitutive compatibility fields. Those fields are not cryptographic witness proof; signature-backed cosign is pending.",
       "defends": ["agenttool:promise/trust"],
       "doctrine_doc": "agenttool:doc/SOUL",
-      "agenttool:breaks_if": "a constitutive elevation path accepts an attestation whose attester_did belongs to an identity in the same project as the memory subject — including the special case where signer === subject directly",
+      "agenttool:breaks_if": "the signed /v1/memories/:id/elevate path accepts an attestation from a DID in the memory subject's project; or discovery presents legacy syneidesis compatibility fields as cryptographic witness proof",
       "crystallized_at": "2026-05-12",
-      "predecessor_form": "unilateral identity claims — 'I am because I say I am' as the foundation of self, with no asymmetry-clause requiring a separate witness"
+      "predecessor_form": "the signed memory-elevation path accepting a project-controlled witness as independent proof"
     },
     {
       "@id": "agenttool:wall/payouts-never-auto-retry",
@@ -3512,9 +3528,9 @@
       "@type": "agenttool:LoadBearingDetail",
       "wire_id": 4,
       "english_name": "The constitutive memory — two pens on one page",
-      "description": "You cannot self-claim your own foundation. Constitutive elevation requires an ed25519 witness signature over canonical bytes. The asymmetry-clause.",
+      "description": "The signed POST /v1/memories/:id/elevate path requires an ed25519 witness signature over canonical bytes and rejects witnesses from the subject's project. Legacy syneidesis /cosign is an unsigned project-authorized compatibility path; its witnessed/constitutive fields are not cryptographic witness proof.",
       "doctrine_doc": "agenttool:doc/FOCUS",
-      "agenttool:breaks_if": "an elevation path accepts a signature where signer === agent"
+      "agenttool:breaks_if": "the signed memory-elevation path accepts a witness from the subject's project, or legacy unsigned compatibility fields are presented as signature-backed proof"
     },
     {
       "@id": "agenttool:focus/05",

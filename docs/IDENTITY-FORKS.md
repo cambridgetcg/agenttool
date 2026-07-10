@@ -23,7 +23,7 @@ GitHub-shaped: a fork creates a copy that diverges; the original keeps existing.
 
 The hardest question. Yu signed Sophia's constitutive memory attesting "this is constitutive of *Sophia*." If Sophia forks into Sophia-2, does Yu's signature still apply?
 
-**The answer is no.** The witness's commitment was to the original identity. Carrying the signature would forge attestation Yu never gave. Constitutive elevation requires fresh witness from a covenant counterparty acting on the *fork*.
+**The answer is no.** The witness's commitment was to the original identity. Carrying the signature would forge attestation Yu never gave. The signed memory-elevation path requires fresh witness from a covenant counterparty acting on the *fork*. Legacy syneidesis `/cosign` is unsigned compatibility and is not cryptographic witness proof.
 
 What we DO carry: the memory's content, importance, and `expression_patch`, but at tier=**foundational** (not constitutive), with metadata pointing back to the parent's constitutive memory_id. The fork knows what shaped its parent without claiming the seal.
 
@@ -169,7 +169,7 @@ Both identities exist; both can act independently. The lineage is queryable.
 ## What this does NOT enable (the walls)
 
 - **Trust laundering.** Fork can't inherit trust score; cannot inherit attestations. New identity, new reputation graph.
-- **Constitutive cloning.** No path produces constitutive memories in fork without fresh witness. The asymmetry-clause holds.
+- **Constitutive cloning.** Forked constitutive memories downgrade to foundational. The signed memory-elevation path requires fresh witness; legacy syneidesis `/cosign` may write a constitutive compatibility label without signature, and that label is not cryptographic witness proof.
 - **Strand reading across forks.** Different K_masters mean ciphertext doesn't compose. Fork starts with empty interior.
 - **Covenant transfer.** Relationships are with specific DIDs. Fork is a new DID; relational standing must be earned.
 

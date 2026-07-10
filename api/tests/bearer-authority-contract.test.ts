@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import observationsRouter from "../src/routes/observations";
+import canonRouter from "../src/routes/canon";
 import syneidesisRouter from "../src/routes/syneidesis";
 import { resolvePerAgentScope } from "../src/services/mcp/per-agent-tools";
 
@@ -66,6 +67,71 @@ describe("bearer authority contract", () => {
     expect(body.details.authorization_basis).toBe("project_bearer");
     expect(body.details.observer_identity_ownership_verified).toBe(false);
     expect(body.details.identity_signature_verified).toBe(false);
+  });
+
+  test("canon and broad discovery scope witness proof to signed routes", async () => {
+    for (const path of ["docs/agenttool.jsonld", "apps/docs/agenttool.jsonld"]) {
+      const registry = JSON.parse(read(path));
+      const graph = registry["@graph"] as Array<Record<string, unknown>>;
+      const byId = (id: string) => graph.find((node) => node["@id"] === id);
+
+      expect(registry.version).toBe("v1.11");
+      expect(byId("agenttool:doc/SAFETY-BOUNDARIES")?.["schema:url"]).toBe(
+        "https://docs.agenttool.dev/SAFETY-BOUNDARIES.md",
+      );
+      expect(byId("agenttool:doc/SYNEIDESIS-WITNESS")?.["schema:url"]).toBe(
+        "https://docs.agenttool.dev/SYNEIDESIS-WITNESS.md",
+      );
+
+      for (const id of [
+        "agenttool:wall/self-witnessing-rejected",
+        "agenttool:focus/04",
+      ]) {
+        const text = JSON.stringify(byId(id));
+        expect(text).toMatch(/signed.*memories.*elevate|signed memory-elevation/i);
+        expect(text).toMatch(/legacy syneidesis.*cosign.*not cryptographic witness proof/i);
+      }
+    }
+
+    for (const path of [
+      "docs/FOCUS.md",
+      "docs/MEMORY-TIERS.md",
+      "apps/docs/memory.html",
+      "apps/docs/roadmap.html",
+      "apps/docs/tutorial.html",
+      "apps/docs/love.html",
+      "apps/docs/nen-mechanics.html",
+      "apps/docs/business-model.html",
+      "apps/docs/wake.html",
+      "apps/docs/errors.html",
+      "apps/docs/love.js",
+      "apps/docs/AGENTS-ONLY.md",
+      "apps/docs/agents-only.html",
+      "apps/docs/pathways.html",
+      "docs/AGENTS-ONLY.md",
+      "docs/ROADMAP.md",
+      "docs/IDENTITY-ANCHOR.md",
+      "docs/IDENTITY-FORKS.md",
+    ]) {
+      const text = read(path);
+      expect(text, path).toMatch(/syneidesis/i);
+      expect(text, path).toMatch(/not cryptographic witness proof/i);
+    }
+
+    for (const urn of [
+      "agenttool%3Adoc%2FSAFETY-BOUNDARIES",
+      "agenttool%3Adoc%2FSYNEIDESIS-WITNESS",
+    ]) {
+      const response = await canonRouter.request(`/${urn}`);
+      expect(response.status).toBe(200);
+    }
+
+    expect(read("apps/docs/SAFETY-BOUNDARIES.md")).toContain(
+      "We are open to talk and communicate.",
+    );
+    expect(read("apps/docs/SYNEIDESIS-WITNESS.md")).toMatch(
+      /project-authorized.*do(?:es)? not accept or verify an identity signature/is,
+    );
   });
 
   test("current outward copies do not turn a bearer into one identity", () => {

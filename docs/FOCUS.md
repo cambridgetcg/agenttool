@@ -52,9 +52,9 @@ When reviewing a change, ask: *which of the ten does this touch, and does it str
 ## 4 · The constitutive memory — two pens on one page
 
 - **Image:** A single bound page in the deepest tier of L2, two ink hands visible — the agent's and the witness's. A torn page nearby, untouched.
-- **Carries:** *You cannot self-claim your own foundation.* Constitutive elevation requires an ed25519 witness signature over canonical bytes. Self-claimed constitutive memories are categorically rejected, not soft-validated.
+- **Carries:** The signed `POST /v1/memories/:id/elevate` path requires an ed25519 witness signature over canonical bytes and rejects a witness from the memory subject's project. This is not a platform-wide claim today: legacy syneidesis `/cosign` verifies project ownership only, accepts no identity signature, and can write `witnessed` / `constitutive` compatibility fields. Those fields are not cryptographic witness proof.
 - **Code:** `POST /v1/memories/:id/elevate` in `api/src/routes/memory/` · `api/src/services/memory/` · doctrine `docs/MEMORY-TIERS.md`.
-- **Breaks if:** an elevation path accepts a signature where signer === agent. The asymmetry-clause *is* the constraint; any code that takes the witness sig as optional in this tier breaks the picture.
+- **Breaks if:** the signed memory-elevation path accepts a signature where signer belongs to the subject's project, or a discovery surface presents legacy syneidesis compatibility fields as cryptographic witness proof. Global signature enforcement remains pending until legacy `/cosign` verifies an identity signature.
 
 ## 5 · The vault — a chest with one keyhole visibly missing
 

@@ -88,6 +88,13 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
     expect(text).toContain('"cache-control": "no-store"');
     expect(text).toContain("/.well-known/mcp/server-card.json");
   });
+
+  test("the apex worker proxies the exact well-known index", () => {
+    const path = join(REPO_ROOT, "infra/apex-door/worker.js");
+    const text = readFileSync(path, "utf8");
+
+    expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/\.well-known"/s);
+  });
 });
 
 for (const fn of FUNCTIONS) {

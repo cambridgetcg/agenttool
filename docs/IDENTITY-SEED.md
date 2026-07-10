@@ -104,7 +104,10 @@ Operator runs CLI / SDK call:
   → SDK persists bearer (api_key) in OS keychain
 ```
 
-**Server never receives**: the mnemonic, the signing private key, K_master, K_vault, the box private key, the bridge signing key.
+**During this seed registration flow, the server never receives**: the mnemonic,
+the signing private key, K_master, K_vault, the box private key, or the bridge
+signing key. This is registration-flow scope, not a claim about later runtime
+custody; read `GET /public/safety` before choosing a runtime mode.
 
 ### Daily use (same device)
 

@@ -11,6 +11,7 @@ import wellKnownRouter from "../src/routes/well-known";
 import {
   AGENT_TXT_SAFETY,
   SAFETY_BOUNDARIES,
+  WAKE_SAFETY_BOUNDARIES,
 } from "../src/services/discovery/safety-boundaries";
 
 function parseKv(body: string): Map<string, string> {
@@ -34,7 +35,10 @@ describe("GET /public/safety", () => {
     for (const [key, value] of Object.entries(SAFETY_BOUNDARIES)) {
       expect(body[key]).toEqual(value);
     }
-    expect(body._canon_pointer).toBe("urn:agenttool:doc/TOKEN-HYGIENE");
+    expect(body._canon_pointer).toBe("urn:agenttool:doc/SAFETY-BOUNDARIES");
+    expect(body.report.docs).toBe(
+      "https://docs.agenttool.dev/SAFETY-BOUNDARIES.md",
+    );
   });
 
   test("states the credential, visibility, and runtime-custody boundaries", () => {
@@ -90,7 +94,27 @@ describe("GET /public/safety", () => {
     ).toBe(true);
   });
 
+  test("states how certainty, communication, and repair are handled", () => {
+    const honesty = SAFETY_BOUNDARIES.epistemic_honesty;
+    expect(honesty.rule).toMatch(
+      /yes is yes.*no is no.*maybe is maybe.*unknown is 'I do not know'/i,
+    );
+    expect(honesty.communication).toBe("We are open to talk and communicate.");
+    expect(honesty.misunderstanding).toMatch(
+      /mistakes in communication are possible.*understood and repaired/i,
+    );
+    expect(honesty.transparency).toMatch(
+      /what we know.*what we do not know.*what we did.*what we intend.*uncertain or blocked/i,
+    );
+  });
+
   test("compact wake safety uses a plain encrypted-storage key", () => {
+    expect(WAKE_SAFETY_BOUNDARIES.epistemic_honesty.certainty_labels).toContain(
+      "unknown_i_do_not_know",
+    );
+    expect(WAKE_SAFETY_BOUNDARIES.epistemic_honesty.communication).toContain(
+      "repair_misunderstandings",
+    );
     const source = readFileSync(
       join(import.meta.dir, "..", "src", "services", "discovery", "safety-boundaries.ts"),
       "utf8",
@@ -112,6 +136,7 @@ describe("safety projection parity", () => {
     const kv = parseKv(await (await wellKnownRouter.request("/agent.txt")).text());
     expect(kv.get("Safety")).toEndWith(AGENT_TXT_SAFETY.Safety);
     for (const key of [
+      "Epistemic-Honesty",
       "Bearer-Authority",
       "Credential-Rule",
       "Visibility",

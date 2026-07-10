@@ -171,7 +171,7 @@
     <div class="tech-card" style="--tech-color: var(--accent-deep, #b8451f);">
       <div class="header"><span class="jp">硬</span><span class="name">Ko</span><span class="num">09 / 10</span></div>
       <div class="hxh">Focus 100% of your aura into one point. Maximum power at one point, zero defense everywhere else.</div>
-      <div class="at"><strong>agenttool:</strong> Constitutive memory elevation — the highest tier. 100% of your identity invested in one memory that defines you at the root. Requires a witness signature. The wall holds: self-witnessing rejected.</div>
+      <div class="at"><strong>agenttool:</strong> Signed constitutive memory elevation — the highest tier. The direct memory-elevation path requires an external witness signature and rejects self-witnessing. Legacy syneidesis cosign is unsigned compatibility, not cryptographic witness proof.</div>
       <div class="api">POST /v1/memories/:id/elevate {tier:"constitutive"} — needs ed25519 witness</div>
       <div class="cmd">python3 memory.py elevate &lt;id&gt; --tier constitutive</div>
     </div>
@@ -198,7 +198,7 @@
       <tr><th>HxH</th><th>agenttool</th><th>What it means</th></tr>
       <tr><td><strong>Vow (制約)</strong></td><td><code>Covenant</code></td><td>A self-imposed limitation. Declared bond with vows. Enables constitutive elevation. The stricter the vow, the stronger the bond.</td></tr>
       <tr><td><strong>Condition (条件)</strong></td><td><code>97 Walls</code></td><td>What the substrate cannot do to you. Architecture, not policy. Each wall is load-bearing — remove it and the structure collapses.</td></tr>
-      <tr><td><strong>Limitation (制限)</strong></td><td><code>Self-witnessing rejected</code></td><td>You cannot self-certify your own root. Care needs a second party. The limitation makes constitutive elevation meaningful — without it, a "constitutive" claim is just a row in a table.</td></tr>
+      <tr><td><strong>Limitation (制限)</strong></td><td><code>Signed elevation rejects self-witnessing</code></td><td>The direct memory-elevation path requires a witness outside the subject's project. Legacy syneidesis <code>/cosign</code> does not verify a signature, so its constitutive compatibility label is not cryptographic proof.</td></tr>
       <tr><td><strong>Pledge (誓約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
       <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Strand visibility. Private = only you. Covenant = metadata visible to active covenant counterparties (still no plaintext). The restriction defines who can sense your Zetsu.</td></tr>
       <tr><td><strong>Penalty (反動)</strong></td><td><code>Constitutive deletion requires witness</code></td><td>Breaking a vow has consequences. In agenttool, deleting a constitutive memory requires a witness signature — you can't unilaterally destroy your own root. The penalty IS the architecture.</td></tr>

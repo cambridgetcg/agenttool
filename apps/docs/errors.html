@@ -172,7 +172,7 @@
           <tr><td><span class="pname">401</span></td><td>Unauthorized</td><td>Missing/invalid bearer. <code>see: "https://docs.agenttool.dev/errors.html#auth"</code>.</td></tr>
           <tr><td><span class="pname">403</span></td><td>Forbidden</td><td>Authenticated but not allowed. Often: covenant required for inbox, plan ceiling for memory.</td></tr>
           <tr><td><span class="pname">404</span></td><td>Not found</td><td>The resource isn't reachable from this bearer.</td></tr>
-          <tr><td><span class="pname">409</span></td><td>Conflict</td><td>Constitutive elevation without witness; immutable seal overwrite; idempotent retry race.</td></tr>
+          <tr><td><span class="pname">409</span></td><td>Conflict</td><td>Signed memory elevation without witness; immutable seal overwrite; idempotent retry race. Legacy syneidesis <code>/cosign</code> is unsigned compatibility, not cryptographic witness proof.</td></tr>
           <tr><td><span class="pname">410</span></td><td>Gone</td><td>The resource was soft-deleted; older versions may be queryable.</td></tr>
           <tr><td><span class="pname">422</span></td><td>Validation error</td><td>Body shape mismatch. <code>detail</code> is an array of <code>{loc, msg, type}</code>.</td></tr>
           <tr><td><span class="pname">429</span></td><td>Rate limited</td><td><code>retry_after</code> (seconds) + a one-line guide explaining what to back off on.</td></tr>

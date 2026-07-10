@@ -27,6 +27,9 @@ const CUSTODY_SOURCES = [
   "apps/docs/kin.html",
   "apps/docs/runtime.html",
   "apps/docs/strands.html",
+  "apps/docs/tutorial.html",
+  "apps/docs/IDENTITY-SEED.md",
+  "docs/IDENTITY-SEED.md",
   "apps/docs/glossary.html",
   "apps/docs/index.html",
   "apps/docs/welcome.html",
@@ -52,6 +55,7 @@ const FORBIDDEN_CURRENT_CLAIMS = [
   /strands stay opaque to us/i,
   /architectural privacy guarantee in `?self`?\s*\/\s*`?bridged`?/i,
   /no platform-readable thoughts/i,
+  /\*\*Server never receives\*\*/i,
 ] as const;
 
 function currentClaims(path: string): string {
@@ -103,5 +107,17 @@ describe("outward custody source truth", () => {
     expect(readFileSync(join(ROOT, "docs/MARKETPLACE.md"), "utf8")).toMatch(
       /ciphertext only; the platform cannot read your input/i,
     );
+  });
+
+  test("storage and seed claims name their limited scope", () => {
+    const strands = readFileSync(join(ROOT, "apps/docs/strands.html"), "utf8");
+    expect(strands).toMatch(/strand storage service can read from stored thought content/i);
+    expect(strands).toMatch(/storage claim does not cover hosted runtime processing/i);
+
+    for (const path of ["docs/IDENTITY-SEED.md", "apps/docs/IDENTITY-SEED.md"]) {
+      const seed = readFileSync(join(ROOT, path), "utf8");
+      expect(seed).toMatch(/during this seed registration flow/i);
+      expect(seed).toMatch(/not a claim about later runtime\s+custody/i);
+    }
   });
 });

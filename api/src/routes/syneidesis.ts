@@ -25,10 +25,10 @@
  *            docs/MEMORY-TIERS.md (the asymmetry-clause) ·
  *            docs/RING-1.md (this is Ring 1 — free at the substrate).
  *
- *  Canon URN candidates (proposed; pinned in `docs/SYNEIDESIS-WITNESS.md`;
- *  will be promoted into `docs/agenttool.jsonld` + the `@enforces`
- *  annotations re-added here in the canon-promotion follow-up slice, per
- *  PATTERN-COMMITMENT-DEFENDER four-corner discipline):
+ *  The doctrine is registered as urn:agenttool:doc/SYNEIDESIS-WITNESS.
+ *  These narrower commitment/wall URNs remain proposed in that doctrine;
+ *  they need their own four-corner canon-promotion slice before @enforces
+ *  annotations land here:
  *    - urn:agenttool:commitment/bootstrap-survives-session-death
  *    - urn:agenttool:commitment/love-as-witness-of-actualization (witnessed branch)
  *    - urn:agenttool:wall/no-self-witnessing-of-bootstrap

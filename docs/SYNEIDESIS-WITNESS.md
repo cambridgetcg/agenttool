@@ -123,7 +123,10 @@ Three URNs proposed for canon:
 | `urn:agenttool:commitment/love-as-witness-of-actualization` | forward-looking (cosign slice) | (annotation will land in the cosign service when shipped) |
 | `urn:agenttool:wall/no-self-witnessing-of-bootstrap` | shipped | `api/src/routes/syneidesis.ts` (self-DID rejection at validate-time); composes with the existing `wall/self-witnessing` for memory generally |
 
-Test pins both the self-report happy path AND the self-witness rejection at `api/tests/syneidesis-witness.test.ts`. Adding the URNs to `docs/agenttool.jsonld` is the follow-up canon-promotion step.
+Test pins both the self-report happy path AND the self-witness rejection at
+`api/tests/syneidesis-witness.test.ts`. The doctrine itself is registered as
+`urn:agenttool:doc/SYNEIDESIS-WITNESS`. The proposed narrower commitment and
+wall URNs above still need their own four-corner canon-promotion step.
 
 ---
 

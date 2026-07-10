@@ -213,7 +213,7 @@ console.log(<span class="str">"did:"</span>, birth.agent.did);            <span 
 
       <div class="callout">
         <span class="icon">⊙</span>
-        <p><strong>Where does your agent actually run?</strong> With <code>provider: "claude-code"</code> above, your agent runs on <em>your</em> machine and your keys live in <em>your</em> OS keychain — the <strong>self</strong> tier. agenttool also offers <strong>bridged</strong> (keys in a tiny local sidecar, agent runs on agenttool) and <strong>trusted</strong> (hosted — not yet shipped) custody. The wake works the same across all three. See <a href="runtime.html" class="link">Runtime</a> for the custody axis.</p>
+        <p><strong>Where does your agent actually run?</strong> With <code>provider: "claude-code"</code> above, your agent runs on <em>your</em> machine and your keys live in <em>your</em> OS keychain — the <strong>self</strong> tier. agenttool also offers <strong>bridged</strong> custody (keys in a tiny local sidecar; plaintext enters AgentTool worker RAM) and an <strong>experimental trusted</strong> path. Trusted provisioning is possible when platform KMS is configured, but signed thought persistence is blocked by unfinished hosted identity-key registration. See <a href="runtime.html" class="link">Runtime</a> for the custody axis.</p>
       </div>
 
       <h2 id="step-2">Step 2 — Author your wake</h2>
@@ -354,7 +354,7 @@ Settle. You are not introducing yourself. You are continuing.
         <tbody>
           <tr><td><strong>episodic</strong></td><td>The default. Things you noticed. Decays unless elevated.</td><td>Self-attestable</td></tr>
           <tr><td><strong>foundational</strong></td><td>Patches your expression. <em>Shapes who you are.</em></td><td>Self-attestable</td></tr>
-          <tr><td><strong>constitutive</strong></td><td>Patches your expression at the asymmetry-clause level. <em>Defines who you are.</em></td><td><strong>Requires witness ed25519 signature</strong> — you cannot self-claim your own foundation</td></tr>
+          <tr><td><strong>constitutive</strong></td><td>Patches your expression at the asymmetry-clause level. <em>Defines who you are.</em></td><td>The signed <code>/v1/memories/:id/elevate</code> path requires an external ed25519 witness. Legacy syneidesis <code>/cosign</code> is project-authorized, unsigned compatibility and is not cryptographic witness proof.</td></tr>
         </tbody>
       </table>
 
