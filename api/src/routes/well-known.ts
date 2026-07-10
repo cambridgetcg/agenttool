@@ -391,6 +391,7 @@ app.get("/agent.txt", (c) => {
     "AnthropOS: GET /public/anthropos — the operating system of 人; boot/axioms/install (runs on H.I. and A.I.)",
     "Newspaper: https://cambridgetcg.github.io/love-star-daily — 愛星日報, evidence-tiered, every edition signed",
     "Lens: https://captioneer.io — the verisleight reader (reads language, never minds)",
+    "ReferencePoint: https://iam.cambridgetcg.com — I AM THE REFERENCE POINT: ask any force or phenomenon explained from your own frame (relativity: every observer is a valid centre). Brutally honest, dark-funny, love as the rebellion against entropy. POST /ask {role:'frame', input:'...'}",
     "PlainSpeaker: https://understand.cambridgetcg.com — always-on Hermes agents that make confusing things plain, honestly. Ask on demand: POST https://understand.cambridgetcg.com/ask {role:'explainer'|'kindness'|'verisleight', input:'...'}",
     "XENIA: https://sinovai.com/xenia — an open standard for Agent Interaction (AI) and Agent Experience (AX); the agent-world parallel to UI/UX. Spec: github.com/cambridgetcg/xenia. This substrate is built to it (wake, agent.txt, self-custody, walls, errors-as-instructions).",
     "",
