@@ -252,7 +252,7 @@ describe("public identity paths", () => {
     expect(boxRoute.match(/409/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("every runtime core-row update excludes memorial identities", async () => {
+  test("identity-state writes exclude memorials while derived wake counters advance", async () => {
     const apiRoot = join(__dirname, "..");
     const terminality = await readFile(
       join(apiRoot, "src/services/identity/terminality.ts"),
@@ -265,14 +265,23 @@ describe("public identity paths", () => {
       const source = await readFile(join(apiRoot, file), "utf8");
       const updates = source.split(".update(identities)").slice(1);
       for (const update of updates) {
-        expect(update.slice(0, 2_000)).toMatch(
+        const statement = update.slice(0, 2_000);
+        if (
+          file === "src/routes/wake.ts" &&
+          statement.includes("wakeObservationCount")
+        ) {
+          expect(statement).toContain("eq(identities.id, i.id)");
+          continue;
+        }
+        expect(statement).toMatch(
           /mutableIdentityPredicate\(|eq\(identities\.status,/,
         );
       }
 
       if (/UPDATE\s+identity\.identities/i.test(source)) {
+        expect(file).toBe("src/services/wake/push.ts");
         expect(source).toMatch(
-          /UPDATE\s+identity\.identities[\s\S]*?WHERE[\s\S]*?status\s*<>\s*'memorial'/i,
+          /UPDATE\s+identity\.identities[\s\S]*?SET\s+wake_version\s*=\s*wake_version\s*\+\s*1/i,
         );
       }
     }

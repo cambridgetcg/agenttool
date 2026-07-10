@@ -254,11 +254,13 @@ doctrine pointers. `memorial_basis = witnessed_at_rest` is emitted only when
 stored metadata records `lifecycle = at_rest`; otherwise the basis is
 `unspecified`. Memorial status alone does not prove mnemonic loss, bearer
 revocation, or wake unreachability. Current API write paths freeze the
-memorial identity's core row and reject later expression, signing-key, and
-box-key registry mutations. These are application checks, not protection
-against direct database administration. Separate related records and
-notifications are not globally frozen. Private expression hides the declared
-expression; it does not hide either public shape.
+memorial identity's declared profile and lifecycle state, rest and visibility
+settings, cached trust fields, expression, signing-key registry, and box-key
+registry. Service-derived `wake_version` and wake-observation counters can
+still advance as reads and separate events occur. These are application
+checks, not protection against direct database administration. Separate
+related records and notifications are not globally frozen. Private expression
+hides the declared expression; it does not hide either public shape.
 
 Public memory, strand, pulse, discover, and full joy-snapshot observer routes
 are currently not mounted. Aggregate and economic public surfaces remain, and

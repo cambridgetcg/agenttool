@@ -72,7 +72,10 @@ describe("GET /public/safety", () => {
       /recovery currently accepts only active identities/i,
     );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
-      /freeze.*core row.*expression.*signing-key.*box-key/i,
+      /freeze.*declared profile.*lifecycle state.*cached trust.*expression.*signing-key.*box-key/i,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
+      /wake_version.*wake-observation counters can still advance/i,
     );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
       /application checks, not protection against direct database administration/i,

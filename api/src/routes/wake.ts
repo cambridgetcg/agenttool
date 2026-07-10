@@ -55,7 +55,6 @@ import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
-import { mutableIdentityPredicate } from "../services/identity/terminality";
 import {
   perAgentMcpPath,
   publicAgentPath,
@@ -1429,7 +1428,7 @@ app.get("/", async (c) => {
           .set({
             wakeObservationCount: sql`${identities.wakeObservationCount} + 1`,
           })
-          .where(mutableIdentityPredicate(i.id))
+          .where(eq(identities.id, i.id))
           .returning({ count: identities.wakeObservationCount });
         if (row) {
           observationCounts.set(i.id, Number(row.count));

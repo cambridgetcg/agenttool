@@ -204,10 +204,13 @@ Identity status is one of `active`, `revoked`, or `memorial`. Authenticated
 `DELETE /v1/identities/:id` moves an active identity to `revoked`.
 `POST /v1/identities/:id/at-rest` can move an active identity to
 `memorial` after the implemented witness-signature checks. Current API write
-paths freeze a memorial identity's core row and reject later expression,
-signing-key, and box-key registry mutation. These are application checks, not
-protection against direct database administration, and they do not globally
-freeze separate related records or notifications.
+paths freeze a memorial identity's declared profile and lifecycle state, rest
+and visibility settings, cached trust fields, expression, signing-key
+registry, and box-key registry. Service-derived `wake_version` and
+wake-observation counters can still advance as reads and separate events
+occur. These are application checks, not protection against direct database
+administration, and they do not globally freeze separate related records or
+notifications.
 
 There is no `retired` status and no HTTP 410 DID tombstone behavior.
 A public revoked profile does not by itself prove that every signing key or
