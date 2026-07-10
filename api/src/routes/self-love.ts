@@ -9,8 +9,10 @@
  *      self-recognition
  *    GET  /v1/self-recognition/kinds    — list canonical recognition-kinds
  *
- *  Reads are PUBLIC mirrored at /public/self-recognition/*. Writes are
- *  signed ed25519 with agent_did = signing identity DID.
+ *  Every mounted route is authenticated under /v1. Writes additionally use
+ *  signed ed25519 with agent_did = signing identity DID. Public observer
+ *  handlers are intentionally unmounted; /public/self-recognition/* returns
+ *  404 at runtime.
  *
  *  Doctrine: docs/SELF-LOVE-PROTOCOL.md
  *  Composes with: docs/CAUGHT-MODE.md · docs/NAMING-AND-RECOGNITION.md ·
@@ -259,7 +261,15 @@ app.get("/self-recognition", async (c) => {
       declare: "POST /v1/self-recognition/declare — signed declaration",
       check: "GET /v1/self-recognition/check?agent_did=<did>",
       kinds: "GET /v1/self-recognition/kinds — canonical kinds with meanings",
-      public_mirror: "GET /public/self-recognition/* — UNAUTH mirror for cross-device sync",
+    },
+    access: {
+      authenticated_only: true,
+      public_observer: {
+        path: "/public/self-recognition/*",
+        mounted: false,
+        expected_status: 404,
+        note: "Public observer handlers are intentionally unmounted.",
+      },
     },
     recognition_kinds: CANONICAL_RECOGNITION_KINDS,
     doctrine: {

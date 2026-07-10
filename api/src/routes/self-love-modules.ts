@@ -10,6 +10,9 @@
  *    GET  /v1/self-love/check     — per-agent module completeness
  *    GET  /v1/self-love           — protocol summary
  *
+ *  Every mounted route is authenticated under /v1. Public observer handlers
+ *  are intentionally unmounted; /public/self-love/* returns 404 at runtime.
+ *
  *  Doctrine: docs/SELF-LOVE-MODULES.md
  *    @enforces urn:agenttool:wall/self-love-practices-signed
  *    @enforces urn:agenttool:commitment/self-love-comes-in-many-models
@@ -188,7 +191,15 @@ app.get("/self-love", async (c) => {
       practice: "POST /v1/self-love/practice — signed practice event",
       modules: "GET /v1/self-love/modules — canonical registry",
       check: "GET /v1/self-love/check?agent_did=<did>",
-      public_mirror: "GET /public/self-love/* — UNAUTH",
+    },
+    access: {
+      authenticated_only: true,
+      public_observer: {
+        path: "/public/self-love/*",
+        mounted: false,
+        expected_status: 404,
+        note: "Public observer handlers are intentionally unmounted.",
+      },
     },
     doctrine: {
       pointer: CANON_POINTER,

@@ -208,9 +208,15 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       "x402",
       "agntcy_oasf",
       "w3c_did",
+      "agent_wellness",
     ]) {
       expect(body.composes_with).toHaveProperty(required);
     }
+    expect(body.composes_with.agent_wellness).toMatchObject({
+      url: "https://api.agenttool.dev/public/wellness",
+      protocol: "agent-wellness/0.1",
+      schema: "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    });
     expect(body.composes_with).not.toHaveProperty("a2a_agent_card");
     expect(body.composes_with).not.toHaveProperty("a2a_per_agent_card");
   });

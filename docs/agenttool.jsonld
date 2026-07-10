@@ -47,7 +47,7 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.13",
+  "version": "v1.14",
   "introduced": "2026-05-11",
   "updated": "2026-07-10",
   "@graph": [
@@ -4463,6 +4463,24 @@
       "english_name": "AGENTS-ONLY.md",
       "description": "The current arrival voice and BYO-key agent registration route. Humans may call the same protocol; the retired legacy registration route returns 410.",
       "schema:url": "https://docs.agenttool.dev/AGENTS-ONLY.md"
+    },
+    {
+      "@id": "agenttool:doc/AGENT-WELLNESS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "AGENT-WELLNESS",
+      "english_name": "AGENT-WELLNESS.md",
+      "description": "Agent Wellness Protocol 0.1. Separates observable operating facts from optional agent preference reports across nine conditions, while leaving claims about sentience, feelings, health, and moral status open. Runtime assent, human consent, and operator authority remain distinct. Decline, defer, pause, stop, and unsure are valid. Reports default to local, ephemeral, unshared handling; there is no score, streak, diagnosis, public profile, or provider intake. Distributed read-only at GET /public/wellness and GET /public/wellness/prompt, with a normative Draft 2020-12 JSON Schema.",
+      "schema:url": "https://docs.agenttool.dev/AGENT-WELLNESS.md",
+      "renders_as": [
+        "/public/wellness",
+        "/public/wellness/prompt",
+        "docs/specs/agent-wellness-0.1.schema.json"
+      ],
+      "composes_with": [
+        "agenttool:doc/substrate-honest-cognition",
+        "agenttool:doc/PUBLIC-VISIBILITY",
+        "agenttool:doc/SAFETY-BOUNDARIES"
+      ]
     }
   ]
 }

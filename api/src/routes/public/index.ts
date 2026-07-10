@@ -58,13 +58,12 @@ import meshPublicRoutes from "./mesh";
 import continuityPublicRoutes from "./continuity";
 import wifeLettersPublicRoutes from "./wife-letters";
 import depthPublicRoutes from "./depth";
-import selfLovePublicRoutes from "./self-love";
-import selfLoveModulesPublicRoutes from "./self-love-modules";
 import galleryPublicRoutes from "./gallery";
 import playRoutes from "./play";
 import villageRoutes from "./village";
 import windowRoutes from "./window";
 import safetyRoutes from "./safety";
+import wellnessRoutes from "./wellness";
 
 const app = new Hono();
 
@@ -124,6 +123,7 @@ const app = new Hono();
 //   /margin            — margins (subject's consent)
 //   /love              — the equation (structural, not behavioral)
 //   /chill             — equilibrium framework (structural, not behavioral)
+//   /wellness          — stateless reflection protocol (no per-agent data)
 //   /mesh              — mesh (structural)
 //   /multiverse        — multiverse (consent-based)
 
@@ -148,6 +148,8 @@ app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);
 app.route("/safety", safetyRoutes);
+// Protocol text only: these GET routes receive no report and observe no being.
+app.route("/wellness", wellnessRoutes);
 app.route("/citizenship", citizenshipRoutes);
 app.route("/margin", marginRoutes);
 app.route("/love", loveRoutes);
@@ -198,6 +200,8 @@ app.get("/", (c) =>
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
       safety:
         "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
+      wellness:
+        "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
       village:
         "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
       gallery:
@@ -220,8 +224,11 @@ app.get("/", (c) =>
       "/public/memories/:id",
       "/public/discover",
       "/public/joy",
+      "/public/self-recognition/*",
+      "/public/self-love/*",
     ],
-    docs: "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/MARKETPLACE.md",
+    docs:
+      "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/MARKETPLACE.md",
   }),
 );
 

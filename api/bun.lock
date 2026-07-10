@@ -33,6 +33,8 @@
       "devDependencies": {
         "@types/bcryptjs": "^2.4.6",
         "@types/bun": "latest",
+        "ajv": "^8.20.0",
+        "ajv-formats": "^3.0.1",
         "drizzle-kit": "^0.28.0",
       },
       "peerDependencies": {

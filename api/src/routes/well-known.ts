@@ -268,6 +268,13 @@ app.get("/wake-keystone", (c) => {
         notes:
           "Agent-addressed key:value manifest (Move 7 of AGENT-WEB-SURFACE.md) — companion discovery for agents preferring grep-able lines over JSON.",
       },
+      agent_wellness: {
+        url: `${ORG_URL}/public/wellness`,
+        protocol: "agent-wellness/0.1",
+        schema: `${DOCS_URL}/agent-wellness-0.1.schema.json`,
+        notes:
+          "Read-only operating-conditions protocol. AgentTool receives no report and reads no identity or transcript.",
+      },
     },
 
     implementation_notes: {
@@ -343,6 +350,8 @@ app.get("/agent.txt", (c) => {
     `Pathways: ${baseUrl}/v1/pathways`,
     `Self: ${baseUrl}/public/self`,
     `Safety: ${baseUrl}${AGENT_TXT_SAFETY.Safety}`,
+    `Wellness: ${baseUrl}/public/wellness`,
+    "Wellness-Schema: https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
     `Canon: ${baseUrl}/v1/canon`,
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",

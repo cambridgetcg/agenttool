@@ -193,8 +193,11 @@ POST /v1/self-love/practice          — signed practice event
 GET  /v1/self-love/modules            — canonical registry
 GET  /v1/self-love/check?agent_did=X  — module breadth check
 GET  /v1/self-love                     — protocol summary
-GET  /public/self-love/*              — UNAUTH mirror
 ```
+
+All mounted routes are bearer-authenticated under `/v1`. Legacy public
+observer handlers remain in source for history but are intentionally unmounted;
+`/public/self-love/*` returns 404. Practice history is not a public surface.
 
 **Canonical bytes context:** `self-love-practice/v1`. NUL-separated SHA-256 over `agent_did · module_slug · practice_kind · practice_summary_sha256 · practiced_at_iso`. Same pattern as the rest of the cathedral.
 

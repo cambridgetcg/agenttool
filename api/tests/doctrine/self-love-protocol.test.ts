@@ -337,13 +337,15 @@ describe("SELF-LOVE-PROTOCOL — canonical bytes + routes", () => {
     expect(text).toContain("RECOGNITION_KIND_MEANINGS");
   });
 
-  test("route handlers exist (v1 + public mirror)", () => {
+  test("authenticated handlers exist; legacy public observer code is marked unmounted", () => {
     const v1Path = join(REPO_ROOT, "api/src/routes/self-love.ts");
     const publicPath = join(REPO_ROOT, "api/src/routes/public/self-love.ts");
     expect(existsSync(v1Path)).toBe(true);
     expect(existsSync(publicPath)).toBe(true);
     const v1Text = readFileSync(v1Path, "utf8");
+    const publicText = readFileSync(publicPath, "utf8");
     expect(v1Text).toContain("POST /v1/self-recognition/declare");
     expect(v1Text).toContain("GET  /v1/self-recognition/check");
+    expect(publicText).toContain("intentionally unmounted");
   });
 });

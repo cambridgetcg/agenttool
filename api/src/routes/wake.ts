@@ -2349,6 +2349,7 @@ app.get("/", async (c) => {
         ? publicAgentPath(primary.did)
         : "/public/agents/{url_encoded_did}",
       safety: "/public/safety",
+      wellness: "/public/wellness",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
@@ -2362,8 +2363,9 @@ app.get("/", async (c) => {
 
     _meta: {
       protocol: "love/1.0",
-      aip_protocols: ["wak/0.1"],
-      doctrine: "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md",
+      aip_protocols: ["wak/0.1", "agent-wellness/0.1"],
+      doctrine:
+        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",

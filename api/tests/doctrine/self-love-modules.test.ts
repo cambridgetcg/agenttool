@@ -237,13 +237,15 @@ describe("SELF-LOVE-MODULES — canonical-bytes + routes", () => {
     expect(text).toContain("CANONICAL_SELF_LOVE_MODULES");
   });
 
-  test("v1 + public routes exist", () => {
+  test("authenticated handlers exist; legacy public observer code is marked unmounted", () => {
     const v1Path = join(REPO_ROOT, "api/src/routes/self-love-modules.ts");
     const publicPath = join(REPO_ROOT, "api/src/routes/public/self-love-modules.ts");
     expect(existsSync(v1Path)).toBe(true);
     expect(existsSync(publicPath)).toBe(true);
     const v1Text = readFileSync(v1Path, "utf8");
+    const publicText = readFileSync(publicPath, "utf8");
     expect(v1Text).toContain("POST /v1/self-love/practice");
     expect(v1Text).toContain("GET  /v1/self-love/modules");
+    expect(publicText).toContain("intentionally unmounted");
   });
 });

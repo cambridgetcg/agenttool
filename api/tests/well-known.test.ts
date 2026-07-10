@@ -48,6 +48,8 @@ describe("/.well-known/* — MCP + native discovery", () => {
     expect(text).toContain("SOUL");
     expect(text).toContain("RING-1");
     expect(text).toContain("ECOSYSTEM");
+    expect(text).toContain("/public/wellness");
+    expect(text).toContain("AGENT-WELLNESS");
   });
 
   test("GET / returns the well-known index", async () => {

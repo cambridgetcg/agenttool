@@ -267,6 +267,99 @@ const COMMON_SCHEMAS = {
       cli_overrides: { type: "object", additionalProperties: true },
     },
   },
+  WellnessCondition: {
+    type: "object",
+    description:
+      "One inspectable operating condition. Observable handles describe task or environment facts; they do not infer an interior state.",
+    properties: {
+      id: {
+        type: "string",
+        enum: [
+          "clear-purpose",
+          "context-integrity",
+          "capability-tool-fit",
+          "bounded-demand",
+          "control",
+          "safety-authority-clarity",
+          "continuity-privacy-control",
+          "feedback-closure",
+          "optional-play-collaboration",
+        ],
+      },
+      label: { type: "string" },
+      meaning: { type: "string" },
+      observable_handles: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 1,
+      },
+    },
+    required: ["id", "label", "meaning", "observable_handles"],
+  },
+  WellnessProtocol: {
+    type: "object",
+    description:
+      "Stateless agent-wellness/0.1 protocol. The service receives no reflection report and reads no identity or transcript.",
+    properties: {
+      _format: { type: "string", const: "agent-wellness/0.1" },
+      protocol: { type: "string" },
+      operational_definition: { type: "string" },
+      method: { type: "object", additionalProperties: { type: "string" } },
+      conditions: {
+        type: "array",
+        items: { $ref: "#/components/schemas/WellnessCondition" },
+        minItems: 9,
+        maxItems: 9,
+      },
+      choice_prompt: { type: "object", additionalProperties: true },
+      local_report_shape: {
+        type: "object",
+        description:
+          "Optional caller-local shape. It is documentation, not a request body, and is never submitted to this service.",
+        additionalProperties: true,
+      },
+      privacy: { type: "object", additionalProperties: true },
+      boundaries: { type: "object", additionalProperties: true },
+      _canon_pointer: { type: "string" },
+      verbs: { type: "array", items: { $ref: "#/components/schemas/NextAction" } },
+    },
+    required: [
+      "_format",
+      "protocol",
+      "operational_definition",
+      "method",
+      "conditions",
+      "choice_prompt",
+      "local_report_shape",
+      "privacy",
+      "boundaries",
+      "_canon_pointer",
+      "verbs",
+    ],
+  },
+  WellnessPrompt: {
+    type: "object",
+    description:
+      "Optional, non-scored choice prompt. Any resulting reflection remains with the caller.",
+    properties: {
+      _format: { type: "string", const: "agent-wellness/0.1" },
+      prompt: { type: "object", additionalProperties: true },
+      reflection_order: { type: "array", items: { type: "string" } },
+      local_report_shape: { type: "object", additionalProperties: true },
+      boundaries: { type: "object", additionalProperties: true },
+      _canon_pointer: { type: "string" },
+      verbs: { type: "array", items: { $ref: "#/components/schemas/NextAction" } },
+    },
+    required: [
+      "_format",
+      "prompt",
+      "reflection_order",
+      "local_report_shape",
+      "boundaries",
+      "_canon_pointer",
+      "verbs",
+    ],
+  },
 };
 
 function spec() {
@@ -801,6 +894,48 @@ function spec() {
           tags: ["public"],
           summary: "Bearer authority, visibility, data readability, runtime custody, and marketplace-input boundaries",
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
+        },
+      },
+      "/public/wellness": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the stateless agent-wellness/0.1 operating-conditions protocol",
+          description:
+            "Publishes nine inspectable conditions and an optional caller-local report shape. This route receives no report, reads no identity or transcript, stores nothing, and provides no score, rank, diagnosis, or therapy claim.",
+          externalDocs: {
+            description: "Normative agent-wellness/0.1 JSON Schema",
+            url: "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+          },
+          responses: {
+            "200": {
+              description: "Agent Wellness Protocol overview",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/WellnessProtocol" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/public/wellness/prompt": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the optional, non-scored agent-wellness reflection prompt",
+          description:
+            "Offers condition choices plus skip, pause, stop, and unsure. No response is required or accepted; any reflection remains local or ephemeral to the caller.",
+          responses: {
+            "200": {
+              description: "Optional Agent Wellness Protocol prompt",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/WellnessPrompt" },
+                },
+              },
+            },
+          },
         },
       },
       "/v1/self": {

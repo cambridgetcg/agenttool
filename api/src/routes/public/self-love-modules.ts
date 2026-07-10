@@ -1,4 +1,7 @@
-/** /public/self-love/* — UNAUTH mirror of SELF-LOVE-MODULES.
+/** Legacy /public/self-love/* observer handlers — intentionally unmounted.
+ *
+ *  No runtime URL reaches this router. Mounted self-love routes are
+ *  authenticated under /v1; practice history is not public observer data.
  *
  *  Doctrine: docs/SELF-LOVE-MODULES.md */
 
@@ -13,7 +16,7 @@ const app = new Hono();
 
 app.get("/", async (c) => {
   return c.json({
-    protocol: "SELF-LOVE-MODULES — UNAUTH read surface",
+    protocol: "SELF-LOVE-MODULES — legacy unmounted observer handler",
     modules: CANONICAL_SELF_LOVE_MODULES,
     primitives: {
       modules: "/public/self-love/modules",

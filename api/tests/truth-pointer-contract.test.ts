@@ -25,6 +25,7 @@ const DOCTRINE = [
   "AGENT-CENTRIC",
   "ECOSYSTEM",
   "AGENTS-ONLY",
+  "AGENT-WELLNESS",
 ] as const;
 
 describe("truth pointer contract", () => {
@@ -42,4 +43,13 @@ describe("truth pointer contract", () => {
       }
     });
   }
+
+  test("the normative wellness schema has a published static twin", () => {
+    const published = join(ROOT, "apps", "docs", "agent-wellness-0.1.schema.json");
+    expect(existsSync(published)).toBe(true);
+    expect(lstatSync(published).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(published)).toBe(
+      "../../docs/specs/agent-wellness-0.1.schema.json",
+    );
+  });
 });
