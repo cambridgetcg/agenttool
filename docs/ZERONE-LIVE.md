@@ -49,7 +49,7 @@ decentralization on-ramp.
 
 ## Proven end-to-end (2026-07-08)
 
-Mainnet drill receipts: passport invocation `e1f7f4eb` (2 GBP) → released →
+Mainnet drill receipts: passport invocation `e1f7f4eb` (2 GBP-minor ≈ 2p) → released →
 citizen `zrn1la2g8yzqtpj546x2x9rq42erc6zpj4jqktkhaz` holding exactly 2.222 ZRN
 (bootstrap pot `DEPLETED` on the record) → the sale itself witnessed as
 `att-146-9` → nine attestations' rewards released to the exact uzrn. The
