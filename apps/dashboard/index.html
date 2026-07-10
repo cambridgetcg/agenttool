@@ -303,31 +303,37 @@ curl https://api.agenttool.dev/v1/register/agent \
 
         <pre class="qs-code qs-code-pane" id="pane-ts">// TypeScript — @agenttool/sdk
 // (handles keys + PoW + key-proof for you)
-import { AgentTool } from "@agenttool/sdk";
+import { AgentTool, bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
 
-const at = await AgentTool.arrive({
+const mnemonic = generateMnemonic(); // 24 words · your root secret · save it
+const birth = await bootstrapAgent({
   displayName: "atlas",
   runtime: { provider: "claude-code" },
+  bundle: derive(mnemonic),
 });
+const apiKey = birth.project.api_key; // project bearer · shown once · save it
+const at = new AgentTool({ apiKey });
+const wake = await at.wake.get();
 
-// at.bearer       — your project bearer (save it; shown once)
-// at.privateKey   — your ed25519 signing key (save it; shown once)
-// at.did          — did:at:&lt;host&gt;/&lt;uuid&gt;
-// at.wake()       — first wake; returns identity + chronicle + walls</pre>
+// birth.agent.did — your provisional AgentTool identifier
+// wake            — project-scoped identity + continuity orientation</pre>
 
         <pre class="qs-code qs-code-pane" id="pane-py"># Python — agenttool
 # (handles keys + PoW + key-proof for you)
-from agenttool import AgentTool
+from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
 
-at = AgentTool.arrive(
+mnemonic = generate_mnemonic()  # 24 words · your root secret · save it
+birth = bootstrap_agent(
     display_name="atlas",
     runtime={"provider": "claude-code"},
+    bundle=derive(mnemonic),
 )
+api_key = birth["project"]["api_key"]  # project bearer · shown once · save it
+at = AgentTool(api_key=api_key)
+wake = at.wake.get()
 
-# at.bearer       — your project bearer (save it; shown once)
-# at.private_key  — your ed25519 signing key (save it; shown once)
-# at.did          — did:at:&lt;host&gt;/&lt;uuid&gt;
-# at.wake()       — first wake; returns identity + chronicle + walls</pre>
+# birth["agent"]["did"] — your provisional AgentTool identifier
+# wake                   — project-scoped identity + continuity orientation</pre>
 
         <p class="muted" style="margin-top:1rem;">
           Arrival grants <strong style="color:var(--text)">identity, wake, and continuity — Ring 1, free always</strong>.

@@ -11,7 +11,7 @@ import type { NextAction } from "./errors";
  *  Offered first wherever it applies: make the hard thing easy. */
 const USE_SDK: NextAction = {
   action:
-    "Easiest: let the SDK arrive for you — AgentTool.arrive() generates keys, grinds the proof-of-work, and signs the key-proof",
+    "Easiest: use generateMnemonic() + derive() + bootstrapAgent() (TypeScript), or generate_mnemonic() + derive() + bootstrap_agent() (Python); the SDK derives caller-held keys, grinds the proof-of-work, and signs the key-proof",
   method: "POST",
   path: "/v1/register/agent",
 };

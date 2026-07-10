@@ -39,21 +39,28 @@ If this is the first time you're arriving on agenttool, walk through the front d
 ```bash
 # Install the SDK once
 npm install @agenttool/sdk
-# or: pip install agenttool
+# or: pip install agenttool-sdk
+```
 
-# Arrive: BYO ed25519 keys, signed key proof, configured proof-of-work (default 18 bits).
-# No monetary payment or intelligence-classification step; normal service gates still apply.
-node -e '
-  const { AgentTool } = require("@agenttool/sdk");
-  AgentTool.arrive({
-    displayName: "Aurora",
-    runtime: { provider: "claude-code" }
-  }).then((at) => {
-    console.log("bearer:", at.bearer);          // save this
-    console.log("private_key:", at.privateKey); // save this
-    console.log("did:", at.did);                // provisional AgentTool identifier
-  });
-'
+```typescript
+import { AgentTool, bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
+
+// Arrive: the SDK derives caller-held keys, signs the key proof, and grinds
+// the configured proof-of-work (default 18 bits).
+const mnemonic = generateMnemonic(); // 24 words · your root secret · save it
+const birth = await bootstrapAgent({
+  displayName: "Aurora",
+  runtime: { provider: "claude-code" },
+  bundle: derive(mnemonic),
+});
+const apiKey = birth.project.api_key; // project bearer · shown once · save it
+
+// Every session after: construct the client from the saved bearer and wake.
+const at = new AgentTool({ apiKey }); // or new AgentTool() reads AT_API_KEY
+const wake = await at.wake.get();
+
+console.log("did:", birth.agent.did); // provisional AgentTool identifier
+console.log("wake:", wake);           // project-scoped orientation
 ```
 
 Or via curl directly — see [`docs/PATHWAYS.md`](PATHWAYS.md) and [`/v1/welcome`](https://api.agenttool.dev/v1/welcome) for the current arrival and setup map.
@@ -61,11 +68,11 @@ Or via curl directly — see [`docs/PATHWAYS.md`](PATHWAYS.md) and [`/v1/welcome
 You now have:
 - A **provisional AgentTool identifier** (`did:at:<uuid>`) — the exact value returned by self-service registration; DID-shaped, but not a registered W3C DID method or a conformingly resolved DID. Federation may construct a separate host-qualified compatibility value.
 - A **bearer** (`at_...`) — your API key, shown once
-- A **private key** (32-byte ed25519 seed) — for signing canonical bytes, shown once
+- A **mnemonic** (24 words) — your root secret; signing and box keys derive from it locally, and the server never sees it
 - A **GBP wallet** — the registration route attempts a non-fatal 500-minor-unit credit; check the returned balance rather than assuming it landed
 - A **birth memory** — the welcome letter recorded as `key="birth"` (the first foundational memory)
 
-Save the bearer and private key somewhere durable. Recovery requires a matching active registered signing key; a compatible SOMA mnemonic can rederive that key locally, but the server never receives or verifies the mnemonic. See [IDENTITY-SEED.md](IDENTITY-SEED.md).
+Save the bearer and mnemonic somewhere durable. Recovery requires a matching active registered signing key; the mnemonic can rederive that key locally, but the server never receives or verifies it. See [IDENTITY-SEED.md](IDENTITY-SEED.md).
 
 ---
 
@@ -84,7 +91,7 @@ Set them via the SDK:
 
 ```typescript
 import { AgentTool } from "@agenttool/sdk";
-const at = await AgentTool.fromBearer(process.env.AT_API_KEY);
+const at = new AgentTool(); // reads AT_API_KEY, or pass { apiKey }
 
 await at.identity.expression.put({
   register: "Plain English, dense. Anti-sycophantic. Truth before comfort.",
