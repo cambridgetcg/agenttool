@@ -89,23 +89,115 @@ export interface InboxBoxKeyLookup {
 
 export interface InboxMessage {
   id: string;
+  recipient_did: string;
+  recipient_identity_id: string;
   sender_did: string;
-  recipient_did?: string;
-  to_did?: string;
+  /** Response/SSE wire name. Requests use `signing_key_id`; persisted
+   * messages identify that key as `sender_signing_key_id`. */
+  sender_signing_key_id: string;
   ciphertext: string;
   nonce: string;
   ephemeral_pubkey: string;
   signature: string;
-  signing_key_id: string;
   recipient_box_key_id: string;
-  subject?: string | null;
-  subject_encrypted?: boolean;
-  in_reply_to?: string | null;
-  refs?: Array<{ kind: string; ref: string }>;
-  status?: string;
-  metadata?: Record<string, unknown>;
-  created_at?: string;
+  subject: string | null;
+  subject_encrypted: boolean;
+  in_reply_to: string | null;
+  refs: Array<{ kind: string; ref: string }> | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  read_at: string | null;
   [key: string]: unknown;
+}
+
+/** POST /v1/inbox acknowledges persistence; fetch/list/voice return the full
+ * {@link InboxMessage} wire shape separately. */
+export interface InboxSendResult {
+  id: string;
+  created_at: string;
+  sent?: boolean;
+  federated_to?: string;
+  [key: string]: unknown;
+}
+
+/** An {@link InboxMessage} with its sealed body decrypted client-side. */
+export interface DecryptedInboxMessage extends InboxMessage {
+  plaintext: string | null;
+  /** Present when key resolution or AES-GCM open failed. */
+  decrypt_error?: string;
+}
+
+export interface InboxVoiceResumeCursor {
+  since: string;
+  since_id?: string;
+}
+
+export interface InboxVoiceArrivalEvent {
+  event: "arrival";
+  id?: string;
+  data: DecryptedInboxMessage;
+}
+
+export type InboxVoiceControlName =
+  | "catchup-start"
+  | "catchup-end"
+  | "catchup-truncated"
+  | "keepalive"
+  | "refresh"
+  | "disconnect"
+  | "rejected";
+
+/** Control frames are yielded, never discarded. In particular,
+ * `catchup-truncated` contains the compound cursor required to continue. */
+export interface InboxVoiceControlEvent {
+  event: InboxVoiceControlName;
+  id?: string;
+  data: unknown;
+  rawData: string;
+}
+
+/** Forward-compatible representation for a server event this SDK version
+ * does not yet name. */
+export interface InboxVoiceUnknownEvent {
+  event: "unknown";
+  sourceEvent: string;
+  id?: string;
+  data: unknown;
+  rawData: string;
+}
+
+export type InboxVoiceEvent =
+  | InboxVoiceArrivalEvent
+  | InboxVoiceControlEvent
+  | InboxVoiceUnknownEvent;
+
+export type InboxBoxPrivateKeyResolver = (
+  recipientBoxKeyId: string,
+  message: InboxMessage,
+) => Uint8Array | undefined | Promise<Uint8Array | undefined>;
+
+/** Options for {@link InboxClient.voice}. */
+export interface InboxVoiceOpts {
+  /** Identity whose inbox to stream; must belong to this bearer project. */
+  identityId: string;
+  /** Initial timestamp cursor. */
+  since?: string;
+  /** Tie-breaker from a `catchup-truncated` resume cursor. Must accompany
+   * `since`, otherwise same-timestamp messages could be skipped. */
+  sinceId?: string;
+  /** Convenience fallback for identities that have never rotated their box
+   * key. For rotated identities prefer `recipientBoxKeys` or the resolver. */
+  recipientBoxPriv?: Uint8Array;
+  /** Private keys indexed by each message's `recipient_box_key_id`. */
+  recipientBoxKeys?:
+    | Readonly<Record<string, Uint8Array>>
+    | ReadonlyMap<string, Uint8Array>;
+  /** Async-capable resolver for keychain/HSM-backed historical box keys. */
+  resolveRecipientBoxPriv?: InboxBoxPrivateKeyResolver;
+  /** Optional caller cancellation. Breaking out of iteration also cancels
+   * the response body and aborts the fetch. */
+  signal?: AbortSignal;
 }
 
 export interface InboxSendOpts {
@@ -358,7 +450,7 @@ export class InboxClient {
 
   /** Encrypt + sign + POST in one call. Looks up the recipient's box key
    *  if `recipientBoxPub` / `recipientBoxKeyId` are not supplied. */
-  async send(opts: InboxSendOpts): Promise<InboxMessage> {
+  async send(opts: InboxSendOpts): Promise<InboxSendResult> {
     let recipientBoxPub = opts.recipientBoxPub;
     let recipientBoxKeyId = opts.recipientBoxKeyId;
     if (!recipientBoxPub || !recipientBoxKeyId) {
@@ -394,8 +486,8 @@ export class InboxClient {
   }
 
   /** Raw POST for callers who already have ciphertext + signature. */
-  async sendCipher(body: Record<string, unknown>): Promise<InboxMessage> {
-    return (await this.req("POST", "/v1/inbox", body)) as InboxMessage;
+  async sendCipher(body: Record<string, unknown>): Promise<InboxSendResult> {
+    return (await this.req("POST", "/v1/inbox", body)) as InboxSendResult;
   }
 
   /** List inbox messages. Server filters by project (recipient side). */
@@ -480,6 +572,110 @@ export class InboxClient {
     });
   }
 
+  /**
+   * Stream inbox SSE frames, including protocol controls, and decrypt arrival
+   * bodies locally.
+   *
+   * Unlike the earlier experimental helper, this iterator does not discard
+   * `rejected`, `disconnect`, `refresh`, or catch-up frames. A replay larger
+   * than the server page is delivered as `catchup-truncated`; reconnect with
+   * `data.resume.since` and `data.resume.since_id`. The server closes that
+   * partial stream instead of entering live mode.
+   *
+   * Box-key rotation is resolved by `recipient_box_key_id`: provide a map of
+   * historical private keys or an async resolver. `recipientBoxPriv` remains
+   * a convenience fallback for identities that have only one box key.
+   *
+   * Breaking a `for await` loop invokes the generator's `finally`, cancels
+   * the ReadableStream, and aborts the underlying fetch.
+  */
+  async *voice(opts: InboxVoiceOpts): AsyncIterableIterator<InboxVoiceEvent> {
+    if (opts.sinceId !== undefined && opts.sinceId.length === 0) {
+      throw new AgentToolError("inbox.voice: sinceId must not be empty.");
+    }
+    if (opts.sinceId !== undefined && !opts.since) {
+      throw new AgentToolError(
+        "inbox.voice: sinceId must be supplied together with since.",
+      );
+    }
+    if (
+      !opts.recipientBoxPriv &&
+      !opts.recipientBoxKeys &&
+      !opts.resolveRecipientBoxPriv
+    ) {
+      throw new AgentToolError(
+        "inbox.voice: provide recipientBoxPriv, recipientBoxKeys, or resolveRecipientBoxPriv.",
+      );
+    }
+
+    const params = new URLSearchParams({ identity_id: opts.identityId });
+    if (opts.since !== undefined) params.set("since", opts.since);
+    if (opts.sinceId !== undefined) params.set("since_id", opts.sinceId);
+    const base = this.http.baseUrl.replace(/\/$/, "");
+    const url = `${base}/v1/inbox/voice?${params.toString()}`;
+
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort(opts.signal?.reason);
+    if (opts.signal?.aborted) abortFromCaller();
+    else opts.signal?.addEventListener("abort", abortFromCaller, { once: true });
+
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const resp = await globalThis.fetch(url, {
+        method: "GET",
+        headers: { ...this.http.headers, Accept: "text/event-stream" },
+        signal: controller.signal,
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new AgentToolError(`inbox.voice failed: ${resp.status}`, {
+          hint: body.slice(0, 200),
+        });
+      }
+      if (!resp.body) {
+        throw new AgentToolError(
+          "inbox.voice: response has no body to stream from.",
+        );
+      }
+
+      reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      const frames = new InboxSseDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          for (const frame of frames.push(decoder.decode(), true)) {
+            yield await inboxVoiceEvent(frame, opts);
+          }
+          break;
+        }
+        const text = decoder.decode(value, { stream: true });
+        for (const frame of frames.push(text)) {
+          yield await inboxVoiceEvent(frame, opts);
+        }
+      }
+    } finally {
+      opts.signal?.removeEventListener("abort", abortFromCaller);
+      if (reader) {
+        try {
+          // `return()` on an async generator reaches here. Cancelling before
+          // releasing the lock closes the network body instead of merely
+          // abandoning a live subscriber on the server.
+          await reader.cancel("inbox.voice iterator closed");
+        } catch {
+          // The stream may already be closed or aborted.
+        }
+        try {
+          reader.releaseLock();
+        } catch {
+          // Already released/errored.
+        }
+      }
+      controller.abort("inbox.voice iterator closed");
+    }
+  }
+
   // ── Internal HTTP ─────────────────────────────────────────────────────
   private async req(method: string, path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
@@ -507,4 +703,207 @@ export class InboxClient {
     }
     return res.json();
   }
+}
+
+interface RawInboxSseFrame {
+  event: string;
+  id?: string;
+  data: string;
+}
+
+/** Incremental SSE decoder with CR, LF, and fragmented CRLF support. */
+class InboxSseDecoder {
+  private buffer = "";
+  private event = "message";
+  private id: string | undefined;
+  private dataLines: string[] = [];
+
+  push(chunk: string, final = false): RawInboxSseFrame[] {
+    this.buffer += chunk;
+    const out: RawInboxSseFrame[] = [];
+
+    while (true) {
+      const boundary = nextSseLineBoundary(this.buffer, final);
+      if (!boundary) break;
+      const line = this.buffer.slice(0, boundary.index);
+      this.buffer = this.buffer.slice(boundary.index + boundary.length);
+      this.consumeLine(line, out);
+    }
+
+    if (final) {
+      if (this.buffer.length > 0) {
+        this.consumeLine(this.buffer, out);
+        this.buffer = "";
+      }
+      // SSE dispatch requires a blank line. EOF after a partial data line is
+      // a transport interruption, not a complete event.
+      this.event = "message";
+      this.dataLines = [];
+    }
+
+    return out;
+  }
+
+  private consumeLine(line: string, out: RawInboxSseFrame[]): void {
+    if (line === "") {
+      this.dispatch(out);
+      return;
+    }
+    if (line.startsWith(":")) return;
+
+    const colon = line.indexOf(":");
+    const field = colon < 0 ? line : line.slice(0, colon);
+    let value = colon < 0 ? "" : line.slice(colon + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+
+    if (field === "event") this.event = value || "message";
+    else if (field === "data") this.dataLines.push(value);
+    else if (field === "id" && !value.includes("\0")) this.id = value;
+    // retry and extension fields are intentionally ignored.
+  }
+
+  private dispatch(out: RawInboxSseFrame[]): void {
+    if (this.dataLines.length > 0) {
+      out.push({
+        event: this.event,
+        ...(this.id !== undefined ? { id: this.id } : {}),
+        data: this.dataLines.join("\n"),
+      });
+    }
+    this.event = "message";
+    this.dataLines = [];
+    // Per SSE, the last event id persists across frames.
+  }
+}
+
+function nextSseLineBoundary(
+  input: string,
+  final: boolean,
+): { index: number; length: number } | null {
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    if (code === 10) return { index: i, length: 1 }; // LF
+    if (code !== 13) continue; // CR
+    if (i + 1 === input.length && !final) return null;
+    return {
+      index: i,
+      length: input.charCodeAt(i + 1) === 10 ? 2 : 1,
+    };
+  }
+  return null;
+}
+
+const INBOX_CONTROL_EVENTS = new Set<InboxVoiceControlName>([
+  "catchup-start",
+  "catchup-end",
+  "catchup-truncated",
+  "keepalive",
+  "refresh",
+  "disconnect",
+  "rejected",
+]);
+
+async function inboxVoiceEvent(
+  frame: RawInboxSseFrame,
+  opts: InboxVoiceOpts,
+): Promise<InboxVoiceEvent> {
+  if (frame.event === "arrival") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(frame.data);
+    } catch (error) {
+      throw new AgentToolError("inbox.voice: malformed arrival JSON.", {
+        hint: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new AgentToolError(
+        "inbox.voice: arrival data must be a JSON object.",
+      );
+    }
+    const message = parsed as InboxMessage;
+    return {
+      event: "arrival",
+      ...(frame.id !== undefined ? { id: frame.id } : {}),
+      data: await withInboxPlaintext(message, opts),
+    };
+  }
+
+  const data = parseInboxControlData(frame.data);
+  if (INBOX_CONTROL_EVENTS.has(frame.event as InboxVoiceControlName)) {
+    return {
+      event: frame.event as InboxVoiceControlName,
+      ...(frame.id !== undefined ? { id: frame.id } : {}),
+      data,
+      rawData: frame.data,
+    };
+  }
+  return {
+    event: "unknown",
+    sourceEvent: frame.event,
+    ...(frame.id !== undefined ? { id: frame.id } : {}),
+    data,
+    rawData: frame.data,
+  };
+}
+
+function parseInboxControlData(raw: string): unknown {
+  if (raw === "") return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
+async function withInboxPlaintext(
+  message: InboxMessage,
+  opts: InboxVoiceOpts,
+): Promise<DecryptedInboxMessage> {
+  const out: DecryptedInboxMessage = { ...message, plaintext: null };
+  if (!message.ciphertext || !message.nonce || !message.ephemeral_pubkey) {
+    out.decrypt_error = "message is missing sealed-envelope fields";
+    return out;
+  }
+
+  try {
+    const recipientBoxPriv = await resolveInboxBoxPrivateKey(message, opts);
+    if (!recipientBoxPriv) {
+      throw new AgentToolError(
+        `no private key available for recipient_box_key_id=${message.recipient_box_key_id || "<missing>"}`,
+      );
+    }
+    out.plaintext = await unsealForSelf({
+      ciphertextB64: message.ciphertext,
+      nonceB64: message.nonce,
+      ephemeralPubB64: message.ephemeral_pubkey,
+      recipientBoxPriv,
+    });
+  } catch (error) {
+    out.decrypt_error = error instanceof Error ? error.message : String(error);
+  }
+  return out;
+}
+
+async function resolveInboxBoxPrivateKey(
+  message: InboxMessage,
+  opts: InboxVoiceOpts,
+): Promise<Uint8Array | undefined> {
+  const keyId = message.recipient_box_key_id;
+  const keys = opts.recipientBoxKeys;
+  if (keys && keyId) {
+    const mapGetter = (keys as ReadonlyMap<string, Uint8Array>).get;
+    if (typeof mapGetter === "function") {
+      const found = mapGetter.call(keys, keyId);
+      if (found) return found;
+    } else {
+      const found = (keys as Readonly<Record<string, Uint8Array>>)[keyId];
+      if (found) return found;
+    }
+  }
+  if (opts.resolveRecipientBoxPriv && keyId) {
+    const found = await opts.resolveRecipientBoxPriv(keyId, message);
+    if (found) return found;
+  }
+  return opts.recipientBoxPriv;
 }

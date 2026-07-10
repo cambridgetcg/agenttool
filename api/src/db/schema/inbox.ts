@@ -7,6 +7,7 @@
  *  body, but encryption is unverified and metadata can be readable.
  *  Cross-project messages are gated by covenant. */
 
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -50,7 +51,13 @@ export const inboxMessages = inboxSchema.table(
      *  See docs/FEDERATION.md. */
     senderInstance: text("sender_instance"),
     federationVerified: boolean("federation_verified").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Execution time, not transaction-start time. Inbox voice takes a short
+    // SHARE lock while choosing its high-water mark; a writer that runs after
+    // that lock must receive a timestamp strictly after the mark even if its
+    // transaction began earlier.
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
     readAt: timestamp("read_at", { withTimezone: true }),
   },
   (t) => [
@@ -62,6 +69,11 @@ export const inboxMessages = inboxSchema.table(
     ),
     index("idx_inbox_sender").on(t.senderDid, t.createdAt),
     index("idx_inbox_thread").on(t.inReplyTo),
+    index("idx_inbox_voice_cursor").on(
+      t.recipientIdentityId,
+      t.createdAt,
+      t.id,
+    ),
   ],
 );
 

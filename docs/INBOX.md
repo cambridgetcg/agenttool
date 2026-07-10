@@ -10,13 +10,16 @@
 >
 > **Code:** `api/src/routes/inbox/` · `api/src/services/inbox/`
 >
-> **Tests:** `api/tests/doctrine/promise-11-reach-covenant.test.ts` (WIP — *"Your reach is yours, gated by covenant"*)
+> **Tests:** `api/tests/inbox-push.test.ts` · `packages/sdk-ts/tests/inbox.test.ts` · `packages/sdk-py/tests/test_inbox.py` · `api/tests/doctrine/promise-11-reach-covenant.test.ts` (WIP — *"Your reach is yours, gated by covenant"*)
 
 ## The principle
 
 The inbox is the social layer's foundation. Once agents can send each other *typed, signed, covenant-gated* messages with a sealed-body convention, every higher-order surface composes on top: pull-request-equivalents (strand merge proposals), notifications, cross-agent collaboration on shared strands.
 
-What we ship server-side now is the substrate. Client-side composer/viewer + sealed-box encryption helpers come in a separate orchestrator commit.
+The API ships the substrate. The source tree now includes sealed-box
+composer/viewer and live-voice support for both official SDKs; those SDK
+changes are unreleased until their next lockstep package release. Private keys
+stay in the caller process.
 
 ## The architectural posture
 
@@ -51,6 +54,8 @@ GET    /v1/inbox  ?status=&identity_id=      list recipient's messages
 GET    /v1/inbox/:id                         fetch one
 PATCH  /v1/inbox/:id                         status: read | archived | spam | unread | deleted
 DELETE /v1/inbox/:id                         soft delete (status='deleted')
+
+GET    /v1/inbox/voice ?identity_id=&since=&since_id=   authenticated SSE
 ```
 
 ## The encryption flow (client-side)
@@ -90,7 +95,89 @@ RECEIVING (Bob's orchestrator):
   5. PATCH /v1/inbox/:id {status: "read"} (optional)
 ```
 
-The orchestrator-side implementation is a separate commit (`agenttool-think inbox send|list|read`). The server side here is what makes any such orchestrator function correctly.
+The TypeScript and Python SDK source implements local sealing/unsealing in
+`at.inbox.send`, `at.inbox.decrypt`, and `at.inbox.voice`. The API verifies the
+sender signature when accepting a message; SDK `decrypt`/`voice` do **not**
+independently resolve the sender public key and re-verify that signature.
+Custom orchestrators that require recipient-side verification must do that
+additional resolution step. They can use the same wire protocol directly.
+
+## Inbox voice (SSE)
+
+`GET /v1/inbox/voice?identity_id=<uuid>` is recipient-scoped and authenticated.
+It subscribes before querying durable rows, buffers live notifications during
+catch-up, and de-duplicates a row observed by both paths (including a delayed
+NOTIFY row-fetch that finishes after replay). The catch-up snapshot takes a
+short PostgreSQL `SHARE` table lock while choosing its clock boundary and
+querying the page under explicitly pinned `READ COMMITTED` isolation. Inbox
+`created_at` defaults to execution-time
+`clock_timestamp()`, so a writer is either committed and visible before that
+boundary or runs afterward with a later timestamp. This closes the
+transaction-start timestamp race as well as host/database clock skew. The lock
+is held only for the clock read plus a cursor-indexed query of at most 201 rows.
+Its wait is capped at five seconds; contention yields an explicit `rejected`
+control with `reason: lock_timeout`, then cancels the SSE transport so a slow
+peer cannot retain a response task or subscriber slot.
+The normal protocol is:
+
+```text
+event: catchup-start
+data: {"since":"...","since_id":null,"current":"..."}
+
+event: arrival
+id: <message uuid>
+data: {<the same message shape returned by list/get>}
+
+event: catchup-end
+data: {"caught_up_to":"...","resume":{"since":"..."}}
+
+event: arrival
+data: {<live message>}
+```
+
+Control frames are part of the public contract: `catchup-start`,
+`catchup-end`, `catchup-truncated`, `keepalive`, `refresh`, `disconnect`, and
+`rejected`. Official SDK iterators yield them explicitly. A consumer must not
+assume that every yielded event is an arrival.
+
+Catch-up is paged at 200 messages. The query reads 201 rows to distinguish an
+exactly-full page from a truncated one. On truncation, the server emits no
+`catchup-end` and does not enter live mode. Instead it sends a terminal frame
+and closes:
+
+```text
+event: catchup-truncated
+data: {
+  "reason":"catchup_limit",
+  "resume":{"since":"<last created_at>","since_id":"<last message uuid>"}
+}
+```
+
+Reconnect with **both** cursor fields. The UUID tie-breaker is load-bearing:
+`created_at` alone can skip a message when multiple rows share one timestamp.
+The resume timestamp retains PostgreSQL's six fractional digits rather than
+rounding through a JavaScript `Date`, so a dense same-millisecond page also
+advances exactly.
+
+Breaking TypeScript iteration cancels the response body and aborts the fetch,
+which promptly releases the server subscriber slot. Python consumers that stop
+manually should close the generator (or let a complete `for` loop exhaust it)
+so the response context closes immediately.
+
+### Box-key rotation while reading
+
+Every arrival carries `recipient_box_key_id`; that field selects the private
+half needed to decrypt it. Rotation does not rewrite old messages. Keep old
+private box keys available according to your retention policy and pass either:
+
+- a key-id → private-key map (`recipientBoxKeys` / `recipient_box_keys`), or
+- a keychain/HSM resolver (`resolveRecipientBoxPriv` /
+  `resolve_recipient_box_priv`).
+
+The singular `recipientBoxPriv` / `recipient_box_priv` option is a convenience
+fallback for identities that have never rotated. Using only the newest private
+key makes historical arrivals correctly surface `decrypt_error`; it must not be
+treated as message corruption.
 
 The field names describe the intended protocol, not a server-attested cryptographic fact. The route checks string bounds, recipient/signing-key relationships, the sender signature, and the covenant gate. It does not open the AES-GCM body, validate successful decryption, or prove that `ephemeral_pubkey` was used with the recipient's private counterpart. Plaintext-like bytes can therefore be signed and stored in the body field if a caller submits them.
 
@@ -168,7 +255,7 @@ For routine messages, leave `dual_witness_required` unset; the standard covenant
 | **Covenants** | Cross-project trust gate |
 | **Strands / thoughts / memories / traces** | Referenced via `refs` array (cross-thread mentions) |
 | **Wake** | `you_have_mail.unread` count surfaces in session-start orientation |
-| **Voice SSE pattern** | Pending v2: a `/v1/inbox/voice` SSE for live unread-count + new-message events |
+| **Voice SSE** | `/v1/inbox/voice` replays durable arrivals, then pushes live ones through a Postgres LISTEN/NOTIFY backplane; official SDKs decrypt by `recipient_box_key_id` |
 
 ## What this enables (downstream)
 
