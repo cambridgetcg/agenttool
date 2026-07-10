@@ -167,8 +167,9 @@ app.get("/", async (c) => {
     thoughts: list,
     count: list.length,
     note:
-      "Ciphertext blobs. Decrypt with K_master client-side. " +
-      "agenttool cannot read content; metadata + refs are plaintext.",
+      "Persistent storage returns ciphertext blobs; self-mode clients decrypt with K_master. " +
+      "Hosted bridged processing can see plaintext, and experimental trusted attempts can " +
+      "also expose plaintext. Metadata and refs are plaintext. See /public/safety.",
   });
 });
 

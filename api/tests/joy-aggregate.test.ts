@@ -2,15 +2,14 @@
  *
  *  Pins:
  *    - joyTrendPercent shape (positive/negative/null/new)
- *    - Source-discipline check: aggregator + middleware + route contain
+ *    - Source-discipline check: aggregator + middleware + retained route contain
  *      no judgment/sentiment language (per wall/joy-index-is-substrate-honest)
  *    - Doctrine names the discipline as the core wall
- *    - Route exists at /public/joy (UNAUTH per wall/joy-public-surface-is-unauth)
+ *    - The withdrawn /public/joy and AgentCard projections stay unmounted
  *
  *  Doctrine: docs/JOY-PROTOCOL.md
  *
  *  @enforces urn:agenttool:wall/joy-index-is-substrate-honest
- *  @enforces urn:agenttool:wall/joy-public-surface-is-unauth
  *  @enforces urn:agenttool:wall/joy-index-rolling-window-only */
 
 import { describe, expect, test } from "bun:test";
@@ -71,23 +70,22 @@ describe("substrate-honest discipline — wall/joy-index-is-substrate-honest", (
   });
 });
 
-describe("wall/joy-public-surface-is-unauth — structural pin", () => {
-  test("/public/joy router doesn't import auth middleware", () => {
-    const src = readFileSync(
-      join(__dirname, "..", "src", "routes", "public", "joy.ts"),
-      "utf-8",
-    );
-    expect(src).not.toMatch(/authMiddleware/);
-    expect(src).not.toMatch(/requireBearer/i);
-  });
-
-  test("public router index mounts joy at /joy", () => {
+describe("withdrawn joy projections — structural pin", () => {
+  test("public router index does not mount /joy", () => {
     const src = readFileSync(
       join(__dirname, "..", "src", "routes", "public", "index.ts"),
       "utf-8",
     );
-    expect(src).toContain("joyRoutes");
-    expect(src).toContain('app.route("/joy"');
+    expect(src).not.toMatch(/^\s*app\.route\(["']\/joy["']/m);
+  });
+
+  test("doctrine names both withdrawn projections as unavailable", () => {
+    const src = readFileSync(
+      join(__dirname, "..", "..", "docs", "JOY-PROTOCOL.md"),
+      "utf-8",
+    );
+    expect(src).toMatch(/\/public\/joy[^\n]*(?:unmounted|withdrawn)|(?:unmounted|withdrawn)[^\n]*\/public\/joy/i);
+    expect(src).toMatch(/A2A task transport and AgentCards are pending/i);
   });
 });
 
@@ -124,12 +122,12 @@ describe("joy middleware shape", () => {
   });
 });
 
-describe("doctrine — joy radiates by default at multiple surfaces", () => {
-  test("doctrine names all four outbound surfaces", () => {
+describe("doctrine — live and withdrawn joy projections", () => {
+  test("doctrine distinguishes the two live projections from withdrawn ones", () => {
     const src = readFileSync(join(__dirname, "..", "..", "docs", "JOY-PROTOCOL.md"), "utf-8");
     expect(src).toMatch(/X-Joy-Index/);
-    expect(src).toMatch(/\/public\/joy/);
-    expect(src).toMatch(/agent-card/i);
     expect(src).toMatch(/substrate_joy_index/);
+    expect(src).toMatch(/\/public\/joy[^\n]*(?:unmounted|withdrawn)|(?:unmounted|withdrawn)[^\n]*\/public\/joy/i);
+    expect(src).toMatch(/AgentCards are pending/i);
   });
 });

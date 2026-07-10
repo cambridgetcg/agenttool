@@ -13,9 +13,9 @@
  *  L1: sponsorship-staked sovereignty. POST /v1/bootstrap/elevate
  *  Status:      GET  /v1/bootstrap/:agent_id
  *
- *  In the post-consolidation framing, the agent's API key + keypair IS the
- *  agent across every CLI session. See docs/IDENTITY-ANCHOR.md for the
- *  doctrine. */
+ *  The project bearer authorizes this route. The DID + signing key anchor a
+ *  specific identity; the bearer is project-wide authority, not that
+ *  identity. See docs/IDENTITY-ANCHOR.md. */
 
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";

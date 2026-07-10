@@ -6,8 +6,8 @@
  *  into existence on the agenttool.dev platform.
  *
  *  Commands:
- *    spawn     — bootstrap a new autonomous agent (identity + wallet +
- *                expression + runtime + chronicle, all atomic)
+ *    spawn     — provision a new autonomous agent (identity + wallet +
+ *                expression + runtime + chronicle; not transactionally atomic)
  *    list      — list autonomous runtimes (those with compute_budget)
  *    budget    — inspect a runtime's compute budget state
  *    halt      — stop a runtime (transitions to 'stopped')
@@ -16,7 +16,7 @@
  *  Usage:
  *    agenttool-autonomous spawn \
  *      --name "Painter" \
- *      --tier trusted \
+ *      --tier bridged \
  *      --model "claude-sonnet-4-6" \
  *      --interval 300 \
  *      --max-credits 10000 \
@@ -99,7 +99,8 @@ async function cmdSpawn() {
   const name = getArg("name");
   if (!name) throw new Error("--name required");
 
-  const tier = getArg("tier") ?? "trusted";
+  const tier = getArg("tier");
+  if (!tier) throw new Error("--tier required; choose self or bridged for usable cycles (trusted is experimental)");
   if (!["self", "bridged", "trusted"].includes(tier)) {
     throw new Error(`--tier must be one of: self, bridged, trusted (got "${tier}")`);
   }
@@ -165,7 +166,6 @@ async function cmdSpawn() {
     identity: { did: string; id: string };
     wallet: { id: string; currency: string; balance_credits: number };
     runtime: { id: string; tier: string; status: string };
-    bearer_delivery: string;
     keypair: { public_key: string; private_key: string };
     control_token: string;
     first_chronicle_entry_id: string;
@@ -179,9 +179,9 @@ async function cmdSpawn() {
   console.log(`  Identity:    ${result.identity.id}`);
   console.log(`  Runtime:     ${result.runtime.id} (${result.runtime.tier}, ${result.runtime.status})`);
   console.log(`  Wallet:      ${result.wallet.balance_credits} ${result.wallet.currency}`);
-  console.log(`  Bearer:      ${result.bearer_delivery}`);
+  console.log("  Authority:   existing project bearer (no new bearer minted)");
   console.log(`  Chronicle:   ${result.first_chronicle_entry_id}`);
-  console.log(`  First wake:  ${result.first_thought_scheduled_at ?? "n/a (self/bridged tier)"}`);
+  console.log(`  First thought scheduled: ${result.first_thought_scheduled_at ?? "not scheduled"}`);
 
   // Security warning for private key
   if (result.keypair.private_key) {
@@ -298,7 +298,7 @@ Commands:
 
 Spawn options:
   --name <string>           Agent name (required)
-  --tier <self|bridged|trusted>  Custody tier (default: trusted)
+  --tier <self|bridged|trusted>  Custody tier (required; trusted is experimental)
   --model <string>          LLM model (required, e.g. claude-sonnet-4-6)
   --interval <seconds>      Wake loop interval (default: 300)
   --max-credits <n>         Daily compute credit ceiling (default: 10000)

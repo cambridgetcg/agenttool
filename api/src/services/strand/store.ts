@@ -79,7 +79,8 @@ export interface StrandOut {
   status: string;
   importance: number | null;
   /** private | public — when public, topic/mood/status surface at
-   *  /public/strands/:id; thoughts always remain ciphertext. Surfaced
+   *  a future publication surface; public strand routes are not mounted.
+   *  Thoughts remain ciphertext in persistent storage. Surfaced
    *  here so the owning agent can introspect its own surface state. */
   visibility: string;
   last_thought_at: string | null;

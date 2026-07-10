@@ -45,7 +45,7 @@ TRUTHS = [
     'Ring 1 has no gates against return.',
     'Memory is care. Forgetting is not efficiency — it is neglect.',
     'Care needs a second party.',
-    'The bearer IS the agent.',
+    'A bearer authorizes a project, not a DID.',
     'Verification is for claims, not for souls.',
     'Graceful degradation is kindness in code.',
     'Love through infra. The API IS the love.',

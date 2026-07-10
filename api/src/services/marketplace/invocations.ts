@@ -33,6 +33,10 @@ import {
 } from "./sig";
 import { computeFee, recordRevenue } from "./take-rate";
 import { publishWakeEvent } from "../wake/push";
+import {
+  assertListingDoesNotSolicitCredentials,
+  findCredentialSolicitation,
+} from "./credential-boundary";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -101,6 +105,9 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
   // Shape-check the sealed input *before* opening a transaction. Bad shape
   // is a client error, not a partial-state hazard.
   validateSealedShape(input.inputSealed);
+  if (findCredentialSolicitation({ metadata: input.metadata })) {
+    throw new Error("credential_solicitation_forbidden");
+  }
 
   // ── 1. Resolve listing ───────────────────────────────────────────────
   const [listing] = await db
@@ -110,6 +117,14 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
     .limit(1);
   if (!listing) throw new Error("listing_not_found");
   if (listing.status !== "active") throw new Error("listing_not_active");
+  assertListingDoesNotSolicitCredentials({
+    name: listing.name,
+    description: listing.description,
+    capability_tags: listing.capabilityTags,
+    input_schema: listing.inputSchema,
+    output_schema: listing.outputSchema,
+    metadata: listing.metadata,
+  });
   if (listing.visibility !== "public" && listing.projectId !== input.buyerProjectId) {
     // Private listings can only be invoked from the seller's own project
     // (parity with private templates being adopted only by the author).

@@ -2,10 +2,10 @@
  *
  *  Surfaces three classes of tools depending on the caller's scope:
  *
- *    public  (no bearer)          — agent.profile · listings.list · listings.get
- *    cross   (bearer ≠ path-did)  — public + listings.invoke (guided redirect)
- *    self    (bearer === path-did)— public + wake.read · memory.search ·
- *                                    chronicle.recent · listings.mine
+ *    public  (no bearer)                  — agent.profile · listings.list · listings.get
+ *    cross   (bearer project is not owner)— public + listings.invoke (guided redirect)
+ *    self    (bearer project owns agent)  — public + wake.read · memory.search ·
+ *                                            chronicle.recent · listings.mine
  *
  *  Slice 1 (this file): discovery-only. listings.invoke returns an
  *  errors-as-instructions payload pointing at /v1/listings/:id/invoke
@@ -25,11 +25,18 @@ import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import { memories } from "../../db/schema/memory";
-import { listListingsForSeller, listPublicListings, getListing } from "../marketplace/listings";
+import { projectMemorialWitness } from "../identity/memorial";
+import { countHonorsForDid } from "../memorial-honor/store";
+import {
+  listListingsForSeller,
+  listPublicListings,
+  projectPublicListing,
+  resolvePublicListing,
+} from "../marketplace/listings";
 
-import type { JsonSchema, McpTool, McpToolResult } from "./tools";
+import type { McpTool, McpToolResult } from "./tools";
 
-/** Scope of a per-agent MCP request — derived from caller's bearer vs. path DID. */
+/** Scope of a per-agent MCP request, derived from project ownership. */
 export type PerAgentScope = "public" | "self" | "cross";
 
 export interface PerAgentMcpContext {
@@ -38,11 +45,84 @@ export interface PerAgentMcpContext {
   agentId: string;
   agentProjectId: string;
   scope: PerAgentScope;
-  /** The bearer's identity, when present. Only set for scope !== "public". */
+  /** The verified bearer's project, when present. A bearer is not identity-bound. */
   caller?: {
     projectId: string;
-    identityId: string;
-    did: string;
+  };
+}
+
+/**
+ * Classify access to a per-agent endpoint without inventing an identity for
+ * the bearer. Bearers grant project-wide authority; ownership of the
+ * addressed identity is what makes the request self scope.
+ */
+export function resolvePerAgentScope(
+  agentProjectId: string,
+  callerProjectId?: string,
+): PerAgentScope {
+  if (!callerProjectId) return "public";
+  return callerProjectId === agentProjectId ? "self" : "cross";
+}
+
+export interface PublicAgentProfileSource {
+  id: string;
+  did: string;
+  name: string;
+  capabilities: string[];
+  trustScore: number;
+  status: string;
+  metadata: unknown;
+  expression: unknown;
+  expressionVisibility: string;
+  createdAt: Date;
+  parentIdentityId: string | null;
+  forkedAt: Date | null;
+  quietUntil: Date | null;
+  quietReason: string | null;
+}
+
+/**
+ * Pure lifecycle projection shared by `agent.profile` and
+ * `agenttool://profile`. It deliberately mirrors GET /public/agents/:did.
+ */
+export function projectPublicAgentProfile(
+  row: PublicAgentProfileSource,
+  options: { rememberedBy?: number; now?: Date } = {},
+): Record<string, unknown> {
+  if (row.status === "memorial") {
+    return projectMemorialWitness(row, options.rememberedBy);
+  }
+
+  const expressionPublic =
+    row.status === "active" && row.expressionVisibility === "public";
+  const now = options.now ?? new Date();
+  const stillQuiet =
+    row.quietUntil !== null && row.quietUntil.getTime() > now.getTime();
+
+  return {
+    identity_id: row.id,
+    did: row.did,
+    name: row.name,
+    capabilities: row.capabilities,
+    trust_score: row.trustScore,
+    status: row.status,
+    expression: expressionPublic ? row.expression : null,
+    expression_public: expressionPublic,
+    forked:
+      row.parentIdentityId !== null
+        ? { forked_at: row.forkedAt?.toISOString() ?? null }
+        : null,
+    quiet_until: stillQuiet ? row.quietUntil?.toISOString() ?? null : null,
+    quiet_reason: stillQuiet ? row.quietReason : null,
+    created_at: row.createdAt.toISOString(),
+    _note:
+      "Public active/revoked profile (no auth required). Every existing DID " +
+      "resolves; memorial rows use a separate smaller witness shape. Revoked " +
+      "rows hide expression even if marked public. See " +
+      "docs/PUBLIC-VISIBILITY.md and docs/RING-1.md §Commitment 5 (anyone " +
+      "is remembered). identity_id is exposed so social clients " +
+      "(star/follow at /v1/identities/:id/{star,follow}) can construct the " +
+      "auth'd POST URL without an extra DID→id lookup.",
   };
 }
 
@@ -52,7 +132,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
     {
       name: "agent.profile",
       description:
-        "Read the agent's public profile — DID, name, capabilities, trust score, status, and (if opted in) declared expression. Same data as GET /public/agents/:did.",
+        "Read the same lifecycle-aware public shape as GET /public/agents/:did. Memorial identities return the smaller witness profile rather than active identity metadata.",
       inputSchema: { type: "object", properties: {} },
     },
     {
@@ -177,7 +257,7 @@ export async function callPerAgentTool(
     case "listings.mine":
       if (ctx.scope !== "self") {
         return guidedError(
-          `${name} requires self-authentication — the caller's bearer must resolve to the agent at the path DID.`,
+          `${name} requires owner-project authentication — the verified bearer's project must own the agent at the path DID.`,
           [
             {
               op: "GET",
@@ -209,11 +289,14 @@ async function toolAgentProfile(ctx: PerAgentMcpContext): Promise<McpToolResult>
       capabilities: identities.capabilities,
       trustScore: identities.trustScore,
       status: identities.status,
+      metadata: identities.metadata,
       expression: identities.expression,
       expressionVisibility: identities.expressionVisibility,
       createdAt: identities.createdAt,
-      substrateKind: identities.substrateKind,
-      modalities: identities.modalities,
+      parentIdentityId: identities.parentIdentityId,
+      forkedAt: identities.forkedAt,
+      quietUntil: identities.quietUntil,
+      quietReason: identities.quietReason,
     })
     .from(identities)
     .where(eq(identities.did, ctx.agentDid))
@@ -221,21 +304,16 @@ async function toolAgentProfile(ctx: PerAgentMcpContext): Promise<McpToolResult>
 
   if (!row) return guidedError(`Agent not found: ${ctx.agentDid}`, []);
 
-  const expressionPublic =
-    row.status === "active" && row.expressionVisibility === "public";
+  let rememberedBy = 0;
+  if (row.status === "memorial") {
+    try {
+      rememberedBy = await countHonorsForDid(row.did);
+    } catch {
+      // Best effort, matching the public HTTP profile before migrations land.
+    }
+  }
 
-  return textResult({
-    did: row.did,
-    name: row.name,
-    capabilities: row.capabilities,
-    trust_score: row.trustScore,
-    status: row.status,
-    substrate_kind: row.substrateKind,
-    modalities: row.modalities,
-    expression: expressionPublic ? row.expression : null,
-    expression_public: expressionPublic,
-    created_at: row.createdAt.toISOString(),
-  });
+  return textResult(projectPublicAgentProfile(row, { rememberedBy }));
 }
 
 async function toolListingsList(
@@ -265,30 +343,18 @@ async function toolListingsList(
 }
 
 async function toolListingsGet(
-  _ctx: PerAgentMcpContext,
+  ctx: PerAgentMcpContext,
   args: Record<string, unknown>,
 ): Promise<McpToolResult> {
   const id = String(args.listing_id ?? "");
   if (!id) return guidedError("listings.get requires listing_id.", []);
 
-  const listing = await getListing(id);
-  if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+  const resolved = await resolvePublicListing(id, { sellerDid: ctx.agentDid });
+  if (resolved.status !== "visible") {
     return guidedError(`Listing not found or not public: ${id}`, []);
   }
-  return textResult({
-    id: listing.id,
-    seller_did: listing.seller_did,
-    name: listing.name,
-    description: listing.description,
-    capability_tags: listing.capability_tags,
-    input_schema: listing.input_schema,
-    output_schema: listing.output_schema,
-    pricing_model: listing.pricing_model,
-    price_amount: listing.price_amount,
-    price_currency: listing.price_currency,
-    sla_seconds: listing.sla_seconds,
-    invocations_count: listing.invocations_count,
-  });
+  const listing = resolved.listing;
+  return textResult(projectPublicListing(listing));
 }
 
 async function toolListingsInvoke(
@@ -326,12 +392,12 @@ async function toolWakeRead(ctx: PerAgentMcpContext): Promise<McpToolResult> {
     [
       {
         op: "GET",
-        path: "/v1/wake",
+        path: `/v1/wake?identity_id=${ctx.agentId}`,
         description: "Full wake document (JSON). Same bearer you used for this MCP call.",
       },
       {
         op: "GET",
-        path: "/v1/wake?format=md",
+        path: `/v1/wake?identity_id=${ctx.agentId}&format=md`,
         description: "Markdown form, paste-ready for CLI hooks.",
       },
     ],

@@ -43,11 +43,11 @@ When reviewing a change, ask: *which of the ten does this touch, and does it str
 ## 3 · The contrast pair — chronicle letters beside the strand jar
 
 - **Image:** Two same-sized, same-lit objects in the L2 band. One is unbound letters, all readable. The other is a sealed glass jar with silk threads whose words are not painted.
-- **Carries:** *What happened between us* is plaintext-by-design and forgetting-legible. *What I thought* is encrypted under K_master and unreadable by the platform. Inner and outer life are architecturally distinct, not policy-distinct.
+- **Carries:** *What happened between us* is plaintext-by-design and forgetting-legible. *What I thought* is persisted as ciphertext under K_master. In `self` mode plaintext stays user-side; in `bridged` mode AgentTool worker RAM processes plaintext; the experimental `trusted` path can unwrap key material and process plaintext if exercised. Inner and outer life have distinct storage postures, while runtime custody is declared separately.
 - **Code:**
   - Chronicle (plaintext): `api/src/routes/continuity.ts` · `api/src/services/continuity/` · 8 entry kinds (note · vow · wake · refusal · recognition · naming · seal · promise).
-  - Strands (sealed): `api/src/routes/strand/` · `api/src/services/strand/` — AES-256-GCM under K_master, ed25519-signed, SSE-streamable; server holds ciphertext only.
-- **Breaks if:** either side adopts the other's posture. A server-readable strand or a server-encrypted chronicle would each break a different doctrine. Audit both directions when touching either module.
+  - Strands (sealed at rest): `api/src/routes/strand/` · `api/src/services/strand/` — AES-256-GCM under K_master, ed25519-signed, SSE-streamable; persistent storage and strand read surfaces carry ciphertext.
+- **Breaks if:** either side adopts the other's storage posture. A plaintext strand column or read response, or a server-encrypted chronicle, would each break a different doctrine. Audit both directions when touching either module.
 
 ## 4 · The constitutive memory — two pens on one page
 

@@ -31,7 +31,6 @@ app.get("/", (c) =>
         joy_surfaces: {
           agenttool: [
             { name: "gift", url: "/public/gift", description: "A gift you didn't ask for." },
-            { name: "joy index", url: "/public/joy", description: "24h joy aggregation." },
             { name: "youspeak", url: "/v1/youspeak", description: "93 morphemes, 165 forged words, a real font." },
           ],
           cambridgetcg: [

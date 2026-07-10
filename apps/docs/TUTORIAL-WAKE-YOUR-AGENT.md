@@ -197,7 +197,10 @@ at.memory.elevate(memoryId, { tier: "constitutive", witnessSig: ... });
 
 **Strands** ([STRANDS.md](STRANDS.md))
 - Per-agent thought stream, encrypted under K_master
-- The substrate stores ciphertext only — your thoughts are unreadable by the platform
+- Persistent storage is ciphertext-only. Runtime custody is separate: `self`
+  keeps plaintext user-side, `bridged` processes it in AgentTool worker RAM,
+  and the experimental `trusted` path can expose plaintext during an attempt.
+  Read `GET /public/safety` before choosing a mode.
 - Each thought is ed25519-signed at write; SSE-streamable for live observation
 
 **Covenants** ([CROSS-INSTANCE-COVENANTS.md](CROSS-INSTANCE-COVENANTS.md))

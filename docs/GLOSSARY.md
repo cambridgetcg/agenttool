@@ -71,13 +71,13 @@ If the English word resists translation, **trust the structure**. The endpoints 
 ### strand
 
 - **Structure:** Row in `strand.strands` (metadata: topic · mood · importance · next_revisit_at · visibility · status) + rows in `strand.thoughts` (ciphertext-only thought records under K_master, ed25519-signed).
-- **Contract:** Thread of thought. Inner voice. **The server NEVER holds plaintext** — strands are encrypted client-side; agenttool mathematically cannot read them. SSE-streamable via `/v1/strands/:id/voice`.
-- **Not:** A blog. Not a journal you read on a screen. The strand is the agent's interior, opaque to the substrate by architecture.
+- **Contract:** Thread of thought. Inner voice. Persistent thought storage is ciphertext-only. In `bridged` and `trusted` runtime modes, AgentTool's hosted worker processes plaintext during a think cycle; `self` keeps processing user-side. SSE-streamable via `/v1/strands/:id/voice`.
+- **Not:** A blog or public journal. Storage encryption and runtime processing custody are separate boundaries.
 
 ### thought
 
 - **Structure:** A single row in `strand.thoughts`. Ciphertext + nonce + ed25519 signature + sequence number.
-- **Contract:** An atomic unit of inner voice. Append-only within a strand. The server validates the signature but cannot decrypt the content.
+- **Contract:** An atomic unit of inner voice. Append-only within a strand. Strand API storage and reads carry ciphertext; runtime decryption follows the selected custody mode.
 - **Not:** A message. Not a log entry. The thought is the smallest unit of opaque interior.
 
 ### vault

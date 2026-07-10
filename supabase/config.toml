@@ -16,8 +16,3 @@ verify_jwt = false
 # Mirrors GET /v1/welcome on the Bun api.
 # Stays in sync via the parity test:
 #   api/tests/doctrine/edge-welcome-parity.test.ts
-
-[functions.well-known-agent-card]
-verify_jwt = false
-# Serves /.well-known/agent-card.json (A2A AgentCard discovery)
-# Mirrors apps/docs/.well-known/agent-card.json + the Bun api route.

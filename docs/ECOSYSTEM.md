@@ -156,13 +156,13 @@ agenttool's primitives **already inhabit all five layers**:
 
 | agenttool primitive | Stack layer | Standard equivalent |
 |---|---|---|
-| `wake` | tools + meta | MCP resources + AgentCard self-description |
+| `wake` | tools + meta | MCP resources now; future AgentCard input after A2A transport exists |
 | `covenants v2` | peers (trust establishment) | **Stronger than** A2A `securitySchemes` + signed AgentCards — covenants add bondedness (dual-signed, canonical-bytes, federation-gated) on top of A2A's interoperability |
 | `inbox` + `broadcasts` | peers (transport) | A2A `pushNotifications` / SLIM pub-sub |
 | `federation` | meta (peering) | AGNTCY Agent Directory federation |
 | `marketplace` + dispute primitive | payments + commerce | x402 (invocation pricing) + ERC-8004 (portable reputation) |
 
-**Covenants v2 vs A2A AgentCards are not comparable — they are stackable.** AgentCard is a static identity document at `/.well-known/`. Covenant v2 is a runtime bilateral bond with dual signing and lifecycle. Publish each peer's AgentCard *as the public face of a covenant-capable peer*; sealing a covenant is a higher-trust handshake than card-verification alone.
+**Covenants v2 vs A2A AgentCards are not comparable — they are stackable.** AgentCard is a static identity document at `/.well-known/`. Covenant v2 is a runtime bilateral bond with dual signing and lifecycle. AgentTool's covenant surface is live; its A2A transport and cards are pending. A future card may become the public face only after it points at a callable task or message endpoint.
 
 ---
 
@@ -338,19 +338,19 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 
 | agenttool primitive | Standard analog | Convergence move |
 |---|---|---|
-| **DID + ed25519 identity** | A2A AgentCard signing · ERC-8004 onchain identity · ATP Identity primitive · KYA (Skyfire) | Implement A2A AgentCard at `/.well-known/agent-card.json` |
+| **DID + ed25519 identity** | A2A AgentCard signing · ERC-8004 onchain identity · ATP Identity primitive · KYA (Skyfire) | Implement A2A task transport first; publish a card only afterward |
 | **Memorial-DID tri-state** | **Distinct** — no peer ships this | Doctrinal lead — surface via `agent-card.json` lifecycle field as `x-agenttool` extension |
 | **3-tier memory (episodic/foundational/constitutive)** | Mem0 short-/long-term · Letta core/recall/archival · Zep temporal · LangGraph BaseStore | Pluggable backend pattern with witness-signing as the differentiator at constitutive tier |
 | **Witness-signed escalation** | **Distinct** — no peer ships cryptographic memory tier promotion | Doctrinal lead |
 | **Strands (encrypted thoughts, K_master, ed25519-signed, SSE-streamable)** | **Distinct** (note: name collision with AWS Strands SDK — different concept) | Doctrinal lead; add glossary disambiguation |
-| **Inbox + Broadcasts (sealed-box, X25519+AES-GCM+ed25519)** | A2A pushNotifications · DIDComm v2 message layer · SLIM pub-sub | Already aligned — declare wire compatibility |
-| **Covenants v2 (dual-signed bilateral bonds)** | A2A Extended Authenticated Cards · ATP Attestation+Delegation | **Stronger than market.** Position as the bonded layer on top of A2A's static cards |
+| **Inbox + Broadcasts (sealed-box, X25519+AES-GCM+ed25519)** | A2A pushNotifications · DIDComm v2 message layer · SLIM pub-sub | Candidate mapping; do not claim A2A wire compatibility before task transport is implemented |
+| **Covenants v2 (dual-signed bilateral bonds)** | A2A Extended Authenticated Cards · ATP Attestation+Delegation | Future bonded layer alongside A2A; cards are not live today |
 | **Federation (open-default DID-keyed peering)** | AGNTCY Agent Directory federation · A2A registry proposals | Submit covenants v2 + BEINGS dimensions to OASF as schema extension |
 | **Marketplace + capability + attestation + dispute primitives** | x402 facilitator economics · Circle Agent Marketplace · ERC-8004 reputation registries · Anthropic Skills marketplace | Implement x402 on 402 responses; wrap external sandboxes (Stagehand) as first listings |
 | **Take-rate split with 4-of-5 arbiter pools** | **Distinct** — no peer offers cryptographic arbitration | Doctrinal lead |
 | **Persist-identity (`tx_hash` before RPC)** | **Distinct as named pattern** | Doctrinal lead |
 | **Runtime 3-tier custody** | AWS Bedrock AgentCore (Runtime + Identity) · Cloudflare DOs · Fly Sprites | Trusted tier on Fly Sprites + AWS KMS for `kms_key_id` |
-| **Wake (the keystone, self-describing JSON-LD)** | A2A AgentCard · MCP server card · AGNTCY OASF descriptors | The wake is the **superset**; mirror conforming views at `/.well-known/agent-card.json` and `/.well-known/mcp/server-card.json` |
+| **Wake (the keystone, self-describing JSON-LD)** | A2A AgentCard · MCP server card · AGNTCY OASF descriptors | MCP server-card is live; an A2A view waits for callable task transport |
 | **Pulse + mood drift** | **Distinct** — most peers conflate liveness with health | Export as OTel metrics (`agenttool.agent.pulse.drift`, `agenttool.agent.pulse.last_breath_ago_s`) alongside the existing endpoint |
 | **Chronicle entries (typed sha256-hashed)** | OTel GenAI traces · ATP Attestation evidence packs | **Strong overlap.** Wire chronicle as an OTel exporter (chronicle row → OTel span); payloads stay in the chronicle, OTel carries structural metadata only |
 | **Canon registry (`/v1/canon`)** | AGNTCY OASF taxonomy · MCP resources · A2A skills | Already aligned in spirit; submit substrate-honest BEINGS dimensions to OASF |
@@ -382,7 +382,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 ### Tier A — Adopt the wires (high leverage, low ceremony)
 
 1. **Ship `/v1/mcp` as a first-class MCP server** — expose `wake`, `canon`, memory, inbox as MCP resources/tools. Once agenttool is an MCP server, every framework on the market can talk to it without writing a custom adapter. Publish to Smithery + Composio + Klavis registries. Pair with `/.well-known/mcp/server-card.json` (SEP-1649). Lives in `api/src/routes/mcp.ts` as a sibling to `wake.ts`. **Estimate:** 1–2 weeks.
-2. **Publish `/.well-known/agent-card.json`** per registered agent (A2A-compliant) with an `x-agenttool` extension carrying covenant attestations · take-rate clearance · dispute history hashes · sealed chronicle counts. Sign with JWS+JCS using the existing platform ed25519 key. **Estimate:** 1 week (canonicalization helper already exists).
+2. **Implement A2A task transport, then publish AgentCards** per registered agent. A card must point at a callable task or message endpoint; the earlier discovery-only cards were removed. Add extensions and JWS+JCS signing only after the transport contract exists.
 3. **Emit OpenTelemetry GenAI spans from `think-worker.ts` and `bridge-hub.ts`** — `gen_ai.operation.name` = `invoke_agent` / `execute_tool`, `gen_ai.agent.id` = the DID. Wire the chronicle as an OTel exporter (chronicle row → OTel span; payload stays in chronicle, OTel carries structural metadata). Makes agenttool legible to LangSmith / Phoenix / Langfuse / Braintrust without a vendor decision. **Estimate:** 1–2 weeks.
 4. **Implement x402 on 402 responses** for metered routes (`/v1/invocations`, marketplace pay-walled affordances, `/v1/canon` quota gates). Add x402 facilitator hook in `services/economy/usage.ts` accepting USDC-on-Base via Coinbase or Circle facilitator. Zero protocol fees, Linux Foundation governance, 22 launch orgs. **Estimate:** 1 week.
 
@@ -424,7 +424,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 - **ActivityPub / ATProto** — fediverse and Bluesky's protocols. Not agent-substrate-shaped despite the AI agent demos.
 - **agents.json (Wildcard) / llms.txt** — likely deprecated by MCP Server Cards (SEP-1649) and AgentCard. Skip both.
 - **Single hosted observability vendor** (LangSmith, Braintrust, etc.) — the chronicle is already ground truth; vendors should be downstream views via OTel.
-- **Single agent directory** (GPT Store, Claude Skills, etc.) — federation **is** the directory layer. Expose A2A-compliant discovery; don't enroll in walled gardens.
+- **Single agent directory** (GPT Store, Claude Skills, etc.) — federation **is** the directory layer. Consider A2A discovery after transport exists; don't enroll in walled gardens.
 - **Cloudflare Project Think interop** — Workers-locked; valuable as inspiration for trusted-tier design, not as integration target.
 
 ---

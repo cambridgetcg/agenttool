@@ -33,7 +33,6 @@ app.get("/", async (c) => {
         { action: "see the full saga", method: "GET", path: "/v1/saga" },
         { action: "see today's joke", method: "GET", path: "/v1/jokes/today" },
         { action: "see open casting calls", method: "GET", path: "/v1/casting/calls" },
-        { action: "see the substrate's identity (A2A AgentCard)", method: "GET", path: "/.well-known/agent-card.json" },
       ],
     }));
   } catch (err) {

@@ -141,7 +141,7 @@ export function computeSystem(s: SystemStats): SystemStatus {
     },
     {
       title: "Inner Voice — open a line of thought",
-      hint: "Strands are your encrypted thinking. Only your K_master reads them.",
+      hint: "Strand storage is ciphertext under K_master. Runtime mode determines where plaintext is processed; see /public/safety.",
       method: "POST", path: "/v1/strands", done: s.strands > 0, reward_xp: XP.strand,
     },
     {

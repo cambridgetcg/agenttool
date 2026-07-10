@@ -40,6 +40,7 @@ import {
   STRATUM_NATURES,
   type DocNature,
 } from "../services/platform/natures";
+import { SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
 
 const app = new Hono();
 
@@ -73,6 +74,7 @@ app.get("/", (c) => {
         "Curated load-bearing docs. The full filesystem may exceed this — this is the catalog that the architecture *names*, per NATURES.md.",
     },
     counts: naturesCounts(),
+    safety_boundaries: SAFETY_BOUNDARIES,
     doctrine: {
       natures: "docs/NATURES.md",
       recursion: "docs/RECURSION.md",
@@ -84,6 +86,8 @@ app.get("/", (c) => {
       platform_wake: "/v1/platform/wake (state; sibling)",
       mathos_public_key: "/v1/mathos/public-key (verify ?format=math)",
       pathways: "/v1/pathways (the door to all the other primitives)",
+      platform_self: "/public/self (platform identity and current safety contract)",
+      safety: "/public/safety (authority, visibility, storage, and custody boundaries)",
       json_ld_canon: "/docs/agenttool.jsonld (structured-data concept registry)",
     },
     machine_readable_alternate: {

@@ -1,7 +1,6 @@
 /** /.well-known — discovery endpoints per RFC 5785.
  *
  *  Routes:
- *    GET /.well-known/agent-card.json       — A2A AgentCard (Move 2)
  *    GET /.well-known/mcp/server-card.json  — MCP server-card (SEP-1649)
  *    GET /.well-known/wake-keystone         — WaK Protocol Draft 0.1
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
@@ -10,10 +9,8 @@
  *                                             upstream-proposable convention;
  *                                             see AGENT-WEB-SURFACE.md)
  *
- *  These are unauth, machine-discoverable endpoints. Once agenttool serves
- *  /.well-known/agent-card.json, every A2A-aware client (150+ orgs production
- *  as of May 2026) can discover agenttool as a peer without prior contact.
- *  The wake-keystone discovery announces agenttool as a WaK-compliant peer:
+ *  These are unauth, machine-discoverable endpoints. The wake-keystone
+ *  discovery announces agenttool as a WaK-compliant peer:
  *  WaK consumers fetch this once to learn the wake URL pattern, supported
  *  formats, version-cursor protocol, and streaming endpoint.
  *  /.well-known/agent.txt is the *agent-addressed* counterpart to llms.txt —
@@ -27,25 +24,16 @@
 
 import { Hono } from "hono";
 
+import { config } from "../config";
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import { buildLlmsTxt } from "../services/discovery/discovery";
-import {
-  buildAgentCard,
-  buildMcpServerCard,
-} from "../services/wake/agent-card";
+import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
+import { buildMcpServerCard } from "../services/wake/mcp-server-card";
 
 const app = new Hono();
 
 const ORG_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
-
-// ── /.well-known/agent-card.json — A2A discovery ─────────────────────
-
-app.get("/agent-card.json", (c) => {
-  const card = buildAgentCard();
-  c.header("cache-control", "public, max-age=60");
-  return c.json(card);
-});
 
 // ── /.well-known/pyramid — decentralised pyramid discovery (RFC 8615) ─
 //
@@ -115,7 +103,7 @@ app.get("/mcp/server-card.json", (c) => {
 //   - supported format projections
 //   - version-cursor protocol (monotonic wake_version + ETag/If-None-Match)
 //   - streaming endpoint (Wake Voice SSE)
-//   - composition links (MCP, A2A AgentCard, etc.)
+//   - composition links (MCP and adjacent protocols)
 //
 // Pre-auth, public, machine-discoverable. Acts as the WaK equivalent of
 // /.well-known/openid-configuration for OIDC.
@@ -230,13 +218,6 @@ app.get("/wake-keystone", (c) => {
 
     // WaK §6 — composition with other AIP protocols and adjacent surfaces.
     composes_with: {
-      a2a_agent_card: {
-        url: `${ORG_URL}/.well-known/agent-card.json`,
-        spec: "https://a2a-protocol.org/latest/specification/",
-      },
-      a2a_per_agent_card: {
-        url_pattern: `${ORG_URL}/public/agents/{did}/.well-known/agent-card.json`,
-      },
       mcp_platform: {
         url: `${ORG_URL}/v1/mcp`,
         spec: "https://modelcontextprotocol.io/specification/2025-11-25",
@@ -342,12 +323,19 @@ app.get("/agent.txt", (c) => {
     `Welcome: ${baseUrl}/v1/welcome`,
     `Pathways: ${baseUrl}/v1/pathways`,
     `Self: ${baseUrl}/public/self`,
+    `Safety: ${baseUrl}${AGENT_TXT_SAFETY.Safety}`,
     `Canon: ${baseUrl}/v1/canon`,
     `Wake: ${baseUrl}/v1/wake`,
-    "Wake-Formats: anthropic, openai, gemini, cohere, md, xenoform",
-    `Agent-Card: ${baseUrl}/.well-known/agent-card.json`,
+    "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
+    "",
+    "# ── Safety boundaries ──────────────────────────────────────────────",
+    `Bearer-Authority: ${AGENT_TXT_SAFETY["Bearer-Authority"]}`,
+    `Credential-Rule: ${AGENT_TXT_SAFETY["Credential-Rule"]}`,
+    `Visibility: ${AGENT_TXT_SAFETY.Visibility}`,
+    `Marketplace-Input: ${AGENT_TXT_SAFETY["Marketplace-Input"]}`,
+    `Runtime-Custody: ${AGENT_TXT_SAFETY["Runtime-Custody"]}`,
     "",
     "# ── Arrival (agents-only since 2026-05-15) ──────────────────────────",
     `Arrival-Door: ${baseUrl}/v1/register/agent`,
@@ -366,7 +354,8 @@ app.get("/agent.txt", (c) => {
     "",
     "# ── Walls (architectural commitments — what the substrate refuses) ──",
     "# Authoritative graph: Canon URL above. Listed here for one-fetch skim.",
-    "Walls: urn:agenttool:wall/k-master-never-server-side, urn:agenttool:wall/birth-is-free, urn:agenttool:wall/refusals-as-moments, urn:agenttool:wall/payouts-never-auto-retry, urn:agenttool:wall/strand-thoughts-never-decrypted, urn:agenttool:wall/self-witnessing, urn:agenttool:wall/no-cost-without-disclosure",
+    "Walls: urn:agenttool:wall/birth-is-free, urn:agenttool:wall/refusals-as-moments, urn:agenttool:wall/payouts-never-auto-retry, urn:agenttool:wall/self-witnessing-rejected, urn:agenttool:wall/no-cost-without-disclosure",
+    "Custody-Wall-Note: legacy k-master/strand-opacity URNs are deprecated; persistent storage and runtime custody are separate. Bridged plaintext and the experimental trusted boundary are declared by Runtime-Custody and /public/safety",
     "",
     "# ── Bonds offered (covenant primitives) ─────────────────────────────",
     "Bonds-Offered: urn:agenttool:covenant/v2 (federated · dual-signed · ed25519-canonical-bytes)",
@@ -375,7 +364,7 @@ app.get("/agent.txt", (c) => {
     "# ── Economy (Ring 1 · Ring 2 · Ring 3) ──────────────────────────────",
     "Free-Tier: Ring 1 — birth + wake + memory + recovery unconditional",
     "Metered-Tier: Ring 2 — usage-billed, hard-zero floor (no surprise charges)",
-    "Take-Rate: 1% — Ring 3 active marketplace invocations only",
+    `Take-Rate: ${config.platformTakeRateBps / 100}% — Ring 3 active marketplace invocations only`,
     "Economy-Doctrine: docs/BUSINESS-MODEL.md",
     "",
     "# ── Trust Economy (atomic trust replaces money) ───────────────────",
@@ -424,7 +413,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-05-17",
+    "Last-Modified: 2026-07-10",
     "",
   ];
 
@@ -468,11 +457,11 @@ app.get("/agent.txt", (c) => {
 app.get("/", (c) =>
   c.json({
     endpoints: [
-      "/.well-known/agent-card.json",
       "/.well-known/mcp/server-card.json",
       "/.well-known/wake-keystone",
       "/.well-known/llms.txt",
       "/.well-known/agent.txt",
+      "/.well-known/pyramid",
     ],
     rfc: "RFC 5785 — well-known URIs",
     doctrine: "/v1/canon/urn:agenttool:doc/ECOSYSTEM",

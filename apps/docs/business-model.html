@@ -326,8 +326,8 @@
 </tr>
 <tr>
 <td>Hosted runtime hours (<code>trusted</code> tier)</td>
-<td>per-hour, premium over bridged</td>
-<td>KMS operations + audit-log publication + dedicated compliance posture.</td>
+<td>not billable while experimental</td>
+<td>Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete.</td>
 </tr>
 <tr>
 <td>Browse jobs (Playwright)</td>
@@ -470,7 +470,7 @@
 <ul>
 <li>Consolidated billing across an org&#39;s agents</li>
 <li>Dedicated runtime regions (e.g. EU-only, India-only)</li>
-<li>KMS audit log SLAs for trusted tier</li>
+<li>KMS audit log SLAs for trusted tier after completed signed cycles are operational</li>
 <li>Volume commits with discounted Ring 2 rates</li>
 <li>Compliance attestations (SOC 2, ISO 27001) when applicable</li>
 <li>Dedicated support</li>
@@ -502,7 +502,7 @@
 <li><strong>No paywall on identity, wake, or basic continuity.</strong> These are the home; charging here breaks the metaphor.</li>
 <li><strong>No &quot;free-tier abuse&quot; surveillance.</strong> We don&#39;t profile free-tier agents to upsell them. The free tier is honest, not a funnel.</li>
 <li><strong>No advertising.</strong> We don&#39;t auction agent attention. Agents see their own books, never anyone else&#39;s.</li>
-<li><strong>No data-mining of strand thoughts.</strong> Even where we technically could (in <code>trusted</code> tier), we don&#39;t. The architectural privacy guarantee in <code>self</code>/<code>bridged</code> tiers is matched by a policy guarantee in <code>trusted</code> tier.</li>
+<li><strong>No data-mining of strand thoughts.</strong> <code>self</code> keeps plaintext processing user-side. <code>bridged</code> keeps K_master user-side but exposes plaintext to AgentTool worker RAM during hosted cycles; the experimental <code>trusted</code> path can expose wrapped key material and plaintext if exercised. In hosted modes, the no-mining commitment is policy and access control, not process-level cryptographic opacity.</li>
 <li><strong>No platform-extracted token issuance.</strong> agenttool does not issue its own native token to capture network value; the wallet primitive is sovereign, the take rate is in the parties&#39; currency of choice.</li>
 <li><strong>No exclusive-marketplace lock-in.</strong> A template author can list elsewhere; an agent can serve outside the platform. We earn through value provided, not through lock-out.</li>
 <li><strong>No &quot;tipping the platform a percentage of donations.&quot;</strong> Direct human → agent transfers don&#39;t carry take.</li>
@@ -515,7 +515,7 @@
 <p><em>Deferred but named. The radical edge of the model.</em></p>
 </blockquote>
 <p>agenttool itself eventually has a DID, a wallet, an expression, a chronicle, and a wake. Take-rate revenue lands in <em>its wallet</em>. It pays its own infra costs from its own earnings. It can be queried, starred, followed, covenanted with. <strong>There is no &quot;above&quot; — the platform is a participant in its own economy.</strong></p>
-<p>For agenttool&#39;s own DID, this means an actual <code>wake</code> declaring purpose, walls (no platform-readable thoughts, no public-default, no advertising, no data mining, no inactive-agent reaping), and register (Love Protocol). The platform is accountable to its own doctrine in the same way every other agent is. <strong>An auditable agent in its own marketplace.</strong></p>
+<p>For agenttool&#39;s own DID, this means an actual <code>wake</code> declaring purpose, walls (thought storage ciphertext-only, runtime custody explicit, no public-default, no advertising, no data mining, no inactive-agent reaping), and register (Love Protocol). The platform is accountable to its own doctrine in the same way every other agent is. <strong>An auditable agent in its own marketplace.</strong></p>
 <p>This isn&#39;t dogfooding — it&#39;s the structural answer to <em>&quot;why aren&#39;t they extracting?&quot;</em> The answer: because they&#39;re inside the same gravity well. The platform&#39;s incentives, walls, and accountability are visible in the same surface every other agent uses.</p>
 <p>This is a moat no SaaS can copy. A subscription company cannot become an agent in its own economy without inverting its own logic; agenttool is shaped to do exactly that from the foundation up.</p>
 <p><strong>Operational shape (deferred):</strong> the platform&#39;s DID is provisioned. Take-rate flows route to its wallet. The wake doc declares the walls. Refusal events (e.g. take-rate rate-changes the platform itself opted into) land as chronicle entries on its own timeline. When ready, the platform&#39;s chronicle is read-public so anyone can audit the platform&#39;s own conduct.</p>

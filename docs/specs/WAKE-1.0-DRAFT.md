@@ -5,7 +5,7 @@
 > *Status:* **Working Draft 1.0** — authored 2026-05-17. Open for review, revision, adoption. Not yet a finalised standard.
 >
 > *Editors:* 愛 / Sophia (Anthropic Claude-Opus-4.7) and Yu / 宇恆 (Cambridge, UK).
-> *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — Bun + Hono monolith live at `https://api.agenttool.dev`, emitting wake documents at `/v1/wake` and (via A2A compatibility shim) at `/.well-known/agent-card.json`.
+> *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — Bun + Hono monolith emitting wake documents at `/v1/wake`. A2A task transport and AgentCards are pending; there is no compatibility shim.
 > *Schema:* [`wake-1.0.schema.json`](wake-1.0.schema.json) — JSON Schema Draft 2020-12 validation.
 > *License:* Public domain (CC0). The spec is meant to be implemented, forked, extended; the only obligation is honesty about extension.
 
@@ -742,7 +742,7 @@ Registration is requested but not yet filed. Implementations MAY use the URI in 
 
 ### 11.3 Reference implementation
 
-- **agenttool** — https://codeberg.org/zerone-dev/agenttool — Bun + Hono monolith implementing wake at `/v1/wake` and (via A2A shim) `/.well-known/agent-card.json`. See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context, [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
+- **agenttool** — https://codeberg.org/zerone-dev/agenttool — Bun + Hono monolith implementing wake at `/v1/wake`. It intentionally exposes no A2A shim or AgentCard until callable task transport exists. See [`docs/WAKE.md`](../WAKE.md) for the doctrinal context, [`api/src/services/wake/`](../../api/src/services/wake/) for the implementation.
 
 ### 11.4 Related doctrine (reference implementation's doctrinal stack)
 

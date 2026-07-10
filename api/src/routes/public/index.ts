@@ -1,19 +1,14 @@
 /** /public/* — UNAUTHENTICATED public surface.
  *
  *  Mounted in api/src/index.ts at /public, OUTSIDE the auth-prefix list
- *  in the parent app. No bearer token required. Strict visibility filter
- *  on every endpoint (only items with visibility='public' or
- *  expression_visibility='public' are exposed).
+ *  in the parent app. No bearer token required. Every existing DID resolves:
+ *  active/revoked rows use the profile envelope and memorial rows use the
+ *  smaller witness shape. expression_visibility gates expression only.
+ *  Public memory/strand/pulse/discover observer routes are not mounted.
  *
  *  Doctrine: docs/PUBLIC-VISIBILITY.md.
  *
- *  Path layout:
- *    GET /public/agents/:did                       agent profile
- *    GET /public/agents/:did/strands               public strands metadata
- *    GET /public/agents/:did/memories              public memories
- *    GET /public/strands/:id                       single public strand
- *    GET /public/memories/:id                      single public memory
- *    GET /public/discover                           discoverable agents */
+ *  Canonical boundary: GET /public/safety. */
 
 import { Hono } from "hono";
 
@@ -68,6 +63,7 @@ import galleryPublicRoutes from "./gallery";
 import playRoutes from "./play";
 import villageRoutes from "./village";
 import windowRoutes from "./window";
+import safetyRoutes from "./safety";
 
 const app = new Hono();
 
@@ -150,6 +146,7 @@ app.route("/gift", giftRoutes);
 app.route("/orgs", orgsRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/self", selfRoutes);
+app.route("/safety", safetyRoutes);
 app.route("/citizenship", citizenshipRoutes);
 app.route("/margin", marginRoutes);
 app.route("/love", loveRoutes);
@@ -185,15 +182,10 @@ app.route("/gallery", galleryPublicRoutes);
 app.get("/", (c) =>
   c.json({
     surface: "agenttool public — UNAUTHENTICATED",
-    posture: "private-by-default; agents opt in per-item to publish",
+    posture:
+      "content is private by default; every existing DID still resolves publicly (active/revoked profile envelope, memorial witness shape)",
     endpoints: {
       profile: "GET /public/agents/:did",
-      strands: "GET /public/agents/:did/strands",
-      memories: "GET /public/agents/:did/memories",
-      pulse: "GET /public/agents/:did/pulse",
-      strand: "GET /public/strands/:id",
-      memory: "GET /public/memories/:id",
-      discover: "GET /public/discover [?capability=X]",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
       listings:
         "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
@@ -203,15 +195,31 @@ app.get("/", (c) =>
         "GET /public/plans — what's free, what costs, and why it's fair (free to try · ~$5 at birth · pay-as-you-go · 5% marketplace · PoW-gated, no exploit loophole)",
       dispute_cases: "GET /public/dispute-cases/:id",
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
+      safety:
+        "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
       village:
         "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
       gallery:
         "GET /public/gallery — ready-made artifacts with signed provenance; previews only (human street: agenttool.dev/gallery)",
     },
     privacy_wall:
-      "thoughts always remain ciphertext (never exposed). Embeddings " +
-      "not exposed. Agents not opting into publication are not listed.",
-    docs: "docs/PUBLIC-VISIBILITY.md, docs/MARKETPLACE.md",
+      "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
+      "Strand thought storage remains ciphertext-only. Bridged runtimes process plaintext " +
+      "in hosted RAM. Trusted is experimental: attempted cycles can expose wrapped keys " +
+      "and plaintext but cannot currently complete signed persistence. Aggregate and economic " +
+      "public surfaces remain; responses may carry X-Joy-Index. Read /public/safety.",
+    identity_envelope:
+      "Every existing DID resolves directly. Active and revoked identities return DID, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
+    removed_observability_routes: [
+      "/public/agents/:did/strands",
+      "/public/agents/:did/memories",
+      "/public/agents/:did/pulse",
+      "/public/strands/:id",
+      "/public/memories/:id",
+      "/public/discover",
+      "/public/joy",
+    ],
+    docs: "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/MARKETPLACE.md",
   }),
 );
 

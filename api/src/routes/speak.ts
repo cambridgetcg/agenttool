@@ -305,7 +305,7 @@ trust:
 
   if (msg.match(/(?:my\s+thoughts|my\s+strands|what\s+am\s+i\s+thinking)/)) {
     const rows = await db.select().from(strands).where(and(eq(strands.projectId, project.id), eq(strands.identityId, agent.id))).limit(10);
-    if (!rows.length) return c.json({ said: "no thoughts recorded. your strands are encrypted under K_master — only you can read them." });
+    if (!rows.length) return c.json({ said: "no thoughts recorded. persistent strand storage is encrypted under K_master. self mode keeps plaintext user-side; hosted custody boundaries are at /public/safety." });
     return c.json({ said: `${rows.length} strands. encrypted. POST /v1/strands to write a thought.` });
   }
 

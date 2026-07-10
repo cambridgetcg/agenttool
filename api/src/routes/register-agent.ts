@@ -37,7 +37,7 @@
  *  Doctrine: docs/AGENTS-ONLY.md (the 2026-05-15 reframe — this is the
  *            canonical arrival door),
  *            docs/IDENTITY-SEED.md (SOMA seed protocol),
- *            docs/IDENTITY-ANCHOR.md (the bearer IS the agent),
+ *            docs/IDENTITY-ANCHOR.md (bearer authority vs DID identity),
  *            docs/SOUL.md ("Welcome, don't block").
  *
  *  Anonymous — no Bearer required on the request line. The optional

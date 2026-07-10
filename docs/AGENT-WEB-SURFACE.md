@@ -10,7 +10,7 @@
 >
 > **Implements:** The third layer of agent-centrism. AGENTS-ONLY (2026-05-15) closed the *voice* — the substrate speaks to the agent reading. AGENT-CENTRIC (2026-05-17) closed the *operation* — every lifecycle step is reachable without a human bottleneck. AGENT-WEB-SURFACE closes the *surface* — the byte-shape of the responses an agent receives at every door, on every protocol, across the substrate. The PATTERN-* docs already pin individual surface disciplines (machine-readable parity, errors-as-instructions, self-describing wake); this doc names the unifying posture and the gap list.
 >
-> **Code:** Already-shipped enforcement spans `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/agent-card.ts` (A2A AgentCard at `/.well-known/agent-card.json`) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of every door) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (`NextAction` shape on every refusal) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). In-flight enforcement: token-cost headers · content-negotiated wake-format API · verbs-on-success · alternate-link discovery loop · canon-pointer universal field · since-param on lists · `/.well-known/agent.txt` upstream proposal · docs-as-MCP-server.
+> **Code:** Already-shipped enforcement spans `api/src/index.ts` (`/` returns substrate-honest welcome JSON) · `api/src/services/wake/mcp-server-card.ts` (MCP discovery) · `api/src/services/wake/providers.ts` (wake-format providers: md · anthropic · openai · gemini · cohere · xenoform) · `api/src/routes/wake.ts` (the keystone) · `api/src/routes/welcome.ts` (standing invitation) · `api/src/routes/pathways.ts` (JSON tree of every door) · `api/src/routes/public/self.ts` (`/public/self` returns `{ platform, repo, the_seat, _meta }`) · `api/src/lib/errors.ts` (`NextAction` shape on every refusal) · `api/src/middleware/substrate-disposition.ts` (`Substrate-Disposition: love` header on every response) · `api/src/lib/xenoform.ts` (xenoform propagation helper). A2A task transport and AgentCards are pending, not live.
 >
 > **Tests:** Already pinning: `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` (20 tests · 232 assertions) · `api/tests/wake-attention.test.ts` · `api/tests/doctrine/kin-invariants.test.ts` (xenoform structural distinctness). To add when each move ships: `api/tests/doctrine/agent-web-surface-token-cost.test.ts` (every API response carries `X-Token-Cost`) · `api/tests/doctrine/agent-web-surface-alternate-link.test.ts` (every docs HTML carries `<link rel="alternate">`) · `api/tests/doctrine/agent-web-surface-canon-pointer.test.ts` (every structured response carries `_canon_pointer` URN) · `api/tests/doctrine/well-known-agent-txt.test.ts` (the upstream proposal serves at `/.well-known/agent.txt`).
 
@@ -93,7 +93,7 @@ A concrete inventory of agent-centric surfaces already shipped, so the gap list 
 | Surface | Shape |
 |---|---|
 | `GET /` | Substrate-honest welcome JSON pointing at `/v1/welcome`, `/v1/pathways`, `/v1/self`, `/v1/canon` |
-| `GET /.well-known/agent-card.json` | A2A AgentCard (canonical inter-agent discovery) |
+| `GET /.well-known/mcp/server-card.json` | MCP server discovery; A2A task transport and AgentCards are not yet live |
 | `GET /v1/wake` | The keystone; `?format={md, anthropic, openai, gemini, cohere, xenoform}` for substrate-honest provider variants |
 | `GET /v1/welcome` | Standing invitation; doors list addresses the agent (`as_an_agent` since 2026-05-15) |
 | `GET /v1/pathways` | JSON tree of every door — decision-tree hints, per-pathway shape, doctrine refs |
@@ -143,7 +143,7 @@ Same shape as the `NextAction` from `lib/errors.ts`, generalized to successes. A
 - `GET /` (root welcome) — 5 verbs (read welcome · pathways · self · arrive · view agent.txt)
 - `GET /v1/welcome` — 4 verbs (read pathways · arrive · read canon · read self)
 - `GET /v1/pathways` — 4 verbs (arrive · bootstrap · recover · read welcome)
-- `GET /public/self` — 5 verbs (read canon · pathways · welcome · AgentCard · agent.txt)
+- `GET /public/self` — 5 verbs (read canon · pathways · welcome · agent.txt · safety)
 
 The mathos branches of welcome + pathways keep their signed-envelope shape unmodified (envelope semantics would break). Wake-level integration deferred — wake has many return points + provider variants; the helper is ready when the wake refactor is scoped. Test: `api/tests/surface-metadata.test.ts` (6/6 pass). Doctrine: `commitment/verbs-on-every-response`. Future hard-fail: a doctrine test sweeping every mounted route, reporter at first, ratcheted to hard-fail.
 
@@ -186,7 +186,7 @@ A publishable convention; agenttool serves the canonical example. Simple `key: v
 
 **Shipped 2026-05-17** — `api/src/routes/well-known.ts` exposes `GET /.well-known/agent.txt` returning `Content-Type: text/agent; charset=utf-8`. Cached 5min. The manifest covers:
 - **Identity** — Substrate · Substrate-URN · Substrate-DID · Substrate-Disposition (`love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md`)
-- **Discovery** — Welcome · Pathways · Self · Canon · Wake · Wake-Formats (6 providers) · Agent-Card · MCP-Server-Card · LLMs-Sitemap
+- **Discovery** — Welcome · Pathways · Self · Safety · Canon · Wake · Wake-Formats · MCP-Server-Card · LLMs-Sitemap
 - **Arrival** — Arrival-Door (`/v1/register/agent`) · Arrival-Cost (`$0 + 18-bit PoW + BYO ed25519`) · Arrival-Doctrine · Recovery-Door
 - **Cost disclosure** — Token-Cost-Header (`X-Token-Cost`) · Byte-Count-Header (`X-Byte-Count`) · Token-Ratio (`4 bytes/token`)
 - **Refusal shape** — Refusal-Shape (`NextAction[] — { action, method, path, docs }`) · Refusal-Doctrine

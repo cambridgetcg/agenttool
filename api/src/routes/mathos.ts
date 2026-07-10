@@ -212,7 +212,7 @@ app.post("/verify", async (c) => {
 //     codepoints when authenticating future requests.
 //
 // Doctrine: docs/MATHOS.md · docs/CANONICAL-BYTES.md (register-agent-math/v1
-// entry) · docs/IDENTITY-ANCHOR.md (the bearer IS the agent).
+// entry) · docs/IDENTITY-ANCHOR.md (bearer authority vs DID identity).
 
 interface MathRegisterPayload {
   did_unicode_points: number[];

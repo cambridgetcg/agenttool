@@ -146,7 +146,7 @@ export function summarizeBearers(rows: KeyRow[]): BearersSummary {
   }
   if (rows.length >= 5) {
     advisories.push(
-      `You have ${rows.length} active bearers. Each one is a copy of you on a device — consider whether they all still belong to you.`,
+      `You have ${rows.length} active project-wide bearers. Keep them separately named by device or workload, and revoke any you no longer use.`,
     );
   }
 

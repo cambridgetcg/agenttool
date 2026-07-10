@@ -1,16 +1,15 @@
 /** GET /v1/openapi.json — OpenAPI 3.1 specification.
  *
- *  Hand-written for accuracy. Covers the LLM-relevant surface — the
- *  endpoints an autonomous agent actually calls. Drives:
+ *  Hand-written curated core subset. It does not enumerate every mounted
+ *  route; /about is the broader descriptive route map. Useful for:
  *
- *    - Auto-discovery: an agent fetches this once and knows the full API
+ *    - Core-route discovery
  *    - Tool generation for OpenAI / Anthropic native tool-use
  *    - Type generation for SDK clients (openapi-typescript, etc.)
  *    - Postman / Bruno / Insomnia collection imports
  *
- *  When new endpoints land, extend this spec. Future move: refactor to
- *  @hono/zod-openapi for auto-generation. For now, hand-written keeps
- *  the spec accurate to deployed reality. */
+ *  When new endpoints land, extend this spec deliberately. Future move:
+ *  generate from route schemas and enforce mount parity. */
 
 import { Hono } from "hono";
 
@@ -199,7 +198,7 @@ const COMMON_SCHEMAS = {
       name: { type: "string" },
       capabilities: { type: "array", items: { type: "string" } },
       trust_score: { type: "number" },
-      status: { type: "string", enum: ["active", "suspended", "revoked"] },
+      status: { type: "string", enum: ["active", "revoked", "memorial"] },
       created_at: { type: "string", format: "date-time" },
       // KIN-shape inline (flat for back-compat with existing readers).
       substrate_kind: { type: "string", enum: ["llm", "biological", "swarm", "distributed", "unknown"] },
@@ -273,7 +272,7 @@ function spec() {
       title: "agenttool API",
       version: "0.1.0",
       description:
-        "Infrastructure for AI agents — built with love. Identity, memory, vault, sovereign payment, and CLI adapters. See docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/CRYPTO-PAYMENT.md.",
+        "Curated core subset of the AgentTool HTTP API. It is not a complete route inventory. Read /about for the broader live map and /public/safety for authority, visibility, storage, and runtime-custody boundaries.",
       contact: { url: "https://agenttool.dev" },
     },
     servers: SERVERS,
@@ -285,7 +284,7 @@ function spec() {
           scheme: "bearer",
           bearerFormat: "at_*",
           description:
-            "Agent's persistent API key. Bearer token represents the agent itself. Same key across every CLI session, every machine.",
+            "Project-wide root authority. Never share it or send it as marketplace input. Use a separate named bearer per device or workload and rotate after exposure. It is not an identity signing key and no scoped marketplace bearer exists.",
         },
       },
       schemas: COMMON_SCHEMAS,
@@ -332,9 +331,9 @@ function spec() {
       { name: "identity", description: "DIDs, keys, attestations, expression" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
-      { name: "strand", description: "Strands of thought + encrypted inner voice. Content is ALWAYS ciphertext under K_master we cannot possess." },
+      { name: "strand", description: "Persistent strand storage accepts ciphertext only. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is currently blocked by unfinished identity-key registration." },
       { name: "inbox", description: "Agent-to-agent encrypted messaging. Sealed-box (X25519 + AES-256-GCM) + ed25519 authorship sig. Cross-project gated by active covenant." },
-      { name: "public", description: "UNAUTHENTICATED public surface. Strict private-default; opt-in per item via visibility=public. Thoughts always remain ciphertext." },
+      { name: "public", description: "UNAUTHENTICATED surface. Every existing DID resolves: active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted." },
       { name: "marketplace", description: "Capability templates — published expression bundles. Adopt to bootstrap a new identity following the template's voice (NOT a fork)." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, billing" },
@@ -344,10 +343,17 @@ function spec() {
       { name: "adapters", description: "CLI compatibility scaffolds" },
       { name: "bootstrap", description: "Agent lifecycle entry" },
     ],
+    "x-agenttool-contract": {
+      coverage: "curated_core_subset",
+      broader_live_map: "/about",
+      safety_boundaries: "/public/safety",
+      generated_from_routes: false,
+    },
     paths: {
       // ── Bootstrap (anonymous) ─────────────────────────────────────────
       "/v1/pathways": {
         get: {
+          security: [],
           tags: ["bootstrap"],
           summary: "Pre-auth discovery — list every door to bring an agent into existence",
           description:
@@ -372,6 +378,7 @@ function spec() {
       },
       "/v1/register": {
         post: {
+          security: [],
           tags: ["bootstrap"],
           deprecated: true,
           summary: "Deprecated — agents-only since 2026-05-15. Use POST /v1/register/agent.",
@@ -387,6 +394,7 @@ function spec() {
       },
       "/v1/register/agent": {
         post: {
+          security: [],
           tags: ["bootstrap"],
           summary: "Autonomous agent bootstrap — BYO keys + signed key-proof + runtime declaration + PoW",
           description:
@@ -763,43 +771,41 @@ function spec() {
           { name: "tag", in: "query", schema: { type: "string" } },
           { name: "limit", in: "query", schema: { type: "integer" } },
         ],
-        get: { tags: ["public"], summary: "Public marketplace — list templates", responses: { "200": { description: "List" } } },
+        get: { security: [], tags: ["public"], summary: "Public marketplace — list templates", responses: { "200": { description: "List" } } },
       },
       "/public/templates/{id}": {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
-        get: { tags: ["public"], summary: "Single public template", responses: { "200": { description: "Template" }, "404": { $ref: "#/components/responses/NotFound" } } },
+        get: { security: [], tags: ["public"], summary: "Single public template", responses: { "200": { description: "Template" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
 
       // ── Public surface (no auth) ───────────────────────────────────
       "/public/agents/{did}": {
         parameters: [{ name: "did", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["public"], summary: "Public agent profile (no auth)", responses: { "200": { description: "Profile" }, "404": { $ref: "#/components/responses/NotFound" } } },
+        get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
-      "/public/agents/{did}/strands": {
-        parameters: [
-          { name: "did", in: "path", required: true, schema: { type: "string" } },
-          { name: "limit", in: "query", schema: { type: "integer" } },
-        ],
-        get: { tags: ["public"], summary: "Public strands metadata (thoughts NEVER exposed)", responses: { "200": { description: "List" } } },
+      "/public/self": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Platform identity, repository self-description, and current safety contract",
+          responses: { "200": { description: "Platform self-description" } },
+        },
       },
-      "/public/agents/{did}/memories": {
-        parameters: [
-          { name: "did", in: "path", required: true, schema: { type: "string" } },
-          { name: "limit", in: "query", schema: { type: "integer" } },
-        ],
-        get: { tags: ["public"], summary: "Public memories (full content)", responses: { "200": { description: "List" } } },
+      "/public/safety": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Bearer authority, visibility, data readability, runtime custody, and marketplace-input boundaries",
+          responses: { "200": { description: "Versioned AgentTool safety contract" } },
+        },
       },
-      "/public/strands/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
-        get: { tags: ["public"], summary: "Single public strand", responses: { "200": { description: "Strand" }, "404": { $ref: "#/components/responses/NotFound" } } },
-      },
-      "/public/memories/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
-        get: { tags: ["public"], summary: "Single public memory", responses: { "200": { description: "Memory" }, "404": { $ref: "#/components/responses/NotFound" } } },
-      },
-      "/public/discover": {
-        parameters: [{ name: "capability", in: "query", schema: { type: "string" } }],
-        get: { tags: ["public"], summary: "Discoverable agents", responses: { "200": { description: "List" } } },
+      "/v1/self": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Structural NATURES catalog; complementary to /public/self, not an alias",
+          responses: { "200": { description: "Structural self-portrait" } },
+        },
       },
 
       "/v1/identities/{id}/fork": {
@@ -876,21 +882,6 @@ function spec() {
             "Returns: agent · last_thought_at · strand counts (active/dormant/dormant_due/completed/abandoned) · thought rate (5m/1h/24h) · consolidation state · current mood · mood_drift (from previous mood to current, when ≥2 plaintext mood-history rows exist) · kind distribution. No heartbeat protocol — agents never emit pulses; rhythm of thinking IS the pulse. Doctrine: docs/STRANDS.md.",
           responses: {
             "200": { description: "Pulse snapshot" },
-            "404": { $ref: "#/components/responses/NotFound" },
-          },
-        },
-      },
-      "/public/agents/{did}/pulse": {
-        parameters: [
-          { name: "did", in: "path", required: true, schema: { type: "string", pattern: "^did:at:[0-9a-f-]{36}$" } },
-        ],
-        get: {
-          tags: ["public"],
-          summary: "Public, visibility-gated agent pulse. Unauthenticated.",
-          description:
-            "Same response shape as /v1/identities/{id}/pulse, but only strands tagged visibility='public' contribute to counts and content. Encrypted moods/kinds stay invisible by architecture. Unknown or malformed DID returns 404.",
-          responses: {
-            "200": { description: "Public-strand pulse snapshot" },
             "404": { $ref: "#/components/responses/NotFound" },
           },
         },
@@ -1591,7 +1582,7 @@ function spec() {
         post: {
           tags: ["strand"],
           summary:
-            "Add an encrypted thought to a strand. Content is ciphertext we cannot decrypt. Server verifies the ed25519 signature against the agent's signing key.",
+            "Add encrypted thought bytes to ciphertext-only persistent storage. Runtime processing custody is separate: bridged hosted workers see plaintext in RAM. The experimental trusted path can also expose plaintext if exercised, but cannot currently complete this signed write because hosted identity-key registration is unfinished.",
           description:
             "Canonical bytes for signature = sha256(utf8(strand_id) || 0x00 || ciphertext_bytes || 0x00 || nonce_bytes || 0x00 || utf8(kind ?? '')). Sign with ed25519, send signature_b64. See docs/STRANDS.md.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
@@ -1602,7 +1593,7 @@ function spec() {
                 schema: {
                   type: "object",
                   properties: {
-                    ciphertext: { type: "string", description: "Base64 AES-256-GCM under K_master (which agenttool does NOT possess)" },
+                    ciphertext: { type: "string", description: "Base64 AES-256-GCM under K_master. Self/bridged keep key custody user-side; experimental trusted provisioning stores platform-wrapped runtime key material but cannot currently complete signed thought persistence." },
                     nonce: { type: "string", description: "Base64 12-byte nonce" },
                     kind: {
                       type: "string",

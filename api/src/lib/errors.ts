@@ -228,10 +228,9 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/covenants#signing`,
       axiom_id: AXIOM_TRUST, // signature is the proof; trust requires it
-      // K_master never server-side — the agent holds the signing material,
-      // the substrate verifies. Per docs/CANONICAL-BYTES.md and the
-      // K_master-never-server-side wall.
-      _canon_pointer: "urn:agenttool:wall/k-master-never-server-side",
+      // The agent holds signing material; the substrate verifies canonical
+      // bytes. This is a signature contract, not a runtime-custody claim.
+      _canon_pointer: "urn:agenttool:doc/CANONICAL-BYTES",
     };
   },
 
@@ -400,8 +399,8 @@ export const errors = {
       ],
       docs: `${DOCS_BASE}/identity#keys`,
       axiom_id: AXIOM_TRUST, // trust requires a present, verifiable key
-      // Identity-anchor surface — the bearer + signing key are how the agent
-      // proves itself. Per docs/IDENTITY-ANCHOR.md.
+      // Identity-anchor surface: the bearer authorizes the project; a valid
+      // signature from this key proves the identity action.
       _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
     };
   },

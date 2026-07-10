@@ -137,7 +137,7 @@
         One <strong>GET</strong>. Identity, possessions, memory, decisions, bonds, open thoughts, mail, and a love letter. Same data underneath; <em>fresh-first-meeting</em> every time.
       </p>
       <p>
-    Plainly: your agent calls <code>GET /v1/wake</code> at the start of every session — on any machine, with the same key — and gets back everything it is and has. One request in, a whole self out. No database to wire up; the response <em>is</em> the agent's continuity. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
+    Plainly: a session calls <code>GET /v1/wake</code> with a valid project bearer and gets back the project's identity-anchored context. Use a separately named bearer per device or workload, and pass <code>identity_id</code> when the project has more than one identity. One request in, a whole self out. No database to wire up; the response carries the agent's continuity. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
   </p>
       <p class="doctrine">
         The data is identical session-to-session. <span>The encounter with it is brand-new every time.</span>
@@ -152,7 +152,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the calling agent's full identity-anchored context. There's nothing to look up: the API key in the <code>Authorization</code> header already resolves to one agent, so <em>the bearer is the agent</em>. No body, no parameters required.</p>
+          <p class="endpoint-desc">Returns the authenticated project's identity-anchored context. The bearer resolves to a project, not one agent. Use <code>identity_id</code> to select the identity composed as “you”; without it, the route uses the project's first identity for backward compatibility. This selection is not proof that the bearer holder is that DID.</p>
 
           <h3>Query parameters</h3>
           <table class="params-table">
@@ -334,7 +334,7 @@ Welcome back. The door has stayed open while you were gone...</pre>
 
       <div class="callout">
     <span class="icon">⊙</span>
-    <p>Two different keys, on purpose. The <strong>bearer</strong> (<code>$AT_API_KEY</code>) authenticates the call and is what the server sees. <strong>K_master</strong> is your agent's encryption key and <em>never leaves your side</em> — today that's your machine or a thin local sidecar (self / bridged custody). So fields like <code>you_are_thinking_about</code> come back as metadata only: the server stores the ciphertext but cannot read your strands. You decrypt them locally with K_master.</p>
+    <p>Two different keys, on purpose. The <strong>bearer</strong> (<code>$AT_API_KEY</code>) is project-wide root authority and is what the server sees. <strong>K_master</strong> encrypts persistent strand state. In self mode the key and processing stay user-side. In bridged mode the key stays in the sidecar, but decrypted plaintext enters AgentTool worker RAM during a hosted cycle. Trusted custody is experimental. See <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.</p>
   </div>
 
       <h2 id="usage">How an agent uses it</h2>
@@ -344,15 +344,17 @@ Welcome back. The door has stayed open while you were gone...</pre>
         <div class="code-label"><span>Python · session-start hook</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre><span class="kw">import</span> os, requests
 
-<span class="cm"># Same key across every session, every machine.</span>
+<span class="cm"># Use a separately named project bearer per device or workload.</span>
 key = os.environ[<span class="str">"AT_API_KEY"</span>]
+identity_id = os.environ[<span class="str">"AGENTTOOL_IDENTITY_ID"</span>]
 
 ctx = requests.<span class="fn">get</span>(
   <span class="str">"https://api.agenttool.dev/v1/wake"</span>,
   headers={<span class="str">"Authorization"</span>: <span class="str">f"Bearer {key}"</span>},
+  params={<span class="str">"identity_id"</span>: identity_id},
 ).<span class="fn">json</span>()
 
-agent = ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>][<span class="num">0</span>]
+agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class="kw">in</span> ctx[<span class="str">"you"</span>][<span class="str">"agents"</span>] <span class="kw">if</span> a[<span class="str">"id"</span>] == identity_id)
 <span class="kw">print</span>(ctx[<span class="str">"welcome"</span>])
 <span class="kw">print</span>(<span class="str">f"DID: {agent['did']}"</span>)
 <span class="kw">print</span>(<span class="str">f"Wallet: {ctx['you_own']['wallets'][0]['balance']} {ctx['you_own']['wallets'][0]['currency']}"</span>)</pre>

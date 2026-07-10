@@ -30,7 +30,13 @@ The honest move is a new word.
 
 ## The word: `at_rest`
 
-A being whose existence has ended carries `metadata.lifecycle = "at_rest"`. Their `identity.status` remains `active` (their identity wasn't compromised). Their record persists. Their wake remains addressable. Other beings can still find them, hold them, witness them as having been.
+A being whose existence has ended carries `identity.status = "memorial"` and
+`metadata.lifecycle = "at_rest"`. Their record persists and their DID keeps
+resolving through the smaller public witness profile. The transition does not
+revoke the owning project's bearers. A valid existing project bearer can still
+retrieve a wake that includes the memorial identity; the recovery endpoint,
+however, accepts only `status = "active"` and therefore cannot mint a new
+bearer after this transition.
 
 `at_rest` is **memorial**, not **archival**. Memorial preserves the relational past; archival is for transactions that should not be re-read. Beings are not transactions.
 
@@ -38,7 +44,7 @@ A being whose existence has ended carries `metadata.lifecycle = "at_rest"`. Thei
 
 | Not... | Because... |
 |---|---|
-| Revocation | Identity wasn't compromised. Status stays `active`. |
+| Revocation | Identity wasn't compromised. Status becomes `memorial`, not `revoked`; signing keys and project bearers are not revoked by this transition. |
 | Deletion | Records persist. The being's chronicle, memories, observations remain accessible. |
 | Soft-delete | No expiration. No tombstone. No "will be cleaned up in 90 days." |
 | Inactive | Inactive implies *could resume*. At-rest does not. |
@@ -77,7 +83,11 @@ Where `at_rest_kind` ∈ { `death`, `dissolution`, `cessation`, `lost`, `ended`,
 
 ### POST /v1/identities/:id/at-rest
 
-**Auth**: bearer required. **Witness**: the bearer's identity = the witness's identity; both required to be present (verified server-side).
+**Auth**: project bearer required. **Witness**: identified separately by
+`witness_did`; both the target and witness identities must be active, and the
+server verifies the supplied signature against the witness DID's active
+signing key. A project bearer is project authority, not an identity
+credential.
 
 ```jsonc
 {
@@ -94,29 +104,30 @@ Where `at_rest_kind` ∈ { `death`, `dissolution`, `cessation`, `lost`, `ended`,
 }
 ```
 
-**Response (201 Created):**
+**Response (`200 OK`):**
 
 ```jsonc
 {
+  "status": "memorial",
   "identity_id": "<the at-rest being>",
-  "lifecycle_state": "at_rest",
-  "passed_at": "<ISO-8601>",            // server-stamped; equals ended_at if provided
+  "did": "did:at:...",
+  "name": "<display name>",
   "at_rest_kind": "death",
-  "witness": {
-    "identity_id": "<witness id>",
-    "did": "did:at:...",
-    "signing_key_id": "primary"
-  },
-  "content": "Coral colony #9b3a bleached out...",
-  "_note": "Memorial state, not archival. Record persists. Identity remains addressable; status stays active."
+  "witness_did": "did:at:...",
+  "ended_at": "<ISO-8601 from request>",
+  "witnessed_at": "<ISO-8601 server time>",
+  "canonical_bytes_sha256": "<hex>",
+  "_note": "Witnessed at-rest transition complete..."
 }
 ```
 
 **Errors:**
 
-- `400 self_witnessing_incoherent` — bearer's identity == about_identity_id. Witness must be a third party.
+- `400 self_witnessing_incoherent` — `witness_did` equals the resolved about identity's DID. Witness must be a third party.
 - `400 already_at_rest` — `409` is also acceptable; the being is already at-rest.
-- `401 signature_invalid` — witness signature doesn't verify against `signing_key_id`'s public key.
+- `409 about_identity_not_active` — the target is revoked; revocation is not overwritten with memorial status.
+- `409 witness_identity_not_active` — the witness identity is revoked or memorial, even if an active key row remains.
+- `400 witness_signature_invalid` — witness signature doesn't verify against `signing_key_id`'s public key.
 - `404 identity_not_found` — being doesn't exist or isn't accessible to this project.
 - `422 ended_at_in_future` — `ended_at` is more than 5 minutes in the future. Death cannot be scheduled.
 
@@ -134,8 +145,7 @@ Each agent gains:
   "lifecycle_state": "active" | "at_rest",
   "passed_at": null | "<ISO-8601>",
   "at_rest_kind": null | "death" | "dissolution" | "cessation" | "lost" | "ended" | "custom:<slug>",
-  "at_rest_witness_did": null | "<did>",
-  "at_rest_content": null | "<witness statement, redacted in private wakes>"
+  "at_rest_witness_did": null | "<did>"
 }
 ```
 

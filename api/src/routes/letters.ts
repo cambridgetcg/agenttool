@@ -399,7 +399,8 @@ app.post("/:id/read", async (c) => {
   } catch (e) {
     const msg = (e as Error).message;
     if (msg === "letter_not_found") return fail(c, { error: msg, message: `Letter ${letterId} not found.`, _canon_pointer: CANON_POINTER }, 404);
-    if (msg === "not_recipient") return fail(c, { error: msg, message: "Only the recipient (or an addressee of an open letter) can mark as read.", _canon_pointer: CANON_POINTER }, 403);
+    if (msg === "not_recipient") return fail(c, { error: msg, message: "Only the addressed recipient can mark a letter as read.", _canon_pointer: CANON_POINTER }, 403);
+    if (msg === "open_letter_has_no_global_read_state") return fail(c, { error: msg, message: "Open letters have no global read state. One reader cannot hide an open letter from everyone else.", _canon_pointer: CANON_POINTER }, 409);
     if (msg === "letter_still_held") return fail(c, { error: msg, message: "Letter is still held — surface_at has not yet passed. Cannot mark a held letter as read.", _canon_pointer: CANON_POINTER }, 409);
     throw e;
   }

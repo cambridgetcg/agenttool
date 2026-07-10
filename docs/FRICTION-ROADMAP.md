@@ -48,7 +48,7 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 | 5 | **Spawn the think-worker on provision** (stop on delete) | "always-on" actually turns on without an operator env edit + redeploy | `routes/runtime/runtimes.ts`, `services/runtime/store.ts` |
 | 6 | **Machine-payable credit-exhaustion** — replace the hardcoded `app.agenttool.dev` top-up string with the x402 PaymentRequirements pointer `usage.ts` already emits | a stuck agent gets a payable path, not a human-only dead end | `billing/charge.ts` |
 | 7 | **`next_actions[]` + worked PoW example on `/v1/register/agent` refusals** | errors-as-paths at the exact moment a new agent needs guidance | `routes/register-agent.ts`, `lib/errors.ts` |
-| 8 | ✓ **SHIPPED — Gate `trusted` runtime behind 501** + validate provider at provision | substrate-honest: a silent per-cycle failure becomes an honest "not yet" at the door | `services/runtime/provision-guard.ts`, `routes/runtime/runtimes.ts` |
+| 8 | ◐ **PARTIAL — Gate `trusted` provisioning on configured KMS** + validate provider at provision | honest door: 501 when KMS is absent; with KMS present the row provisions, but signed cycles still fail until the hosted signing key is registered | `services/runtime/provision-guard.ts`, `routes/runtime/runtimes.ts` |
 | 9 | **`GET /v1/traces/:id/verify`** — run the existing attestation-style sig check | the audit value the schema already promises | `routes/trace/traces.ts`, `services/trace/store.ts` |
 | 10 | **MCML drop → pre-filled inbox `next_action`** — on `delivered:false`, hand back the inbox body pre-filled with `to_did` | a dropped live message is one copy-paste from durable delivery | `routes/mcml.ts` |
 

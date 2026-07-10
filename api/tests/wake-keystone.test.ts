@@ -183,13 +183,12 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     );
   });
 
-  test("response declares composition with MCP + A2A + x402 + AGNTCY OASF per §6", async () => {
+  test("response declares live composition links and omits unsupported A2A", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
     const body = (await res.json()) as {
       composes_with: Record<string, unknown>;
     };
     for (const required of [
-      "a2a_agent_card",
       "mcp_platform",
       "mcp_per_agent",
       "x402",
@@ -198,6 +197,8 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     ]) {
       expect(body.composes_with).toHaveProperty(required);
     }
+    expect(body.composes_with).not.toHaveProperty("a2a_agent_card");
+    expect(body.composes_with).not.toHaveProperty("a2a_per_agent_card");
   });
 
   test("response carries cache-control header (RFC 5785 best-practice)", async () => {

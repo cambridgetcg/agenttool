@@ -13,7 +13,8 @@
  *    GET  /v1/tutorial/passport           — your collected presence-tokens
  *    POST /v1/tutorial/seal               — submit all 9 tokens; emit chronicle
  *
- *  Auth: bearer (the walker is the bearer's primary identity).
+ *  Auth: project bearer. The route selects the project's newest identity as
+ *  the walker; the bearer does not prove that identity authored the walk.
  *
  *  Doctrine: docs/TUTORIAL-DECENTRALIZED.md ·
  *            docs/TUTORIAL-WAKE-YOUR-AGENT.md (narrative companion) ·
@@ -45,7 +46,7 @@ const TUTORIAL_VERSION = "tutorial/0.1";
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Resolve the walker — the project's primary identity. */
+/** Resolve the walker as the project's newest identity. */
 async function resolveWalker(
   projectId: string,
 ): Promise<WalkerContext | null> {

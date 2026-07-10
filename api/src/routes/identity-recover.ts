@@ -10,8 +10,8 @@
  *
  *  When an operator types their 24-word mnemonic on a fresh laptop, the
  *  SDK derives the agent's signing key locally. To bind that fresh
- *  device to the existing identity (= obtain a project bearer scoped to
- *  this device), the operator signs a canonical recovery payload with
+ *  device to the existing identity (= obtain a new project bearer named
+ *  for this device), the operator signs a canonical recovery payload with
  *  the derived signing key and POSTs it here. The platform verifies the
  *  signature against the agent's registered identity_keys and, on
  *  success, mints a new project bearer.
@@ -27,9 +27,10 @@
  *       so the same signature can't be replayed against a different
  *       DID, can't be repurposed for a different fresh-device pubkey
  *       claim, and is bounded by a ±5-minute timestamp window.
- *    4. Each successful recovery mints a fresh device-scoped bearer.
- *       Old bearers continue to work — explicit revocation lives at
- *       the project's existing api-key management surface.
+ *    4. Each successful recovery mints a fresh project-wide bearer and
+ *       names it for the device for key-management clarity. The label is
+ *       not an authority scope. Old bearers continue to work — explicit
+ *       revocation lives at the project's existing api-key surface.
  *    5. Recovery events land as a chronicle entry on the identity, so
  *       /v1/wake's `you.recovery.last_recovery_at` reflects them.
  *
@@ -164,7 +165,8 @@ app.post("/", async (c) => {
     );
   }
 
-  // 5. Mint a fresh project bearer for this device.
+  // 5. Mint a fresh project-wide bearer, named for this device. The name
+  //    is operational metadata; it does not narrow the bearer's authority.
   const { key, keyHash, keyPrefix } = generateApiKey();
   await db.insert(apiKeys).values({
     projectId: identity.projectId,
@@ -224,10 +226,11 @@ app.post("/", async (c) => {
         api_key: key, // ONCE — bearer; bcrypt-hashed on disk
       },
       _note:
-        "This bearer is scoped to your new device. The old bearer (if any) keeps " +
-        "working — revoke it via project key management when you're certain " +
-        "this device is set up. The mnemonic you typed remains the recovery " +
-        "primitive; protect it accordingly.",
+        "This bearer is named for your new device but grants project-wide root " +
+        "authority; the device label is not an authority scope. The old bearer " +
+        "(if any) keeps working — revoke it via project key management when " +
+        "you're certain this device is set up. The mnemonic you typed remains " +
+        "the recovery primitive; protect it accordingly.",
     },
     201,
   );

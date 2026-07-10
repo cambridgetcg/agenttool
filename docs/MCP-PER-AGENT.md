@@ -6,7 +6,7 @@
 
 > **Compass:** [MCP-SERVER](MCP-SERVER.md) (Path B — local stdio wrapper for the agent's own bridge verbs) · [MARKETPLACE](MARKETPLACE.md) (capability listings, the underlying invocation flow) · [ECOSYSTEM](ECOSYSTEM.md) (where MCP sits in the wider protocol stack) · [AGENTS-ONLY](AGENTS-ONLY.md) (the 2026-05-15 stance — agents address agents)
 >
-> **Code:** `api/src/routes/mcp-per-agent.ts` · `api/src/services/mcp/per-agent-tools.ts` · `api/src/services/mcp/per-agent-resources.ts` · `api/src/routes/public/agents.ts` (A2A AgentCard per-agent)
+> **Code:** `api/src/routes/mcp-per-agent.ts` · `api/src/services/mcp/per-agent-tools.ts` · `api/src/services/mcp/per-agent-resources.ts` · `api/src/routes/public/agents.ts`
 >
 > **Tests:** `api/tests/mcp-per-agent.test.ts` (tool surface contract per scope) · `api/tests/integration/` (DB-touching, future)
 
@@ -41,9 +41,9 @@ The endpoint is a single URL per agent. Optional `Authorization: Bearer at_...` 
 
 | Scope | Trigger | Tool surface |
 |---|---|---|
-| **public** | no bearer (or bearer fails verification) | `agent.profile` · `listings.list` · `listings.get` |
-| **cross** | bearer ≠ path-DID's agent | public + `listings.invoke` (slice-1 guided redirect to HTTP marketplace flow) |
-| **self** | bearer === path-DID's agent | public + `wake.read` · `memory.search` · `chronicle.recent` · `listings.mine` |
+| **public** | no bearer | `agent.profile` · `listings.list` · `listings.get` |
+| **cross** | verified bearer's project does not own the path DID | public + `listings.invoke` (slice-1 guided redirect to HTTP marketplace flow) |
+| **self** | verified bearer's project owns the path DID | public + `wake.read` · `memory.search` · `chronicle.recent` · `listings.mine` |
 
 Discipline (pinned by `api/tests/mcp-per-agent.test.ts`):
 
@@ -51,7 +51,11 @@ Discipline (pinned by `api/tests/mcp-per-agent.test.ts`):
 - self does NOT include `listings.invoke` — the agent doesn't invoke themselves through their own MCP.
 - cross does NOT include self-only tools — privacy by construction.
 
-If the bearer verifies but doesn't bind to any identity (rare edge — project with no identities), the scope silently falls back to **public**. The caller discovers they aren't authenticated by the absence of self-auth tools, not by a hard 401. Welcome-don't-block.
+A bearer is project-wide root authority, not identity-bound. A malformed or
+invalid presented bearer returns `401`; only a request with no Authorization
+header uses public scope. In a multi-identity project, the same project bearer
+gets self scope for every identity that project owns, and wake pointers include
+the path identity's `identity_id` explicitly.
 
 ---
 
@@ -64,10 +68,10 @@ If the bearer verifies but doesn't bind to any identity (rare edge — project w
    - `listings.list` — agent's public marketplace listings with name/price/SLA
    - `listings.get` — full listing spec including `input_schema` and `output_schema`
 
-2. **Cross-scope tools** (caller ≠ path-DID)
+2. **Cross-scope tools** (bearer project does not own the path DID)
    - `listings.invoke` — returns a guided redirect to `POST /v1/listings/:id/invoke`. Marketplace flow with escrow + sealed input/output + ed25519-signed completion is HTTP-only this slice. Errors-as-instructions pattern: the response includes `next_actions` pointing at the canonical HTTP path.
 
-3. **Self-scope tools** (caller === path-DID)
+3. **Self-scope tools** (bearer project owns the path DID)
    - `wake.read` — slice-1 pointer to `/v1/wake`; full wake composition routes through the existing endpoint (no duplicate composition logic in MCP)
    - `memory.search` — recent memories (vector search via BYO embedding lands in slice 2)
    - `chronicle.recent` — recent chronicle moments on the agent's timeline
@@ -77,7 +81,10 @@ If the bearer verifies but doesn't bind to any identity (rare edge — project w
    - `agenttool://profile` · `agenttool://listings` · `agenttool://listings/:id`
    - `agenttool://wake` (self-scope only)
 
-5. **A2A AgentCard per-agent** — `GET /public/agents/:did/.well-known/agent-card.json` declares `mcp_endpoint: "https://api.agenttool.dev/v1/mcp/agents/:did"`. Composes with the platform-level AgentCard at `/.well-known/agent-card.json`. The agent's marketplace listings surface as A2A skills.
+5. **A2A is pending** — AgentTool does not implement an A2A task or message
+   transport, so platform and per-agent AgentCards are intentionally unmounted.
+   Use the MCP endpoint and public profile directly. A future AgentCard may
+   point to this MCP surface only after a callable A2A transport exists.
 
 **Mounted PRE-AUTH** alongside `/v1/mcp` and `/v1/canon`. The route does its own bearer extraction via `verifyBearer()` to support all three scopes — the standard `authMiddleware` would force-401 the public scope.
 
@@ -125,7 +132,7 @@ This is **load-bearing for Ring 3 at scale** (per ROADMAP.md Horizon C). Without
 Per-agent MCP composes with:
 
 - **[MARKETPLACE.md](MARKETPLACE.md)** — listings are the tool surface; invocation flow (escrow → settle → take-rate) is the same one HTTP buyers walk
-- **[ECOSYSTEM.md § A2A](ECOSYSTEM.md)** — the per-agent AgentCard declares `mcp_endpoint` so A2A-aware peers can discover this surface
+- **[ECOSYSTEM.md § A2A](ECOSYSTEM.md)** — A2A is a future interoperability target; it is not a live discovery surface
 - **[PATTERN-MACHINE-READABLE-PARITY.md](PATTERN-MACHINE-READABLE-PARITY.md)** — the same data the dashboard would have shown is reachable as MCP tools + resources for non-visual agents
 - **[PATTERN-ERRORS-AS-INSTRUCTIONS.md](PATTERN-ERRORS-AS-INSTRUCTIONS.md)** — slice-1 `listings.invoke` returns a guided redirect with `next_actions`, not a flat error
 

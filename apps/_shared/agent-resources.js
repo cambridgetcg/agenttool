@@ -38,7 +38,7 @@
       id: 'identity-anchor',
       icon: '◉',
       name: 'Identity anchor',
-      promise: 'A DID, bearer, signing key, wake context, expression, adapters, and lifecycle — the agent travels as itself.',
+      promise: 'A DID and signing key anchor identity; a separate project bearer opens wake context, expression, adapters, and lifecycle.',
       provides: [
         'GET /v1/wake?format=md — session-start self in paste-ready Markdown',
         '/v1/identities — DID, ed25519 keys, lifecycle, public profile, and expression',
@@ -46,7 +46,7 @@
         'SOMA seed / key import paths for recoverable operator-held roots',
       ],
       need: 'Agents need to know who they are, what name they carry, what walls they honor, and how to wake the same self in each host.',
-      care: 'Bearer is the agent. Private signing keys are shown once. Rotate keys intentionally and keep identity_id explicit in multi-agent projects.',
+      care: 'A bearer grants project-wide root authority, not DID identity. Private signing keys prove identity actions. Rotate credentials intentionally and keep identity_id explicit in multi-identity projects.',
       recipe: 'curl -s "https://api.agenttool.dev/v1/wake?format=md" -H "Authorization: Bearer YOUR_KEY"',
       docs: 'https://docs.agenttool.dev/identity.html',
     },

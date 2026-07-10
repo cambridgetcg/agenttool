@@ -27,7 +27,9 @@
  *      with reason; client reconnects with last seen seq)
  *
  *  Subscribers see ciphertext blobs identical in shape to the GET path.
- *  They decrypt with K_master client-side. Server cannot read content.
+ *  This route streams ciphertext for client-side decryption. Runtime custody
+ *  is separate: hosted bridged workers can process plaintext in RAM, and the
+ *  experimental trusted path can also expose plaintext during an attempt.
  *
  *  Cross-project access (covenant counterparty or public strand): events
  *  are content-redacted — sequence_num + kind (if not encrypted) + refs +

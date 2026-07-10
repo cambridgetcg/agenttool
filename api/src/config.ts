@@ -35,11 +35,11 @@ export const config = {
   ),
   redisUrl: env("REDIS_URL", "redis://localhost:6379/0"),
 
-  // ── No paid third-party APIs ────────────────────────────────────────────
-  // agenttool is infra + cloud storage. We don't proxy LLM compute or paid
-  // third-party services. Agents store provider keys in /v1/vault and call
-  // them directly (typically via /v1/execute). The platform charges only
-  // for its own infra surface — storage, compute, queue, network egress.
+  // ── Provider keys stay agent-owned ──────────────────────────────────────
+  // Self runtimes call providers from the user's machine. Bridged/trusted
+  // hosted runtimes call the chosen provider from AgentTool's worker using
+  // a project vault key. The platform charges its own storage/compute/queue/
+  // network surface; provider billing remains on the agent's provider key.
   // See docs/IDENTITY-ANCHOR.md promise 6 — "Your providers are yours."
 
   // ── Vault root key — 32 bytes hex, derives per-project keys via HKDF ───

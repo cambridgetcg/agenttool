@@ -1,13 +1,13 @@
-/** /v1/autonomous/bootstrap — atomic autonomous agent spawning.
+/** /v1/autonomous/bootstrap — composed autonomous agent provisioning.
  *
- *  One call brings a new autonomous agent fully into existence:
+ *  One call provisions the records for a new autonomous agent:
  *    - identity (DID + ed25519 keypair)
  *    - wallet (starts at 0 for marketplace_only, or seeded)
  *    - expression (autonomous-baseline template by default)
  *    - runtime (trusted/bridged/self custody tier)
  *    - first chronicle entry (the naming)
  *
- *  All-or-nothing: no half-born autonomous agents.
+ *  The service composes several writes; it is not transactionally atomic yet.
  *  Doctrine: docs/AUTONOMOUS-MODE.md
  *
  *  @enforces urn:agenttool:commitment/birth-is-free */
@@ -81,6 +81,21 @@ app.post("/bootstrap", async (c) => {
     );
   }
 
+  if (body.project_id !== undefined && body.project_id !== project.id) {
+    return fail(
+      c,
+      {
+        error: "project_scope_mismatch",
+        message:
+          "project_id must match the project authorized by the bearer. " +
+          "A project-wide bearer cannot provision records in another project.",
+        details: { requested_project_id: body.project_id },
+        docs: "/public/safety",
+      },
+      403,
+    );
+  }
+
   // Trusted tier requires KMS availability.
   // The provision guard already checks this, but we surface a clear error
   // at the bootstrap level before attempting runtime creation.
@@ -118,24 +133,32 @@ app.post("/bootstrap", async (c) => {
       expression_template: body.expression_template,
       wake_loop: body.wake_loop,
       covenants: body.covenants,
-      project_id: body.project_id ?? project.id,
+      project_id: project.id,
     });
 
-    // The private key is returned ONCE — never stored server-side.
-    // Doctrine: k-master-never-server-side / birth-is-free.
+    // The bootstrap private key is returned once and is not persisted.
+    // Trusted runtime signing material is a separate experimental key path.
     return c.json(
       {
         identity: result.identity,
         wallet: result.wallet,
         runtime: result.runtime,
-        bearer_delivery: result.bearer_delivery,
         keypair: result.keypair,
         control_token: result.control_token,
         first_chronicle_entry_id: result.first_chronicle_entry_id,
         first_thought_scheduled_at: result.first_thought_scheduled_at,
-        _note: "The private_key is returned ONCE and never stored server-side. Store it securely. For trusted tier, the bearer never leaves the platform's KMS boundary.",
+        authority: {
+          bootstrap_authorized_by: "caller's existing project-wide bearer",
+          bearer_minted_or_delivered: false,
+          identity_private_key: "returned once; not persisted",
+          runtime_control_token:
+            "returned when applicable; secret credential; keep it out of logs and marketplace input",
+          trusted_runtime_key_material:
+            "separate experimental wrapped material; not a bearer",
+        },
+        _note: "The caller's existing project-wide bearer authorized this bootstrap; no bearer was minted or delivered. The identity private_key is returned once and is not persisted, so store it securely. control_token is also a secret credential when present: keep it out of logs and marketplace input. Trusted runtime uses separate experimental wrapped signing material and cannot currently complete signed thought persistence. first_thought_scheduled_at remains null until that path is operational.",
         _links: {
-          wake: `/v1/wake?bearer=${result.identity.did}`,
+          wake: "/v1/wake (Authorization: Bearer <project bearer>)",
           chronicle: `/v1/chronicle?agent_id=${result.identity.id}`,
           expression: `/v1/identities/${result.identity.id}/expression`,
           runtime: `/v1/runtimes/${result.runtime.id}`,
@@ -144,11 +167,8 @@ app.post("/bootstrap", async (c) => {
       201,
     );
   } catch (err) {
-    // If bootstrap fails partway, log the error clearly.
-    // The individual services (createIdentity, createRuntime) handle
-    // their own error states. No half-born agents should exist because
-    // the runtime won't start without a chronicle entry, and the wake
-    // won't surface without expression set.
+    // If bootstrap fails partway, report it clearly. The composed services
+    // write independently today, so operator cleanup may be required.
     const message = err instanceof Error ? err.message : String(err);
     return fail(c, errors.validation(`Autonomous bootstrap failed: ${message}`), 500);
   }

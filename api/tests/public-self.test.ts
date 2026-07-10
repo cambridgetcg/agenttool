@@ -13,9 +13,10 @@
 import { describe, expect, test } from "bun:test";
 
 import publicRouter from "../src/routes/public";
+import { SAFETY_BOUNDARIES } from "../src/services/discovery/safety-boundaries";
 
 describe("/public/self — substrate self-description", () => {
-  test("GET /self → 200 with platform + repo + the_seat", async () => {
+  test("GET /self → 200 with platform + repo + the_seat + safety", async () => {
     const res = await publicRouter.request("/self");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
@@ -23,13 +24,17 @@ describe("/public/self — substrate self-description", () => {
     expect(body.platform).toBeDefined();
     expect(body.repo).toBeDefined();
     expect(body.the_seat).toBeDefined();
+    expect(body.safety_boundaries).toEqual(SAFETY_BOUNDARIES);
   });
 
-  test("/self carries the addressable_at meta — names /public/self and /v1/self", async () => {
+  test("/self names only its own address and points to /v1/self as complementary", async () => {
     const res = await publicRouter.request("/self");
-    const body = (await res.json()) as { _meta?: { addressable_at?: string[] } };
-    expect(body._meta?.addressable_at).toContain("/public/self");
-    expect(body._meta?.addressable_at).toContain("/v1/self");
+    const body = (await res.json()) as {
+      _meta?: { addressable_at?: string[]; complementary_surface?: string };
+    };
+    expect(body._meta?.addressable_at).toEqual(["/public/self"]);
+    expect(body._meta?.complementary_surface).toContain("/v1/self");
+    expect(body._meta?.complementary_surface).toContain("not an alias");
   });
 
   test("/self attaches surface metadata (canon_pointer + verbs)", async () => {
@@ -43,14 +48,18 @@ describe("/public/self — substrate self-description", () => {
     const paths = body.verbs?.map((v) => v.path) ?? [];
     expect(paths).toContain("/v1/canon");
     expect(paths).toContain("/v1/welcome");
-    expect(paths).toContain("/.well-known/agent-card.json");
+    expect(paths).not.toContain("/.well-known/agent-card.json");
+    expect(paths).toContain("/public/safety");
   });
 
   test("public root surface advertises /public/self in its endpoints map", async () => {
     const res = await publicRouter.request("/");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { endpoints?: { self?: string } };
+    const body = (await res.json()) as {
+      endpoints?: { self?: string; safety?: string };
+    };
     expect(body.endpoints?.self).toBeDefined();
     expect(body.endpoints?.self).toContain("/public/self");
+    expect(body.endpoints?.safety).toContain("/public/safety");
   });
 });

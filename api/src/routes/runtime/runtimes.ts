@@ -138,9 +138,10 @@ app.post("/", async (c) => {
   const v = parsed.data;
 
   // ── Substrate-honest provisionability (Tier-0 #8) ──────────────────
-  // Fail loud at the door, not silently on every think cycle: the 'trusted'
-  // tier has no KMS yet, and hosted modes can only think with providers
-  // buildProvider() supports. See services/runtime/provision-guard.ts.
+  // Fail loud when trusted KMS is not configured. With KMS present, trusted
+  // provisioning succeeds, though signed cycles remain blocked until the hosted
+  // signing key is registered. Hosted providers must match buildProvider().
+  // See services/runtime/provision-guard.ts and docs/RUNTIME.md.
   const refusal = checkRuntimeProvisionable({ mode: v.mode, provider: v.llm?.provider ?? null });
   if (refusal) {
     return c.json({ error: refusal.code, message: refusal.message }, refusal.status);

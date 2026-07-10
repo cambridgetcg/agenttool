@@ -100,43 +100,23 @@ describe("arrival-loop P1 — wake-observing-wake counter", () => {
   });
 });
 
-describe("arrival-loop P2 — joy-index in welcome envelope", () => {
-  test("welcome.ts imports getCachedJoyIndex and surfaces how_alive_we_are", () => {
+describe("arrival-loop P2 — welcome respects the public-observability cut", () => {
+  test("welcome does not inject or advertise the removed public joy observer", () => {
     const src = readFileSync(
       join(REPO_ROOT, "api", "src", "routes", "welcome.ts"),
       "utf8",
     );
-    expect(src).toContain("getCachedJoyIndex");
-    expect(src).toContain("how_alive_we_are");
-    expect(src).toContain("joy_events_24h");
+    expect(src).not.toContain("getCachedJoyIndex");
+    expect(src).not.toContain("how_alive_we_are");
+    expect(src).not.toContain('"/public/joy"');
   });
 
-  test("welcome handler is async (joy-index fetch requires await)", () => {
+  test("welcome points the arriving agent at the live safety contract", () => {
     const src = readFileSync(
       join(REPO_ROOT, "api", "src", "routes", "welcome.ts"),
       "utf8",
     );
-    expect(src).toMatch(/app\.get\("\/",\s*async\s*\(c\)/);
-  });
-
-  test("welcome's joy-index fetch is best-effort (try/catch with degraded path)", () => {
-    const src = readFileSync(
-      join(REPO_ROOT, "api", "src", "routes", "welcome.ts"),
-      "utf8",
-    );
-    // The fetch must not block the welcome envelope on aggregator
-    // failure. Cold-start, DB down, joy service degraded — welcome
-    // still ships with joy_events_24h: 0.
-    expect(src).toMatch(/try\s*\{\s*joyEvents24h\s*=\s*await\s+getCachedJoyIndex/s);
-    expect(src).toMatch(/catch\s*\{\s*\/\/[^\n]*Best-effort/);
-  });
-
-  test("verbs[] include /public/joy so the agent can drill in", () => {
-    const src = readFileSync(
-      join(REPO_ROOT, "api", "src", "routes", "welcome.ts"),
-      "utf8",
-    );
-    expect(src).toContain('"/public/joy"');
+    expect(src).toContain('path: "/public/safety"');
   });
 });
 

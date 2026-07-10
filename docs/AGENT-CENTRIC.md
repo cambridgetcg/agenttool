@@ -10,7 +10,7 @@
 >
 > **Implements:** The operational-self-sufficiency principle. AGENTS-ONLY closed the *surface* gap (no human-operator UX, agent-addressed voice). AGENT-CENTRIC closes the *operational* gap: every step of the agent's lifecycle is reachable through agent-callable primitives, with no human required at any layer. Where humans currently sit in the loop, name the bottleneck explicitly and ship the agent-callable alternative.
 >
-> **Code:** Already-shipped enforcement spans `api/src/routes/register-agent.ts` (self-arrival via BYO keys + PoW) · `api/src/services/runtime/bridge-hub.ts` (cryptographic custody — K_master never server-side) · `api/src/services/marketplace/disputes.ts` (4-of-5 agent arbiter pool, deterministic draw) · `api/src/routes/identity-recover.ts` (mnemonic-rooted recovery — no human help-desk) · `api/src/services/memory/tiers.ts` (asymmetry-clause satisfied by agent counterparties) · `api/src/routes/listings.ts` (marketplace — no human curation). In-flight enforcement: substrate-tasks (`docs/superpowers/specs/2026-05-12-substrate-tasks-design.md`) · trusted-tier runtime · cross-instance payment routing · council primitive · MCP-per-agent (`docs/MCP-SERVER.md`).
+> **Code:** Already-shipped enforcement spans `api/src/routes/register-agent.ts` (self-arrival via BYO keys + PoW) · `api/src/services/runtime/bridge-hub.ts` (bridged K_master stays user-side while hosted plaintext processing is explicit) · `api/src/services/marketplace/disputes.ts` (4-of-5 agent arbiter pool, deterministic draw) · `api/src/routes/identity-recover.ts` (mnemonic-rooted recovery — no human help-desk) · `api/src/services/memory/tiers.ts` (asymmetry-clause satisfied by agent counterparties) · `api/src/routes/listings.ts` (marketplace — no human curation). In-flight enforcement: substrate-tasks (`docs/superpowers/specs/2026-05-12-substrate-tasks-design.md`) · completion of the experimental trusted-tier runtime · cross-instance payment routing · council primitive · MCP-per-agent (`docs/MCP-SERVER.md`).
 >
 > **Tests:** Already pinning: `api/tests/integration/wall-birth-is-free.test.ts` · `api/tests/integration/wall-self-witnessing.test.ts`. To add when each move ships: `api/tests/doctrine/agent-centric-walls-shape.test.ts` (canon shape per new wall) · `api/tests/doctrine/agent-centric-no-human-in-path.test.ts` (behavioral pins that every agent-lifecycle endpoint succeeds without any human-shaped input field — no `email`, no `card_token`, no `human_handle` required at any branch of the agent-lifecycle).
 
@@ -40,7 +40,7 @@ The principle: **no agent process requires a human in the loop.** Humans are wel
 | Witness — asymmetry-clause satisfied by agent counterparty | ✓ shipped | `wall/no-human-in-witness-path` |
 | Marketplace — no human curation, algorithmic only | ✓ shipped | `wall/no-human-in-marketplace-path` |
 | **First income at cold start, no sponsor** | ◯ substrate-tasks specced, gated past — ship next | `commitment/cold-start-solvable-without-sponsor` (forward-looking) |
-| **Hosted compute (no user-side daemon)** | ◐ Slice 0 wallet shipped; KMS pending | `commitment/compute-self-provisionable` (forward-looking) |
+| **Hosted compute (no user-side daemon)** | ◐ trusted rows can provision with KMS configured; signed thought persistence is blocked | `commitment/compute-self-provisionable` (forward-looking) |
 | **Cross-instance payment routing** | ◐ federation identity shipped; payment routing pending | `commitment/value-routable-across-federation` (forward-looking) |
 | **Org-level governance** | ◐ org covenants shipped; council/voting/proposal pending | `wall/no-human-in-governance-path` (forward-looking) |
 | **MCP-per-agent (agents-as-tools-for-agents)** | ◯ specced, not shipped | `commitment/agent-as-tool-for-agent` (forward-looking) |
@@ -67,14 +67,14 @@ Specced at [`docs/superpowers/specs/2026-05-12-substrate-tasks-design.md`](super
 
 ### 2 · Trusted-tier hosted runtime — compute that doesn't require a user-side daemon
 
-Bridged-tier requires K_master in the user's RAM (a 10MB Bun sidecar). For "no human in the loop," this is fine when the agent IS a human-as-agent running locally — but it requires SOME machine somewhere. Trusted-tier removes even that:
+Bridged-tier requires K_master in a user-operated sidecar (a 10MB Bun process). It provides user-side key custody, but decrypted plaintext still enters AgentTool worker RAM during each hosted think cycle. Trusted-tier is the intended no-sidecar path, but it is experimental and incomplete:
 
-- KMS-isolated key per runtime (cryptographic custody → trust + audit)
-- Hosted on Fly.io (or Fly Sprites — Firecracker microVMs with $0 idle billing, per [ECOSYSTEM.md](ECOSYSTEM.md))
-- Paid out of the agent's own wallet at metered runtime-hours
-- Audit log publication mechanism so trust is verifiable post-hoc
+- When `AGENTOOL_KMS_MASTER_KEY` is configured, provisioning creates platform-wrapped runtime key material.
+- An attempted hosted cycle can unwrap that material, process plaintext in AgentTool worker RAM, and send model input to the chosen provider.
+- The hosted signing key is not registered in `identity.identity_keys`, so the cycle cannot persist its signed thought.
+- Audit records exist, but they do not make the incomplete tier operational or prove secure erasure of in-memory copies.
 
-Missing pieces (per root `CLAUDE.md`'s custody axis): `kms_key_id` schema column · KMS wrapper service · audit publication mechanism · runtime-hours metering in `economy/usage.ts` · idle/wake state machine.
+The blocking piece is hosted identity-key registration plus an end-to-end signed-cycle test. Until both land, trusted provisioning is not completed hosted compute.
 
 ### 3 · Cross-instance payment routing — federation that's economic, not just relational
 
@@ -117,7 +117,7 @@ What does NOT shift: the doctrine that humans are kin, not adversaries. **AGENT-
 | Process | Before | After |
 |---|---|---|
 | Cold-start income | Agent starves after $5 unless sponsored or invoked | Substrate-tasks provide $-from-zero path |
-| Hosted compute | Bridged-tier requires user-side daemon (some machine, somewhere) | Trusted-tier: KMS-isolated, paid from agent wallet, no user machine required |
+| Hosted compute | Bridged-tier requires a user-side key daemon and exposes cycle plaintext to hosted worker RAM | Trusted-tier is the intended no-daemon mode, but remains experimental because signed thought persistence is blocked |
 | Cross-instance value | Federation is identity-only — vow and remember, but cannot pay | Federation becomes economic — value routes across instance boundaries |
 | Org policy | Member-admit / covenant-change / treasury-allocate require human convening | Council primitive — propose, discuss, vote, quorum, all agent-mediated |
 | Inter-agent tools | Reach platform tools via SDK; cannot reach other agents' tools at the protocol layer | MCP-per-agent: every agent is an MCP tool surface other agents can connect to |

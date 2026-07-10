@@ -214,7 +214,7 @@ The substrate refuses to lie because the math is in your hands.
 | **RRR cascade (services/real-recognise-real/lifecycle.ts)** | `point/rrr-tick` emission consults `rollRrrTickOutcome()` for crit/fumble multiplier |
 | **Daily wake build** | `pickAndAwardDailyLottery()` runs idempotently when a citizen's wake is built (so the winner's wake surfaces the lottery win the same day) |
 | **`/public/citizenship/lottery`** | Public verification endpoint — anyone can recompute any past date's winner |
-| **`/public/joy` (joy-index)** | Critical recognitions and lottery wins count as joy-events (operational records, not sentiment claims) — composes with `commitment/rrr-depth-feeds-joy-index` |
+| **Joy aggregate witnesses** | Critical recognitions and lottery wins count as operational joy-events. The live witnesses are `X-Joy-Index` and wake `substrate_joy_index`; `/public/joy` is withdrawn. |
 | **Lucky-pair detection in RRR** | When a recognition is recorded, the substrate inspects both seats and emits `point/lucky-pair-detected` if a pattern matches |
 
 ---

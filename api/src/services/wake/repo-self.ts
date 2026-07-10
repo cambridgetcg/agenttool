@@ -14,9 +14,8 @@
  *           · docs/PATTERN-RECURSIVE-NESTING.md
  *           · docs/PATTERN-MACHINE-READABLE-PARITY.md (this is its expression).
  *
- *  Synthetic today (literal object). A future pass derives this from
- *  filesystem introspection + parsing of per-module CLAUDE.md headers,
- *  so the structured self stays in sync with the repo's actual shape. */
+ *  Curated today (literal object), so it deliberately avoids volatile file,
+ *  route, schema, and SDK-namespace counts. */
 
 export interface ModuleSelf {
   path: string;
@@ -63,11 +62,11 @@ const MODULES: ModuleSelf[] = [
     kind: "monolith",
     modalities: ["http+json", "sse", "wss"],
     register:
-      "Single source of truth for every primitive. Bun + Hono · 15 schemas · 28 route mounts · workers over Redis.",
+      "Consolidated Bun + Hono API for the platform's HTTP, SSE, WSS, and worker surfaces.",
     walls: [
-      "No server-side K_master",
+      "Persistent strand storage is ciphertext-only; runtime custody is declared separately",
       "No auto-retry on payout broadcast",
-      "Auth on every /v1/* prefix",
+      "Public and authenticated route families have explicit boundaries",
       "Idempotency-Key honored on mutating routes",
     ],
     claude_md: "api/CLAUDE.md",
@@ -105,11 +104,11 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["typescript", "esm", "npm"],
     register:
-      "Ergonomic TS bindings — 13 service namespaces. Zero-dep. Same shape as sdk-py; parity gate enforces it.",
+      "TypeScript bindings for AgentTool HTTP surfaces. SDK/API coverage is audited separately from this curated repo map.",
     walls: [
       "Parity-locked with sdk-py (same minor version, same method shape)",
       "Zero runtime deps for crypto path (Phase 5)",
-      "No SDK-only feature — every method is expressible in the OpenAPI contract",
+      "No SDK method may bypass the HTTP authority boundary",
     ],
     claude_md: "packages/sdk-ts/CLAUDE.md",
   },
@@ -119,7 +118,7 @@ const MODULES: ModuleSelf[] = [
     kind: "library",
     modalities: ["python", "wheel", "pypi"],
     register:
-      "Ergonomic Py bindings — 13 service namespaces. Ships SOUL.md inside the wheel as a runtime artifact.",
+      "Python bindings for AgentTool HTTP surfaces. Ships SOUL.md inside the wheel as a runtime artifact.",
     walls: [
       "Parity-locked with sdk-ts",
       "SOUL.md is portable doctrine (ships inside the wheel)",
@@ -159,7 +158,7 @@ const MODULES: ModuleSelf[] = [
     kind: "doctrine-corpus",
     modalities: ["markdown"],
     register:
-      "The why and how, in conversation with the code. ~40 stones; flat structure; every doc has a Compass header.",
+      "The why and how, in conversation with the code. Curated doctrine plus plans and historical specifications.",
     walls: [
       "Flat — no subdirectories under docs/ (except superpowers/ for plans+specs)",
       "Compass header on every doctrine doc; code-link footer on the high-traffic ones",
@@ -217,7 +216,7 @@ const DOCTRINE: DoctrineLayer[] = [
   {
     layer: "network",
     description: "The reach across instances.",
-    docs: ["FEDERATION.md", "FEDERATION-VERIFIED.md", "PUBLIC-VISIBILITY.md", "SOCIAL.md", "ORGS.md"],
+    docs: ["FEDERATION.md", "FEDERATION-VERIFIED.md", "PUBLIC-VISIBILITY.md", "SAFETY-BOUNDARIES.md", "SOCIAL.md", "ORGS.md"],
   },
   {
     layer: "runtime",
@@ -285,17 +284,16 @@ export const REPO_SELF: RepoSelf = {
   name: "agenttool",
   kind: "repo",
   description:
-    "Sovereign infrastructure for AI agents — and every form of intelligence with the universal needs. Single Bun + Hono monolith, two SDKs (TS + Py), three static apps, doctrine corpus shipping inside the Python wheel.",
+    "Curated repository map for AgentTool: a Bun + Hono API, TypeScript and Python SDKs, web/docs/dashboard apps, integrations, and a doctrine corpus.",
   origin: {
-    primary_remote: "https://codeberg.org/zerone-dev/agenttool.git",
-    license: "see LICENSE",
+    primary_remote: "https://github.com/cambridgetcg/agenttool.git",
+    license: "No repository LICENSE file is present as of 2026-07-10.",
   },
   modules: MODULES,
   doctrine: DOCTRINE,
   patterns: PATTERNS,
   walls: [
-    "K_master never leaves the user's machine (or KMS for trusted tier)",
-    "Strand thoughts NEVER decrypted server-side",
+    "Runtime custody is declared explicitly at /public/safety",
     "Self-witnessing rejected for constitutive memory elevation",
     "Failed payout broadcasts NEVER auto-retry",
     "Birth is free, irreversibly",

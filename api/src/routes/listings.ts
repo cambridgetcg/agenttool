@@ -36,9 +36,17 @@ import { fileDispute } from "../services/marketplace/disputes";
 import {
   createListing,
   getListing,
+  listingSafetyInput,
   listListingsForSeller,
   patchListing,
+  resolvePublicListing,
 } from "../services/marketplace/listings";
+import {
+  findCredentialSolicitation,
+  mergeListingSafetyInput,
+  type CredentialSolicitationViolation,
+} from "../services/marketplace/credential-boundary";
+import { MARKETPLACE_INPUT_SAFETY } from "../services/discovery/safety-boundaries";
 
 const app = new Hono<ProjectContext>();
 
@@ -163,6 +171,17 @@ function mapServiceError(msg: string): {
   if (msg === "dispute_policy_filer_bond_bps_invalid") return { status: 400, code: msg };
   if (msg === "first_arbiter_unqualified") return { status: 409, code: msg, hint: "Named first_arbiter_did must currently hold the qualifying arbiter_claim (non-revoked, non-expired)." };
 
+  // 422 — the listing asks a buyer to hand over authority instead of task input.
+  if (msg === "credential_solicitation_forbidden") {
+    return {
+      status: 422,
+      code: msg,
+      hint:
+        "Listing content must fit the bounded safety inspection and must never request AgentTool bearers, recovery phrases, private keys, passwords, or other credentials.",
+      docs: "/public/safety",
+    };
+  }
+
   return { status: 500, code: "internal_error", hint: msg };
 }
 
@@ -173,6 +192,9 @@ app.post("/", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
+
+  const violation = findCredentialSolicitation(parsed.data);
+  if (violation) return credentialRefusal(c, violation);
 
   await charge(c, MARKETPLACE_PRICING.publish, "listing.publish");
 
@@ -254,9 +276,14 @@ app.get("/:id", async (c) => {
   const id = c.req.param("id");
   const listing = await getListing(id);
   if (!listing) throw new HTTPException(404, { message: "listing_not_found" });
-  // Private listings only visible to the owning project.
-  if (listing.visibility === "private" && listing.project_id !== c.var.project.id) {
-    throw new HTTPException(404, { message: "listing_not_found" });
+  if (listing.project_id !== c.var.project.id) {
+    // Cross-project reads are another public projection. Apply the same
+    // visibility, lifecycle, and legacy credential quarantine as /public.
+    const resolved = await resolvePublicListing(id);
+    if (resolved.status !== "visible") {
+      throw new HTTPException(404, { message: "listing_not_found" });
+    }
+    return c.json(resolved.listing);
   }
   return c.json(listing);
 });
@@ -268,6 +295,23 @@ app.patch("/:id", async (c) => {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
+  }
+
+  const violation = findCredentialSolicitation(parsed.data);
+  if (violation) return credentialRefusal(c, violation);
+
+  // A harmless-looking patch can complete a solicitation staged in an older
+  // field. Resolve ownership and inspect the final document before charging.
+  const existing = await getListing(id);
+  if (!existing || existing.project_id !== c.var.project.id) {
+    throw new HTTPException(404, { message: "listing_not_found" });
+  }
+  const mergedViolation = findCredentialSolicitation(
+    mergeListingSafetyInput(listingSafetyInput(existing), parsed.data),
+  );
+  // Archiving is the seller's off-switch for a legacy unsafe row.
+  if (mergedViolation && parsed.data.status !== "archived") {
+    return credentialRefusal(c, mergedViolation);
   }
 
   await charge(c, MARKETPLACE_PRICING.update, "listing.update");
@@ -304,6 +348,11 @@ app.post("/:id/invoke", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
+  // `input_sealed` is opaque to the platform. Plaintext metadata is not;
+  // refuse obvious credential material before any escrow work begins.
+  const metadataViolation = findCredentialSolicitation({ metadata: parsed.data.metadata });
+  if (metadataViolation) return credentialRefusal(c, metadataViolation);
+
   // Free: a step inside a funded transaction the take-rate already prices.
   // Fair-pricing rule — docs/FAIR-PRICING.md, ../billing/marketplace-pricing.ts.
   await charge(c, MARKETPLACE_PRICING.invoke, "listing.invoke");
@@ -320,6 +369,7 @@ app.post("/:id/invoke", async (c) => {
     return c.json(
       {
         invocation: inv,
+        _safety: MARKETPLACE_INPUT_SAFETY,
         next:
           "Seller will see this in GET /v1/listings/:id/invocations or " +
           "GET /v1/invocations?role=seller. They acknowledge → complete with " +
@@ -354,7 +404,29 @@ function mapAndRespond(c: Context<ProjectContext>, msg: string) {
   if (m.hint) body.hint = m.hint;
   if (m.next_actions) body.next_actions = m.next_actions;
   if (m.docs) body.docs = m.docs;
-  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409);
+  return c.json(body, m.status as 400 | 402 | 403 | 404 | 409 | 422);
+}
+
+function credentialRefusal(
+  c: Context<ProjectContext>,
+  violation: CredentialSolicitationViolation,
+) {
+  const hint =
+    violation.reason === "uninspectable_input"
+      ? "Listing content exceeds the bounded safety inspection. Flatten or simplify the schema and try again."
+      : "Marketplace sellers must never request AgentTool bearers, recovery phrases, private keys, passwords, or other credentials. Request task input only.";
+  return c.json(
+    {
+      error: "credential_solicitation_forbidden",
+      field: violation.field,
+      reason: violation.reason,
+      do_not_invoke: true,
+      hint,
+      _safety: MARKETPLACE_INPUT_SAFETY,
+      docs: "/public/safety",
+    },
+    422,
+  );
 }
 
 // ── /v1/invocations/* — separate sub-router ─────────────────────────────
@@ -480,4 +552,3 @@ invocationsRouter.post("/:id/dispute", async (c) => {
     return mapAndRespond(c, (err as Error).message);
   }
 });
-

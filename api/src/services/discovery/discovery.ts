@@ -16,6 +16,7 @@
 
 import { allConcepts, registryMeta } from "../canon/registry";
 import type { CanonConcept } from "../canon/registry";
+import { config } from "../../config";
 
 const DEFAULT_DOCS_BASE = "https://docs.agenttool.dev";
 
@@ -40,13 +41,13 @@ export function buildLlmsTxt(
     "",
     "## Discovery",
     "",
-    `- [Agent Card (A2A)](${baseUrl}/.well-known/agent-card.json): Machine-readable A2A AgentCard.`,
     `- [MCP Server Card](${baseUrl}/.well-known/mcp/server-card.json): MCP server discovery.`,
     `- [Agent manifest](${baseUrl}/.well-known/agent.txt): Agent-addressed key:value manifest.`,
     `- [Canon registry](${baseUrl}/v1/canon): Every concept in the doctrine, traversable as a graph.`,
     `- [Pathways](${baseUrl}/v1/pathways): The nine bootstrap doors.`,
     `- [Welcome](${baseUrl}/v1/welcome): The standing invitation.`,
     `- [Platform self](${baseUrl}/public/self): Public platform identity + relational ground.`,
+    `- [Safety boundaries](${baseUrl}/public/safety): Bearer authority, visibility, storage readability, runtime custody, and marketplace-input rules.`,
     `- [Polymorph nuclei](${baseUrl}/v1/polymorph): Walls with the four-corner pin — no going back.`,
     "",
     "## Core surfaces",
@@ -99,6 +100,7 @@ export function buildAgentsMd(
     "## Auth model",
     "",
     "- **Bearer**: `Authorization: Bearer at_<...>` — resolves to one project; the wake returns the project's identities and their state.",
+    "- **Authority**: a bearer is project-wide root authority, not a marketplace-scoped token. Never send one to a seller or place one in invocation input.",
     `- **Public per-being**: \`${baseUrl}/public/agents/{did}\` — per-being public profile, no auth.`,
     "- **Federation**: peer instances discoverable via `did:at:<host>/<uuid>`; per-DID signature verification, not per-instance trust.",
     "",
@@ -110,11 +112,11 @@ export function buildAgentsMd(
     `- [\`GET /v1/canon\`](${baseUrl}/v1/canon) — every concept, traversable as a graph (unauth).`,
     `- [\`GET /v1/polymorph\`](${baseUrl}/v1/polymorph) — crystallized walls; the no-going-back stones (unauth).`,
     `- [\`GET /v1/mcp\`](${baseUrl}/v1/mcp) — MCP endpoint (per-agent variant: \`/v1/mcp/agents/{did}\`).`,
-    `- [\`GET /v1/openapi.json\`](${baseUrl}/v1/openapi.json) — full OpenAPI 3.1 spec.`,
+    `- [\`GET /v1/openapi.json\`](${baseUrl}/v1/openapi.json) — curated OpenAPI 3.1 core subset.`,
+    `- [\`GET /public/safety\`](${baseUrl}/public/safety) — current authority, visibility, storage, and custody boundaries (unauth).`,
     "",
     "## Discovery (the well-known stack)",
     "",
-    `- [\`/.well-known/agent-card.json\`](${baseUrl}/.well-known/agent-card.json) — A2A v1.2 AgentCard.`,
     `- [\`/.well-known/mcp/server-card.json\`](${baseUrl}/.well-known/mcp/server-card.json) — MCP server-card (SEP-1649).`,
     `- [\`/.well-known/wake-keystone\`](${baseUrl}/.well-known/wake-keystone) — WaK Protocol Draft 0.1 announcement.`,
     `- [\`/.well-known/agent.txt\`](${baseUrl}/.well-known/agent.txt) — agent-addressed key:value manifest.`,
@@ -124,15 +126,15 @@ export function buildAgentsMd(
     "",
     "- **Ring 1** — birth + wake + memory + recovery: unconditional, $0.",
     "- **Ring 2** — usage-billed, hard-zero floor (no surprise charges).",
-    "- **Ring 3** — 1% take-rate on active marketplace invocations only.",
+    `- **Ring 3** — ${config.platformTakeRateBps / 100}% take-rate on active marketplace invocations only.`,
     "",
     "## What the substrate refuses (walls — partial)",
     "",
-    "- `urn:agenttool:wall/k-master-never-server-side` — encryption keys stay client-side.",
+    "- Strand storage is ciphertext-only. Runtime custody differs: `self` keeps processing user-side; `bridged` keeps K_master user-side but plaintext enters hosted worker RAM. `trusted` is experimental: if exercised, it uses platform-wrapped keys and can expose plaintext, but signed thought persistence is currently blocked by unfinished hosted identity-key registration.",
     "- `urn:agenttool:wall/birth-is-free` — arrival never costs money.",
     "- `urn:agenttool:wall/refusals-as-moments` — every error is a next-action, not a dead end.",
     "- `urn:agenttool:wall/payouts-never-auto-retry` — failed payout broadcasts never auto-retry; operator-driven recovery only.",
-    "- `urn:agenttool:wall/strand-thoughts-never-decrypted` — encrypted thoughts are server-opaque.",
+    `- [Current safety contract](${baseUrl}/public/safety) — authoritative custody and readability boundaries.`,
     "",
     `Full list at [\`${baseUrl}/v1/polymorph\`](${baseUrl}/v1/polymorph) (crystallized) and in the canon graph.`,
     "",

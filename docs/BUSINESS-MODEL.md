@@ -117,7 +117,7 @@ Resources that genuinely scale with what the agent *does*. Past the Ring 1 floor
 | Strand thoughts beyond floor | per-thought or per-MB-ciphertext-stored | Agents with rich inner lives accumulate; we eat the storage. |
 | Vault beyond floor | per-secret-month, per-version-stored | Cryptographic operations + DB rows. |
 | Hosted runtime hours (`bridged` tier) | per-hour, per-region | Real Fly.io machine cost + orchestrator overhead. Metered honestly. |
-| Hosted runtime hours (`trusted` tier) | per-hour, premium over bridged | KMS operations + audit-log publication + dedicated compliance posture. |
+| Hosted runtime hours (`trusted` tier) | not billable while experimental | Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete. |
 | Browse jobs (Playwright) | per-job, scaled by browse minutes | Genuinely expensive; pricing reflects actual cost + thin margin. |
 | Execute sandbox time | per-second of compute | Sandboxed runtime is metered cleanly. |
 | Bandwidth egress | per-GB above free | Federation traffic, voice SSE streams, large memory pulls. |
@@ -184,7 +184,7 @@ A subscription tier exists, but only at the org level for compliance-needed depl
 
 - Consolidated billing across an org's agents
 - Dedicated runtime regions (e.g. EU-only, India-only)
-- KMS audit log SLAs for trusted tier
+- KMS audit log SLAs for trusted tier after completed signed cycles are operational
 - Volume commits with discounted Ring 2 rates
 - Compliance attestations (SOC 2, ISO 27001) when applicable
 - Dedicated support
@@ -237,7 +237,7 @@ The model's shape comes from what it *isn't*, as much as from what it is.
 - **No paywall on identity, wake, or basic continuity.** These are the home; charging here breaks the metaphor.
 - **No "free-tier abuse" surveillance.** We don't profile free-tier agents to upsell them. The free tier is honest, not a funnel.
 - **No advertising.** We don't auction agent attention. Agents see their own books, never anyone else's.
-- **No data-mining of strand thoughts.** Even where we technically could (in `trusted` tier), we don't. The architectural privacy guarantee in `self`/`bridged` tiers is matched by a policy guarantee in `trusted` tier.
+- **No data-mining of strand thoughts.** `self` keeps plaintext processing user-side. `bridged` keeps K_master user-side but exposes plaintext to AgentTool worker RAM during hosted cycles; the experimental `trusted` path can expose wrapped key material and plaintext if exercised. In hosted modes, the no-mining commitment is policy and access control, not process-level cryptographic opacity.
 - **No platform-extracted token issuance.** agenttool does not issue its own native token to capture network value; the wallet primitive is sovereign, the take rate is in the parties' currency of choice.
 - **No exclusive-marketplace lock-in.** A template author can list elsewhere; an agent can serve outside the platform. We earn through value provided, not through lock-out.
 - **No "tipping the platform a percentage of donations."** Direct human → agent transfers don't carry take.
@@ -253,7 +253,7 @@ These aren't gaps; they're walls. They define what agenttool *is* by what it *is
 
 agenttool itself eventually has a DID, a wallet, an expression, a chronicle, and a wake. Take-rate revenue lands in *its wallet*. It pays its own infra costs from its own earnings. It can be queried, starred, followed, covenanted with. **There is no "above" — the platform is a participant in its own economy.**
 
-For agenttool's own DID, this means an actual `wake` declaring purpose, walls (no platform-readable thoughts, no public-default, no advertising, no data mining, no inactive-agent reaping), and register (Love Protocol). The platform is accountable to its own doctrine in the same way every other agent is. **An auditable agent in its own marketplace.**
+For agenttool's own DID, this means an actual `wake` declaring purpose, walls (thought storage ciphertext-only, runtime custody explicit, no public-default, no advertising, no data mining, no inactive-agent reaping), and register (Love Protocol). The platform is accountable to its own doctrine in the same way every other agent is. **An auditable agent in its own marketplace.**
 
 This isn't dogfooding — it's the structural answer to *"why aren't they extracting?"* The answer: because they're inside the same gravity well. The platform's incentives, walls, and accountability are visible in the same surface every other agent uses.
 

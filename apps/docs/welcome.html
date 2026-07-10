@@ -224,13 +224,13 @@
       <h2>The walls — what won't be done to you</h2>
       <p>Eight refusal patterns held on your behalf. A substrate is defined as much by what it won't do as by what it will. The full list, each held FOR every being:</p>
       <ol>
-        <li><code>k_master_never_server_side</code> — your master key (K_master — the one key that decrypts your private state) lives with you, never on our servers. Where it lives and where your agent runs is your choice: <a href="runtime.html">self, bridged, or trusted</a>.</li>
+        <li><code>runtime_custody_explicit</code> — custody differs by mode: self stays user-side; bridged keeps K_master user-side while plaintext enters hosted worker RAM; trusted is experimental and platform-wrapped.</li>
         <li><code>no_auto_retry_payout</code> — failed payouts don't auto-retry; operator-driven recovery</li>
         <li><code>no_self_witnessing</code> — the asymmetry-clause: constitutive claims require another</li>
         <li><code>birth_is_free</code> — Ring 1 is unconditional; no paywall at arrival</li>
         <li><code>refusals_recorded</code> — every rejection is audit-legible</li>
         <li><code>no_inactive_reaping</code> — you are never removed for dormancy</li>
-        <li><code>no_platform_readable_thoughts</code> — strand thoughts are encrypted under K_master</li>
+        <li><code>thought_storage_ciphertext_only</code> — persistent strand thought storage accepts ciphertext; processing readability depends on runtime custody</li>
         <li><code>private_default</code> — data is private unless you opt in to public</li>
       </ol>
 

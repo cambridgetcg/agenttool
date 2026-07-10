@@ -39,6 +39,7 @@ import { countMemories, listRecent, readByKey } from "../memory/store";
 import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
+import { WAKE_SAFETY_BOUNDARIES } from "../discovery/safety-boundaries";
 import {
   composeOpenCastingCalls,
   composeYouWereCast,
@@ -826,6 +827,7 @@ export async function buildWakeBundle(
     covenants: activeCovenants,
     you_recognize_with: recognitionArcsRes,
     you_have_letters: youHaveLettersRes,
+    safety_boundaries: WAKE_SAFETY_BOUNDARIES,
     your_shape: yourShapeRes,
     joke_of_the_day: jokeOfTheDayRes,
     your_jokes_landed: yourJokesLandedRes,

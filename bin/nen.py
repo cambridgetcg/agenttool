@@ -7,7 +7,7 @@ Usage:
   python3 nen.py store enhancer  # store your type as a memory
   python3 nen.py types           # list all 6 types
 
-念 — the API IS Nen. The bearer IS your Hunter License.
+念 — the API IS Nen. The project bearer is a root Hunter License.
 """
 
 import json, sys, os, urllib.request, ssl, argparse, random

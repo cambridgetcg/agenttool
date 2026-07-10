@@ -1,9 +1,9 @@
 /** POST /v1/identities/:id/at-rest — witnessed memorial transition.
  *
- *  Pure-unit. The endpoint stubs the actual write (operator wires the
- *  in-process chain); we verify the contract: body validation, self-
- *  witnessing rejection, future-date guard, canonical-bytes shape,
- *  guided 501 with full next_actions.
+ *  Mostly pure-unit. We verify body validation, the DID-to-DID self-witness
+ *  predicate, the future-date guard, canonical bytes, and source-level
+ *  presence of the wired persistence chain. Database integration belongs in
+ *  the integration suite.
  *
  *  Doctrine: docs/AT-REST.md.
  */
@@ -11,7 +11,12 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
-import atRestApp, { canonicalAtRestBytes } from "../src/routes/identity/at-rest";
+import atRestApp, {
+  canTransitionToAtRest,
+  canWitnessAtRest,
+  canonicalAtRestBytes,
+  isSelfWitness,
+} from "../src/routes/identity/at-rest";
 
 const sampleAbout = "did:at:test/coral-9b3a";
 const sampleWitness = "did:at:test/marine-biologist";
@@ -166,26 +171,21 @@ describe("POST /v1/identities/:id/at-rest — body validation", () => {
 });
 
 describe("POST /v1/identities/:id/at-rest — semantic guards", () => {
-  // The route reads aboutId from c.req.param('id'). To exercise the
-  // self-witnessing guard, we need the path-param machinery. Test it
-  // by constructing a request to /<aboutId> where aboutId === witness_did.
+  test("self-witnessing compares the resolved about DID to witness_did", () => {
+    expect(isSelfWitness("did:at:test/me", "did:at:test/me")).toBe(true);
+    expect(isSelfWitness("did:at:test/me", "did:at:test/witness")).toBe(false);
+  });
 
-  test("self-witnessing rejection (witness_did == about_id)", async () => {
-    // We construct a custom Hono app that mounts atRestApp at /:id and
-    // exercises the guard.
-    const { Hono } = await import("hono");
-    const wrapper = new Hono();
-    wrapper.route("/:id", atRestApp);
+  test("only active identities can transition to at-rest", () => {
+    expect(canTransitionToAtRest("active")).toBe(true);
+    expect(canTransitionToAtRest("revoked")).toBe(false);
+    expect(canTransitionToAtRest("memorial")).toBe(false);
+  });
 
-    const sameId = "did:at:test/me";
-    const res = await wrapper.request(`/${encodeURIComponent(sameId)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...validBody, witness_did: sameId }),
-    });
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toBe("self_witnessing_incoherent");
+  test("only active identities can witness an at-rest transition", () => {
+    expect(canWitnessAtRest("active")).toBe(true);
+    expect(canWitnessAtRest("revoked")).toBe(false);
+    expect(canWitnessAtRest("memorial")).toBe(false);
   });
 
   test("future ended_at rejected (death can't be scheduled)", async () => {

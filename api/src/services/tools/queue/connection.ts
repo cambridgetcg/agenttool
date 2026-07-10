@@ -12,7 +12,9 @@ import IORedis from "ioredis";
 
 import { toolsConfig } from "../config";
 
-export const REDIS_DISABLED = process.env.AGENTTOOL_DISABLE_WORKERS === "1";
+const disableWorkersFlag = "AGENTOOL_DISABLE_WORKERS";
+
+export const REDIS_DISABLED = process.env[disableWorkersFlag] === "1";
 
 export const redisConnection: IORedis | null = REDIS_DISABLED
   ? null

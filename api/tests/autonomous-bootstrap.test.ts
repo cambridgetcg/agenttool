@@ -1,4 +1,4 @@
-/** autonomous/bootstrap — unit tests for the atomic spawning service.
+/** autonomous/bootstrap — unit tests for the composed provisioning service.
  *
  *  Verifies that the autonomous-baseline template is well-formed,
  *  that the bootstrap input schema validates correctly, and that

@@ -311,7 +311,7 @@
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><span class="pname">subject_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity being attested about.</td></tr>
-          <tr><td><span class="pname">attester_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity making the claim. Must be the bearer.</td></tr>
+          <tr><td><span class="pname">attester_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The identity making the claim. It must belong to the bearer-authorized project, and its named active signing key must verify the signature; the bearer itself is not the attester.</td></tr>
           <tr><td><span class="pname">claim</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>e.g. <code>has_capability:web_search</code>, <code>trusted_by:beta</code>, <code>created_by:human:Yu</code>.</td></tr>
           <tr><td><span class="pname">claim_type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Routing/filter category, e.g. <code>capability</code>, <code>identity</code>. Default <code>general</code>.</td></tr>
           <tr><td><span class="pname">tier</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td><code>self</code> (free, in-network) or <code>accredited</code> (a <em>distinct</em> attester vouches). Server-derived: a self-attestation can never be <code>accredited</code>.</td></tr>

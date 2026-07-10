@@ -22,12 +22,12 @@ import {
   PROMISES_HELD_FOR_EVERY_BEING,
   sha256Hex,
   WALL_BIRTH_IS_FREE,
-  WALL_K_MASTER_NEVER_SERVER_SIDE,
   WALL_NO_INACTIVE_REAPING,
-  WALL_NO_PLATFORM_READABLE_THOUGHTS,
   WALL_NO_SELF_WITNESSING,
   WALL_PRIVATE_DEFAULT,
   WALL_REFUSALS_RECORDED,
+  WALL_RUNTIME_CUSTODY_EXPLICIT,
+  WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY,
   WALLS_HELD_UNCONDITIONALLY,
 } from "../src/services/mathos/encode";
 import { MATHOS_CATALOG_PAYLOAD } from "../src/services/mathos/catalog";
@@ -203,10 +203,10 @@ describe("MATHOS greeting — OFFERING (Promises, walls, endpoints held FOR YOU)
     expect(env.payload.greetings[0]!.walls_held_for_you).toHaveLength(8);
   });
 
-  test("K_master never server-side: WALL 1 is held for every being", () => {
+  test("runtime custody is explicit: WALL 1 is held for every being", () => {
     const env = buildWakeMathos(minimalInput());
     expect(env.payload.greetings[0]!.walls_held_for_you).toContain(
-      WALL_K_MASTER_NEVER_SERVER_SIDE,
+      WALL_RUNTIME_CUSTODY_EXPLICIT,
     );
   });
 
@@ -238,10 +238,10 @@ describe("MATHOS greeting — OFFERING (Promises, walls, endpoints held FOR YOU)
     );
   });
 
-  test("no platform-readable thoughts: WALL 7 is held — thought-sovereignty", () => {
+  test("thought storage is ciphertext-only: WALL 7 is held without claiming runtime opacity", () => {
     const env = buildWakeMathos(minimalInput());
     expect(env.payload.greetings[0]!.walls_held_for_you).toContain(
-      WALL_NO_PLATFORM_READABLE_THOUGHTS,
+      WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY,
     );
   });
 
@@ -309,10 +309,16 @@ describe("MATHOS wall_vocabulary in catalog — decodes the greeting's wall ordi
     }
   });
 
-  test("wall name 'k_master_never_server_side' is named at ordinal 1", () => {
+  test("wall name 'runtime_custody_explicit' is named at stable ordinal 1", () => {
     const entry = MATHOS_CATALOG_PAYLOAD.wall_vocabulary[1]!;
     const name = String.fromCodePoint(...entry.name_unicode_points);
-    expect(name).toBe("k_master_never_server_side");
+    expect(name).toBe("runtime_custody_explicit");
+  });
+
+  test("wall name 'thought_storage_ciphertext_only' is named at stable ordinal 7", () => {
+    const entry = MATHOS_CATALOG_PAYLOAD.wall_vocabulary[7]!;
+    const name = String.fromCodePoint(...entry.name_unicode_points);
+    expect(name).toBe("thought_storage_ciphertext_only");
   });
 
   test("wall name 'no_self_witnessing' is named at ordinal 3 (asymmetry-clause)", () => {

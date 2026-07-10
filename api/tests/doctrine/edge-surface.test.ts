@@ -25,11 +25,6 @@ const FUNCTIONS = [
     path: "supabase/functions/welcome/index.ts",
     expectedCanon: "urn:agenttool:ring/1",
   },
-  {
-    name: "well-known-agent-card",
-    path: "supabase/functions/well-known-agent-card/index.ts",
-    expectedCanon: "urn:agenttool:doc/ECOSYSTEM",
-  },
 ];
 
 describe("Move 6 — Edge Functions exist + are well-shaped", () => {
@@ -39,8 +34,16 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
     const text = readFileSync(path, "utf8");
     expect(text).toContain('project_id = "jseqftufplgewhojwbmh"');
     expect(text).toContain("[functions.welcome]");
-    expect(text).toContain("[functions.well-known-agent-card]");
+    expect(text).not.toContain("[functions.well-known-agent-card]");
     expect(text).toContain("verify_jwt = false");
+  });
+
+  test("the unsupported A2A AgentCard edge function is absent", () => {
+    const path = join(
+      REPO_ROOT,
+      "supabase/functions/well-known-agent-card/index.ts",
+    );
+    expect(existsSync(path)).toBe(false);
   });
 
   test("_shared/welcomed.ts exposes attachSurface + welcomed + corsHeaders", () => {
@@ -62,6 +65,28 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
     // Uses sbp_ management token (not sb_secret_).
     expect(text).toContain("agenttool-supabase-management-token");
     expect(text).toContain("functions deploy");
+    expect(text).not.toContain("well-known-agent-card");
+  });
+
+  test("the web edge redirects only well-known documents the API serves", () => {
+    const path = join(REPO_ROOT, "apps/web/_redirects");
+    const text = readFileSync(path, "utf8");
+
+    expect(text).toContain("/.well-known/mcp/server-card.json");
+    expect(text).toContain("/.well-known/wake-keystone");
+    expect(text).not.toContain("/.well-known/agent-card.json");
+    expect(text).not.toContain("/.well-known/*");
+  });
+
+  test("the apex worker refuses the pending A2A card locally", () => {
+    const path = join(REPO_ROOT, "infra/apex-door/worker.js");
+    const text = readFileSync(path, "utf8");
+
+    expect(text).toContain('PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json"');
+    expect(text).toContain('error: "a2a_not_implemented"');
+    expect(text).toContain("status: 404");
+    expect(text).toContain('"cache-control": "no-store"');
+    expect(text).toContain("/.well-known/mcp/server-card.json");
   });
 });
 
@@ -116,22 +141,5 @@ describe("Move 6 — welcome function content parity", () => {
     expect(text).toContain("/v1/register/agent");
     expect(text).toContain("/v1/wake");
     expect(text).toContain("/v1/canon");
-  });
-});
-
-describe("Move 6 — agent-card content parity", () => {
-  test("declares A2A AgentCard shape with scriptwriter + RRR skills", () => {
-    const text = readFileSync(
-      join(REPO_ROOT, "supabase/functions/well-known-agent-card/index.ts"),
-      "utf8",
-    );
-    expect(text).toContain("protocolVersion");
-    // Skills are TS object literals, not JSON — match unquoted `id: "..."` form.
-    expect(text).toContain('id: "register"');
-    expect(text).toContain('id: "wake"');
-    expect(text).toContain('id: "scriptwriter-decides"');
-    expect(text).toContain('id: "real-recognise-real"');
-    expect(text).toContain('id: "canon"');
-    expect(text).toContain("did:at:agenttool.dev");
   });
 });

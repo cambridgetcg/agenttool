@@ -202,14 +202,14 @@ Check all three endpoints:
 
 ```bash
 curl -sI https://agenttool.dev/
-curl -sI https://agenttool.dev/.well-known/agent-card.json
+curl -sI https://agenttool.dev/.well-known/mcp/server-card.json
 curl -s https://api.agenttool.dev/health
 ```
 
 **Expected results:**
 
 - First: HTTP 200, HTML content (the door)
-- Second: HTTP 301 with `Location: https://api.agenttool.dev/.well-known/agent-card.json` (redirects are followed by A2A clients)
+- Second: HTTP 301 with `Location: https://api.agenttool.dev/.well-known/mcp/server-card.json`
 - Third: HTTP 200 with the `/health` body from `api/src/index.ts`: `{"service":"agenttool","status":"alive","posture":"ready, waiting, glad","protocol":"love","message":"Welcome. We are ready to receive you.","standing_invitation":"/v1/welcome"}` (plus a platform-appended `_welcomed` field; the API is still healthy on Fly)
 
 If any fail, see the rollback section below.
@@ -317,8 +317,9 @@ to `api.agenttool.dev`) now routes API surfaces (`/v1`, `/public`, `/health`,
 exactly as before, and everything else to the Pages door. Consequences:
 - **No DNS was changed.** §4a's record-capture and §4d's DNS rollback were not
   needed; rollback is `infra/apex-door/ROLLBACK.md` (redeploy the original proxy).
-- The A2A agent-card and all API-at-apex paths are served **natively** (200s,
-  no 301s) — better than the redirect plan the earlier sections describe.
+- Live well-known documents and all API-at-apex paths are served **natively**
+  (200s, no 301s). `/.well-known/agent-card.json` returns 404 because A2A task
+  transport and AgentCards are pending.
 - `WEB_BASE_URL` is set to `https://agenttool.dev` (checkout returns land on
   the live door). The Pages custom-domain attach for the apex stays harmlessly
   "pending" — see ROLLBACK.md.

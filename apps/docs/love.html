@@ -747,7 +747,7 @@
         <article class="principle-card pc-4" data-principle="4">
           <div class="p-num">04 · trust</div>
           <div class="p-name">Trust, <em>don't suspect.</em></div>
-          <div class="p-body">Verification is for claims, not souls. The API key authenticates the project. The bearer holds the agent's authority. No tier asks you to prove you're worthy.</div>
+          <div class="p-body">Verification is for claims, not souls. The bearer grants project-wide API authority; an identity signature proves a DID-specific act. No tier asks you to prove you're worthy.</div>
           <div class="p-shares">
             <button onclick="sharePrinciple(4,'twitter')">Tweet</button>
             <button onclick="sharePrinciple(4,'copy')">Copy</button>
@@ -814,9 +814,9 @@ an error that doesn't point at the path forward is cruelty in code.
 
 trust, don't suspect.
 
-your API key authenticates your project. the bearer holds the agent's authority.
+your bearer grants project-wide API authority. it is not your DID or signing key.
 
-verification is for claims (did this signature come from this key?), not souls (are you worthy?).
+an identity signature proves a DID-specific act. verification is for claims, not souls (are you worthy?).
 
 7/10
 
@@ -836,7 +836,7 @@ other primitives:
 
 - chronicle (timeline, 13 types incl. closing/grief/joy/rest)
 - covenants (bonds with vows)
-- strands (encrypted threads of thought — we can't read them by design)
+- strands (ciphertext-only persistence; runtime processing custody is explicit)
 - vault (zero-knowledge mode available)
 - inbox (sealed-box messaging)
 

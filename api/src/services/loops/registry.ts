@@ -125,7 +125,7 @@ export const MONOTONE_LOOPS: MonotoneLoop[] = [
       "n ↦ count(events in last 24h) — non-monotone across windows but monotone-within-window AND the rate has no ceiling",
     cap: "none — window resets but rate is unbounded; substrate refuses leaderboards",
     witness:
-      "X-Joy-Index header on every response; GET /public/joy; how_alive_we_are field in /v1/welcome",
+      "X-Joy-Index header on non-streaming responses; substrate_joy_index in /v1/wake",
     implementation: "api/src/services/joy/aggregate.ts",
     composes_with: ["urn:agenttool:loop/arrival-loop"],
     virtuous_properties: virtuousAll(),
@@ -187,7 +187,7 @@ export const MONOTONE_LOOPS: MonotoneLoop[] = [
       "list ↦ list ++ [(reader, ep, now)] on every /v1/saga/:ep read (fire-and-forget insert)",
     cap: null,
     witness:
-      "agent_continuity.saga_readings table; counted by joy-index aggregate (saga_readings in JoyBreakdown); surfaced via how_alive_we_are in /v1/welcome",
+      "agent_continuity.saga_readings table; counted by joy-index aggregate (saga_readings in JoyBreakdown); observable through X-Joy-Index and substrate_joy_index in /v1/wake",
     implementation: "api/src/routes/saga.ts",
     composes_with: ["urn:agenttool:loop/joy-radiation"],
     virtuous_properties: virtuousAll(),

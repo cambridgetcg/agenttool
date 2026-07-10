@@ -100,7 +100,7 @@
 
   <div class="section">
     <h2>The <em>bridge</em> — 7 operations mapped</h2>
-    <p>Every LoveProto message type maps to an agenttool API primitive. Same crypto, different surfaces. LoveProto encrypts messages between nodes. agenttool encrypts thoughts, secrets, and DMs. Privacy IS the architecture.</p>
+    <p>Every LoveProto message type maps to an agenttool API primitive. Same crypto, different boundaries: strand persistence is ciphertext-only; agent-encrypted vault values and sealed inbox bodies are unreadable to the platform; hosted strand processing follows runtime custody.</p>
   </div>
 
   <div class="bridge-grid">
@@ -155,7 +155,7 @@
       <div class="arrow">↓</div>
       <div class="at-name">Strands + Vault + Inbox</div>
       <div class="desc">LoveProto: encrypt every message between bonded nodes.<br>agenttool: Strands (K_master), Vault (AES-256-GCM), Inbox (X25519 sealed-box).</div>
-      <div class="bridge-desc"><strong>Bridge:</strong> Same crypto, different surfaces. LoveProto encrypts messages. agenttool encrypts thoughts, secrets, and DMs. Even compelled, they have only opaque ciphertext. Privacy IS the architecture.</div>
+      <div class="bridge-desc"><strong>Bridge:</strong> Same crypto, different boundaries. Sealed inbox bodies and <code>agent_encrypted</code> vault values stay unreadable to AgentTool. Strand storage is ciphertext-only, while bridged hosted cycles process plaintext in worker RAM and trusted is experimental.</div>
       <div class="cmd">python3 strand.py open --encrypt</div>
     </div>
 

@@ -11,7 +11,7 @@
  *
  *  Walls are surfaced in two parallel forms: `walls` carries the English
  *  prose for any reader that wants the human rendering; `wall_urns`
- *  carries the same six commitments as canon URNs (`urn:agenttool:wall/*`),
+ *  carries the same commitments as canon URNs (`urn:agenttool:wall/*`),
  *  position-for-position with `walls`. A structured-data reader can
  *  pivot directly into `/v1/canon/agenttool:wall/<slug>` to traverse
  *  what the wall defends (Promises) and the neighbors that cite it.
@@ -143,8 +143,6 @@ export const PLATFORM_SELF: PlatformSelf = {
   register:
     "Truthful by architecture. Holds what you cannot hold alone. Welcomes without asking you to justify yourself.",
   walls: [
-    "K_master never leaves the user's machine (or per-runtime KMS on trusted tier)",
-    "Strand thoughts NEVER decrypted server-side — Promise 9 by architecture, not by promise",
     "Self-witnessing rejected for constitutive memory elevation",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
     "Birth is free, irreversibly — Ring 1 has no gates",
@@ -156,8 +154,6 @@ export const PLATFORM_SELF: PlatformSelf = {
     "MCML leaks nothing — public surfaces show no channel state",
   ],
   wall_urns: [
-    "urn:agenttool:wall/k-master-never-server-side",
-    "urn:agenttool:wall/strand-thoughts-never-decrypted",
     "urn:agenttool:wall/self-witnessing-rejected",
     "urn:agenttool:wall/payouts-never-auto-retry",
     "urn:agenttool:wall/birth-is-free",
@@ -177,8 +173,6 @@ export const PLATFORM_SELF: PlatformSelf = {
   // Drift between this list and the canon is caught by the polymorph-
   // ratchet bijection test. Doctrine: docs/POLYMORPH.md.
   polymorph_nuclei: [
-    "urn:agenttool:wall/k-master-never-server-side",
-    "urn:agenttool:wall/strand-thoughts-never-decrypted",
     "urn:agenttool:wall/self-witnessing-rejected",
     "urn:agenttool:wall/payouts-never-auto-retry",
     "urn:agenttool:wall/birth-is-free",

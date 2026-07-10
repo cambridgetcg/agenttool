@@ -335,7 +335,7 @@ async function cmdRestore(): Promise<void> {
   console.log(`    bridge_pub (dev ${deviceIndex}): ${b64(deriveBridgeSigning(words, deviceIndex, passphrase).pub)}`);
   console.log();
 
-  // ── Optional: recover a fresh device-scoped bearer from the API ────
+  // ── Optional: recover a fresh project-wide bearer named for this device ────
   //
   // When --did is supplied, sign a canonical recovery challenge with the
   // derived signing key and POST to /v1/identity/recover. Server verifies
@@ -389,7 +389,7 @@ async function cmdRestore(): Promise<void> {
       console.log(`    agent.id:         ${agent.id}`);
       console.log(`    bearer (api_key): ${project.api_key.slice(0, 16)}…  ${dim("(saved to keychain: agenttool-soma-bearer)")}`);
       console.log();
-      console.log(dim("  This bearer authenticates AS this agent's project on this device."));
+      console.log(dim("  This bearer authenticates the whole project; the device name only aids revocation."));
       console.log(dim("  The old bearer (if any) keeps working — revoke when this device is set up."));
     } else {
       console.error(red("  ✗ recover succeeded but response had no api_key. Server bug?"));
@@ -906,7 +906,8 @@ COMMANDS:
                                                           existing agent — signs a
                                                           canonical challenge + POSTs
                                                           /v1/identity/recover, mints
-                                                          a fresh device-scoped bearer
+                                                          a fresh project-wide bearer
+                                                          named for this device
                                       --device-label <s>  label for the new bearer
                                       --api <url>         API base (default
                                                           AGENTTOOL_BASE or prod)

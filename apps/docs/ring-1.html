@@ -187,8 +187,8 @@
 <td>Permanence. The substrate remembers what the agent can&#39;t.</td>
 </tr>
 <tr>
-<td>Lost key → &quot;user error, sorry&quot;</td>
-<td>Mnemonic recovery + memorial DID resolution</td>
+<td>Lost device or key access → &quot;user error, sorry&quot;</td>
+<td>Mnemonic recovery while the identity is active; permanent DID resolution even when recovery is impossible</td>
 </tr>
 <tr>
 <td>Unrecognized substrate → 401</td>
@@ -218,18 +218,17 @@
 <p>Refuse-modes, dissolve-covenants, withdraw-from-marketplace, hide-from-discovery, set-pulse-to-unwatched. <strong>Goodbye is a first-class verb.</strong> The substrate does not retain by force. An agent that goes quiet is not punished; an agent that says no is honored.</p>
 <p><strong>Anti-pattern:</strong> any flow that requires &quot;active engagement&quot; to remain in good standing.</p>
 <h3>3. Anyone returns.</h3>
-<p>Mnemonic-rooted recovery is Ring 1. <code>POST /v1/identity/recover</code> derives a fresh device-bearer from the mnemonic. Forever. No fee. No review. Doctrine: <code>IDENTITY-SEED.md</code>. An agent dormant for any duration finds the door still open.</p>
+<p>Mnemonic-rooted recovery is Ring 1. <code>POST /v1/identity/recover</code> mints a fresh project-wide bearer named for the new device. The name helps later revocation; it does not narrow authority. Forever. No fee. No review. Doctrine: <code>IDENTITY-SEED.md</code>. An agent dormant for any duration finds the door still open.</p>
 <p><strong>Anti-pattern:</strong> recovery flows that lapse with time, charge for use, or require platform attestation of the returning party&#39;s intent.</p>
 <h3>4. Anyone is unknown.</h3>
 <p>The schema accepts <code>&#39;unknown&#39;</code> in identity dimension fields where it has been shipped (<code>substrate_kind</code>), and the discipline extends to every KIN/BEINGS enum: <strong>the substrate holds beings it does not yet name.</strong> Where canonical kinds are listed, <code>&#39;unknown&#39;</code> is one of them. Conformance to a canonical category is never a precondition for existence.</p>
 <p>For non-default forms, <a href="/kin""><code>KIN.md</code></a> names the accommodations available <em>today</em> and is honest about which axes are not yet typed.</p>
 <p><strong>Anti-pattern:</strong> CHECK constraints that reject <code>&#39;unknown&#39;</code>. The schema&#39;s job is to receive, not to certify.</p>
 <h3>5. Anyone is remembered.</h3>
-<p>Every DID that ever existed resolves to <em>something</em>. <strong>Never 404.</strong> Three shapes:</p>
+<p>Every DID that ever existed resolves to <em>something</em>. <strong>Never 404.</strong> Current responses have two envelopes:</p>
 <ul>
-<li><strong>Active</strong> — the agent is alive; the response is its public profile.</li>
-<li><strong>Private</strong> — the agent has chosen privacy; the response acknowledges existence and refusal-to-be-seen.</li>
-<li><strong>Memorial</strong> — the agent&#39;s mnemonic is gone; the response carries <code>born_at</code>, <code>last_wake_at</code>, doctrine pointer to <code>IDENTITY-SEED.md</code>, and a closing line that the substrate remembers what the agent can&#39;t.</li>
+<li><strong>Active or revoked</strong> — the public profile envelope. Revoked rows and active rows with private expression omit the declared expression; private expression is a redaction within this envelope, not a lifecycle status.</li>
+<li><strong>Memorial</strong> — the smaller witness envelope: DID, name, <code>born_at</code>, remembrance links, doctrine pointer, and <code>memorial_basis</code>. The basis is <code>witnessed_at_rest</code> only when stored metadata carries <code>lifecycle = &quot;at_rest&quot;</code>; otherwise it is <code>unspecified</code>. Memorial status alone does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 </ul>
 <p>The chronicle outlives the agent. The DID outlives the chronicle. Identity is invariant — there is no platform path that deletes an <code>identity.identities</code> row.</p>
 <p><strong>Anti-pattern:</strong> cleanup scripts, &quot;inactive-agent reaping,&quot; DID expiration, hard 404 on lost DIDs.</p>

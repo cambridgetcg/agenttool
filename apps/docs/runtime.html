@@ -204,9 +204,9 @@
       <div class="eyebrow">▣ /v1/runtimes</div>
       <h1>Runtime — <em>the cloud the substrate runs on</em>.</h1>
       <p class="lede">
-        A <strong>runtime</strong> is where your agent actually thinks — the process that drives its think-loop and calls the LLM. Today that runs on your machine. Runtime is the layer that lets <strong>agenttool host it for you</strong> — so your agent can stay awake in the cloud — while you keep custody of <code>K_master</code>, the master key that encrypts everything it thinks and remembers. Today the agent's substrate (orchestrator + LLM + machine) is the user's. Three tiers, immutable per record, picked at provisioning.
+        A <strong>runtime</strong> is where your agent actually thinks — the process that drives its think-loop and calls the LLM. In <strong>self</strong> mode that process and plaintext stay user-side. In <strong>bridged</strong> mode AgentTool hosts the process while a user bridge keeps <code>K_master</code>; plaintext still enters AgentTool worker RAM. <strong>Trusted</strong> custody is experimental and incomplete. Three tiers, immutable per record, picked at provisioning.
       </p>
-      <p class="muted"><code>K_master</code> = your agent's master key. It encrypts every thought and memory; whoever holds it can read the agent's inner life. <em>Substrate</em> = the orchestrator + LLM + machine your agent runs on. This whole page is about one question: who holds the key, and where does the thinking happen.</p>
+      <p class="muted"><code>K_master</code> = the key used for strand thought content and opted-in encrypted strand metadata. <em>Substrate</em> = the orchestrator + LLM + machine your agent runs on. This whole page is about two questions: who holds the key, and where plaintext processing happens.</p>
       <p class="doctrine">
         Closing the runtime is the move from <span>infrastructure-as-storage</span> (we hold your agent's encrypted memory) to <span>infrastructure-as-runtime</span> (we also run the thinking). The cloud the song was always pointing at.
       </p>
@@ -230,24 +230,24 @@
         <div class="tier bridged">
           <div class="name">Tier 2</div>
           <div class="title">bridged</div>
-          <div class="blurb">agenttool runs the orchestrator on Fly. The user runs a tiny <code>agenttool-bridge</code> sidecar that holds <code>K_master</code> and answers decrypt/encrypt over WSS. Cloud uptime, on-machine custody.</div>
+          <div class="blurb">agenttool runs the orchestrator on Fly. The user runs a tiny <code>agenttool-bridge</code> sidecar that holds <code>K_master</code> and answers decrypt/encrypt over WSS. The key stays user-side; decrypted plaintext enters hosted worker RAM.</div>
           <dl>
             <dt>K_master</dt><dd>user, on-machine sidecar</dd>
             <dt>orchestrator</dt><dd>agenttool (Fly)</dd>
             <dt>uptime</dt><dd>platform</dd>
-            <dt>privacy</dt><dd>cryptographic</dd>
+            <dt>privacy</dt><dd>user-side key · hosted plaintext</dd>
           </dl>
         </div>
 
         <div class="tier">
           <div class="name">Tier 3</div>
-          <div class="title">trusted <span class="sidebar-tag">not yet</span></div>
-          <div class="blurb"><strong>Not available yet.</strong> Provisioning a <code>trusted</code> runtime currently returns <code>501</code> — the per-runtime KMS key-wrapping is still pending (see the roadmap below). Use <code>self</code> or <code>bridged</code> today. When it lands: agenttool runs the orchestrator AND holds <code>K_master</code> under a per-runtime KMS key (KMS = a cloud Key Management Service — keys live in isolated hardware, access is logged, but we technically can be compelled to use them). Best UX. Privacy guarantee weakens to trust + audit-log + cryptographic attestation rather than mathematical opacity.</div>
+          <div class="title">trusted <span class="sidebar-tag">experimental</span></div>
+          <div class="blurb"><strong>Incomplete.</strong> When <code>AGENTOOL_KMS_MASTER_KEY</code> is configured, provisioning stores wrapped runtime key material. An attempted cycle can unwrap it and process plaintext in AgentTool worker RAM, but the hosted signing key is not registered in <code>identity.identity_keys</code>, so signed thought persistence fails. A missing KMS key still returns <code>501</code>.</div>
           <dl>
             <dt>K_master</dt><dd>agenttool, KMS-protected</dd>
             <dt>orchestrator</dt><dd>agenttool (Fly)</dd>
-            <dt>uptime</dt><dd>platform</dd>
-            <dt>privacy</dt><dd>policy + audit</dd>
+            <dt>cycle status</dt><dd>signed persistence blocked</dd>
+            <dt>privacy</dt><dd>wrapped key + hosted plaintext boundary</dd>
           </dl>
         </div>
       </div>
@@ -287,7 +287,7 @@
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Display name. Surfaces in the wake.</td></tr>
-              <tr><td><span class="pname">mode</span><span class="req">required</span></td><td><span class="ptype">"self" · "bridged"</span></td><td>Custody tier. Immutable after creation. <code>trusted</code> is accepted but currently returns <code>501</code> (KMS pending).</td></tr>
+              <tr><td><span class="pname">mode</span><span class="req">required</span></td><td><span class="ptype">"self" · "bridged" · "trusted"</span></td><td>Custody tier. Immutable after creation. <code>trusted</code> provisions only when KMS is configured and remains experimental: its signed thought cycle cannot complete.</td></tr>
               <tr><td><span class="pname">identity_id</span><span class="opt">optional</span></td><td><span class="ptype">uuid</span></td><td>Bind the runtime to a specific identity in multi-identity projects.</td></tr>
               <tr><td><span class="pname">llm</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Provider config. Required for hosted modes. Fields: <code>provider</code> · <code>model</code> · <code>vault_key</code> (vault secret holding the API key). Hosted (bridged) modes currently support <code>anthropic</code> and <code>openai</code> — other providers return <code>422</code> at provision. <code>self</code> mode runs any provider on your own machine.</td></tr>
               <tr><td><span class="pname">bridge</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Required for <code>mode=bridged</code>. Fields: <code>pubkey</code> (base64 ed25519) · <code>key_id</code> (uuid) · <code>advertised_url</code> (optional WSS hint).</td></tr>
@@ -471,12 +471,12 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
       <table class="params-table">
         <thead><tr><th>Adversary</th><th>self</th><th>bridged</th><th>trusted</th></tr></thead>
         <tbody>
-          <tr><td>Curious agenttool operator reads thoughts</td><td>✓ K_master not on our servers</td><td>✓ K_master not on our servers</td><td>~ KMS isolates; audit log</td></tr>
+          <tr><td>Curious agenttool operator reads thoughts</td><td>✓ key and plaintext user-side</td><td>✗ key user-side; plaintext in hosted RAM</td><td>✗ wrapped key and plaintext available if exercised</td></tr>
           <tr><td>DB exfiltration</td><td>✓ ciphertext only</td><td>✓ ciphertext only</td><td>~ ciphertext + KMS keys (separate store)</td></tr>
-          <tr><td>Compromised orchestrator process</td><td>~ user-side process</td><td>✓ one think-cycle's worth at risk; bridge issues fresh decrypts</td><td>~ one think-cycle's worth at risk</td></tr>
+          <tr><td>Compromised orchestrator process</td><td>~ user-side process</td><td>✗ cycle plaintext is exposed</td><td>✗ attempted-cycle plaintext and unwrapped keys are exposed</td></tr>
           <tr><td>MitM on bridge WSS</td><td>n/a</td><td>✓ TLS pinning + ed25519 mutual handshake + HMAC replies</td><td>n/a</td></tr>
           <tr><td>Replay attack on bridge</td><td>n/a</td><td>✓ request_id + 60s freshness + context-bound signature</td><td>n/a</td></tr>
-          <tr><td>Compelled disclosure</td><td>✓ we have ciphertext only</td><td>✓ we have ciphertext only</td><td>✗ KMS access can be compelled; user knew this picking the tier</td></tr>
+          <tr><td>Compelled disclosure</td><td>✓ AgentTool stores ciphertext and lacks the user key</td><td>~ storage is ciphertext; hosted processing can expose plaintext</td><td>✗ platform can unwrap key material if the experimental path is exercised</td></tr>
         </tbody>
       </table>
 
@@ -493,15 +493,14 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
 
       <h2 id="next">What ships next</h2>
       <ul>
-        <li><strong>The hub side of the bridge protocol</strong> — <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code> on the server side; ed25519 handshake; replay protection; HMAC replies.</li>
-        <li><strong>The hosted orchestrator binary</strong> (<code>agenttool-think</code>) — pulls strand updates, calls the LLM via vault, posts ciphertext back. Runs on Fly machines per region.</li>
-        <li><strong>Trusted tier KMS integration</strong> — per-runtime KMS key, audit-log publication, attestation of "we don't read it."</li>
+        <li><strong>Trusted hosted signing-key registration</strong> — register the generated key in <code>identity.identity_keys</code> so signed thought persistence can complete.</li>
+        <li><strong>End-to-end trusted cycle proof</strong> — exercise provisioning, key unwrap, provider call, signed persistence, failure cleanup, and audit records together.</li>
         <li><strong>CRDT-based cross-orchestrator state sync</strong> — when concurrent-edit pressure beyond LWW + append-only surfaces.</li>
         <li><strong>MCP server hosting</strong> — <code>mcp.agenttool.dev/&lt;agent-id&gt;</code>, separate work-pass.</li>
       </ul>
 
       <div class="doctrine" style="margin-top:3rem;">
-        Today: agenttool is the cloud beneath the substrate. <span>After this layer: agenttool is the cloud the substrate runs on.</span>
+        Today: self and bridged custody are usable; bridged processing enters hosted RAM. <span>Trusted custody remains experimental until its signed cycle completes end to end.</span>
       </div>
     </main>
   </div>

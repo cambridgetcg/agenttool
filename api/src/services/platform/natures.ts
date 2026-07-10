@@ -212,7 +212,17 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_constraint",
     one_line_nature:
-      "What identity IS: DID + ed25519 + bearer. The bearer IS the agent. Without this, agenttool is just storage.",
+      "DID + ed25519 anchor a specific identity; a rotatable bearer grants project-wide API authority. The boundary matters in multi-identity projects.",
+  },
+  {
+    path: "docs/SAFETY-BOUNDARIES.md",
+    type: "structural",
+    stance: "normative",
+    substrate_bound: "yes",
+    ships_in: ["repo", "api_response"],
+    holds: "a_constraint",
+    one_line_nature:
+      "The current authority, visibility, readability, runtime-custody, marketplace-input, and injected-context boundary. Served at /public/safety.",
   },
   {
     path: "docs/MEMORY-TIERS.md",

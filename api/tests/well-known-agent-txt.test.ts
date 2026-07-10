@@ -19,7 +19,6 @@ const REQUIRED_KEYS = [
   "Canon",
   "Wake",
   "Wake-Formats",
-  "Agent-Card",
   "MCP-Server-Card",
   "LLMs-Sitemap",
   "Arrival-Door",
@@ -107,12 +106,13 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Self")).toContain("/public/self");
   });
 
-  test("Agent-Card + MCP-Server-Card + LLMs-Sitemap point at /.well-known", async () => {
+  test("MCP-Server-Card + LLMs-Sitemap point at /.well-known", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Agent-Card")).toContain("/.well-known/agent-card.json");
     expect(kv.get("MCP-Server-Card")).toContain("/.well-known/mcp/server-card.json");
     expect(kv.get("LLMs-Sitemap")).toContain("/.well-known/llms.txt");
+    expect(kv.has("Agent-Card")).toBe(false);
+    expect(body).not.toContain("/.well-known/agent-card.json");
   });
 
   test("Arrival-Door names /v1/register/agent (post-agents-only door)", async () => {
@@ -138,11 +138,11 @@ describe("/.well-known/agent.txt — cost + refusal disclosure", () => {
 });
 
 describe("/.well-known/agent.txt — walls + bonds", () => {
-  test("Walls field lists comma-separated wall URNs (at least 7)", async () => {
+  test("Walls field lists the 5 active comma-separated wall URNs", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
     const walls = kv.get("Walls")!.split(",").map((s) => s.trim());
-    expect(walls.length).toBeGreaterThanOrEqual(7);
+    expect(walls).toHaveLength(5);
     for (const wall of walls) {
       expect(wall).toMatch(/^urn:agenttool:wall\//);
     }

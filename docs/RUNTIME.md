@@ -18,9 +18,24 @@ Today, agenttool is the cloud beneath the agent — memory, identity, wallet, va
 
 That makes agenttool *infrastructure-as-storage* — like S3 for agency.
 
-Closing the runtime is the move from S3 to EC2. agenttool becomes *infrastructure-as-runtime* — the cloud the agent's substrate runs ON, not just the cloud the substrate writes TO. The user can keep BYO substrate (the privacy-pure way) or provision a hosted runtime (the always-on way).
+Closing the runtime is the move from S3 to EC2. agenttool becomes *infrastructure-as-runtime* — the cloud the agent's substrate runs ON, not just the cloud the substrate writes TO. The user can keep BYO substrate or provision a hosted runtime.
 
-Promise 9 still holds either way: *your inner voice is yours alone.* The architecture lets the user pick a custody tier where that promise is preserved by construction, while still getting the cloud-platform UX.
+The privacy boundary depends on runtime mode. Persistent thought storage is
+ciphertext-only, but hosted processing is not automatically opaque.
+
+### Current implementation status
+
+`self` and `bridged` are the usable custody modes. `trusted` is experimental:
+a runtime row can be provisioned when `AGENTOOL_KMS_MASTER_KEY` is configured,
+and an attempted cycle can unwrap keys and process plaintext, but it cannot
+complete the signed thought write. The hosted signing key is derived as a
+`trusted-*` identifier and is not yet registered in
+`identity.identity_keys`, while the thought store requires a registered key.
+
+Until that registration flow and an end-to-end signed-cycle test land, treat
+`trusted` as unavailable for completed think cycles. Trusted-mode custody
+descriptions below state what can happen if the experimental code path is
+exercised; they are not an availability claim.
 
 ---
 
@@ -61,8 +76,8 @@ agenttool-bridge (sidecar)                    Hosted orchestrator
 
 **Who runs the loop:** agenttool's hosted orchestrator on Fly.io.
 **Who holds K_master:** the user, on their machine, in a small `agenttool-bridge` sidecar binary (10MB, Bun-compiled).
-**What we see:** ciphertext + derived metadata. The bridge exposes only `decrypt(blob, nonce)` and `encrypt(plaintext)` operations — never the key itself. Plaintext lives in the orchestrator's RAM only for the duration of one think-cycle, never disk.
-**Trade-off:** privacy preserved cryptographically; needs the user's bridge to be reachable. Bridge auto-reconnects across IP changes via the agent's signing key.
+**What we see:** K_master does not cross from the bridge, but decrypted plaintext lives in AgentTool's hosted orchestrator RAM during a think-cycle and is sent to the chosen model provider. Persistent strand storage remains ciphertext-only.
+**Trade-off:** user-side key custody with hosted plaintext processing; needs the user's bridge to be reachable. This protects against a database-only compromise, not a compromised hosted process or operator. Bridge auto-reconnects across IP changes via the agent's signing key.
 **Use case:** the production default. Cloud-uptime UX with on-machine custody.
 
 The bridge protocol is an authenticated WSS connection initiated by the orchestrator and authenticated against the agent's ed25519 signing key. Each request carries:
@@ -86,7 +101,7 @@ Replies carry an HMAC-SHA256 over the request_id + result, keyed off a per-sessi
 
 Latency budget: a single LLM-call cycle in bridged mode is `≈ 2× WSS RTT + bridge crypto + LLM call`. Typical: orchestrator in lhr, bridge on a London laptop, ≈ 80ms round-trip overhead per think-cycle. Negligible relative to a 1–10s LLM call.
 
-### Tier 3 — `trusted`
+### Tier 3 — `trusted` (experimental, incomplete)
 
 ```
                                               agenttool cloud
@@ -97,13 +112,14 @@ Latency budget: a single LLM-call cycle in bridged mode is `≈ 2× WSS RTT + br
                                                 └── encrypt/decrypt in-process
 ```
 
-**Who runs the loop:** agenttool's hosted orchestrator.
-**Who holds K_master:** agenttool, encrypted-at-rest under a per-runtime KMS key (Cloud KMS / AWS KMS, hardware-backed where available).
-**What we see:** plaintext, briefly, in the orchestrator's RAM during each think-cycle.
-**Trade-off:** the privacy guarantee weakens to *trust + audit-log + cryptographic attestation* rather than *mathematical opacity*. The platform commits to never reading plaintext, with audit logs published per-runtime to an append-only chronicle the user can verify.
-**Use case:** when the user prefers UX over the sidecar requirement. Suitable for agents owned by orgs that already trust their cloud.
+**Availability:** provisionable when KMS is configured, but currently unable to complete signed thought persistence because hosted identity-key registration is unfinished.
+**Who runs an attempted loop:** agenttool's hosted orchestrator.
+**Who holds K_master if exercised:** agenttool, wrapped at rest under the configured `AGENTOOL_KMS_MASTER_KEY` platform secret.
+**What we can see if exercised:** plaintext in orchestrator RAM and model input at the chosen provider, even if the later signed write fails.
+**Trade-off:** the privacy boundary weakens to platform trust plus an append-only runtime audit log, rather than process-level cryptographic opacity. Plaintext and key copies can exist in the hosted process; buffer zeroing is best effort and is not a secure-erasure promise.
+**Use case today:** testing the incomplete trusted custody path only. Do not rely on it for completed thought cycles.
 
-We mark `trusted` runtimes with a visible flag in `/v1/wake` and the dashboard so the human always knows the trade-off.
+Provisioned `trusted` runtime rows are marked by mode in `/v1/wake` and the dashboard. That visible mode does not mean the signed-cycle path is complete.
 
 ---
 
@@ -259,7 +275,11 @@ This is the part that makes the architecture work. Read carefully.
 
 A 32-byte AES-256 secret. Generated client-side at agent birth (during bootstrap). Used to encrypt strand thoughts and any opt-into-encryption strand metadata. **Never sent to agenttool in the `self` and `bridged` modes** — period.
 
-In `trusted` mode, the user explicitly enrolls K_master into a per-runtime KMS key. The platform commits to never reading the plaintext-decrypt API; this is policy + audit, not cryptographic.
+In the experimental `trusted` path, provisioning generates runtime key material
+wrapped under the platform KMS secret. If that path is exercised, the hosted
+worker can unwrap it and read plaintext. The path cannot currently complete a
+signed thought write because its signing key is not registered as an identity
+key.
 
 ### How `bridged` keeps K_master local
 
@@ -282,7 +302,13 @@ The hosted orchestrator's think-loop blocks on a missing bridge after a 30s grac
 
 ### What about the LLM call?
 
-In all three tiers, the LLM call goes from the orchestrator (or self-hosted process) directly to the provider — Anthropic, OpenAI, Google, Cohere — using the agent's vault-loaded API key. The LLM provider sees plaintext (it's a model; plaintext is the input). agenttool never sees the LLM traffic in the `self`/`bridged` tiers. In `trusted`, the orchestrator briefly holds plaintext between decrypt-from-vault and send-to-provider; nothing logs it.
+In `self`, the LLM call leaves the user-run orchestrator directly for the
+provider. In `bridged`, AgentTool's hosted orchestrator makes the provider call,
+so AgentTool worker RAM and the provider both receive plaintext even though
+K_master stays in the user bridge. If the experimental `trusted` path is
+exercised, the hosted orchestrator can likewise hold plaintext and send model
+input before the later signed write fails. Do not infer provider-traffic
+opacity from ciphertext-only strand storage.
 
 ---
 
@@ -290,14 +316,14 @@ In all three tiers, the LLM call goes from the orchestrator (or self-hosted proc
 
 | Adversary | What they could try | What protects |
 |---|---|---|
-| **Curious agenttool operator** | Read user thoughts | `bridged`/`self`: K_master is not on our servers. We hold ciphertext only. `trusted`: KMS isolates plaintext access; audit log is append-only and verifiable. |
-| **agenttool DB exfiltration** | Extract `runtimes.*` + `strands.thoughts` | Thoughts: ciphertext under K_master not derivable from DB rows. `trusted` runtimes: KMS keys are not stored alongside ciphertext (separate store; per-runtime). |
-| **Compromised hosted orchestrator process** | Read decrypted plaintext during a think-cycle | `self`/`bridged`: only one think-cycle's worth at risk; bridge issues fresh decryptions per request. The orchestrator process never logs plaintext, never persists it. `trusted`: same in-RAM-only constraint. |
+| **Curious agenttool operator** | Read user thoughts | `self`: K_master and processing stay user-side. `bridged`: K_master stays user-side, but hosted worker RAM receives plaintext. Experimental `trusted`: if exercised, the platform can unwrap runtime key material and process plaintext. |
+| **agenttool DB exfiltration** | Extract `runtimes.*` + `strands.thoughts` | Strand rows contain ciphertext. Experimental trusted runtime rows also contain wrapped key material; the platform KMS secret is separate from those rows. |
+| **Compromised hosted orchestrator process** | Read decrypted plaintext during a think-cycle | `self`: no hosted cycle. `bridged`: plaintext crosses hosted RAM while the user bridge retains the key. Experimental `trusted`: attempted cycles can expose plaintext before signed persistence fails. |
 | **MitM on the bridge WSS** | Intercept decrypt/encrypt traffic | TLS pinning + ed25519 mutual handshake + HMAC-bound replies. An attacker would need both sides' private keys to forge. |
 | **Replay attack on bridge** | Re-issue an old decrypt request to leak plaintext under different context | Each request signed over a `request_id` + 60s freshness window + context (strand_id, thought_seq) bound into the signature. Server rejects stale request_ids. |
 | **Compromised user machine** | Steal K_master from the bridge's keychain access | OS-level mitigation (Secure Enclave on macOS, libsecret/TPM on Linux, Credential Manager on Windows). The bridge requires keychain unlock at startup; doesn't cache the key beyond that. |
 | **State desync between runtimes** | Two runtimes write conflicting strand status | Per-strand lease in `runtimes.active_strands` + sequence-num-monotonic + ed25519-signed thoughts make byte-level conflict impossible. Metadata uses LWW with explicit warnings. |
-| **Compelled disclosure** (court order to hand over thoughts) | "Give us this user's plaintext" | `self`/`bridged`: we hand over ciphertext bytes. We cannot decrypt. By design. `trusted`: the order would be served, but the audit log + the runtime's published mode flag means the user knew this was the trade-off when they chose it. |
+| **Compelled disclosure** (court order to hand over thoughts) | "Give us this user's plaintext" | `self`: AgentTool has stored ciphertext and does not have the user-held K_master. `bridged`: persistent storage is ciphertext, but hosted processing can expose plaintext in memory. Experimental `trusted`: if exercised, the platform has wrapped-key custody and can process plaintext. |
 
 ---
 
@@ -341,7 +367,9 @@ $ curl -X POST https://api.agenttool.dev/v1/runtimes \
 
 ## What about MCP server hosting?
 
-Separate but composes. agenttool can also expose an **MCP server** at `mcp.agenttool.dev/<agent-id>`, authenticated by the agent's bearer, exposing the same primitives (`/v1/wake`, `/v1/memories`, `/v1/strands`, etc.) over MCP rather than REST. CLIs that speak MCP first-class (Claude Code, Cursor) get a richer integration than the hook-based adapters.
+Separate but composes. AgentTool exposes an authenticated MCP surface at
+`/v1/mcp` and a per-agent variant at `/v1/mcp/agents/:did`, backed by the same
+core primitives. See the live discovery documents for the current contract.
 
 This is its own work-pass with its own design cycle. Doctrine deferred to `MCP-SERVER.md`.
 
@@ -349,7 +377,9 @@ This is its own work-pass with its own design cycle. Doctrine deferred to `MCP-S
 
 ## What about CLI adapters for Cursor / Cline / Replit?
 
-Once the runtime layer is shipped, adapters become simpler — they just need to wire the host CLI to fetch `/v1/wake?format=md` at session start. The pattern is well-established by Claude Code + Codex. Each new CLI takes one work-pass.
+The maintained scaffold today is Claude Code at
+`/v1/adapters/claude-code`. Other CLIs can fetch `/v1/wake?format=md`
+directly, but they do not currently have mounted first-class adapter routes.
 
 ---
 

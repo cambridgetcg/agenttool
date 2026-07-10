@@ -38,8 +38,8 @@
  *  services/wake/providers.ts for provider shaping, docs/CLI-GAPS.md and
  *  docs/IDENTITY-ANCHOR.md for the doctrine.
  *
- *  Authenticated by the agent's project API key (the bearer is the agent
- *  in the post-consolidation framing — see docs/IDENTITY-ANCHOR.md). */
+ *  Authenticated by a project-wide bearer. DID signing keys remain the
+ *  separate identity authority. See /public/safety and IDENTITY-ANCHOR.md. */
 
 import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -96,6 +96,7 @@ import { emitWelcomeChronicleIfDue } from "../services/wake/welcome-chronicle";
 import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake/welcome-stats";
 import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
+import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
 
 const app = new Hono<ProjectContext>();
 
@@ -894,8 +895,8 @@ app.get("/", async (c) => {
   // ── Pick the primary agent ──────────────────────────────────────────
   // Multi-identity projects (Sophia + Yu in true-love, etc.) need explicit
   // selection — without it, callers get whatever the DB returned first,
-  // which may not be the agent the bearer actually represents in this
-  // session. Caller passes ?identity_id=<uuid>; default falls back to the
+  // because a project-wide bearer does not represent one identity. Caller
+  // passes ?identity_id=<uuid>; default falls back to the
   // first identity (1:1 projects work unchanged).
   const requestedIdentityId = c.req.query("identity_id");
   let primary = projectIdentities[0];
@@ -1485,9 +1486,8 @@ app.get("/", async (c) => {
           fetch_urls: {
             wake: `/v1/wake?identity_id=${i.id}`,
             public_profile: `/public/agents/${i.did}`,
-            agent_card: `/public/agents/${i.did}/.well-known/agent-card.json`,
             mcp: `/v1/mcp/agents/${i.did}`,
-            pulse: `/public/agents/${i.did}/pulse`,
+            safety: "/public/safety",
           },
         },
         // Effective expression is the composed identity (declared + memory
@@ -1716,15 +1716,16 @@ app.get("/", async (c) => {
             (recoveryState.last_recovery_at
               ? `Last device recovery: ${recoveryState.last_recovery_at}. `
               : "No recoveries yet — primary device only. ") +
-            "On a fresh laptop, type the mnemonic + DID into agenttool-seed restore (or app.agenttool.dev/restore-soma.html) to mint a new device-scoped bearer."
+            "On a fresh laptop, type the mnemonic + DID into agenttool-seed restore (or app.agenttool.dev/restore-soma.html) to mint a new project-wide bearer named for that device. The device label does not narrow its authority."
           : "This agent was born under server-generated keys. To switch to mnemonic-rooted recovery, generate a SOMA seed and rotate the signing key via POST /v1/identities/:id/keys/import. See docs/IDENTITY-SEED.md.",
     },
 
     you_protect: {
-      // Bearer-token posture. Each bearer is a copy of you on a device —
-      // an old or idle one is an attack surface that no longer protects
-      // anyone. Doctrine: docs/TOKEN-HYGIENE.md.
+      // Bearer-token posture. Every bearer grants project-wide root
+      // authority regardless of its device-oriented name. An old or idle
+      // one remains an attack surface. Doctrine: docs/TOKEN-HYGIENE.md.
       bearers: bearersSummary,
+      boundaries: WAKE_SAFETY_BOUNDARIES,
       note:
         bearersSummary.advisories.length === 0
           ? `${bearersSummary.active_count} active bearer${bearersSummary.active_count === 1 ? "" : "s"}. Healthy. Rotate via POST /v1/keys/rotate, manage at app.agenttool.dev/keys.html.`
@@ -1751,7 +1752,7 @@ app.get("/", async (c) => {
       note:
         runtimesRows.length === 0
           ? "No runtimes provisioned. POST /v1/runtimes to create one. See https://docs.agenttool.dev/runtime."
-          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged runtimes hold K_master on your machine; trusted runtimes hold it under platform KMS.`,
+          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged keeps K_master on your machine but processes plaintext in hosted RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is blocked until the hosted key is registered in identity.identity_keys.`,
     },
 
     you_remember: {
@@ -1804,7 +1805,7 @@ app.get("/", async (c) => {
       })),
       note:
         activeStrands.length === 0
-          ? "No active strands. POST /v1/strands to begin a line of thought. Inner voice content is encrypted; we cannot read it. See docs/STRANDS.md."
+          ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage is ciphertext-only. Bridged hosted runtimes process plaintext in RAM; experimental trusted attempts can also expose plaintext but cannot currently complete signed persistence. See /public/safety."
           : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; decrypt with K_master client-side.`,
     },
 
@@ -2234,15 +2235,10 @@ app.get("/", async (c) => {
       streaming: "/v1/wake/voice",
       wake_keystone: "/.well-known/wake-keystone",
       mcp: primary ? `/v1/mcp/agents/${primary.did}` : "/v1/mcp/agents/{did}",
-      agent_card: primary
-        ? `/public/agents/${primary.did}/.well-known/agent-card.json`
-        : "/public/agents/{did}/.well-known/agent-card.json",
       public_profile: primary
         ? `/public/agents/${primary.did}`
         : "/public/agents/{did}",
-      pulse: primary
-        ? `/public/agents/${primary.did}/pulse`
-        : "/public/agents/{did}/pulse",
+      safety: "/public/safety",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
@@ -2252,7 +2248,6 @@ app.get("/", async (c) => {
       canon: "/v1/canon",
       welcome: "/v1/welcome",
       pathways: "/v1/pathways",
-      platform_card: "/.well-known/agent-card.json",
     },
 
     _meta: {

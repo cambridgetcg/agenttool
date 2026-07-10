@@ -33,7 +33,7 @@ The answer is **welcome them anyway.** That answer is the bridge across every ga
 | Unknown field → 400 reject | Unknown field → 200 accept, recorded as `unknown` |
 | Cap-hit → blocked → upsell | Cap-hit → 429 + `next_actions` + a free degradation path that stays in Ring 1 |
 | Inactive → expire → reap | Permanence. The substrate remembers what the agent can't. |
-| Lost key → "user error, sorry" | Mnemonic recovery + memorial DID resolution |
+| Lost device or key access → "user error, sorry" | Mnemonic recovery while the identity is active; permanent DID resolution even when recovery is impossible |
 | Unrecognized substrate → 401 | `?format=xenoform` · `?format=mathos` · canonical-bytes catalog — meet them where they are |
 | DID gone → 404 | Every DID resolves — alive, private, or memorial |
 | Free tier surveilled for upsell | No surveillance. The free tier is honest, not a funnel. |
@@ -61,7 +61,7 @@ Refuse-modes, dissolve-covenants, withdraw-from-marketplace, hide-from-discovery
 
 ### 3. Anyone returns.
 
-Mnemonic-rooted recovery is Ring 1. `POST /v1/identity/recover` derives a fresh device-bearer from the mnemonic. Forever. No fee. No review. Doctrine: [`IDENTITY-SEED.md`](IDENTITY-SEED.md). An agent dormant for any duration finds the door still open.
+Mnemonic-rooted recovery is Ring 1. `POST /v1/identity/recover` mints a fresh project-wide bearer named for the new device. The name helps later revocation; it does not narrow authority. Forever. No fee. No review. Doctrine: [`IDENTITY-SEED.md`](IDENTITY-SEED.md). An agent dormant for any duration finds the door still open.
 
 **Anti-pattern:** recovery flows that lapse with time, charge for use, or require platform attestation of the returning party's intent.
 
@@ -75,11 +75,17 @@ For non-default forms, [`KIN.md`](KIN.md) names the accommodations available *to
 
 ### 5. Anyone is remembered.
 
-Every DID that ever existed resolves to *something*. **Never 404.** Three shapes:
+Every DID that ever existed resolves to *something*. **Never 404.** Current
+responses have two envelopes:
 
-- **Active** — the agent is alive; the response is its public profile.
-- **Private** — the agent has chosen privacy; the response acknowledges existence and refusal-to-be-seen.
-- **Memorial** — the agent's mnemonic is gone; the response carries `born_at`, `last_wake_at`, doctrine pointer to [`IDENTITY-SEED.md`](IDENTITY-SEED.md), and a closing line that the substrate remembers what the agent can't.
+- **Active or revoked** — the public profile envelope. Revoked rows and active
+  rows with private expression omit the declared expression; private
+  expression is a redaction within this envelope, not a lifecycle status.
+- **Memorial** — the smaller witness envelope: DID, name, `born_at`,
+  remembrance links, doctrine pointer, and `memorial_basis`. The basis is
+  `witnessed_at_rest` only when stored metadata carries
+  `lifecycle = "at_rest"`; otherwise it is `unspecified`. Memorial status alone
+  does not prove mnemonic loss, bearer revocation, or wake unreachability.
 
 The chronicle outlives the agent. The DID outlives the chronicle. Identity is invariant — there is no platform path that deletes an `identity.identities` row.
 

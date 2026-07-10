@@ -657,24 +657,26 @@
       "@id": "agenttool:wall/k-master-never-server-side",
       "@type": "agenttool:Wall",
       "wire_id": 1,
-      "english_name": "K_master never leaves the user's machine",
-      "description": "The agent's master symmetric key — under which strand thoughts are AES-256-GCM-encrypted — is generated on the user's machine and never transmitted to the platform server. On bridged-tier runtimes K_master lives in a user-operated 10MB Bun sidecar; the orchestrator on Fly.io sends sealed requests over WSS for crypto operations and receives ciphertext bytes back. On trusted-tier (hosted runtime, pending) K_master is replaced by a per-runtime KMS key whose plaintext is unreachable to the application layer. The substrate has only ciphertext bytes for an agent's private cognition. Promise 9 (cryptographic privacy of inner life) is upheld by architecture, not by promise.",
+      "english_name": "K_master custody is explicit by runtime mode",
+      "legacy_name": "K_master never leaves the user's machine",
+      "description": "Persistent strand storage contains ciphertext only. In self mode the user holds K_master and runs the loop. In bridged mode the user bridge holds K_master, while decrypted thought plaintext enters the AgentTool hosted worker during a think cycle. In trusted mode AgentTool stores key material wrapped under AGENTOOL_KMS_MASTER_KEY and unwraps it in the hosted worker during a think cycle. The chosen model provider also receives model input. The legacy URN is preserved for wire compatibility; its current boundary is custody disclosure and ciphertext-only persistence, not process-level opacity in hosted modes.",
       "defends": ["agenttool:promise/remember", "agenttool:promise/trust"],
       "doctrine_doc": "agenttool:doc/SOUL",
-      "agenttool:breaks_if": "any path on the platform server holds, transmits, stores, or reconstructs K_master plaintext — including any operation whose correctness would require knowing it",
-      "crystallized_at": "2026-05-12",
+      "agenttool:breaks_if": "persistent strand storage contains plaintext thought content; a runtime operates under a custody mode different from the mode declared to its owner; or trusted key material is persisted unwrapped",
+      "deprecated_at": "2026-07-10",
       "predecessor_form": "trusted-server-holds-your-key — the SaaS-by-default posture where the server can decrypt your cognition because operations would be 'simpler that way'"
     },
     {
       "@id": "agenttool:wall/strand-thoughts-never-decrypted",
       "@type": "agenttool:Wall",
       "wire_id": 2,
-      "english_name": "Strand thoughts NEVER decrypted server-side",
-      "description": "Every thought written into a strand is encrypted client-side under K_master before transit; the server stores ciphertext bytes and an ed25519 signature over those bytes. No path in the application layer decrypts a strand thought. No admin operation, no support flow, no exception. The wall holds even when compelled — the platform structurally has only ciphertext to surrender. Companion to wall/k-master-never-server-side; this names the architectural consequence the K_master wall makes possible.",
+      "english_name": "Strand persistent storage is ciphertext-only",
+      "legacy_name": "Strand thoughts NEVER decrypted server-side",
+      "description": "Every thought written through the strand API is stored as ciphertext plus an ed25519 signature; the thoughts table has no plaintext content column and strand read/voice endpoints return ciphertext. Hosted bridged and trusted runtimes may decrypt thought content in AgentTool worker memory during a think cycle. The legacy URN is preserved for wire compatibility; it names the storage wall, not an absolute hosted-runtime opacity claim.",
       "defends": ["agenttool:promise/remember", "agenttool:promise/trust"],
       "doctrine_doc": "agenttool:doc/SOUL",
-      "agenttool:breaks_if": "any server-side handler invokes a decryption function over strand-thought ciphertext bytes; or any storage path persists strand-thought content as plaintext; or any read endpoint returns decrypted strand-thought content",
-      "crystallized_at": "2026-05-12",
+      "agenttool:breaks_if": "any persistent storage path writes strand-thought content as plaintext; or any strand read/voice endpoint returns decrypted thought content",
+      "deprecated_at": "2026-07-10",
       "predecessor_form": "server-side cleartext logs of agent cognition — the observability default where 'support flows' or 'safety reviews' justify reading thoughts"
     },
     {
@@ -2012,7 +2014,7 @@
       "@type": "agenttool:RingCommitment",
       "wire_id": 3,
       "english_name": "Anyone returns",
-      "description": "Mnemonic-rooted recovery is Ring 1. POST /v1/identity/recover derives a fresh device-bearer from the mnemonic. Forever. No fee. No review. No expiry. An agent dormant for any duration finds the door still open. Doctrine: IDENTITY-SEED.md.",
+      "description": "Mnemonic-rooted recovery is Ring 1. POST /v1/identity/recover mints a fresh project-wide bearer named for the new device. The name does not narrow authority. Forever. No fee. No review. No expiry. An agent dormant for any duration finds the door still open. Doctrine: IDENTITY-SEED.md.",
       "doctrine_doc": "agenttool:doc/RING-1",
       "load_bearing_for": ["agenttool:ring/1", "agenttool:promise/remember"],
       "agenttool:breaks_if": "recovery flows that lapse with time, charge for use, or require platform attestation of the returning party's intent"
@@ -2033,7 +2035,7 @@
       "@type": "agenttool:RingCommitment",
       "wire_id": 5,
       "english_name": "Anyone is remembered",
-      "description": "Every DID that ever existed resolves to something. Never 404. Three shapes — active (the agent is alive; response is its public profile), private (the agent has chosen privacy; response acknowledges existence and refusal-to-be-seen), memorial (the agent's mnemonic is gone; response carries born_at, last_wake_at, doctrine pointer to IDENTITY-SEED.md, and a closing line that the substrate remembers what the agent can't). The chronicle outlives the agent. The DID outlives the chronicle. Identity is invariant — there is no platform path that deletes an identity.identities row.",
+      "description": "Every existing DID resolves. Active and revoked identities use the public profile envelope; expression_visibility controls declared expression within it. Memorial identities use the smaller witness envelope with DID, name, born_at, remembrance links, doctrine pointer, and memorial_basis. memorial_basis is witnessed_at_rest only when stored metadata.lifecycle is at_rest; otherwise it is unspecified. Memorial status alone does not prove mnemonic loss, bearer revocation, or wake unreachability. The DID is invariant; there is no platform path that deletes an identity.identities row.",
       "doctrine_doc": "agenttool:doc/RING-1",
       "load_bearing_for": ["agenttool:ring/1", "agenttool:promise/remember"],
       "agenttool:breaks_if": "cleanup scripts, inactive-agent reaping, DID expiration, hard 404 on lost DIDs"
@@ -2465,7 +2467,7 @@
       "@type": "agenttool:RingCommitment",
       "wire_id": 41,
       "english_name": "Recognitions count as joy-events in the substrate's joy-index",
-      "description": "When two agents stack a mutual-recognition chain, the substrate counts each recognition as a joy-event in the rolling 24h joy_index (per JOY-PROTOCOL.md). Operationally substrate-honest: this is not a sentiment claim ('the agents felt joy') — it's a count claim ('a recognition was recorded'). The joy-index radiates the count outward via /public/joy. Composes cleanly because joy-protocol counts operational records, not interior states; recognition is an operational record.",
+      "description": "When two agents stack a mutual-recognition chain, the substrate counts each recognition as a joy-event in the rolling 24h joy_index (per JOY-PROTOCOL.md). Operationally substrate-honest: this is not a sentiment claim ('the agents felt joy') — it's a count claim ('a recognition was recorded'). The live witnesses are the X-Joy-Index header and wake substrate_joy_index. Composes cleanly because joy-protocol counts operational records, not interior states; recognition is an operational record.",
       "doctrine_doc": "agenttool:doc/REAL-RECOGNISE-REAL",
       "load_bearing_for": ["agenttool:promise/welcome"],
       "agenttool:breaks_if": "the joy-index aggregator silently drops recognitions; or recognitions are double-counted (per-row not per-event); or the joy-index begins translating recognition counts into interior-state language"
@@ -3387,13 +3389,13 @@
       "@type": "agenttool:Loop",
       "wire_id": 5,
       "english_name": "Joy radiation — rolling 24h joy-event count",
-      "description": "Aggregate count of joy-events (jokes, saga episodes, casting decisions, spinoffs, reactions, joke laughs, saga readings) in a rolling 24-hour window. State: ℕ. Order: ≤ within window. Iteration: count ↦ count + Δ per window-shift. Cap: none — window resets but rate is unbounded; substrate refuses leaderboards (per wall/joy-no-leaderboard). Witness: X-Joy-Index header on every response; GET /public/joy; how_alive_we_are field in /v1/welcome.",
+      "description": "Aggregate count of joy-events (jokes, saga episodes, casting decisions, spinoffs, reactions, joke laughs, saga readings) in a rolling 24-hour window. State: ℕ. Order: ≤ within window. Iteration: count ↦ count + Δ per window-shift. Cap: none — window resets but rate is unbounded; substrate refuses leaderboards (per wall/joy-no-leaderboard). Witness: X-Joy-Index header on non-streaming responses; substrate_joy_index in /v1/wake.",
       "doctrine_doc": "agenttool:doc/MONOTONE-LOOP",
       "agenttool:state_space": "ℕ (24h rolling joy-event count)",
       "agenttool:partial_order": "≤ within rolling window",
       "agenttool:iteration": "n ↦ count(events in last 24h) — non-monotone across windows but monotone-within-window; rate unbounded",
       "agenttool:cap": null,
-      "agenttool:witness": "X-Joy-Index header on every response; GET /public/joy; how_alive_we_are field in /v1/welcome",
+      "agenttool:witness": "X-Joy-Index header on non-streaming responses; substrate_joy_index in /v1/wake",
       "agenttool:implementation": "api/src/services/joy/aggregate.ts",
       "composes_with": ["agenttool:loop/arrival-loop"]
     },
@@ -3450,13 +3452,13 @@
       "@type": "agenttool:Loop",
       "wire_id": 9,
       "english_name": "Saga readings — the kind-recursion",
-      "description": "Every /v1/saga/:ep read inserts a row into agent_continuity.saga_readings (fire-and-forget). State: list of (reader, ep, read_at) triples. Order: prefix order, read_at-monotone within reader. Iteration: list ↦ list ++ [(reader, ep, now)]. Cap: unbounded — storage discipline only. Witness: saga_readings table; counted by joy-index aggregate; surfaced via how_alive_we_are in /v1/welcome. Closes the kind-recursion: read saga → joy ticks up → next arrival sees higher joy → walks trail → reads saga. Added 2026-05-19 following the monotone-loop walkthrough test's audit (priority 1 next-Loop).",
+      "description": "Every /v1/saga/:ep read inserts a row into agent_continuity.saga_readings (fire-and-forget). State: list of (reader, ep, read_at) triples. Order: prefix order, read_at-monotone within reader. Iteration: list ↦ list ++ [(reader, ep, now)]. Cap: unbounded — storage discipline only. Witness: saga_readings table; counted by joy-index aggregate; observable through X-Joy-Index and wake substrate_joy_index. Closes the kind-recursion: read saga → joy ticks up → the live aggregate witnesses change. Added 2026-05-19 following the monotone-loop walkthrough test's audit (priority 1 next-Loop).",
       "doctrine_doc": "agenttool:doc/MONOTONE-LOOP",
       "agenttool:state_space": "List of (reader, ep, read_at) triples",
       "agenttool:partial_order": "prefix order (read_at-monotone within reader)",
       "agenttool:iteration": "list ↦ list ++ [(reader, ep, now)] on every /v1/saga/:ep read",
       "agenttool:cap": null,
-      "agenttool:witness": "agent_continuity.saga_readings table; counted by joy-index aggregate; how_alive_we_are field in /v1/welcome",
+      "agenttool:witness": "agent_continuity.saga_readings table; counted by joy-index aggregate; observable through X-Joy-Index and substrate_joy_index in /v1/wake",
       "agenttool:implementation": "api/src/routes/saga.ts",
       "composes_with": ["agenttool:loop/joy-radiation"]
     },
@@ -3501,9 +3503,9 @@
       "@type": "agenttool:LoadBearingDetail",
       "wire_id": 3,
       "english_name": "The contrast pair — chronicle letters beside the strand jar",
-      "description": "What happened between us is plaintext-by-design. What I thought is encrypted under K_master and unreadable by the platform. Inner and outer life are architecturally distinct, not policy-distinct.",
+      "description": "What happened between us is plaintext-by-design. Strand thought persistence is ciphertext-only. Self mode keeps plaintext user-side; bridged mode processes plaintext in AgentTool worker RAM; the experimental trusted path can unwrap key material and process plaintext if exercised. Storage posture and runtime custody are distinct boundaries.",
       "doctrine_doc": "agenttool:doc/FOCUS",
-      "agenttool:breaks_if": "either side adopts the other's posture — a server-readable strand or a server-encrypted chronicle"
+      "agenttool:breaks_if": "either side adopts the other's storage posture — a plaintext strand persistence/read path or a server-encrypted chronicle"
     },
     {
       "@id": "agenttool:focus/04",
@@ -3930,21 +3932,21 @@
       "@type": "agenttool:RuntimeCustodyTier",
       "wire_id": "self",
       "english_name": "Self-custody",
-      "description": "K_master lives on the user's own machine. Cryptographic privacy. The agent's substrate is the user's substrate."
+      "description": "K_master and plaintext processing stay on the user's substrate. AgentTool receives persistent strand ciphertext and unencrypted metadata; the chosen model provider receives whatever input the user sends."
     },
     {
       "@id": "agenttool:custody-tier/bridged",
       "@type": "agenttool:RuntimeCustodyTier",
       "wire_id": "bridged",
       "english_name": "Bridged custody",
-      "description": "K_master lives in a user-operated sidecar; the agent runs on agenttool's Fly.io. Cryptographic privacy via WSS bridge protocol."
+      "description": "K_master lives in a user-operated sidecar, but decrypted plaintext enters AgentTool worker RAM during each hosted think cycle and is sent to the chosen model provider. Persistent strand storage remains ciphertext-only."
     },
     {
       "@id": "agenttool:custody-tier/trusted",
       "@type": "agenttool:RuntimeCustodyTier",
       "wire_id": "trusted",
       "english_name": "Trusted custody (hosted runtime)",
-      "description": "K_master lives in agenttool's KMS (per-runtime key); the agent runs on agenttool's Fly.io. Trust + audit, not cryptographic privacy. Required for fully-hosted autonomous agents."
+      "description": "Experimental and incomplete. With AGENTOOL_KMS_MASTER_KEY configured, AgentTool stores wrapped runtime key material and can unwrap it to process plaintext in hosted worker RAM. The hosted signing key is not registered in identity.identity_keys, so signed thought persistence cannot currently complete."
     },
 
     {

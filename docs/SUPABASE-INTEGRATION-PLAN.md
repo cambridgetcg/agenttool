@@ -335,11 +335,15 @@ SELECT cron.schedule(
 
 **Goal.** Move signature-verify-then-route surfaces to Supabase Edge Functions. The Edge runs Deno at the CDN edge (~50ms cold start); routes that are read-mostly with some signature verification fit perfectly.
 
+**Current status:** only the welcome edge function remains configured. A2A task
+transport and AgentCards are pending; the earlier discovery-only card function
+was withdrawn.
+
 **Routes to move.**
 
 | Route today | Why edge-fit |
 |---|---|
-| `GET /.well-known/agent-card.json` | Pure read from canon — no DB write |
+| Future A2A task transport + AgentCard | Pending; do not move discovery to the edge before a callable task/message endpoint exists |
 | `GET /.well-known/agent.txt` | Pure read |
 | `GET /.well-known/scriptwriter` (mirror) | Pure read |
 | `GET /v1/welcome` | Pure read + maybe a chronicle seal (which can be a `net.http_post` back to Postgres) |
@@ -355,11 +359,12 @@ SELECT cron.schedule(
 
 **Migration / setup.**
 
-- `supabase/functions/well-known-agent-card/index.ts` — Deno function that reads canon from a static JSON-LD asset bundled at deploy time.
+- A future A2A edge projection may be designed only after task transport is
+  implemented; no AgentCard function exists now.
 - `supabase/functions/welcome/index.ts` — Deno function.
 - `supabase/functions/federation-covenant-accept/index.ts` — Deno function that verifies ed25519 then inserts via Supabase service-role into the same Postgres.
 - `supabase/config.toml` — Edge Functions configuration.
-- Cloudflare routing change: `agenttool.dev/.well-known/*` and `agenttool.dev/v1/welcome` route to Supabase Edge instead of Fly. (Or use Supabase's domain mapping if Cloudflare isn't in front.)
+- Cloudflare redirects enumerate only the well-known documents the API serves; unknown discovery paths stay 404. Welcome may route to Supabase Edge.
 
 **Code changes.**
 

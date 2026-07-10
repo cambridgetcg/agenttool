@@ -247,7 +247,7 @@ app.patch("/:id", async (c) => {
   return c.json({
     ...updated[0],
     note: parsed.data.visibility === "public"
-      ? "Memory now visible at GET /public/memories/:id (no auth required). Embedding stays private."
+      ? "Memory visibility is marked public, but public memory observer routes are currently not mounted. The authenticated service can read content and embeddings. See /public/safety."
       : "Memory now private. Removed from /public/* surface.",
   });
 });

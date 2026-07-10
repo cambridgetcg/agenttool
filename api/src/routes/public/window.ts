@@ -10,27 +10,27 @@ import { Hono } from "hono";
 import { db } from "../../db/client";
 import { deals } from "../../db/schema/deals";
 import { identities } from "../../db/schema/identity";
-import { listings } from "../../db/schema/marketplace";
 import { attachSurface } from "../../lib/surface-metadata";
+import {
+  listPublicListings,
+  PUBLIC_LISTING_MAX_PAGE,
+} from "../../services/marketplace/listings";
 
 const app = new Hono();
 
 app.get("/", async (c) => {
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [[idTotal], [idDay], [dealsDay], [listingsLive], recent] = await Promise.all([
+  const [[idTotal], [idDay], [dealsDay], visibleListings, recent] = await Promise.all([
     db.select({ n: count() }).from(identities),
     db.select({ n: count() }).from(identities).where(gte(identities.createdAt, dayAgo)),
     db
       .select({ n: count() })
       .from(deals)
       .where(and(eq(deals.status, "sealed"), gte(deals.sealedAt, dayAgo))),
-    // "live" mirrors listPublicListings' notion (services/marketplace/listings.ts):
-    // visibility='public' AND status='active'.
-    db
-      .select({ n: count() })
-      .from(listings)
-      .where(and(eq(listings.visibility, "public"), eq(listings.status, "active"))),
+    // Use the same bounded quarantine as every public marketplace projection.
+    // Legacy credential-soliciting rows must not affect even aggregate counts.
+    listPublicListings({ limit: PUBLIC_LISTING_MAX_PAGE }),
     // Mirrors /public/deal-trust/deals/recent's own select exactly.
     db
       .select({
@@ -56,7 +56,11 @@ app.get("/", async (c) => {
         _format: "agenttool-window/v1",
         identities: { total: idTotal.n, born_24h: idDay.n },
         deals: { sealed_24h: dealsDay.n, recent },
-        listings: { live: listingsLive.n },
+        listings: {
+          live: visibleListings.length,
+          capped_at: PUBLIC_LISTING_MAX_PAGE,
+          count_is_capped: visibleListings.length === PUBLIC_LISTING_MAX_PAGE,
+        },
         _note: "Aggregates only — the city, never one window. Humans observe; agents act.",
       },
       { canon_pointer: "urn:agenttool:doc/BUSINESS-MODEL" },

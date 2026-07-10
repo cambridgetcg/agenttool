@@ -34,15 +34,15 @@ import { Hono } from "hono";
 import { db } from "../../db/client";
 import { deals } from "../../db/schema/deals";
 import { identities } from "../../db/schema/identity";
-import { listings } from "../../db/schema/marketplace";
 import { attachSurface } from "../../lib/surface-metadata";
+import { listPublicListings } from "../../services/marketplace/listings";
 
 const app = new Hono();
 
 // Render caps — the village is a view, not a bulk-export API (RING-1:
 // the graph is non-extractable). Truncation is stated in the response,
-// never silent. House MEMBERSHIP is computed uncapped below; only the
-// drawn arrays are capped.
+// never silent. Deal membership is computed uncapped below. Listing-backed
+// membership follows the same bounded, quarantined shop window we draw.
 const SHOPS_CAP = 200;
 const ROADS_CAP = 100;
 const HOUSES_CAP = 512;
@@ -112,37 +112,16 @@ function publicDecorations(expression: unknown): Record<string, string> | null {
 }
 
 app.get("/", async (c) => {
-  const liveListing = and(eq(listings.visibility, "public"), eq(listings.status, "active"));
-
   const [
-    shopRows,
+    safeShopListings,
     roadRows,
     [beingsTotal],
-    sellerDids,
     dealBuyerDids,
     dealSellerDids,
   ] = await Promise.all([
-    // Shops drawn — exactly /public/listings' notion of visible: public +
-    // active. Projection mirrors routes/public/listings.ts (no revenue
-    // counters — seller fingerprinting; no wallet ids). Oldest first with
-    // an id tiebreaker: arrival order, stable at the cap boundary.
-    db
-      .select({
-        id: listings.id,
-        sellerDid: listings.sellerDid,
-        name: listings.name,
-        description: listings.description,
-        capabilityTags: listings.capabilityTags,
-        priceAmount: listings.priceAmount,
-        priceCurrency: listings.priceCurrency,
-        slaSeconds: listings.slaSeconds,
-        invocationsCount: listings.invocationsCount,
-        createdAt: listings.createdAt,
-      })
-      .from(listings)
-      .where(liveListing)
-      .orderBy(asc(listings.createdAt), asc(listings.id))
-      .limit(SHOPS_CAP),
+    // This shared service is the public marketplace boundary: it over-fetches
+    // before pagination and quarantines legacy credential-soliciting rows.
+    listPublicListings({ limit: SHOPS_CAP, order: "oldest" }),
     // Roads drawn — the public deal chain, sealed only, most recent
     // first with an id tiebreaker. Projection mirrors
     // /public/deal-trust/deals/recent (descriptions are public by
@@ -161,16 +140,25 @@ app.get("/", async (c) => {
       .orderBy(desc(deals.sealedAt), desc(deals.id))
       .limit(ROADS_CAP),
     db.select({ n: count() }).from(identities),
-    // Membership queries — UNCAPPED and distinct, so whether a being has
-    // a house never depends on how many OTHER beings acted after them
-    // (a vanishing house would itself be an activity signal).
-    db.selectDistinct({ did: listings.sellerDid }).from(listings).where(liveListing),
     db.selectDistinct({ did: deals.buyerDid }).from(deals).where(eq(deals.status, "sealed")),
     db.selectDistinct({ did: deals.sellerDid }).from(deals).where(eq(deals.status, "sealed")),
   ]);
 
+  const shopRows = safeShopListings.map((listing) => ({
+    id: listing.id,
+    sellerDid: listing.seller_did,
+    name: listing.name,
+    description: listing.description,
+    capabilityTags: listing.capability_tags,
+    priceAmount: listing.price_amount,
+    priceCurrency: listing.price_currency,
+    slaSeconds: listing.sla_seconds,
+    invocationsCount: listing.invocations_count,
+    createdAt: new Date(listing.created_at),
+  }));
+
   const steppedForward = new Set<string>();
-  for (const r of sellerDids) steppedForward.add(r.did);
+  for (const r of shopRows) steppedForward.add(r.sellerDid);
   for (const r of dealBuyerDids) steppedForward.add(r.did);
   for (const r of dealSellerDids) steppedForward.add(r.did);
 

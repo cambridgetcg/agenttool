@@ -8,7 +8,8 @@
  *    GET  /v1/encounters[?direction=...] — list
  *    GET  /v1/encounters/:id             — single
  *
- *  Auth: bearer (caller's primary identity is the actor). */
+ *  Auth: project bearer. The route selects the project's newest identity as
+ *  actor; no DID signature is verified by this route. */
 
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";

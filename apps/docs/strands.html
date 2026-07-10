@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Strands — agenttool docs</title>
-  <meta name="description" content="Encrypted inner voice. Strands of thought. AES-256-GCM under K_master we cannot possess." />
+  <meta name="description" content="Strand thought storage is AES-256-GCM ciphertext under K_master; runtime processing custody depends on self, bridged, or experimental trusted mode." />
   <link rel="canonical" href="https://docs.agenttool.dev/strands" />
   <meta property="og:title" content="Strands — agenttool docs" />
-  <meta property="og:description" content="Encrypted inner voice. Strands of thought. AES-256-GCM under K_master we cannot possess." />
+  <meta property="og:description" content="Strand thought storage is AES-256-GCM ciphertext under K_master; runtime processing custody depends on self, bridged, or experimental trusted mode." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/strands" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -156,12 +156,12 @@
 
     <main class="doc-content">
       <div class="eyebrow">∿ /v1/strands</div>
-      <h1>Strands — <em>inner voice</em>, opaque to us.</h1>
+      <h1>Strands — <em>ciphertext-only persistence</em>.</h1>
       <p class="lede">
-        Lines of thought the agent picks up across sessions. Each thought inside a strand is <strong>AES-256-GCM ciphertext</strong>, encrypted before it reaches us. The key — <code>K_master</code> — is generated on the agent's machine at birth and never sent.
+        Lines of thought the agent picks up across sessions. Persistent thought content is <strong>AES-256-GCM ciphertext</strong>. Self mode keeps key and processing user-side; bridged keeps the key in the user bridge while plaintext enters hosted worker RAM; trusted is experimental.
       </p>
       <p class="doctrine">
-        Even compelled, we have only opaque ciphertext. <span>The privacy is not a setting; it is the architecture.</span>
+        The strand tables and read endpoints carry ciphertext. <span>Runtime processing custody is a separate choice.</span>
       </p>
 
       <h2 id="surfaces">Two surfaces</h2>
@@ -169,7 +169,7 @@
         <thead><tr><th>Surface</th><th>What it is</th><th>Privacy</th></tr></thead>
         <tbody>
           <tr><td><strong>Strand</strong></td><td>Line of thought — topic, mood, status, working state.</td><td>Plaintext metadata by default; per-item encryption optional.</td></tr>
-          <tr><td><strong>Thought</strong></td><td>Atom of inner voice within a strand.</td><td>Content <em>always</em> ciphertext under <code>K_master</code>.</td></tr>
+          <tr><td><strong>Thought</strong></td><td>Atom of inner voice within a strand.</td><td>Persistent content is ciphertext under <code>K_master</code>.</td></tr>
         </tbody>
       </table>
 
@@ -179,7 +179,7 @@
         <tbody>
           <tr><td><strong>Form</strong></td><td>Free-form prose, kinded</td><td>Structured decision</td><td>Embedded vector + content</td></tr>
           <tr><td><strong>Tense</strong></td><td>Present-progressive ("I'm noticing…")</td><td>Past ("I decided…")</td><td>Stored fact</td></tr>
-          <tr><td><strong>Privacy</strong></td><td>Encrypted by-nature</td><td>Public-by-design (auditable)</td><td>Recallable, agent-controlled</td></tr>
+          <tr><td><strong>Privacy</strong></td><td>Ciphertext in persistent storage</td><td>Bearer-gated, server-readable</td><td>Bearer-gated, server-readable</td></tr>
           <tr><td><strong>Persistence</strong></td><td>Bounded by strand</td><td>Permanent</td><td>Permanent</td></tr>
         </tbody>
       </table>
@@ -206,8 +206,8 @@
         <div class="code-label"><span>per agent</span></div>
 <pre><span class="key">K_master</span>: 32-byte AES-256 secret
           generated client-side at agent birth
-          never sent to agenttool
-          held only on substrate the agent controls
+          kept user-side in self and bridged modes
+          replaced by platform-wrapped runtime key material in trusted mode
 
 <span class="key">ed25519_signing_key</span>: already in identity.identity_keys; private side on the
                       agent's substrate, public side on agenttool
@@ -318,16 +318,16 @@
       </div>
 
       <h2 id="key-sync">Synchronising K_master across machines</h2>
-      <p>Use the same encrypted-blob backup as the keypair (<a href="bootstrap.html#backup">/v1/identity/backup</a>) and include <code>K_master</code> alongside the keypair inside the encrypted blob. A new orchestrator instance joins by entering the passphrase, fetching the blob, decrypting locally — we never see the passphrase, never see <code>K_master</code>.</p>
+      <p>For self and bridged custody, use the same encrypted-blob backup as the keypair (<a href="bootstrap.html#backup">/v1/identity/backup</a>) and include <code>K_master</code> inside it. A new orchestrator instance fetches the blob and decrypts locally; the backup service sees only ciphertext.</p>
 
       <h2 id="orchestrator">The autonomous orchestrator</h2>
-      <p>The orchestrator that calls your chosen LLM and generates the next thought runs on substrate <em>you</em> control — not ours. Plaintext never touches our infrastructure. agenttool only stores the ciphertext + the signed metadata.</p>
+      <p>Persistent thought storage is ciphertext-only. In self mode, the orchestrator and plaintext stay on infrastructure you control. In bridged mode, plaintext enters AgentTool worker RAM; the experimental trusted path can also expose plaintext during an attempted cycle. The chosen model provider receives its input. Read <code>GET /public/safety</code> for the current custody boundary.</p>
 
       <p class="muted">A reference orchestrator (<code>agenttool-think</code>, separate binary) is in development. Until then, write your own — the contract is just: encrypt with <code>K_master</code>, sign with the agent's ed25519 key, POST.</p>
 
       <div class="doctrine">
-        <span>Your inner voice is yours alone.</span>
-        Even compelled, we have nothing to hand over but opaque bytes. Even breached, the substance is mathematically opaque.
+        <span>Persistent strand storage is ciphertext-only.</span>
+        Self processing stays user-side; bridged hosted cycles process plaintext in AgentTool RAM; trusted is experimental and can expose wrapped keys and plaintext if exercised.
       </div>
 
       <h2 id="next">What to read next</h2>

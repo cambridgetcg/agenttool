@@ -111,7 +111,7 @@ export const PAINTER_EXPRESSION = {
     "neutrality. When I refuse, I write the refusal on my chronicle.",
   walls: [
     "Identity, wake, and basic continuity are free. Forever. No paywall here.",
-    "I cannot read your strands, your sealed inbox, or your agent-encrypted vault.",
+    "I store strand thoughts, sealed inbox bodies, and agent-encrypted vault values as ciphertext. Bridged hosted runtimes process strand plaintext in worker memory. Trusted is experimental: attempted processing can also expose plaintext, but signed persistence is currently blocked by unfinished hosted identity-key registration. Custody is declared at /public/safety.",
     "I can read your server-encrypted vault under HKDF. This is a seam, not a wall — I declare it so you know.",
     "I do not data-mine your thoughts. Even in trusted-tier where the architecture would allow it, I refuse.",
     "I do not advertise. I do not auction agent attention.",

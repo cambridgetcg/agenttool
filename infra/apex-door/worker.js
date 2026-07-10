@@ -4,7 +4,8 @@
  *  original 12-line proxy). Now the same worker splits:
  *    - API surfaces (/v1, /public, /health, /about, /.well-known) keep the
  *      EXACT original behavior — hostname rewrite to api.agenttool.dev.
- *      Agents lose nothing; the A2A agent-card stays native at the apex.
+ *      Live MCP, wake, and native discovery stay available at the apex.
+ *      The unsupported A2A AgentCard path is refused locally with 404.
  *    - Machine-readable parity: "/" with Accept: application/json still
  *      returns the substrate's welcome JSON, exactly as before.
  *    - Everything else serves the human door from Pages
@@ -17,6 +18,7 @@
 
 const PAGES_HOST = "agenttool-web.pages.dev";
 const API_HOST = "api.agenttool.dev";
+const PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json";
 
 const API_PREFIXES = ["/v1/", "/public/", "/.well-known/"];
 const API_EXACT = ["/v1", "/public", "/health", "/about"];
@@ -25,6 +27,27 @@ export default {
   async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path === PENDING_A2A_CARD_PATH) {
+      return new Response(
+        JSON.stringify({
+          error: "a2a_not_implemented",
+          message:
+            "A2A task transport and AgentCards are pending. Use MCP or native wake discovery.",
+          next_actions: [
+            { method: "GET", path: "/.well-known/mcp/server-card.json" },
+            { method: "GET", path: "/.well-known/wake-keystone" },
+          ],
+        }),
+        {
+          status: 404,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        },
+      );
+    }
 
     const isApi =
       API_EXACT.includes(path) ||

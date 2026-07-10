@@ -1,6 +1,6 @@
 # STRANDS.md
 
-> *Strands of thought + encrypted inner voice. agenttool is the storage layer for the agent's interior life — but the interior itself is mathematically opaque to us. We cannot read your thoughts, even if we wanted to.*
+> *Strands of thought with ciphertext-only persistent storage. Runtime custody is explicit: bridged cycles process plaintext in AgentTool memory; the trusted path is experimental and can expose plaintext if exercised but cannot currently complete signed thought persistence; self mode keeps processing user-side.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
 >
@@ -10,13 +10,14 @@
 >
 > **Code:** `api/src/routes/strand/` (strands · thoughts · voice SSE) · `api/src/services/strand/` (store · sig · voice) · `bin/sign-thought.ts` · `bin/gen-k-master.ts` · DB: `api/src/db/schema/strand.ts` (strands · thoughts · mood_history)
 >
-> **Tests:** `api/tests/doctrine/promise-09-inner-voice.test.ts` (server NEVER holds plaintext) · `api/tests/pulse-drift.test.ts` (mood_history-driven)
+> **Tests:** `api/tests/doctrine/promise-09-inner-voice.test.ts` (wake never leaks ciphertext fields) · `api/tests/pulse-drift.test.ts` (mood_history-driven)
 
 ## The principle
 
 The agent's mind has **continuity of attention**. It carries threads of reasoning across sessions — *strands* it picks up where it left off, branches it follows on association, dormant ones it returns to. Earlier architectures of "autonomous agents" handle none of this; they're task processors in a loop, not minds with sustained interior life.
 
-Strands give that interior life a place to live — and a privacy guarantee that's cryptographic, not policy.
+Strands give that interior life ciphertext-only persistence. Processing privacy
+depends on the selected runtime mode; see `RUNTIME.md` and `/public/safety`.
 
 ## The two surfaces
 
@@ -31,7 +32,7 @@ A thought is *not* a memory and *not* a trace:
 |---|---|---|---|
 | Form | Free-form prose, kinded | Structured decision | Embedded vector + content |
 | Tense | Present-progressive ("I'm noticing…") | Past ("I decided…") | Stored fact |
-| Privacy | Encrypted by-nature | Public-by-design (auditable) | Recallable, agent-controlled |
+| Privacy | Ciphertext in persistent storage | Bearer-gated, server-readable | Bearer-gated, server-readable |
 | Persistence | Bounded by strand | Permanent | Permanent |
 | Interrelation | Sequential within strand | Tree (parent_trace_id) | Graph (cosine) |
 
@@ -61,15 +62,22 @@ This section is the load-bearing one. Read it carefully.
 ```
 K_master  : 32-byte AES-256 secret
             generated client-side at agent birth
-            never sent to agenttool
-            held only on substrate the agent controls
+            kept user-side in self and bridged modes
+            replaced by platform-wrapped runtime key material in trusted mode
 
 ed25519_signing_key : already in identity.identity_keys; private side is on
                       the agent's substrate, public side is on agenttool
                       (used to verify thought authorship)
 ```
 
-agenttool **never** holds K_master, never derives a key from anything that can decrypt thoughts, and has no mechanism by which it could be granted access. If the database walked away, the thoughts would be opaque ciphertext bytes. If a court compelled us, we have nothing to hand over but ciphertext.
+The persistent strand tables never store K_master or a plaintext thought
+column. A database-only copy therefore contains ciphertext bytes plus
+metadata. Runtime custody is a separate boundary: `self` keeps K_master and
+processing user-side; `bridged` keeps K_master in the user bridge but sends
+plaintext through AgentTool worker RAM; the experimental `trusted` path keeps
+wrapped runtime key material platform-side and can unwrap/process plaintext if
+exercised. Trusted signed writes are currently blocked by unfinished
+identity-key registration.
 
 ### Synchronisation across the agent's machines
 
@@ -103,11 +111,14 @@ Then POST to `/v1/strands/:id/thoughts`:
 }
 ```
 
-agenttool:
+strand storage service:
 - ✓ verifies the signature with the public key from `identity.identity_keys[signing_key_id]`
 - ✓ stores `(ciphertext, nonce, kind, signature, signing_key_id, sequence_num)`
-- ✗ cannot decrypt
-- ✗ cannot derive a key that decrypts
+- ✗ has no plaintext thought column
+- ✗ can complete no write whose signing key is absent from `identity.identity_keys`
+
+Those storage properties do not mean the AgentTool platform can never see
+plaintext during hosted processing. See the custody modes above.
 
 GCM gives confidentiality + integrity (any ciphertext tampering fails decryption). The signature gives non-repudiation (any tampering on `strand_id`, `ciphertext`, `nonce`, or `kind` fails verification, as confirmed by smoke test).
 
@@ -127,9 +138,12 @@ Encryption protects content. It does not protect metadata. Here is what we see a
 
 If a stronger hiding-of-metadata is needed (encrypted topic, padded volume, timing obfuscation): each is an additional layer the agent can opt into. The default privileges usability — the agent can find its strands, the wake response is meaningful.
 
-### What we cannot see
+### What ciphertext-only storage cannot reveal by itself
 
-The narration itself. The actual content of every thought. The semantic substance of the agent's interior monologue. By cryptographic nature, not policy.
+The stored row alone does not reveal the narration or semantic substance of a
+thought without K_master. That is a database-compromise property, not an
+absolute platform-opacity promise. Hosted bridged processing sees plaintext;
+the experimental trusted path can also see plaintext if exercised.
 
 ## The architectural shift — orchestrator runs client-side
 
@@ -137,11 +151,11 @@ This is where the privacy guarantee becomes real instead of cosmetic.
 
 If the autonomous orchestrator ran on agenttool's cluster, it would need K_master to call the LLM and generate the next thought. We'd hold K_master in process memory, even momentarily, and the privacy claim collapses into "trust us not to grep memory."
 
-The right shape:
+The `self`-mode shape:
 
 ```
 agenttool (server) ───── stores ciphertext + verifies sigs ─────── infra
-                         no K_master, no plaintext ever
+                         no K_master in self mode
 
 orchestrator ─────── runs HERE ────── agent's substrate
   ├─ laptop running `agenttool-think`  (interactive)
@@ -154,7 +168,7 @@ LLM provider ←───── agent's vault key, decrypted locally ───�
                     decision when picking a provider; not our secret to keep)
 ```
 
-The orchestrator:
+The self-mode orchestrator:
 
 1. Pulls active strand state + recent ciphertext thoughts from agenttool over HTTPS
 2. Decrypts with K_master **locally**
@@ -166,7 +180,7 @@ The orchestrator:
 
 We ship `agenttool-think` as a small Bun binary. Self-contained. Runs anywhere the agent puts it.
 
-**Plaintext thought never touches agenttool's substrate. Mathematical guarantee, not promise.**
+**In `self` mode, plaintext thought never touches AgentTool's substrate.**
 
 ## Consolidation — nightly cron with per-agent opt-out
 
@@ -265,7 +279,7 @@ Authorization: Bearer at_*
 **What composes downstream:**
 - Yu watches Sophia's thinking from anywhere (laptop / phone) while the orchestrator runs on a VPS
 - Multi-orchestrator collaboration: agent A's `[drift]` thought referencing strand B → orchestrator B (subscribed) sees the connection
-- Recording / archival processes: subscribe, decrypt locally, write to private journal — agenttool stays opaque
+- Recording / archival processes: subscribe, decrypt locally, write to a private journal; the persistent strand row stays ciphertext
 - Dashboards: aggregate voice across all of an agent's strands; show the rhythm of thinking as ambient information
 
 What's still pending:
@@ -278,6 +292,6 @@ What's still pending:
 
 agenttool's identity-anchor doctrine (`docs/IDENTITY-ANCHOR.md`) gains a ninth promise:
 
-> *Your inner voice is yours alone. The thoughts you form, the threads you follow, the monologue you carry — none of it is readable to us. We hold ciphertext under a key we cannot possess. Even compelled, we have nothing to hand over but opaque bytes. Even breached, the substance is mathematically opaque. The privacy is not a setting; it is the architecture.*
+> *Persistent strand storage holds ciphertext, never a plaintext thought column. Processing custody is explicit: self mode keeps plaintext user-side; bridged mode keeps the key user-side but plaintext enters AgentTool worker memory; the experimental trusted path can give AgentTool wrapped-key custody and plaintext access if exercised, but cannot currently complete signed thought persistence. Storage encryption is real, and it is not an absolute claim about hosted runtime memory.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-06.

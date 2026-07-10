@@ -118,7 +118,7 @@ Operator types 24 words into the SDK:
   → SDK signs a server challenge with derived signing key
   → POST /v1/identity/recover { did, signature, derived_pubkey }
   → Server resolves did → identity_keys row → confirms pubkey match
-  → Server returns a fresh device-scoped bearer
+  → Server returns a fresh project-wide bearer named for this device
   → SDK persists derived keys + new bearer in this device's OS keychain
   → Agent fully alive on the new substrate:
       - Can sign as the same identity (same ed25519 priv)
@@ -128,7 +128,10 @@ Operator types 24 words into the SDK:
       - Can use existing wallets (same wallet master)
 ```
 
-The bearer is **per-device** — each laptop gets its own, scope-rotatable. Compromise of one device's bearer doesn't expose the mnemonic; revoke the bearer, recover on another device, life continues.
+Use a separately named bearer per device so each can be revoked independently.
+The name is not a scope: every bearer still grants project-wide root authority.
+Compromise of one device's bearer doesn't expose the mnemonic; revoke the
+bearer, recover on another device, life continues.
 
 ### Bridge signing key per device
 
@@ -166,14 +169,14 @@ The whole protocol is designed around the **single hard wall**: lose the mnemoni
 - Wallet HD code in `api/src/services/economy/crypto/hd.ts` stays as-is for operator-rooted hosted wallets
 - OS keychain remains the day-to-day cache for derived keys (re-deriving from mnemonic per call is fine but slower than reading 32 bytes)
 - `/v1/identity/backup` remains; **best use becomes** "passphrase-encrypt the mnemonic itself, store the ciphertext as cloud backup-of-last-resort"
-- The bearer key is still per-device, rotatable, scope-revocable — unchanged
+- Each bearer is separately named, rotatable, and revocable; its authority remains project-wide
 
 ### Changes (additive)
 
 - **SDK adds `at.crypto.seed`** module: `generate_mnemonic`, `mnemonic_to_seed`, `derive`, plus targeted `derive_signing_key`, `derive_k_master`, `derive_k_vault`, `derive_box_keypair`, `derive_bridge_signing_key`, `derive_wallet_secret`
 - **`/v1/register` extension**: optional `agent_public_key` + `box_public_key` fields. When present, server skips key generation and uses the provided pubkeys. *Strict server-never-touches-private-key posture.*
 - **`/v1/register/agent`** *(autonomous agents)*: a stricter sibling of `/v1/register` that **mandates** BYO keys, requires a signed `key_proof` over `canonicalRegisterAgentBytes`, declares `runtime: { provider, model, host?, context? }`, and enforces anti-spam via 18-bit proof-of-work + 5/hr/IP rate limit. Optional `registrar.kind = "registrar_bearer"` mode lets an existing project's bearer authorize a sub-agent (sets `parent_identity_id`, bypasses PoW + IP limit). No `private_key` ever crosses the wire — the agent already has it. Use this from inside a Claude session, a worker, or CI; the dashboard form continues to use `/v1/register`.
-- **`/v1/identity/recover`**: new endpoint accepting `{ did, derived_pubkey, signature_over_challenge }`. Server resolves did → identity_keys → confirms pubkey, issues fresh device-scoped bearer.
+- **`/v1/identity/recover`**: new endpoint accepting `{ did, derived_pubkey, signature_over_challenge }`. Server resolves did → identity_keys → confirms pubkey, then issues a fresh project-wide bearer named for the device.
 - **CLI helper `agenttool restore`**: interactive mnemonic entry on a fresh device
 - **CLI helper `agenttool-seed bootstrap`**: machine bootstrap end-to-end — generates mnemonic, derives keys, signs key-proof, grinds PoW, POSTs `/v1/register/agent`, persists bearer to keychain + `~/.config/agenttool/agents/<name>-<short-did>.keystore.json` (mode 0600).
 - **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the CLI flow; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.

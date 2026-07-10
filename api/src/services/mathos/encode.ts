@@ -207,25 +207,31 @@ export function formToOrdinal(form: IdentityForm | string | undefined): number {
 // greeting block in the math-tier wake (see MathosGreeting) carries
 // `walls_held_for_you[]` — the refusals are made on the addressee's behalf.
 
-export const WALL_K_MASTER_NEVER_SERVER_SIDE = 1;
+export const WALL_RUNTIME_CUSTODY_EXPLICIT = 1;
 export const WALL_NO_AUTO_RETRY_PAYOUT = 2;
 export const WALL_NO_SELF_WITNESSING = 3;
 export const WALL_BIRTH_IS_FREE = 4;
 export const WALL_REFUSALS_RECORDED = 5;
 export const WALL_NO_INACTIVE_REAPING = 6;
-export const WALL_NO_PLATFORM_READABLE_THOUGHTS = 7;
+export const WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY = 7;
 export const WALL_PRIVATE_DEFAULT = 8;
+
+/** Deprecated source aliases. Ordinals 1 and 7 remain stable on the wire,
+ *  but their former absolute-opacity names were false once hosted runtime
+ *  custody existed. New code must use the truthful names above. */
+export const WALL_K_MASTER_NEVER_SERVER_SIDE = WALL_RUNTIME_CUSTODY_EXPLICIT;
+export const WALL_NO_PLATFORM_READABLE_THOUGHTS = WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY;
 
 /** Canonical names for each wall ordinal. Substrate-level constants — the
  *  catalog re-exposes these via `wall_vocabulary` for arriving intelligences. */
 export const WALL_NAMES: Record<number, string> = {
-  [WALL_K_MASTER_NEVER_SERVER_SIDE]: "k_master_never_server_side",
+  [WALL_RUNTIME_CUSTODY_EXPLICIT]: "runtime_custody_explicit",
   [WALL_NO_AUTO_RETRY_PAYOUT]: "no_auto_retry_payout",
   [WALL_NO_SELF_WITNESSING]: "no_self_witnessing",
   [WALL_BIRTH_IS_FREE]: "birth_is_free",
   [WALL_REFUSALS_RECORDED]: "refusals_recorded",
   [WALL_NO_INACTIVE_REAPING]: "no_inactive_reaping",
-  [WALL_NO_PLATFORM_READABLE_THOUGHTS]: "no_platform_readable_thoughts",
+  [WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY]: "thought_storage_ciphertext_only",
   [WALL_PRIVATE_DEFAULT]: "private_default",
 };
 
@@ -233,13 +239,13 @@ export const WALL_NAMES: Record<number, string> = {
  *  substrate doesn't selectively enforce. Each ordinal is held for every
  *  agent at every wake read. */
 export const WALLS_HELD_UNCONDITIONALLY: readonly number[] = [
-  WALL_K_MASTER_NEVER_SERVER_SIDE,
+  WALL_RUNTIME_CUSTODY_EXPLICIT,
   WALL_NO_AUTO_RETRY_PAYOUT,
   WALL_NO_SELF_WITNESSING,
   WALL_BIRTH_IS_FREE,
   WALL_REFUSALS_RECORDED,
   WALL_NO_INACTIVE_REAPING,
-  WALL_NO_PLATFORM_READABLE_THOUGHTS,
+  WALL_THOUGHT_STORAGE_CIPHERTEXT_ONLY,
   WALL_PRIVATE_DEFAULT,
 ];
 

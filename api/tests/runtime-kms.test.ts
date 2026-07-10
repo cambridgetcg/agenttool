@@ -14,6 +14,8 @@ import { describe, expect, test } from "bun:test";
 import { randomBytes } from "@noble/ciphers/webcrypto";
 import * as ed25519 from "@noble/ed25519";
 import { base64 } from "@scure/base";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   generateDekAndWrap,
@@ -87,6 +89,24 @@ describe("KMS module", () => {
 });
 
 describe("trusted-crypto module", () => {
+  test("the think worker clears trusted keys from a finally block", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "src", "services", "runtime", "think-worker.ts"),
+      "utf8",
+    );
+    const cycle = source.slice(
+      source.indexOf("async function runOneCycleWithPrep"),
+      source.indexOf("// ── Cycle preparation"),
+    );
+    expect(cycle).toMatch(/finally\s*\{[\s\S]*zeroTrustedCrypto\(trustedCtx\)/);
+    expect(cycle.indexOf("zeroTrustedCrypto(trustedCtx)")).toBeGreaterThan(
+      cycle.indexOf("} finally {"),
+    );
+    expect(cycle.indexOf('logAudit(runtimeId, "thought_written"')).toBeGreaterThan(
+      cycle.indexOf("await addThought("),
+    );
+  });
+
   test("prepareTrustedCrypto generates signing key on first cycle", async () => {
     const { dek, wrapped } = generateDekAndWrap();
     const ctx = await prepareTrustedCrypto(wrapped, "runtime-test-1", null);

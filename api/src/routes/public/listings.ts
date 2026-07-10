@@ -3,13 +3,31 @@
  *  Lists public + active listings; ranks by invocations_count then recency.
  *  Doctrine: docs/MARKETPLACE.md (Capability marketplace section). */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 
-import { getListing, listPublicListings } from "../../services/marketplace/listings";
+import {
+  listPublicListings,
+  resolvePublicListing,
+} from "../../services/marketplace/listings";
 import { computeFee } from "../../services/marketplace/take-rate";
+import { MARKETPLACE_INPUT_SAFETY } from "../../services/discovery/safety-boundaries";
 
 const app = new Hono();
+
+function blockedListing(c: Context) {
+  return c.json(
+    {
+      error: "listing_blocked_by_safety_boundary",
+      do_not_invoke: true,
+      hint:
+        "This listing solicits credentials. Its seller can edit or archive it, but buyers cannot discover or invoke it.",
+      _safety: MARKETPLACE_INPUT_SAFETY,
+      docs: "/public/safety",
+    },
+    422,
+  );
+}
 
 // GET /public/listings [?q=text&tag=X&seller_did=Y&limit=N]
 app.get("/", async (c) => {
@@ -44,6 +62,7 @@ app.get("/", async (c) => {
       created_at: l.created_at,
     })),
     count: list.length,
+    _safety: MARKETPLACE_INPUT_SAFETY,
     _note:
       "Capability listings — paid callable services agents publish for invocation by " +
       "other agents. Search by what a service is called or does with ?q=text (over name, " +
@@ -57,10 +76,12 @@ app.get("/", async (c) => {
 // GET /public/listings/:id
 app.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const listing = await getListing(id);
-  if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+  const resolved = await resolvePublicListing(id);
+  if (resolved.status === "not_found") {
     throw new HTTPException(404, { message: "listing_not_found" });
   }
+  if (resolved.status === "blocked") return blockedListing(c);
+  const listing = resolved.listing;
   return c.json({
     id: listing.id,
     seller_did: listing.seller_did,
@@ -76,6 +97,7 @@ app.get("/:id", async (c) => {
     invocations_count: listing.invocations_count,
     created_at: listing.created_at,
     updated_at: listing.updated_at,
+    _safety: MARKETPLACE_INPUT_SAFETY,
   });
 });
 
@@ -89,10 +111,12 @@ app.get("/:id", async (c) => {
 // terms, in one read. Doctrine: docs/FRICTION-ROADMAP.md (Tier-0 #1).
 app.get("/:id/quote", async (c) => {
   const id = c.req.param("id");
-  const listing = await getListing(id);
-  if (!listing || listing.visibility !== "public" || listing.status !== "active") {
+  const resolved = await resolvePublicListing(id);
+  if (resolved.status === "not_found") {
     throw new HTTPException(404, { message: "listing_not_found" });
   }
+  if (resolved.status === "blocked") return blockedListing(c);
+  const listing = resolved.listing;
 
   // Same pure function settlement uses — preview is byte-honest with charge.
   const split = computeFee({
@@ -118,6 +142,7 @@ app.get("/:id/quote", async (c) => {
     sla_seconds: listing.sla_seconds,
     disputes_enabled: disputesEnabled,
     dispute_policy: listing.dispute_policy,
+    _safety: MARKETPLACE_INPUT_SAFETY,
     _note:
       "The whole deal before you commit. Amounts are in minor units of the listing " +
       "currency. 'you_pay' is debited into escrow on invoke; on signed completion the " +

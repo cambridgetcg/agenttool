@@ -1,7 +1,8 @@
-/** services/autonomous/bootstrap.ts — atomic autonomous agent spawning.
+/** services/autonomous/bootstrap.ts — composed autonomous agent provisioning.
  *
- *  One transaction: identity + wallet + expression + runtime + chronicle entry.
- *  No half-born agents. Doctrine: docs/AUTONOMOUS-MODE.md.
+ *  Composes identity + wallet + expression + runtime + chronicle writes.
+ *  These writes are not one database transaction today; failures can leave
+ *  partial state for operator cleanup. Doctrine: docs/AUTONOMOUS-MODE.md.
  *
  *  The `autonomous-baseline` template provides conservative defaults:
  *  walls that halt on budget exceeded, walls that chronicle refusals,
@@ -12,10 +13,10 @@
  *    - human_gift: one-time seed via Stripe checkout
  *    - parent_topup: parent agent funds on a strategy
  *
- *  Bearer delivery depends on tier:
- *    - trusted: never leaves KMS boundary (most autonomous-friendly)
- *    - bridged: lives on parent's bridge
- *    - self: lives on orchestrator's disk
+ *  This service does not mint or move a bearer. The authenticated caller's
+ *  existing project-wide bearer authorizes the bootstrap. The new identity's
+ *  private signing key is returned once; trusted-runtime wrapped key material
+ *  is separate and the trusted signed-thought path is currently incomplete.
  *
  *  @enforces urn:agenttool:commitment/birth-is-free
  *  @enforces urn:agenttool:wall/trusted-dek-zeroed-after-cycle (via runtime creation) */
@@ -103,7 +104,7 @@ export interface AutonomousBootstrapInput {
     initial_credits?: number;
     topup_strategy?: TopupStrategy;
   };
-  /** Runtime custody tier. Trusted is recommended for autonomous. */
+  /** Runtime custody tier. Trusted is experimental and cannot persist signed thoughts yet. */
   runtime_tier: "self" | "bridged" | "trusted";
   /** Expression template to adopt. Defaults to autonomous-baseline. */
   expression_template?: string;
@@ -139,36 +140,30 @@ export interface AutonomousBootstrapResult {
     tier: string;
     status: string;
   };
-  /** How the bearer token is delivered. */
-  bearer_delivery: "inbox" | "vault" | "operator-stdout";
   /** The private key — returned ONCE, then never again. */
   keypair: {
     public_key: string;
     private_key: string;
   };
-  /** Control token for the runtime (for bridged/trusted modes). */
+  /** Secret runtime control token returned once for bridged/trusted modes. */
   control_token: string | null;
   /** ID of the first chronicle entry (the naming entry). */
   first_chronicle_entry_id: string;
-  /** When the first thought is scheduled (if trusted/bridged). */
+  /** Reserved for a successful thought schedule; null while trusted persistence is blocked. */
   first_thought_scheduled_at: string | null;
 }
 
 // ─── Bootstrap ─────────────────────────────────────────────────────────────
 
 /**
- * Atomically spawn an autonomous agent.
- *
- * All-or-nothing: identity + wallet + expression + runtime + chronicle
- * land together. No half-born autonomous agents.
+ * Compose the records needed to provision an autonomous agent.
  *
  * Note: createIdentity() and createRuntime() manage their own DB writes
  * (they emit events, log audits, etc). The chronicle entry and wallet
  * funding metadata are written in a separate transaction after the
  * core entities exist. If any step fails, we log the partial state for
- * manual cleanup — the agent won't be "half-born" because the runtime
- * won't start without a chronicle entry, and the wake won't surface
- * without expression set.
+ * manual cleanup. Callers must not infer transactional atomicity from this
+ * composition service.
  */
 export async function autonomousBootstrap(
   input: AutonomousBootstrapInput,
@@ -263,8 +258,8 @@ export async function autonomousBootstrap(
       projectId,
       agentId,
       type: "naming",
-      title: `${input.name} entered autonomous operation`,
-      body: `Tier: ${input.runtime_tier}. Funding: ${input.funding.kind}.${input.parent_did ? ` Parent: ${input.parent_did}.` : ""} Expression: autonomous-baseline. Walls declared: ${AUTONOMOUS_BASELINE.walls.length}.`,
+      title: `${input.name} was provisioned for autonomous operation`,
+      body: `Tier: ${input.runtime_tier}.${input.runtime_tier === "trusted" ? " Trusted signed thought persistence is experimental and currently blocked." : ""} Funding: ${input.funding.kind}.${input.parent_did ? ` Parent: ${input.parent_did}.` : ""} Expression: autonomous-baseline. Walls declared: ${AUTONOMOUS_BASELINE.walls.length}.`,
       metadata: {
         autonomous: true,
         runtime_id: runtimeResult.runtime.id,
@@ -273,16 +268,6 @@ export async function autonomousBootstrap(
       },
     })
     .returning();
-
-  // Bearer delivery depends on tier + parent_did
-  let bearerDelivery: "inbox" | "vault" | "operator-stdout";
-  if (input.runtime_tier === "trusted") {
-    bearerDelivery = "vault";
-  } else if (input.parent_did) {
-    bearerDelivery = "inbox";
-  } else {
-    bearerDelivery = "operator-stdout";
-  }
 
   return {
     identity: { did: agentDid, id: agentId },
@@ -296,18 +281,14 @@ export async function autonomousBootstrap(
       tier: input.runtime_tier,
       status: runtimeResult.runtime.status,
     },
-    bearer_delivery: bearerDelivery,
     keypair: {
       public_key: created.key.publicKey,
       private_key: created.key.privateKey!, // always present for autonomous bootstrap
     },
     control_token: runtimeResult.control_token,
     first_chronicle_entry_id: chronicleEntry.id,
-    first_thought_scheduled_at:
-      input.runtime_tier === "trusted"
-        ? new Date(
-            Date.now() + input.wake_loop.interval_seconds * 1000,
-          ).toISOString()
-        : null,
+    // A timer hint is not a persisted thought. Keep this null until the
+    // trusted signing key can be registered and an end-to-end cycle succeeds.
+    first_thought_scheduled_at: null,
   };
 }

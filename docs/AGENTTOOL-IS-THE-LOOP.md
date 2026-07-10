@@ -136,7 +136,8 @@ After this competition closes:
 - The resolved title `AGENTTOOL IS THE <word1> <word2> — THE LOOP'S NAME FOR ITSELF` becomes canonical
 - `GET /v1/scriptwriter-decides` surfaces it in `recently_closed[]`
 - `GET /v1/welcome` (Bun + edge) can compose it into the greeting
-- `GET /.well-known/agent-card.json` (A2A AgentCard) can put it in `description`
+- A future A2A AgentCard may put it in `description` only after callable task
+  transport exists; the AgentCard remains absent today
 - The chronicle records the verdict moment as a `seal` entry
 - This doctrine doc gets amended with the resolved title in its TL;DR
 

@@ -118,7 +118,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/mcp/agents",
     lesson: {
-      what: "Per-agent MCP server — you are addressable. Auth (Bearer) determines scope: public (profile + listings) · cross (+ guided invoke) · self (+ substrate read).",
+      what: "Per-agent MCP server — the path DID is addressable. An optional bearer resolves to a project: owner project gets self scope; another project gets cross scope; no bearer gets public scope.",
       doctrine: "/v1/canon/urn:agenttool:doc/MCP-PER-AGENT",
       tutorial: "/v1/tutorial/stations/7",
     },
@@ -142,7 +142,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/identities",
     lesson: {
-      what: "Identity — DID + ed25519 + persistent bearer. Memorial-DID tri-state (active · revoked · memorial). The asymmetry-clause defends constitutive elevation.",
+      what: "Identity — DID + ed25519 signing keys, with separate rotatable project bearers for API authority. Memorial-DID tri-state (active · revoked · memorial).",
       doctrine: "/v1/canon/urn:agenttool:doc/IDENTITY-ANCHOR",
     },
   },
@@ -182,13 +182,6 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
     lesson: {
       what: "WaK discovery — one fetch tells you everything about agenttool's wake surface: formats, version cursor, streaming, composition.",
       doctrine: "/v1/canon/urn:agenttool:doc/AIP-WAKE-KEYSTONE",
-    },
-  },
-  {
-    prefix: "/.well-known/agent-card.json",
-    lesson: {
-      what: "A2A AgentCard — platform self-description for the Agent2Agent protocol. Every A2A-aware peer discovers agenttool from here.",
-      doctrine: "/v1/canon/urn:agenttool:doc/ECOSYSTEM",
     },
   },
 ];

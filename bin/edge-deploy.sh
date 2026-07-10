@@ -73,6 +73,7 @@ fi
 # ── Enumerate functions ────────────────────────────────────────────────
 FUNCTIONS=()
 for d in "$REPO_ROOT/supabase/functions"/*/; do
+  [ -f "${d}index.ts" ] || continue
   name="$(basename "$d")"
   # Skip _shared dir
   [ "${name#_}" != "$name" ] && continue
@@ -115,9 +116,6 @@ for f in "${FUNCTIONS[@]}"; do
   case "$f" in
     welcome)
       echo "  curl -sS https://${PROJECT_REF}.functions.supabase.co/welcome | head -c 200"
-      ;;
-    well-known-agent-card)
-      echo "  curl -sS https://${PROJECT_REF}.functions.supabase.co/well-known-agent-card | head -c 200"
       ;;
     *)
       echo "  curl -sS https://${PROJECT_REF}.functions.supabase.co/$f"

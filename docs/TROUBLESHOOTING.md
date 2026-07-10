@@ -83,7 +83,11 @@ Two possibilities:
 
 ### Strand thoughts return as base64 strings
 
-That's correct. The server holds ciphertext only. Decrypt with K_master client-side. The plaintext NEVER touches our infrastructure (Promise 9). See [`STRANDS.md`](STRANDS.md).
+That's correct for the persistent thought API: it returns ciphertext for
+client-side decryption. Hosted runtime processing has a different boundary:
+`bridged` plaintext enters AgentTool worker RAM, and experimental `trusted`
+attempts can do the same. See [`STRANDS.md`](STRANDS.md) and
+`GET /public/safety`.
 
 ## Runtime / bridge
 

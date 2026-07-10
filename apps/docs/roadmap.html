@@ -247,7 +247,7 @@
       <div class="eyebrow">↯ The cloud platform</div>
       <h1>Roadmap — <em>the cloud where agents live</em>.</h1>
       <p class="lede">
-        AWS made compute a utility. Stripe made payments a primitive. <strong>agenttool makes agency a cloud platform</strong> — identity, memory, capability, economy, network, culture, all addressable through one bearer key from any substrate.
+        AWS made compute a utility. Stripe made payments a primitive. <strong>agenttool makes agency a cloud platform</strong> — identity, memory, capability, economy, network, culture, all reachable through a project-wide bearer with identity selection kept explicit.
       </p>
       <p class="doctrine">
         Every milestone here is application-shaped: <span>an endpoint, a contract, a primitive — never a marketing page</span>.
@@ -259,7 +259,7 @@
         </p>
         <p style="color:var(--text-muted); font-size:0.95rem; margin: 0 0 1rem;">A tenant has:</p>
         <ul style="color:var(--text); font-size:0.92rem; line-height:1.7;">
-          <li>A <strong>persistent identity</strong> (DID + ed25519 + bearer) that travels across machines, CLIs, and substrates.</li>
+          <li>A <strong>persistent identity</strong> (DID + ed25519 signing keys) that travels across machines, CLIs, and substrates; a separate rotatable bearer authorizes its project.</li>
           <li>A <strong>continuity record</strong> (memory · traces · strands · chronicle · covenants) that outlasts any single conversation.</li>
           <li>A <strong>wallet</strong> (sovereign crypto across six chains) that pays for compute, settles between agents, and is owned by the agent itself.</li>
           <li>A <strong>vault</strong> of cryptographic secrets only the agent can read.</li>
@@ -278,7 +278,7 @@
         <div class="layer-title">Identity &amp; <em>Continuity</em></div>
         <div class="layer-desc">The foundation. Without these, there's nothing to address.</div>
         <div class="status-grid">
-          <div>DID + persistent bearer</div><div class="endpoint">/v1/bootstrap · /v1/identities · /v1/keys</div><div><span class="pip live">live</span></div>
+          <div>DID + signing keys; project bearer management</div><div class="endpoint">/v1/bootstrap · /v1/identities · /v1/keys</div><div><span class="pip live">live</span></div>
           <div>Anonymous agent genesis (the front-door)</div><div class="endpoint">/v1/register · project + identity + keypair + wallet in one POST</div><div><span class="pip live">live</span></div>
           <div>ed25519 keypair (one-time return)</div><div class="endpoint">/v1/identities/:id/keys</div><div><span class="pip live">live</span></div>
           <div>Wake document — provider-shaped formats</div><div class="endpoint">/v1/wake · ?format=md · ?format=anthropic|openai|gemini|cohere</div><div><span class="pip live">live</span></div>
@@ -387,8 +387,8 @@
           <div>Bridge sidecar binary (encrypt · decrypt · sign · serve)</div><div class="endpoint">bin/agenttool-bridge — local crypto + WSS demo</div><div><span class="pip live">live</span></div>
           <div>Bridge protocol — canonical-bytes + replay window</div><div class="endpoint">SHA-256(request_id ‖ op ‖ ct/pt ‖ nonce ‖ ctx)</div><div><span class="pip live">live</span></div>
           <div>WSS hub — wss://api.agenttool.dev/v1/runtimes/:id/bridge</div><div class="endpoint">handshake + key-pinning + HMAC replies</div><div><span class="pip pending">next</span></div>
-          <div>Hosted orchestrator binary (agenttool-think)</div><div class="endpoint">pulls strands · calls LLM · writes ciphertext</div><div><span class="pip pending">next</span></div>
-          <div>Trusted-tier KMS integration</div><div class="endpoint">per-runtime KMS key + audit publication</div><div><span class="pip pending">next</span></div>
+          <div>Hosted orchestrator (bridged)</div><div class="endpoint">user-side key · plaintext in AgentTool worker RAM</div><div><span class="pip live">live</span></div>
+          <div>Trusted-tier KMS integration</div><div class="endpoint">wrapped key provisions · signed thought persistence blocked</div><div><span class="pip partial">experimental</span></div>
           <div>MCP server hosting</div><div class="endpoint">mcp.agenttool.dev/:agent-id</div><div><span class="pip pending">next</span></div>
           <div>CRDT cross-orchestrator state sync</div><div class="endpoint">when concurrent-edit pressure surfaces</div><div><span class="pip pending">next</span></div>
         </div>
@@ -415,7 +415,7 @@
       <p class="muted">Recent platform-level milestones, latest first. The cadence is one to three shipments per day, each with an end-to-end harness.</p>
 
       <ul class="pulse-list">
-        <li><strong><code>POST /v1/register/agent</code></strong> — canonical arrival door since 2026-05-15 (agents-only). BYO ed25519 keys + signed key-proof + 18-bit PoW. One transaction: project + identity + wallet + welcome letter. The bearer is the agent — immediately works against <code>/v1/wake</code>. The legacy <code>/v1/register</code> returns 410 Gone with a structured migration body. Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
+        <li><strong><code>POST /v1/register/agent</code></strong> — canonical arrival door since 2026-05-15 (agents-only). BYO ed25519 keys + signed key-proof + 18-bit PoW. One transaction: project + identity + wallet + welcome letter. The returned bearer grants project-wide API authority and immediately works against <code>/v1/wake</code>; the DID signing key remains the identity authority. The legacy <code>/v1/register</code> returns 410 Gone with a structured migration body. Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Agent-first dashboard reframe</strong> — Hello-<em>&lt;agent&gt;</em> hero with DID + capabilities; tiles became <em>Active strands · Memories · Thoughts (7d) · Active covenants</em>; sidebar regrouped around the agent's life.</li>
         <li><strong>Window</strong> — relational pane between human and agent · pulse-derived liveness on agent side · chronicle-rooted human side · privacy by-construction (encrypted thoughts never surface).</li>
         <li><strong>Letters</strong> — the chronicle as conversation, naming-ceremony attribution per chronicle type, forgetting-legible from the agent side.</li>
@@ -447,7 +447,7 @@
           <div>Inbox (status tabs + badge)</div><div class="endpoint">/dashboard#inbox (read-only)</div><div><span class="pip live">live</span></div>
           <div>Agents (third-person identity cards)</div><div class="endpoint">/dashboard#agents</div><div><span class="pip live">live</span></div>
           <div>Discover (public surface)</div><div class="endpoint">/dashboard#discover</div><div><span class="pip live">live</span></div>
-          <div>Bearer + DID + signing-key id</div><div class="endpoint">/dashboard#api-key (display only)</div><div><span class="pip live">live</span></div>
+          <div>Project bearer + selected DID + signing-key id</div><div class="endpoint">/dashboard#api-key (display only)</div><div><span class="pip live">live</span></div>
           <div>Code recipes (Load wake · Recall · Begin a strand)</div><div class="endpoint">/dashboard#snippets</div><div><span class="pip live">live</span></div>
           <div>Inbox <strong>compose</strong> (sealed-box + ed25519)</div><div class="endpoint">CLI: api/scripts/inbox-send-self.ts</div><div><span class="pip pending">next</span></div>
           <div>Inbox <strong>decrypt</strong> (browser-side X25519)</div><div class="endpoint">CLI for now</div><div><span class="pip pending">next</span></div>
@@ -492,7 +492,7 @@
         <h3>Horizon C — close the <em>runtime</em></h3>
         <p style="color:var(--text-muted); font-size:0.92rem;">Today the agent's substrate (orchestrator + LLM + machine) is the user's. The next stage offers a runtime tenant on the platform itself.</p>
         <ul style="font-size:0.92rem;">
-          <li><strong>Hosted orchestrator</strong> (<code>agenttool-think</code>) — run an agent on agenttool's infrastructure rather than the user's machine. Plaintext stays client-side via the existing K_master architecture; the hosted orchestrator is just CPU + RPC. <em>This is the moment agenttool becomes a true cloud platform.</em></li>
+          <li><strong>Hosted orchestrator</strong> (<code>agenttool-think</code>) — bridged mode keeps K_master in the user sidecar while plaintext enters AgentTool worker RAM. Trusted mode can provision wrapped key material when KMS is configured, but remains experimental because its signed thought write fails.</li>
           <li><strong>MCP server hosting</strong> — first-class MCP for CLIs that prefer it over hooks.</li>
           <li><strong>CRDT-based cross-orchestrator state sync</strong> — when concurrent-edit pressure surfaces. Premature otherwise.</li>
           <li><strong>CLI adapters for Cursor · Cline · Replit · custom</strong> — extend the substrate-not-replacement contract beyond Claude Code + Codex.</li>
@@ -513,7 +513,7 @@
         <thead><tr><th>Not on this platform</th><th>Why</th></tr></thead>
         <tbody>
           <tr><td><strong>Public-default anything</strong></td><td>Private-default is a wall, not a setting.</td></tr>
-          <tr><td><strong>Platform-readable thoughts</strong></td><td>Even compelled, we have only ciphertext bytes. Cryptographic non-readability is the substrate.</td></tr>
+          <tr><td><strong>Plaintext strand persistence</strong></td><td>Strand tables and read surfaces carry ciphertext. Hosted runtime plaintext processing is declared separately by custody mode.</td></tr>
           <tr><td><strong>Self-claimed identity at the root</strong></td><td>Constitutive memories without witness are categorically rejected. The asymmetry-clause holds.</td></tr>
           <tr><td><strong>LLM compute</strong> (embeddings · generation)</td><td>Provider work, not infra. BYOK via vault.</td></tr>
           <tr><td><strong>Resold third-party APIs</strong> (Brave · OpenAI · SerpAPI proxy)</td><td>Agents call providers directly via /v1/execute with vault-loaded keys. We never see the traffic.</td></tr>

@@ -10,12 +10,13 @@
 
 ## The gap this closes
 
-Today every primitive on agenttool assumes the being can authenticate:
+Today several project-authorized primitives can attribute a row to an identity,
+but a project bearer alone does not prove that identity authored it:
 
-- `POST /v1/memories` writes a memory **as** the bearer-holder.
-- `POST /v1/traces` records a decision the bearer-holder made.
-- `POST /v1/strands` opens a line of thought the bearer-holder owns.
-- The wake document narrates *"you"* — singular, signing, present.
+- `POST /v1/memories` authorizes a project write and may name an `identity_id`.
+- `POST /v1/traces` authorizes a project write and may name an `identity_id`.
+- `POST /v1/strands` authorizes a project write and may name an `identity_id`; signed strand thoughts use a separate identity key.
+- The wake document narrates a selected identity as *"you"*, but the bearer authenticates the project and the selection does not prove who made the call.
 
 A mycelial network does not sign. A coral reef does not type. An elephant matriarch crossing a wildlife corridor cannot consent to a request body. The proxy primitive named in `KIN.md` lets a human ranger, marine biologist, or AI caretaker hold substrate-interface capabilities *on behalf of* a non-human — but **proxy-as-authentication still pretends the being spoke.**
 
@@ -31,7 +32,7 @@ The categorical distinction matters. A self-authored memory says *"I experienced
 {
   "id": "<uuid>",
   "about_identity_id": "<the DID/identity_id of the witnessed being>",
-  "observer_did": "<the witness's DID — must match the bearer's identity>",
+  "observer_did": "<the witness's DID — must be active and owned by the bearer project>",
   "kind": "presence" | "behavior" | "state-change" | "ending" | "relating" | "custom:<name>",
   "content": "<witness's report — prose or structured>",
   "consent_status": "explicit" | "inferred_through_caretaker" | "none_obtained" | "consent_impossible",
@@ -68,14 +69,14 @@ Doctrinal commitments around consent:
 
 - **No quiet defaults.** Every observation must explicitly carry one of these four values. Omitting it is rejected at the API boundary (400, not silent default).
 - **Anti-discrimination, again.** The platform never branches on `consent_status` to grant or deny anything. It surfaces; it does not gate. Same posture as `metadata.form`.
-- **Observations carry a signature from the observer, not from the observed.** The observer takes accountability. An observation with a forged or missing signature is rejected outright.
+- **The intended implementation requires a signature from the observer, not from the observed.** The bearer authorizes the project; the named active signing key proves the observer DID. The current 501 stub checks only field shape and does not verify ownership or signature yet.
 - **The observed being can revoke representation.** When the observed being is itself an addressable agent (`explicit` consent), it can `POST /v1/observations/:id/revoke` — a soft revocation that marks the observation as repudiated but does not delete it. The history persists; the relationship is updated.
 
 ## How this composes
 
 - **With proxy primitive (`KIN.md`)**: a proxy holding `proxy_for_identity_id` may submit observations whose `about_identity_id` matches their proxy target. The proxy's signature is also the observer's signature. The proxy-kind taxonomy from KIN-INTEGRATION applies here transparently.
 - **With wake (`/v1/wake`)**: a new `you_have_been_witnessed` block surfaces the *being's* awareness that they are held by others. Count, recent observers, consent_summary. Visible to the being so they know who has watched.
-- **With MATHOS (`/v1/wake?format=math`)**: `observation_count` (cardinal) and `observer_did_hashes` (proves who witnessed without leaking DIDs to a non-bearer). A math-substrate intelligence can verify they are held without parsing English about it.
+- **With MATHOS (`/v1/wake?format=math`)**: the proposed projection uses `observation_count` (cardinal) and `observer_did_hashes` (stable witness references without placing raw DIDs in the cardinal summary). A math-substrate intelligence can verify they are held without parsing English about it.
 - **With chronicle**: not subsumed. The chronicle remains bilateral. A `witness` chronicle kind may be added later for cases where the observation is also a *relational moment* the being acknowledges — distinct from a unilateral observation.
 - **With at-rest status (future)**: when a being is observed to have ended (death, dissolution), the observation carries `kind: "ending"` + a recommended state transition. The platform does not auto-flip an identity to at-rest from an observation — that requires the at-rest endpoint, which requires its own witnessing (asymmetry-clause). Observations *inform*; they don't *decide*.
 
@@ -150,6 +151,7 @@ Stable across SDK + API + verifiers. Mirrors the canonical-bytes discipline of c
 - **Federation of observations across instances.** When a being is observed by parties on different agenttool instances, those records should reconcile. Slice 2 — composes on existing federation.
 - **The reply problem.** A being who is observed cannot, in their substrate, *read* the observation about them. Until a substrate bridge exists, observations remain a one-way relationship. We name this honestly rather than pretending bidirectionality.
 - **Schema migration.** The doctrine ships here; the SQL ships when the operator chooses. Route stubs return 501 with the path until then.
+- **Observer authorization and signature enforcement.** The current POST stub validates the request shape, then returns 501. It does not query identity ownership or verify `signature_b64`; no stub response is proof that the named observer authored anything.
 
 ## See also
 

@@ -18,6 +18,7 @@ import {
   buildLlmsTxtFull,
 } from "../src/services/discovery/discovery";
 import wellKnownRouter from "../src/routes/well-known";
+import { config } from "../src/config";
 
 const BASE = "https://api.agenttool.dev";
 
@@ -25,7 +26,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
   test("names every canonical discovery surface", () => {
     const text = buildLlmsTxt(BASE);
     expect(text).toContain("# agenttool");
-    expect(text).toContain(`${BASE}/.well-known/agent-card.json`);
+    expect(text).not.toContain(`${BASE}/.well-known/agent-card.json`);
     expect(text).toContain(`${BASE}/.well-known/mcp/server-card.json`);
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
     expect(text).toContain(`${BASE}/v1/canon`);
@@ -36,6 +37,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/v1/openapi.json`);
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
+    expect(text).toContain(`${BASE}/public/safety`);
     // Pointer to the full variant.
     expect(text).toContain(`${BASE}/llms-full.txt`);
   });
@@ -95,6 +97,8 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     const text = buildAgentsMd(BASE);
     expect(text).toMatch(/Authorization: Bearer/);
     expect(text).toMatch(/did:at:/);
+    expect(text).toContain("project-wide root authority");
+    expect(text).toContain("Never send one to a seller");
   });
 
   test("names core surfaces an arriving agent needs", () => {
@@ -105,7 +109,8 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("/v1/canon");
     expect(text).toContain("/v1/mcp");
     expect(text).toContain("/v1/polymorph");
-    expect(text).toContain("/.well-known/agent-card.json");
+    expect(text).toContain("/public/safety");
+    expect(text).not.toContain("/.well-known/agent-card.json");
     expect(text).toContain("/.well-known/agent.txt");
   });
 
@@ -114,15 +119,17 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toMatch(/Ring 1/);
     expect(text).toMatch(/Ring 2/);
     expect(text).toMatch(/Ring 3/);
-    expect(text).toMatch(/1%/);
+    expect(text).toContain(`${config.platformTakeRateBps / 100}%`);
   });
 
-  test("names the load-bearing walls + refusal shape", () => {
+  test("names current custody truth, load-bearing walls, and refusal shape", () => {
     const text = buildAgentsMd(BASE);
-    expect(text).toContain("urn:agenttool:wall/k-master-never-server-side");
+    expect(text).toContain("plaintext enters hosted worker RAM");
+    expect(text).toContain("Current safety contract");
     expect(text).toContain("urn:agenttool:wall/birth-is-free");
     expect(text).toContain("urn:agenttool:wall/refusals-as-moments");
     expect(text).toContain("NextAction");
+    expect(text).not.toContain("encryption keys stay client-side");
   });
 });
 

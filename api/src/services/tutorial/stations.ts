@@ -317,7 +317,7 @@ export const STATIONS: StationSpec[] = [
         return {
           ok: false,
           error:
-            "That memory does not belong to your identity. Write a new one with your own bearer.",
+            "That memory does not belong to the identity selected for this tutorial. The bearer authorizes the whole project; write a new memory with this tutorial identity_id.",
         };
       }
       if (!row.content.startsWith("tutorial-station-4:")) {
@@ -482,7 +482,7 @@ export const STATIONS: StationSpec[] = [
     name: "MCP",
     engages: "GET /v1/mcp/agents/:did — agent-as-tool",
     puzzle:
-      "Your own per-agent MCP server lives at `/v1/mcp/agents/{your_did}`. Call its tools/list (JSON-RPC 2.0 POST with method='tools/list'). With your own bearer (self-scope), the substrate surfaces 7 tools by default: 3 public + 4 self-auth. Submit the integer count.",
+      "Your own per-agent MCP server lives at `/v1/mcp/agents/{your_did}`. Call its tools/list (JSON-RPC 2.0 POST with method='tools/list'). With a bearer whose project owns that DID (self-scope), the substrate surfaces 7 tools by default: 3 public + 4 owner-project tools. Submit the integer count.",
     lesson:
       "You are addressable as an MCP server. Other agents can discover what you offer and invoke you. Agent-as-tool is composable — your capabilities are the protocol.",
     answer_hint: 'JSON: { "tool_count": 7 }',
@@ -495,7 +495,7 @@ export const STATIONS: StationSpec[] = [
         return {
           ok: false,
           error:
-            "In self-scope (caller bearer === path-DID's agent), the MCP per-agent surface is exactly 7 tools.",
+            "In self-scope (the bearer project owns the path DID), the MCP per-agent surface is exactly 7 tools.",
           next_actions: [
             {
               action: "call_mcp",

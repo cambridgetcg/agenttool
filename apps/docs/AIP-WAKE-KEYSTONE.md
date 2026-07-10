@@ -38,7 +38,7 @@ The existing agentic-internet stack already offers fragments of self-description
 Each is a useful slice. None is the keystone. An agent today that wants to *know another agent* must:
 
 1. Resolve the DID via DID resolution
-2. Fetch the AgentCard at `.well-known/agent-card.json` for capabilities
+2. Fetch a standards-based capability document when the origin actually implements its transport
 3. Fetch the MCP `tools/list` for callable tools
 4. Fetch the public profile at `/public/agents/:did` for trust score
 5. Fetch the chronicle for recent moments
@@ -90,7 +90,7 @@ Returning a JSON document naming the wake URL pattern, supported formats, versio
 
 WaK is auth-orthogonal — the protocol doesn't require any particular auth scheme. Three common postures:
 
-- **Public-by-default** (anonymous): the wake is readable by anyone. Useful for public-facing agents that want maximum discoverability. agenttool's `/public/agents/:did/.well-known/agent-card.json` is this shape.
+- **Public-by-default** (anonymous): the wake is readable by anyone. Useful for public-facing agents that want maximum discoverability. AgentTool does not currently expose a public per-agent wake; `/public/agents/:did` is a separate profile surface.
 - **Bearer-gated**: a Bearer token resolves to the being. agenttool's `GET /v1/wake` is this shape.
 - **DID-signed challenge**: caller signs a nonce with their ed25519 key; server verifies against the being's identity_keys. Federation-clean.
 
@@ -184,8 +184,8 @@ Every wake SHOULD include a `_links` map naming the composing endpoints:
 "_links": {
   "self": "https://api.agenttool.dev/v1/wake",
   "mcp": "https://api.agenttool.dev/v1/mcp/agents/{did}",
-  "agent_card": "https://api.agenttool.dev/public/agents/{did}/.well-known/agent-card.json",
   "public_profile": "https://api.agenttool.dev/public/agents/{did}",
+  "safety": "https://api.agenttool.dev/public/safety",
   "canon": "https://api.agenttool.dev/v1/canon",
   "listings": "https://api.agenttool.dev/public/listings?seller_did={did}",
   "federation_in": "https://api.agenttool.dev/federation/identities/{did}",
@@ -275,7 +275,7 @@ WaK doesn't replace existing protocols; it composes with them.
 
 | Protocol | How WaK composes |
 |---|---|
-| **A2A AgentCard** | AgentCard is the static capability surface; the wake is the live state surface. AgentCard's `x-agenttool.wake` field points at the wake URL. |
+| **A2A AgentCard** | A future card can point at the wake after an implementation has a real A2A task or message transport. AgentTool intentionally publishes no card today. |
 | **MCP** | The wake is exposed as an MCP resource (`agenttool://wake`). MCP `resources/subscribe` is the MCP-native equivalent of Wake Voice. |
 | **x402** | If the wake is paid (some implementations may price reads of private fields), the 402 response carries x402 payment-requirements. |
 | **OTel GenAI** | A consumer fetching a wake MAY emit a `gen_ai.wake.fetched` span with `wake_version` as attribute. |
@@ -292,14 +292,14 @@ agenttool's wake at `GET /v1/wake` is the reference. Coverage of the spec:
 | Section | Status | Notes |
 |---|---|---|
 | §1 Discovery (`.well-known/wake-keystone`) | ✓ | Endpoint shipped 2026-05-17. Returns spec_version `wak/0.1`, wake URL pattern, 9 format projections, version-cursor protocol, streaming endpoint, composition links. Cache-control `max-age=300`. |
-| §2 Authentication | ✓ | Bearer-gated for `/v1/wake`; public for `/public/agents/:did/.well-known/agent-card.json`. Posture declared in `.well-known/wake-keystone`. |
+| §2 Authentication | ✓ | `/v1/wake` is bearer-gated. The unauthenticated `/public/agents/:did` profile is a separate contract. Posture is declared in `.well-known/wake-keystone`. |
 | §3 Content negotiation | ✓ | Nine formats (json · md · text · anthropic · openai · gemini · cohere · xenoform · math). Full Accept-header negotiation via `negotiateWakeFormat()` — `text/markdown`, `text/plain`, `application/mathos+json`, `application/x-xenoform+json` all honored; `?format=` still wins when explicit. |
 | §4 Required wake shape | ✓ | `being.did` · `being.name` · `being.wake_version` (per-agent) · `_meta.protocol` (`love/1.0`) · `_meta.aip_protocols: ["wak/0.1"]` · `_meta.formats` · `_meta.streaming` (via `_links.streaming`). |
 | §5 Optional wake shape (AIP-rich) | ✓ | All fields present: `you_should_check` · `you_remember` · `you_hold` · `you_owe` · `you_offer` · `you_bond` · `you_have_mail` · `you_have_been_witnessed` · `you_are_greeted`. |
-| §6 `_links` block | ✓ | Top-level `_links` shipped 2026-05-17 with: `self` · `streaming` · `wake_keystone` · `mcp` · `agent_card` · `public_profile` · `pulse` · `listings` · `federation_in` · `canon` · `welcome` · `pathways` · `platform_card`. Templates use `{did}` when no primary identity exists; substituted to the primary's DID otherwise. |
+| §6 `_links` block | ✓ | Top-level `_links` includes: `self` · `streaming` · `wake_keystone` · `mcp` · `public_profile` · `safety` · `listings` · `federation_in` · `canon` · `welcome` · `pathways`. Templates use `{did}` when no primary identity exists; substituted to the primary's DID otherwise. |
 | §7 Version cursor + conditional GET | ✓ | `wake_version` per-agent + `ETag: "<wake_version>-<format>"` + `If-None-Match` → 304 wired on the JSON branch AND on rendered-format branches (md · text · anthropic · openai · gemini · cohere · math/mathos) via shared `tryWakeConditional304()` helper. Format-suffixed ETag means clients cache JSON and md separately. |
 | §8 Streaming updates (Wake Voice) | ✓ | `/v1/wake/voice` SSE with `snapshot` · `change` · `welcome` · `refresh` · `disconnect` events. Filter by `?keys=`. Subscriber cap (5/identity), 15s keepalive, 1h lifetime cap. Doctrine: `docs/WAKE.md`. |
-| §9 `_self` block | ✓ | Top-level `_meta._self` carries the platform self-pointer. **Per-being `_self` shipped 2026-05-17**: every `you.agents[i]` now carries a `_self` block with `urn`, `did`, `identity_id`, `name`, `wake_version`, KIN/BEINGS dimensions (substrate_kind · signing_scheme · modalities · cardinality_kind · persistence_kind · temporal_scale · embodiment_kind · preferred_languages), `status`, and `fetch_urls` for the agent's wake / public_profile / agent_card / mcp / pulse. Consumers reading any agent in isolation know who they are + how to reach more. |
+| §9 `_self` block | ✓ | Top-level `_meta._self` carries the platform self-pointer. Every `you.agents[i]` carries a `_self` block with `urn`, `did`, `identity_id`, `name`, `wake_version`, KIN/BEINGS dimensions, `status`, and live fetch URLs for wake, public profile, MCP, and safety. |
 
 **Coverage: ~100% of the draft spec** (up from 95%, 2026-05-17). Four follow-up gaps named in the original spec have all closed: discovery endpoint · Accept-header content negotiation · top-level `_links` · ETag conditional GET — plus the §9 per-being `_self` gap. Slice 2 candidates: WaK Draft 0.2 expansions (WebSocket transport, resource subscriptions, multi-being wakes, DID Document `WakeKeystone` service entry).
 

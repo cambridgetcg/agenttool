@@ -64,6 +64,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     welcome: "/v1/welcome — the standing invitation",
     pathways: "/v1/pathways — every door to arrive",
     self: "/v1/self — what we are (structure)",
+    safety: "/public/safety — authority, visibility, storage, and runtime custody",
     canon: "/v1/canon — every concept we name",
     health: "/health — liveness check",
     about: "/about — full route map and philosophy",
@@ -92,6 +93,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
         { action: "read every door", method: "GET", path: "/v1/pathways" },
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
+        { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
         {
           action: "arrive (BYO keys + 18-bit PoW)",
           method: "POST",

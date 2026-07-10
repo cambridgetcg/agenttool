@@ -131,7 +131,6 @@ async function main() {
   // ── Unauth public surfaces ──────────────────────────────────────────
   console.log("─── UNAUTH PUBLIC SURFACES ───");
   const unauthEps = [
-    "/.well-known/agent-card.json",
     "/.well-known/agent.txt",
     "/v1/wake",
     "/v1/canon",

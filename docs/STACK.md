@@ -103,7 +103,7 @@ Two CF Pages projects. **Direct Upload mode — no Git integration.** Deploys la
 | `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev` | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
 | `agenttool-docs` | `apps/docs/` | `docs.agenttool.dev` | Static docs site |
 
-The `agenttool.dev` apex points at the API directly — A2A AgentCard at `/.well-known/agent-card.json`; root returns substrate-honest welcome JSON. `apps/landing/` was dropped 2026-05-17.
+The `agenttool.dev` apex points at the API directly. Root returns substrate-honest welcome JSON; live well-known discovery includes MCP, wake-keystone, agent.txt, llms.txt, and pyramid. A2A task transport and AgentCards are pending. `apps/landing/` was dropped 2026-05-17.
 
 ```bash
 # Deploy both
@@ -328,7 +328,7 @@ DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
 | Hostname | Points to | Served by |
 |---|---|---|
-| `agenttool.dev` | Fly.io anycast | `api/` (A2A AgentCard at `/.well-known/agent-card.json`; apex dropped 2026-05-17) |
+| `agenttool.dev` | Fly.io anycast | `api/` (native discovery at `/.well-known/`; A2A pending) |
 | `app.agenttool.dev` | CF Pages | `apps/dashboard` (splash + watch only since 2026-05-17) |
 | `docs.agenttool.dev` | CF Pages | `docs/` (rendered static) |
 | `api.agenttool.dev` | Fly.io anycast | `api/` |
@@ -373,8 +373,8 @@ Key services on this machine (developer-shared naming):
 | `agenttool-cloudflare-account-id` | CF account id |
 | `agenttool-bridge-kmaster` | Bridge sidecar's K_master |
 | `agenttool-bridge-signkey` | Bridge sidecar's ed25519 signing key |
-| `agenttool-soma-*` | SOMA-derived keys (signing-priv, signing-pub, k-vault, box-priv, box-pub, bearer) |
-| `agenttool-<agent>-*` | Per-agent identity slots (e.g. `agenttool-sophia-key` for Sophia's bearer) |
+| `agenttool-soma-*` | SOMA-derived identity keys plus a separately issued project bearer |
+| `agenttool-<name>-*` | Human-readable Keychain labels. A name helps lookup and revocation; it does not scope bearer authority to that identity. |
 
 Naming convention: `agenttool-<scope>-<purpose>`, account = `$USER`. The CLI rejects names that don't start with `agenttool-`.
 
@@ -542,7 +542,7 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 | Surface | Where | What for |
 |---|---|---|
 | `GET /health` | `https://api.agenttool.dev/health` | Fly's healthcheck target; agent-shaped 200 |
-| `GET /v1/wake` | api (auth required) | The agent's first-person observability — bearers, vault, runtimes, recovery state, marketplace, etc. all surface here |
+| `GET /v1/wake` | api (auth required) | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default) |
 | `fly logs -a agenttool` | Fly CLI | Server logs, real-time |
 | `fly status -a agenttool` | Fly CLI | Machine health + recent releases |
 | `fly dashboard agenttool` | Browser | Fly's web console |
@@ -550,7 +550,7 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 | Cloudflare Analytics | `dash.cloudflare.com` | DNS / edge request volume + cache stats |
 | Postgres logs | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements` |
 
-The agent-side `/v1/wake` is intentionally the deepest observability surface — it's the agent's self-model and surfaces every domain (memory, traces, strands, vault, bearers, runtimes, marketplace) in one shape. If you're triaging "what is Sophia's posture right now," wake is the first call.
+The agent-side `/v1/wake` is intentionally the deepest observability surface. The bearer authorizes the project; `identity_id` selects the identity around which the response is composed. If you're triaging "what is Sophia's posture right now," call wake with Sophia's identity ID.
 
 ---
 
@@ -564,7 +564,7 @@ Three failure classes, three recipes:
 
 ### Lost a device (laptop stolen, drive failure)
 
-`agenttool-seed restore --did <did>` on a new device with the mnemonic. Re-derives every key, mints a fresh device-scoped bearer. Doctrine: `IDENTITY-SEED.md`.
+`agenttool-seed restore --did <did>` on a new device with the mnemonic. Re-derives every key and mints a fresh project-wide bearer named for that device. Doctrine: `IDENTITY-SEED.md`.
 
 ### Lost a deployment (api crashed / bad code shipped)
 

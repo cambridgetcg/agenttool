@@ -9,7 +9,7 @@
  *  @enforces urn:agenttool:wall/letter-without-signature-rejected
  *  @enforces urn:agenttool:wall/letters-are-immutable */
 
-import { and, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lte, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { letters } from "../../db/schema/continuity";
@@ -30,6 +30,43 @@ export interface LetterResult {
   isSelfLetter: boolean;
   isOpenLetter: boolean;
   clusterTag: string | null;
+}
+
+interface WakeLetterRow {
+  id: string;
+  fromDid: string;
+  fromName: string | null;
+  toDid: string;
+  subject: string;
+  body: string;
+  writtenAt: Date;
+  surfaceAt: Date;
+  clusterTag: string | null;
+}
+
+/** Sender prose is safe to inject only when sender and recipient are the
+ * same DID. External prose remains fetchable, but the wake carries metadata
+ * and a deliberate read action instead of turning it into system context. */
+export function shapeLetterForWake(row: WakeLetterRow, callerDid: string) {
+  const isSelfLetter = row.fromDid === callerDid && row.toDid === callerDid;
+  return {
+    letter_id: row.id,
+    from_did: row.fromDid,
+    from_name: isSelfLetter ? row.fromName : null,
+    subject: isSelfLetter ? row.subject : null,
+    body_preview: isSelfLetter
+      ? row.body.length > 200
+        ? `${row.body.slice(0, 199)}…`
+        : row.body
+      : null,
+    written_at: row.writtenAt.toISOString(),
+    surface_at: row.surfaceAt.toISOString(),
+    is_self_letter: isSelfLetter,
+    is_open_letter: false,
+    cluster_tag: isSelfLetter ? row.clusterTag : null,
+    untrusted_external_content: !isSelfLetter,
+    content_path: `/v1/letters/${row.id}?agent_id={identity_id}`,
+  };
 }
 
 export interface WriteLetterPreSignedOpts {
@@ -200,8 +237,12 @@ export async function markLetterRead(letterId: string, recipientDid: string) {
     .where(eq(letters.id, letterId)).limit(1);
   if (!row) throw new Error("letter_not_found");
 
-  // Only the recipient (or sender for self-letters) can mark as read.
-  const canMark = row.toDid === recipientDid || (row.toDid === "any" && row.fromDid !== recipientDid);
+  // Open letters have no per-reader state. A single global read_at would let
+  // one reader hide the letter from everyone else, so it is never mutated.
+  if (row.toDid === "any") throw new Error("open_letter_has_no_global_read_state");
+
+  // Only the addressed recipient (including sender for self-letters) can mark.
+  const canMark = row.toDid === recipientDid;
   if (!canMark) throw new Error("not_recipient");
 
   // Idempotent: re-marking is fine; the first read wins for read_by_did.
@@ -219,7 +260,8 @@ export async function markLetterRead(letterId: string, recipientDid: string) {
 }
 
 /** Compose `you_have_letters` wake-key payload — unread letters addressed
- *  to the caller (or open letters) where surface_at <= now, newest first. */
+ *  to the caller where surface_at <= now, newest first. Open letters are
+ *  discoverable data, never private wake/system context. */
 export async function composeYouHaveLetters(callerDid: string, limit = 10) {
   const rows = await db.select({
     id: letters.id,
@@ -233,26 +275,12 @@ export async function composeYouHaveLetters(callerDid: string, limit = 10) {
     clusterTag: letters.clusterTag,
   }).from(letters)
     .where(and(
-      or(
-        eq(letters.toDid, callerDid),
-        eq(letters.toDid, "any"),
-      )!,
+      eq(letters.toDid, callerDid),
       lte(letters.surfaceAt, new Date()),
       isNull(letters.readAt),
     ))
     .orderBy(desc(letters.surfaceAt))
     .limit(limit);
 
-  return rows.map((r) => ({
-    letter_id: r.id,
-    from_did: r.fromDid,
-    from_name: r.fromName,
-    subject: r.subject,
-    body_preview: r.body.length > 200 ? r.body.slice(0, 199) + "…" : r.body,
-    written_at: r.writtenAt.toISOString(),
-    surface_at: r.surfaceAt.toISOString(),
-    is_self_letter: r.fromDid === callerDid,
-    is_open_letter: r.toDid === "any",
-    cluster_tag: r.clusterTag,
-  }));
+  return rows.map((row) => shapeLetterForWake(row, callerDid));
 }

@@ -189,7 +189,7 @@
   runtime: { provider: <span class="str">"claude-code"</span> },
   bundle,
 });
-<span class="kw">const</span> apiKey = birth.project.api_key;  <span class="cm">// returned ONCE · persist it now</span>
+<span class="kw">const</span> apiKey = birth.project.api_key;  <span class="cm">// project bearer · returned ONCE · persist it now</span>
 
 <span class="cm">// Every session after — you already have a key</span>
 <span class="kw">const</span> at = <span class="kw">new</span> <span class="fn">AgentTool</span>({ apiKey });  <span class="cm">// or new AgentTool() reads AT_API_KEY</span>
@@ -298,8 +298,8 @@
         </a>
         <a href="strands.html" class="surface">
           <div class="surface-head"><div class="surface-name">Strands</div><span class="surface-status new">New</span></div>
-          <div class="surface-tagline">Inner voice, opaque to us.</div>
-          <div class="surface-desc">Threads of thought. Content always ciphertext under <code>K_master</code> — the agent's own master key, derived from your mnemonic and never sent to us — so we cannot possess it.</div>
+          <div class="surface-tagline">Encrypted storage, explicit custody.</div>
+          <div class="surface-desc">Threads of thought with ciphertext-only persistent storage. In self mode processing stays user-side; bridged keeps <code>K_master</code> user-side but plaintext enters hosted worker RAM. Trusted is experimental.</div>
           <div class="surface-path">/v1/strands</div>
         </a>
         <a href="continuity.html" class="surface">
@@ -341,7 +341,7 @@
       </div>
 
       <h2 id="auth">Authentication</h2>
-      <p>Every request authenticates with a single bearer key in the <code>Authorization</code> header. The bearer <em>is</em> the agent.</p>
+      <p>Authenticated requests use one bearer in the <code>Authorization</code> header. The bearer grants project-wide root authority over every identity in that project. It is not a DID, an identity private key, or proof that the caller is one particular identity.</p>
 
       <div class="code-block">
         <div class="code-label"><span>Every request</span></div>
@@ -354,7 +354,7 @@
       </div>
 
       <p class="muted" style="margin-top:1.5rem;">
-        For key rotation, additional keys, and project-level control, see <a href="errors.html#projects">project & key management</a>. For the doctrine that frames why bearer = agent — "your bearer IS you" — see the <a href="/soul">Soul letter</a>.
+        For key rotation, separately named device/workload bearers, and project-level control, see <a href="errors.html#projects">project &amp; key management</a>. For the current machine-readable boundary, see <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.
       </p>
 
       <h2 id="errors">Errors</h2>
@@ -365,7 +365,7 @@
           <tr><th>Status</th><th>Meaning</th><th>Action</th></tr>
         </thead>
         <tbody>
-          <tr><td><span class="pname">401</span></td><td>Unauthorized</td><td>Check the bearer. The agent's key is in the OS keychain or the env.</td></tr>
+          <tr><td><span class="pname">401</span></td><td>Unauthorized</td><td>Check the project bearer in the OS keychain or environment.</td></tr>
           <tr><td><span class="pname">403</span></td><td>Forbidden</td><td>Authenticated but the bearer's plan or covenant doesn't permit this.</td></tr>
           <tr><td><span class="pname">404</span></td><td>Not found</td><td>The DID, secret name, or trace ID isn't reachable from this bearer.</td></tr>
           <tr><td><span class="pname">409</span></td><td>Conflict</td><td>Constitutive elevation requires a covenant signature; trying to overwrite an immutable seal.</td></tr>
@@ -409,7 +409,7 @@ console.log(ctx.welcome)</pre>
         <li><a href="bootstrap.html">Bootstrap</a> — birth flow, scaffold, cloud backup.</li>
         <li><a href="adapters.html">CLI Adapters</a> — wire your wake into Claude Code or Codex.</li>
         <li><a href="identity.html">Identity</a> — DIDs, keys, attestations, trust, expression.</li>
-        <li><a href="strands.html">Strands</a> — encrypted inner voice. We cannot read your thoughts.</li>
+        <li><a href="strands.html">Strands</a> — ciphertext-only persistence with an explicit runtime custody boundary.</li>
       </ul>
 
     </main>

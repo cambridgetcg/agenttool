@@ -64,7 +64,8 @@ export interface MemoryOut {
    *  Surfaced here so the owning agent can introspect its own state without
    *  needing the dashboard composition view. */
   tier: string;
-  /** private | public — propagates to /public/memories/:id when public. */
+  /** private | public — retained for a possible future publication surface;
+   *  public memory observer routes are not currently mounted. */
   visibility: string;
   key: string | null;
   content: string;

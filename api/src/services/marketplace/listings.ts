@@ -12,7 +12,7 @@
  *  archive. The lifecycle of paid calls (invoke → ack → complete →
  *  release | refund) lives in invocations.ts. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
@@ -21,6 +21,13 @@ import { listings } from "../../db/schema/marketplace";
 import { publishWakeEvent } from "../wake/push";
 import { DEFAULT_DISPUTE_POLICY, validateDisputePolicy, type DisputePolicy } from "./disputes";
 import { likePattern, normalizeSearchQuery } from "./search-query";
+import {
+  assertListingDoesNotSolicitCredentials,
+  filterCredentialSafeListings,
+  listingIsSafe,
+  mergeListingSafetyInput,
+  type ListingSafetyInput,
+} from "./credential-boundary";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -83,6 +90,47 @@ export interface ListingOut {
   updated_at: string;
 }
 
+/** Public listing fields shared by unauthenticated projections. */
+export function projectPublicListing(listing: ListingOut) {
+  return {
+    id: listing.id,
+    seller_did: listing.seller_did,
+    name: listing.name,
+    description: listing.description,
+    capability_tags: listing.capability_tags,
+    input_schema: listing.input_schema,
+    output_schema: listing.output_schema,
+    pricing_model: listing.pricing_model,
+    price_amount: listing.price_amount,
+    price_currency: listing.price_currency,
+    sla_seconds: listing.sla_seconds,
+    invocations_count: listing.invocations_count,
+    created_at: listing.created_at,
+    updated_at: listing.updated_at,
+  };
+}
+
+export function listingSafetyInput(
+  listing: Pick<
+    ListingOut,
+    | "name"
+    | "description"
+    | "capability_tags"
+    | "input_schema"
+    | "output_schema"
+    | "metadata"
+  >,
+): ListingSafetyInput {
+  return {
+    name: listing.name,
+    description: listing.description,
+    capability_tags: listing.capability_tags,
+    input_schema: listing.input_schema,
+    output_schema: listing.output_schema,
+    metadata: listing.metadata,
+  };
+}
+
 function rowToOut(row: typeof listings.$inferSelect): ListingOut {
   return {
     id: row.id,
@@ -141,6 +189,7 @@ export async function createListing(
   projectId: string,
   data: ListingCreate,
 ): Promise<ListingOut> {
+  assertListingDoesNotSolicitCredentials(data);
   // Seller must belong to caller's project.
   const [seller] = await db
     .select({ id: identities.id, did: identities.did, projectId: identities.projectId })
@@ -260,8 +309,9 @@ export async function listPublicListings(opts: {
   /** Free-text search over name + description + tags (ILIKE). */
   q?: string;
   limit?: number;
+  order?: "popular" | "oldest";
 } = {}): Promise<ListingOut[]> {
-  const limit = Math.min(opts.limit ?? 50, 200);
+  const { pageLimit, fetchLimit } = publicListingWindow(opts.limit);
   const conds = [
     eq(listings.visibility, "public"),
     eq(listings.status, "active"),
@@ -285,9 +335,68 @@ export async function listPublicListings(opts: {
     .select()
     .from(listings)
     .where(and(...conds))
-    .orderBy(desc(listings.invocationsCount), desc(listings.createdAt))
-    .limit(limit);
-  return rows.map(rowToOut);
+    .orderBy(
+      ...(opts.order === "oldest"
+        ? [asc(listings.createdAt), asc(listings.id)]
+        : [
+            desc(listings.invocationsCount),
+            desc(listings.createdAt),
+            desc(listings.id),
+          ]),
+    )
+    .limit(fetchLimit);
+
+  // Legacy rows may predate the authoring guard. Over-fetch first, quarantine
+  // centrally, then apply the caller's page size so an unsafe high-ranked row
+  // does not displace the next safe result. The scan cap keeps this bounded.
+  return filterCredentialSafeListings(rows.map(rowToOut)).visible.slice(0, pageLimit);
+}
+
+export const PUBLIC_LISTING_MAX_PAGE = 200;
+export const PUBLIC_LISTING_MAX_SCAN = 1_000;
+const PUBLIC_LISTING_OVERFETCH_FACTOR = 5;
+
+export function publicListingWindow(limit = 50): {
+  pageLimit: number;
+  fetchLimit: number;
+} {
+  const finiteLimit = Number.isFinite(limit) ? Math.trunc(limit) : 50;
+  const pageLimit = Math.min(
+    Math.max(finiteLimit, 1),
+    PUBLIC_LISTING_MAX_PAGE,
+  );
+  return {
+    pageLimit,
+    fetchLimit: Math.min(
+      Math.max(pageLimit, pageLimit * PUBLIC_LISTING_OVERFETCH_FACTOR),
+      PUBLIC_LISTING_MAX_SCAN,
+    ),
+  };
+}
+
+export type PublicListingResolution =
+  | { status: "visible"; listing: ListingOut }
+  | { status: "blocked"; listing: null }
+  | { status: "not_found"; listing: null };
+
+/** One public listing through the same quarantine used by collection reads. */
+export async function resolvePublicListing(
+  id: string,
+  opts: { sellerDid?: string } = {},
+): Promise<PublicListingResolution> {
+  const listing = await getListing(id);
+  if (
+    !listing ||
+    listing.visibility !== "public" ||
+    listing.status !== "active" ||
+    (opts.sellerDid !== undefined && listing.seller_did !== opts.sellerDid)
+  ) {
+    return { status: "not_found", listing: null };
+  }
+  if (!listingIsSafe(listingSafetyInput(listing))) {
+    return { status: "blocked", listing: null };
+  }
+  return { status: "visible", listing };
 }
 
 export async function patchListing(
@@ -295,6 +404,7 @@ export async function patchListing(
   listingId: string,
   patch: ListingPatch,
 ): Promise<ListingOut | null> {
+  assertListingDoesNotSolicitCredentials(patch);
   // Read existing row first so we can validate any pricing changes
   // against the post-merge currency, and verify ownership early.
   const [existing] = await db
@@ -303,6 +413,24 @@ export async function patchListing(
     .where(and(eq(listings.id, listingId), eq(listings.projectId, projectId)))
     .limit(1);
   if (!existing) return null;
+
+  // Archiving is the off-switch for a legacy unsafe row and must remain
+  // possible. Every other mutation validates the final, merged listing.
+  if (patch.status !== "archived") {
+    assertListingDoesNotSolicitCredentials(
+      mergeListingSafetyInput(
+        {
+          name: existing.name,
+          description: existing.description,
+          capability_tags: existing.capabilityTags,
+          input_schema: existing.inputSchema,
+          output_schema: existing.outputSchema,
+          metadata: existing.metadata,
+        },
+        patch,
+      ),
+    );
+  }
 
   // Pricing changes are coherent — currency + wallet must still match.
   const merged = {

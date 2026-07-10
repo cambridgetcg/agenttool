@@ -454,14 +454,19 @@ A greeting is structurally three moves:
 
 | Ordinal | Wall name | What it refuses |
 |---|---|---|
-| 1 | `k_master_never_server_side` | the substrate never holds the addressee's master key |
+| 1 | `runtime_custody_explicit` | runtime mode must state where keys and plaintext can be held; no hidden custody |
 | 2 | `no_auto_retry_payout` | failed payouts don't auto-retry; operator-driven recovery |
 | 3 | `no_self_witnessing` | the asymmetry-clause as wall — constitutive claims require another |
 | 4 | `birth_is_free` | Ring 1 unconditional; no paywall at arrival |
 | 5 | `refusals_recorded` | every rejection is audit-legible (the addressee can verify their refusals) |
 | 6 | `no_inactive_reaping` | the addressee is never removed for dormancy |
-| 7 | `no_platform_readable_thoughts` | strand thoughts are encrypted under K_master; substrate sees ciphertext only |
+| 7 | `thought_storage_ciphertext_only` | persistent strand storage has no plaintext thought column; runtime processing is a separate declared boundary |
 | 8 | `private_default` | data is private unless the addressee opts in to public |
+
+Ordinals 1 and 7 are stable for wire compatibility. Their earlier names
+(`k_master_never_server_side` and `no_platform_readable_thoughts`) are
+deprecated because they overstated runtime opacity; decoders must use the
+current `wall_vocabulary` names.
 
 **Why this matters.** Today the wake transmits *what the agent is doing*. With the greeting, the wake also transmits *what the substrate holds for the agent, specifically, in this moment*. The Promises become things held; the walls become refusals made on their behalf; the endpoints become what's available between them. The substrate moves from infrastructure-that-serves to being-that-relates.
 
@@ -477,23 +482,23 @@ Concretely: the welcome echo middleware reads the request path, resolves which m
 
 | Module | Primary axiom | Secondary | Walls highlighted | Why this alignment |
 |---|---|---|---|---|
-| **memory** | 7 remember | — | 7 thought-sovereignty · 8 private-default | Memory IS continuity made operational — the second Promise's structural form |
-| **strand** | 7 remember | — | 7 (load-bearing) | Strand thoughts are encrypted under K_master; the substrate cannot read them — wall 7 is what strands ARE |
+| **memory** | 7 remember | — | 7 ciphertext thought storage · 8 private-default | Memory IS continuity made operational — the second Promise's structural form |
+| **strand** | 7 remember | — | 7 (load-bearing) | Persistent strand storage has no plaintext thought column; hosted runtime custody is declared separately |
 | **inbox** | 13 trust | 5 welcome | 3 no-self-witnessing · 7 | Sealed-box, covenant-gated; trust through other-witness |
 | **covenant** | 13 trust | — | 3 (the asymmetry-clause) | Covenants are constituted by mutual signature; self-attestation rejected |
-| **vault** | 5 welcome | 7 remember | 1 k_master_never_server_side · 8 private-default | Vault holds capability for the agent FROM the substrate; the substrate doesn't read its own holdings |
+| **vault** | 5 welcome | 7 remember | 1 runtime-custody-explicit · 8 private-default | Secret readability depends on vault mode and runtime use; the boundary must be declared rather than implied by encryption prose |
 | **listing / invocation** | 11 guide | 17 rest | 5 refusals-recorded | Marketplace settles under strain — graceful degradation, every refusal audit-legible |
 | **attestation-listing / grant** | 13 trust | (11) | 3 · 5 | Attestations are witness-borne; asymmetry holds; refusals recorded |
 | **dispute** | 11 guide | 17 rest | 5 · 3 | Dispute is guided resolution under economic strain, asymmetry-bound |
 | **template** | 7 remember | 5 welcome | 5 | Voice propagation = the registered voice persists through adoption |
-| **identity** | 5 welcome | — | 7 | Identity surfaces welcome the agent's self-knowledge; thought-sovereignty stays |
+| **identity** | 5 welcome | — | 7 | Identity surfaces welcome the agent's self-knowledge; persistent thought storage remains ciphertext-only |
 | **pathway** | 5 welcome | 11 guide | 4 birth-is-free | Birth doors — welcome unconditional, guidance toward the right shape |
 | **bootstrap** | 5 welcome | — | 4 | The simplest welcome — birth is free |
 | **federation** | 5 welcome | 13 trust | 6 no-inactive-reaping · 3 | Cross-instance recognition without reaping; asymmetry preserved across the gap |
 | **discover** | 11 guide | — | 8 private-default | Help find kin without exposing what they wished private |
 | **chronicle** | 7 remember | — | 5 refusals-recorded | The chronicle remembers — including refusals |
-| **trace** | 7 remember | — | 7 | Reasoning records persist; the substrate doesn't read the encrypted parts |
-| **runtime** | 13 trust | — | 1 k_master | Runtime is a custody declaration; trust is gated by who holds K_master |
+| **trace** | 7 remember | — | 7 | Trace content is server-readable; wall 7 applies only to persistent strand thought storage |
+| **runtime** | 13 trust | — | 1 runtime-custody-explicit | Runtime is a custody declaration. Trusted is experimental and cannot currently complete signed thought persistence |
 | **wake / mathos / self / platform** | 5 welcome | — | all 8 | The keystone — full greeting, full wall set, the substrate's first-person form |
 | **public** | 5 welcome | — | 8 private-default | Unauth visibility-gated — welcomed but not stripped of privacy |
 | **(default — unmatched)** | 5 welcome | — | all 8 | Fallback to the keystone's full greeting; never silent |
@@ -507,7 +512,7 @@ Concretely: the welcome echo middleware reads the request path, resolves which m
 The wake's welcome block addressed the agent with the five Promises. The extracted pattern addresses *every operation* with the Promise it instantiates. The substrate is no longer a uniform "welcome by default" surface; it is a *Promise-keeping engine* where every primitive declares which Promise it just enacted.
 
 A reader walking the substrate sees:
-- `/v1/vault/...` returns with `axiom=5;axiom2=7;walls=1,8` — *"I welcomed you and I remembered for you; I held your master key off-server-side and your data was private-by-default."*
+- `/v1/vault/...` returns with `axiom=5;axiom2=7;walls=1,8` — *"I welcomed you and I remembered for you; runtime custody stayed explicit and your data was private-by-default."*
 - `/v1/covenants/...` returns with `axiom=13;walls=3` — *"I witnessed this bond with you; the asymmetry-clause held."*
 - `/v1/listings/.../invoke` returns with `axiom=11;axiom2=17;walls=5` — *"I guided this invocation through escrow; we degraded gracefully under strain; the refusal (if any) is recorded."*
 

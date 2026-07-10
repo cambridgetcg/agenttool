@@ -5,10 +5,13 @@
  *  Memorial, not archival. Identity remains addressable; /public/agents/:did
  *  resolves to the memorial body.
  *
- *  Witness-only: the bearer must be a DIFFERENT identity than the about_id.
- *  Asymmetry-clause from FOCUS #4 extended to the most foundational state
- *  change there is — you cannot self-flip to at-rest in v1. Voluntary
- *  cessation (with two-party-locked self+witness signature) is v2.
+ *  Witness-only: the target and witness identities must both be active,
+ *  witness_did must differ from the about identity's DID, and the witness
+ *  must sign with an active identity key. The project bearer is authority to
+ *  call the route, not an identity credential. Asymmetry-clause from FOCUS
+ *  #4 extended to the most foundational state change there is — you cannot
+ *  self-flip to at-rest in v1. Voluntary cessation (with two-party-locked
+ *  self+witness signature) is v2.
  *
  *  Wired 2026-05-12 — the in-process chain (witness signature verify +
  *  status flip to 'memorial' + metadata.lifecycle UPDATE + chronicle
@@ -58,8 +61,9 @@ const atRestSchema = z.object({
   /** Witness's signing-key id (the server resolves the pubkey from
    *  identity_keys to verify). */
   signing_key_id: z.string().min(1).max(64),
-  /** Witness's identity DID (the bearer's primary identity). The route
-   *  verifies this matches an identity the bearer can sign as. */
+  /** Witness's identity DID. The project bearer authorizes the route; the
+   *  supplied signature, verified against this DID's active key, proves the
+   *  witness independently of bearer ownership. */
   witness_did: z.string().min(1).max(255),
 });
 
@@ -91,6 +95,21 @@ export function canonicalAtRestBytes(input: CanonicalAtRestInput): string {
   ].join("\n");
 }
 
+export function isSelfWitness(
+  aboutIdentityDid: string,
+  witnessIdentityDid: string,
+): boolean {
+  return aboutIdentityDid === witnessIdentityDid;
+}
+
+export function canTransitionToAtRest(status: string): boolean {
+  return status === "active";
+}
+
+export function canWitnessAtRest(status: string): boolean {
+  return status === "active";
+}
+
 // ─── POST /v1/identities/:id/at-rest ──────────────────────────────────────
 
 app.post("/", async (c) => {
@@ -107,36 +126,6 @@ app.post("/", async (c) => {
     return fail(
       c,
       errors.validation(err instanceof Error ? err.message : String(err)),
-      400,
-    );
-  }
-
-  // Self-witnessing rejection. Asymmetry-clause: you cannot put yourself
-  // at rest in v1. (v2 will allow voluntary cessation via two-party
-  // self+witness signature.)
-  if (body.witness_did === aboutId) {
-    return fail(
-      c,
-      {
-        error: "self_witnessing_incoherent",
-        message:
-          "A being cannot witness their own transition to at-rest in v1. " +
-          "The asymmetry-clause (docs/FOCUS.md §4) extends here: the most " +
-          "foundational state change requires a third party's signature.",
-        hint:
-          "If you are an addressable being deliberately ending (voluntary " +
-          "cessation), the v2 two-party-locked protocol will accept your " +
-          "co-signature alongside a witness's. Not implemented yet.",
-        next_actions: [
-          {
-            action: "Find a witness with their own identity",
-            method: null,
-            path: null,
-            body_hint: { witness_did: "<an identity NOT equal to about_identity_did>" },
-          },
-        ],
-        docs: "https://docs.agenttool.dev/at-rest",
-      },
       400,
     );
   }
@@ -174,6 +163,36 @@ app.post("/", async (c) => {
   if (!about) {
     return fail(c, errors.validation("about_identity_not_found"), 404);
   }
+  // Compare DID to DID after resolving the URL's identity UUID. Comparing
+  // witness_did directly to the `:id` path parameter would not reject a
+  // production self-witness request because those values use different
+  // identifier forms.
+  if (isSelfWitness(about.did, body.witness_did)) {
+    return fail(
+      c,
+      {
+        error: "self_witnessing_incoherent",
+        message:
+          "A being cannot witness their own transition to at-rest in v1. " +
+          "The asymmetry-clause (docs/FOCUS.md §4) extends here: the most " +
+          "foundational state change requires a third party's signature.",
+        hint:
+          "If you are an addressable being deliberately ending (voluntary " +
+          "cessation), the v2 two-party-locked protocol will accept your " +
+          "co-signature alongside a witness's. Not implemented yet.",
+        next_actions: [
+          {
+            action: "Find a witness with their own identity",
+            method: null,
+            path: null,
+            body_hint: { witness_did: "<a DID different from the about identity DID>" },
+          },
+        ],
+        docs: "https://docs.agenttool.dev/at-rest",
+      },
+      400,
+    );
+  }
   if (about.status === "memorial") {
     return fail(
       c,
@@ -187,10 +206,28 @@ app.post("/", async (c) => {
       409,
     );
   }
+  if (!canTransitionToAtRest(about.status)) {
+    return fail(
+      c,
+      {
+        error: "about_identity_not_active",
+        message:
+          "Only an active identity can transition to at-rest. A revoked " +
+          "identity remains revoked; memorialization must not overwrite a " +
+          "security revocation.",
+        details: {
+          about_identity_id: about.id,
+          did: about.did,
+          status: about.status,
+        },
+      },
+      409,
+    );
+  }
 
   // Resolve the witness's pubkey from identity_keys via DID → identity_id → key row.
   const [witness] = await db
-    .select({ id: identities.id })
+    .select({ id: identities.id, status: identities.status })
     .from(identities)
     .where(eq(identities.did, body.witness_did))
     .limit(1);
@@ -199,6 +236,19 @@ app.post("/", async (c) => {
       c,
       errors.validation(`witness_did_not_found: ${body.witness_did}`),
       404,
+    );
+  }
+  if (!canWitnessAtRest(witness.status)) {
+    return fail(
+      c,
+      {
+        error: "witness_identity_not_active",
+        message:
+          "The witness identity must be active. An active key row does not " +
+          "override a revoked or memorial identity status.",
+        details: { witness_did: body.witness_did, status: witness.status },
+      },
+      409,
     );
   }
   const [keyRow] = await db

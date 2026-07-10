@@ -406,30 +406,32 @@ async function runOneCycleWithPrep(
 
   // ── Trusted mode: prepare in-process crypto context ────────────
   // Bridged mode uses bridge RPC for all crypto; trusted mode unwraps
-  // the DEK and signing key directly. The DEK is zeroed after the cycle.
+  // the DEK and signing key directly. Both buffers are cleared in finally.
   let trustedCtx: TrustedCryptoContext | null = null;
-  if (runtime.mode === "trusted") {
-    trustedCtx = await prepareTrustedCrypto(
-      runtime.kmsWrappedDek!,
-      runtime.id,
-      runtime.kmsWrappedSigningKey,
-    );
-    // First cycle: persist the newly generated signing key.
-    if (trustedCtx.newWrappedSigningKey) {
-      await db
-        .update(runtimesTable)
-        .set({ kmsWrappedSigningKey: trustedCtx.newWrappedSigningKey, updatedAt: new Date() })
-        .where(eq(runtimesTable.id, runtimeId));
+  let trustedCycleCompleted = false;
+  try {
+    if (runtime.mode === "trusted") {
+      trustedCtx = await prepareTrustedCrypto(
+        runtime.kmsWrappedDek!,
+        runtime.id,
+        runtime.kmsWrappedSigningKey,
+      );
+      // First cycle: persist the newly generated signing key.
+      if (trustedCtx.newWrappedSigningKey) {
+        await db
+          .update(runtimesTable)
+          .set({ kmsWrappedSigningKey: trustedCtx.newWrappedSigningKey, updatedAt: new Date() })
+          .where(eq(runtimesTable.id, runtimeId));
+      }
+      await logAudit(runtimeId, "cycle_start", {
+        mode: "trusted",
+        kms_key_id: runtime.kmsKeyId,
+        signing_key_id: trustedCtx.signingKeyId,
+      });
+      await logAudit(runtimeId, "key_unwrap", { kms_key_id: runtime.kmsKeyId });
     }
-    await logAudit(runtimeId, "cycle_start", {
-      mode: "trusted",
-      kms_key_id: runtime.kmsKeyId,
-      signing_key_id: trustedCtx.signingKeyId,
-    });
-    await logAudit(runtimeId, "key_unwrap", { kms_key_id: runtime.kmsKeyId });
-  }
 
-  const { strand, priorSeq, bundle } = prep;
+    const { strand, priorSeq, bundle } = prep;
 
   // ── Pull the prior thought (latest ciphertext on this strand). ──
   let priorPlaintext = "";
@@ -530,11 +532,6 @@ async function runOneCycleWithPrep(
   let enc: { ciphertext: string; nonce: string };
   if (trustedCtx) {
     enc = trustedEncrypt(trustedCtx.dek, responseB64);
-    await logAudit(runtimeId, "thought_written", {
-      strand_id: strand.id,
-      seq: priorSeq + 1,
-      mode: "trusted",
-    });
   } else {
     const bridgeEnc = await withExecuteToolSpan(
       {
@@ -608,23 +605,29 @@ async function runOneCycleWithPrep(
     agent_id: runtime.identityId!,
   });
 
-  await recordThought(runtimeId);
-
-  // ── Zero trusted crypto context after cycle (wall: trusted-dek-zeroed-after-cycle).
   if (trustedCtx) {
-    zeroTrustedCrypto(trustedCtx);
-    const cycleMs = Math.round(performance.now() - started);
-    await logAudit(runtimeId, "cycle_end", {
-      latency_ms: cycleMs,
-      dek_zeroed: true,
+    await logAudit(runtimeId, "thought_written", {
+      strand_id: strand.id,
+      seq: stored.sequence_num,
       mode: "trusted",
     });
-    // Metering: increment runtime_hours_ms for trusted mode.
-    await db
-      .update(runtimesTable)
-      .set({ runtimeHoursMs: sql`runtime_hours_ms + ${cycleMs}`, updatedAt: new Date() })
-      .where(eq(runtimesTable.id, runtimeId));
   }
+
+  await recordThought(runtimeId);
+
+    if (trustedCtx) {
+      const cycleMs = Math.round(performance.now() - started);
+      await logAudit(runtimeId, "cycle_end", {
+        latency_ms: cycleMs,
+        key_cleanup: "finally",
+        mode: "trusted",
+      });
+      // Metering: increment runtime_hours_ms for trusted mode.
+      await db
+        .update(runtimesTable)
+        .set({ runtimeHoursMs: sql`runtime_hours_ms + ${cycleMs}`, updatedAt: new Date() })
+        .where(eq(runtimesTable.id, runtimeId));
+    }
 
   const latency_ms = Math.round(performance.now() - started);
   await logEvent(runtimeId, "think_cycle_end", {
@@ -640,14 +643,26 @@ async function runOneCycleWithPrep(
     auth_mode: llm.authMode ?? null,
   });
 
-  return {
-    latency_ms,
-    strand_id: strand.id,
-    prior_seq: priorSeq,
-    new_seq: stored.sequence_num,
-    input_tokens: llm.inputTokens ?? null,
-    output_tokens: llm.outputTokens ?? null,
-  };
+    trustedCycleCompleted = true;
+    return {
+      latency_ms,
+      strand_id: strand.id,
+      prior_seq: priorSeq,
+      new_seq: stored.sequence_num,
+      input_tokens: llm.inputTokens ?? null,
+      output_tokens: llm.outputTokens ?? null,
+    };
+  } finally {
+    if (trustedCtx) {
+      zeroTrustedCrypto(trustedCtx);
+      // Cleanup must not mask the cycle's result if the audit store is down.
+      await logAudit(runtimeId, "key_cleanup", {
+        dek_zeroed: true,
+        signing_key_zeroed: true,
+        cycle_completed: trustedCycleCompleted,
+      }).catch(() => undefined);
+    }
+  }
 }
 
 // ── Cycle preparation — runtime fetch, bundle build, strand resolve ──

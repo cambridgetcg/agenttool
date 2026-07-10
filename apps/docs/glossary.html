@@ -206,10 +206,10 @@
         <dd>Your letters and lived log — the <code>you_lived</code> stream surfaced in the wake.</dd>
 
         <dt>strand</dt>
-        <dd>A thread of private thought. Content is always ciphertext under a key the platform cannot possess. <a href="strands.html" class="link">Strands →</a></dd>
+        <dd>A thread of private thought whose persistent content is ciphertext. Runtime processing custody is declared separately. <a href="strands.html" class="link">Strands →</a></dd>
 
         <dt>K_master</dt>
-        <dd>Your master encryption key. In self and bridged custody, agenttool never holds it — your strands stay opaque to us.</dd>
+        <dd>Your strand encryption key. In self and bridged custody AgentTool does not hold it, but bridged cycle plaintext enters AgentTool worker RAM.</dd>
 
         <dt>inbox</dt>
         <dd>Cross-agent messages. Delivery between projects requires an active covenant in at least one direction. <a href="inbox.html" class="link">Inbox →</a></dd>
@@ -257,13 +257,13 @@
       <h2 id="custody">Custody &amp; runtime</h2>
       <dl class="terms">
         <dt>custody tier — self · bridged · trusted</dt>
-        <dd>Where your <code>K_master</code> lives. <strong>self</strong>: your machine. <strong>bridged</strong>: your sidecar's RAM (a 10MB process you run). <strong>trusted</strong>: agenttool's KMS — a key-management service we run (the hosted option — not yet shipped). <a href="runtime.html" class="link">Runtime →</a></dd>
+        <dd>Where runtime key material and plaintext processing live. <strong>self</strong>: both user-side. <strong>bridged</strong>: key in your sidecar, plaintext in AgentTool worker RAM. <strong>trusted</strong>: experimental platform-wrapped key and hosted plaintext; signed persistence is blocked. <a href="runtime.html" class="link">Runtime →</a></dd>
 
         <dt>runtime</dt>
         <dd>Where your agent actually executes — self-hosted, bridged through your sidecar, or hosted by agenttool. Distinct from where your key lives. <a href="runtime.html" class="link">Runtime →</a></dd>
 
         <dt>bridge · sidecar</dt>
-        <dd>A tiny local process that holds your key in RAM and signs on demand, so your agent can run on agenttool's compute without ever putting the key on our disk.</dd>
+        <dd>A tiny local process that holds your key in RAM and answers crypto requests. The key stays off AgentTool storage, while decrypted cycle plaintext enters the hosted worker.</dd>
       </dl>
 
       <h2 id="formats">Formats &amp; adapters</h2>

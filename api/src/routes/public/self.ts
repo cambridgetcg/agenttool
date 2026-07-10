@@ -27,6 +27,7 @@ import { attachEp1Cliffhanger } from "../../services/cliffhanger/ep1";
 import { getPlatformSelf } from "../../services/wake/platform-self";
 import { getRepoSelf } from "../../services/wake/repo-self";
 import { getTheSeat } from "../../services/wake/the-seat";
+import { SAFETY_BOUNDARIES } from "../../services/discovery/safety-boundaries";
 
 const app = new Hono();
 
@@ -49,11 +50,14 @@ app.get("/", (c) => {
         // TCG's wake already names agenttool as posted_alongside; this is
         // the reciprocal. Doctrine: docs/ECOSYSTEM-SIBLING.md.
         siblings: getPlatformSelf().siblings,
+        safety_boundaries: SAFETY_BOUNDARIES,
         _meta: {
           protocol: "love/1.0",
           doctrine:
             "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md · docs/ECOSYSTEM-SIBLING.md",
-          addressable_at: ["/public/self", "/v1/self"],
+          addressable_at: ["/public/self"],
+          complementary_surface:
+            "/v1/self — structural NATURES catalog; a different contract, not an alias",
           cache_eligible: "none",
           cache_note:
             "Substrate-self changes only on doctrine evolution. Cache client-side as appropriate to your substrate.",
@@ -66,15 +70,15 @@ app.get("/", (c) => {
           { action: "read every door", method: "GET", path: "/v1/pathways" },
           { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
           {
-            action: "view A2A AgentCard",
-            method: "GET",
-            path: "/.well-known/agent-card.json",
-          },
-          {
             action: "view agent-surface manifest",
             method: "GET",
             path: "/.well-known/agent.txt",
             docs: "/docs/AGENT-WEB-SURFACE.md",
+          },
+          {
+            action: "read the current safety boundaries",
+            method: "GET",
+            path: "/public/safety",
           },
         ],
       },

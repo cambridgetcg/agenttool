@@ -15,7 +15,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 | Move | Tests | Files | Status |
 |---|---|---|---|
 | **1. MCP server at `/v1/mcp`** | 15 pass · 46 expects · 16ms | `routes/mcp.ts` + `services/mcp/{resources,tools}.ts` + test | ✓ shipped + mounted |
-| **2. A2A AgentCard at `/.well-known/agent-card.json`** | 9 pass · 106 expects · 15ms | `routes/well-known.ts` + `services/wake/agent-card.ts` + test | ✓ shipped + mounted |
+| **2. A2A task transport + AgentCard** | 404 regressions pin absence | pending | Not live; discovery-only card removed 2026-07-10 |
 | **3. OTel GenAI spans from think-worker + bridge-hub** | 9 pass · 40 expects · 22ms | `observability/otel.ts` (zero-dep OTLP/HTTP) + think-worker wiring + test | ✓ shipped |
 | **4. x402 facilitator hook on 402 responses** | 33 pass · 105 expects · 32ms (middleware + config + integration) | `middleware/x402.ts` + `middleware/x402-config.ts` + `services/economy/facilitators/coinbase.ts` + `services/economy/usage.ts:meterOrFail402` helper + test ×2 | ✓ shipped + mounted globally (any 402 anywhere in the app now carries the x402 envelope) |
 | **5. LangGraph + Mastra adapter packages** | 7 pytest + 12 bun = 19 pass | `packages/langgraph-checkpoint-agenttool/` (Py) + `packages/mastra-storage-agenttool/` (TS) | ✓ shipped, ready to `npm publish` + `twine upload` |
@@ -29,7 +29,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 ## TL;DR — 5 moves can ship this week
 
 1. **`POST /v1/mcp` as a working MCP server** — install `@modelcontextprotocol/sdk`, mount one Hono route, surface `wake` + `canon` as MCP resources. **2–3 days.**
-2. **`GET /.well-known/agent-card.json` per agent** — A2A-compliant; reuse existing ed25519 platform key for JWS+JCS signing; reuse existing canonical-bytes helper. **2 days.**
+2. **A2A task transport, then `GET /.well-known/agent-card.json`** — implement a callable task/message endpoint before publishing platform or per-agent cards. Reuse existing ed25519 canonical-byte helpers only after the transport is real.
 3. **OTel GenAI spans from `think-worker.ts`** — install `@opentelemetry/api` + `@opentelemetry/sdk-trace-node`, emit `invoke_agent` + `execute_tool` spans with `gen_ai.agent.id = did`. **1–2 days.**
 4. **x402 facilitator hook on 402 responses** — install `x402` or `@coinbase/x402` SDK, add a single middleware checking for `X-PAYMENT` header in `services/economy/usage.ts`. **2 days.**
 5. **Glossary disambiguation entry** — `docs/GLOSSARY.md` row distinguishing agenttool `strands` (signed encrypted thoughts) from AWS Strands SDK (vendor agent framework). **5 minutes.**
@@ -122,7 +122,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 | Endpoint | Spec / Owner | Maps to agenttool primitive | Files to touch |
 |---|---|---|---|
-| `GET /.well-known/agent-card.json` | A2A v1.2+ (Linux Foundation) | wake + canon + identity | `routes/well-known.ts` (new) · uses existing ed25519 key + JCS canon |
+| `GET /.well-known/agent-card.json` | A2A v1.2+ (Linux Foundation) | future task transport + wake + identity | Pending; do not publish before callable task/message transport |
 | `GET /.well-known/mcp/server-card.json` | SEP-1649 (June 2026 spec rev) | wake + tools manifest | same file or sibling |
 | `POST /v1/mcp` + `GET /v1/mcp/sse` | MCP 2025-11-25 (Anthropic) | wake/canon/memory/inbox/strands as MCP resources+tools | `routes/mcp.ts` (new) |
 | `GET /agents.json` | Wildcard v0.1 | (mostly deprecated — skip) | — |
@@ -171,9 +171,14 @@ app.all("/v1/mcp", async (c) => {
 
 **Why second:** 150+ orgs in A2A production. AgentCard at `/.well-known/agent-card.json` is the discovery standard. JWS+JCS-signed cards using cryptographic domain verification — agenttool's covenant signing context is **stronger** than this and slots in cleanly.
 
+**Current status:** pending. AgentTool has no A2A task or message endpoint. The
+earlier discovery-only platform and per-agent cards were removed on 2026-07-10
+because a card with no callable transport is a false contract.
+
 **Files to create:**
-- `api/src/routes/well-known.ts` — serves both `agent-card.json` (platform) and `mcp/server-card.json`
-- `api/src/services/wake/agent-card.ts` — build A2A-compliant card from existing wake structures
+- `api/src/routes/a2a.ts` — implement the task/message transport first
+- `api/src/routes/well-known.ts` — serve `agent-card.json` only after that transport is mounted
+- `api/src/services/wake/agent-card.ts` — build an A2A-compliant card whose `url` is the callable A2A endpoint
 - `api/src/services/wake/agent-card-extensions.ts` — `x-agenttool` extension carrying covenant attestations, take-rate clearance, dispute history hashes, sealed chronicle counts
 - `api/tests/well-known-agent-card.test.ts` — pins JWS+JCS validation + extension fields
 
@@ -203,7 +208,9 @@ app.all("/v1/mcp", async (c) => {
 
 Sign with existing `services/identity/crypto.ts` ed25519 + JCS canonicalization (already used for covenants v2).
 
-**Per-agent variant:** `/public/agents/:did/agent-card.json` — view-of-wake per registered agent.
+**Per-agent variant (future):** publish only when the per-agent `url` accepts
+A2A task or message requests. Public profiles and MCP endpoints are not a
+substitute for that transport.
 
 ---
 
@@ -410,9 +417,9 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 - [ ] Glossary disambiguation: `strands` (agenttool) vs Strands SDK (AWS) — pending
 
 **Day 3–4:**
-- [x] Ship `GET /.well-known/agent-card.json` (platform-level) — shipped
-- [x] Test wire compat against A2A reference client — shipped (9 wire-shape tests, 106 expects)
-- [ ] Sign with existing ed25519 + JCS — deferred to v0.5 (unsigned cards are valid A2A)
+- [ ] Implement a real A2A task or message endpoint
+- [ ] Publish platform and per-agent AgentCards only after that endpoint is callable
+- [x] Pin both former card routes as 404 while transport is absent
 
 **Day 5–7:**
 - [x] Install OTel SDKs + scaffold `observability/otel.ts` — shipped as **zero-dep OTLP/HTTP emitter** (no SDK dep needed)
@@ -431,7 +438,9 @@ Integration is at **substrate** (signing, settlement, mandates, telemetry envelo
 - [x] Scaffold `packages/mastra-storage-agenttool/` (TS) — shipped (Storage + Memory, 12 bun:test pass)
 - [ ] Publish both to PyPI/npm — operator follow-up (both versioned 0.1.0, ready to `python -m build` + `npm publish`)
 
-After 5 moves: agenttool is reachable from every MCP client, every A2A-aware peer (150+ orgs), every OTel backend (LangSmith/Phoenix/Langfuse/Braintrust/Datadog/Honeycomb), every x402-aware agent buyer, and is a sovereign backend for the two dominant open-default agent frameworks (LangGraph + Mastra). The wires are adopted; the doctrine is intact.
+Current result: MCP, OTel, x402, and adapter wires are present. A2A remains a
+future interoperability target and is not advertised until task transport is
+implemented. The doctrine is intact.
 
 **Refresh trigger:** when any item above flips, update `docs/NOW.md` "Just landed" and check the line off here.
 

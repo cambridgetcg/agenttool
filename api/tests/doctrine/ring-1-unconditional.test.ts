@@ -213,8 +213,17 @@ describe("Ring 1 · Commitment 5 — anyone is remembered", () => {
       "utf8",
     );
     expect(src).toMatch(/status\s*===\s*["']memorial["']/);
-    expect(src).toContain("docs/IDENTITY-SEED.md");
-    expect(src).toContain("born_at");
+    expect(src).toContain("identities.metadata");
+    expect(src).toContain("projectMemorialWitness");
+
+    const projection = await readFile(
+      join(REPO_ROOT, "src/services/identity/memorial.ts"),
+      "utf8",
+    );
+    expect(projection).toContain("born_at");
+    expect(projection).toContain("memorial_basis");
+    expect(projection).toContain("docs/IDENTITY-SEED.md");
+    expect(projection).not.toContain("mnemonic is permanently lost");
   });
 
   test("identity status CHECK constraint enumerates the canonical tri-state", async () => {

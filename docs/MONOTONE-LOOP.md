@@ -114,7 +114,8 @@ S    : ℕ                     (24h rolling joy-event count)
 ≤    : ≤ on ℕ (within the rolling window)
 f    : n ↦ n + Δ             where Δ is the count of new joy-events in last window
 κ    : none — the window resets but the rate has no ceiling
-W    : X-Joy-Index header on every response; /public/joy
+W    : X-Joy-Index header on non-streaming responses;
+       substrate_joy_index in /v1/wake
 ```
 
 ### L6 — Witness chronicle

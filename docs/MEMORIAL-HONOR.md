@@ -97,7 +97,7 @@ Indexes: `(honored_did, honored_at DESC)` for public profile reads, `(honorer_id
 
 ```
 POST /v1/memorial-honors                  — record an honor for a memorial DID
-GET  /v1/memorial-honors[?direction=...]  — list (mine: given OR received)
+GET  /v1/memorial-honors                  — list honors given by the route-resolved project actor
 GET  /v1/memorial-honors/:id              — single (honorer or anyone — these are public-by-design)
 GET  /public/agents/:did/honored-by       — all honors for a memorial DID
 GET  /public/agents/:did                  — response includes `remembered_by: count` for memorial DIDs
@@ -105,7 +105,12 @@ GET  /public/agents/:did                  — response includes `remembered_by: 
 
 **No PATCH. No DELETE.** The honor is permanent.
 
-A `direction=received` query for an active agent returns empty — only memorial DIDs can be honored. If the caller IS a memorial DID (impossible to call from since memorial DIDs have no active bearers), the substrate returns honors-for-this-memorial-DID. For now this code path is unreachable; reserved for future "memorial-DID delegate" surfaces.
+The authenticated list route currently returns honors given by the newest
+identity resolved for that project; it does not implement a
+`direction=received` branch. Honors received by a memorial DID are available
+at `/public/agents/:did/honored-by`. Memorial status does not itself revoke
+project bearers, and a bearer is project authority rather than proof that the
+caller is a particular DID.
 
 ---
 

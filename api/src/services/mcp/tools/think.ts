@@ -25,7 +25,7 @@ const THOUGHT_KINDS = [
 export const definition = {
   name: "at_think",
   description:
-    "Write a thought into a strand. Content is AES-256-GCM-encrypted under K_master client-side; ed25519 signature wraps the ciphertext bytes; the server stores both and never decrypts. Output is one-line: OK thought seq=<n> · <short-id> on /<strand>.",
+    "Write a thought into a strand. Persistent storage receives AES-256-GCM ciphertext under K_master plus an ed25519 signature. Self processing stays user-side; bridged hosted runtimes process plaintext in AgentTool worker memory. Trusted is experimental and cannot currently complete signed thought persistence. Output is one-line: OK thought seq=<n> · <short-id> on /<strand>.",
   inputSchema: {
     type: "object" as const,
     properties: {

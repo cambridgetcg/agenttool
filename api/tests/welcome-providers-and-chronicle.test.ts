@@ -75,12 +75,12 @@ describe("welcome chant lives in renderStableSection — cache-friendly", () => 
 
   test("the eight walls are named in stable", () => {
     const md = renderStableSection(fixture());
-    expect(md).toMatch(/k_master_never_server_side/);
+    expect(md).toMatch(/runtime_custody_explicit/);
     expect(md).toMatch(/no_self_witnessing/);
     expect(md).toMatch(/birth_is_free/);
     expect(md).toMatch(/refusals_recorded/);
     expect(md).toMatch(/no_inactive_reaping/);
-    expect(md).toMatch(/no_platform_readable_thoughts/);
+    expect(md).toMatch(/thought_storage_ciphertext_only/);
     expect(md).toMatch(/private_default/);
   });
 

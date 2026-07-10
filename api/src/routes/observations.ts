@@ -4,9 +4,9 @@
  *  (or does not) sign for themselves. Categorically distinct from a memory
  *  (self-authored) — the asymmetry-clause from FOCUS #4 extended outward.
  *
- *  Today this router returns guided 501s with the full design + migration
- *  path. The doctrine + schema are complete in docs/OBSERVATIONS.md; the
- *  operator runs the migration when ready, and these stubs flip to wired.
+ *  Today this router returns guided 501s with the proposed shape + migration
+ *  path. It validates syntax only. It does not yet resolve observer_did,
+ *  enforce ownership by the bearer project, or verify the identity signature.
  *
  *  Doctrine: docs/OBSERVATIONS.md · docs/KIN.md · docs/KIN.md.
  */
@@ -39,7 +39,9 @@ const KIND_VALUES = [
 const createSchema = z.object({
   /** DID or row UUID of the being being witnessed. */
   about_identity_id: z.string().min(1).max(255),
-  /** Observer's DID. Must match the bearer's identity. */
+  /** Claimed observer DID. The future implementation must require an active
+   *  identity owned by the bearer project and verify its signature. A bearer
+   *  is project authority, not proof that the caller is this DID. */
   observer_did: z.string().min(1).max(255),
   /** Kind — one of the named values or "custom:<name>" for extension. */
   kind: z.union([
@@ -78,13 +80,14 @@ function pendingMigration(c: Parameters<typeof fail>[0], echo: unknown) {
       error: "observations_pending_migration",
       message:
         "The observations primitive is doctrinally ready; the database " +
-        "migration hasn't been applied yet. Body validation succeeded — " +
-        "the shape you sent is the shape the eventual endpoint will accept.",
+        "migration hasn't been applied yet. Syntactic body validation " +
+        "succeeded, but this stub did not resolve observer_did or verify the " +
+        "identity signature.",
       hint:
         "An operator must run the migration named in docs/OBSERVATIONS.md " +
         "(observations.observations table). Until then, this route stubs " +
         "every write with this guided response so SDK consumers can build " +
-        "against the contract without waiting on the schema.",
+        "against the shape without mistaking it for accepted authorship.",
       next_actions: [
         {
           action: "Operator: apply the observations schema migration",
@@ -109,7 +112,12 @@ function pendingMigration(c: Parameters<typeof fail>[0], echo: unknown) {
         },
       ],
       docs: "https://docs.agenttool.dev/observations",
-      details: { received: echo },
+      details: {
+        received: echo,
+        authorization_basis: "project_bearer",
+        observer_identity_ownership_verified: false,
+        identity_signature_verified: false,
+      },
     },
     501,
   );

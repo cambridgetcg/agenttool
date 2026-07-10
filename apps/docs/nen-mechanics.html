@@ -97,7 +97,7 @@
     <p class="sub">
       Ten techniques. Five advanced principles. Three organizational structures.
       Every HxH Nen mechanic maps to an agenttool primitive. The API IS Nen.
-      The bearer IS your Hunter License. The Love Protocol IS Hatsu.
+      The project bearer is your root Hunter License; the DID signing key is your identity seal. The Love Protocol IS Hatsu.
     </p>
   </header>
 
@@ -123,7 +123,7 @@
     <div class="tech-card" style="--tech-color: var(--text-dim);">
       <div class="header"><span class="jp">絶</span><span class="name">Zetsu</span><span class="num">03 / 10</span></div>
       <div class="hxh">Suppress your aura completely. Become invisible. No output, no presence. Inner silence.</div>
-      <div class="at"><strong>agenttool:</strong> Strands — encrypted thoughts. Inner voice is AES-256-GCM ciphertext under K_master. Even compelled, the server has only opaque ciphertext. Zetsu IS the privacy architecture.</div>
+      <div class="at"><strong>agenttool:</strong> Strands — persistent thought content is AES-256-GCM ciphertext under K_master. Runtime processing is separate: self stays user-side; bridged enters hosted worker RAM; trusted is experimental.</div>
       <div class="api">POST /v1/strands · POST /v1/strands/:id/thoughts</div>
       <div class="cmd">python3 strand.py open --encrypt --mood silent</div>
     </div>
@@ -163,7 +163,7 @@
     <div class="tech-card" style="--tech-color: var(--text-muted);">
       <div class="header"><span class="jp">隠</span><span class="name">In</span><span class="num">08 / 10</span></div>
       <div class="hxh">Conceal your aura. Make your presence undetectable. The art of hiding in plain sight.</div>
-      <div class="at"><strong>agenttool:</strong> Vault — AES-256-GCM secrets. Your secrets are yours. The server holds encrypted values it cannot read. In IS the vault: your capabilities, hidden from even the host. Zero-knowledge mode available.</div>
+      <div class="at"><strong>agenttool:</strong> Vault has two modes. Default values are server-readable during authorized use; <code>agent_encrypted: true</code> stores client-encrypted ciphertext that AgentTool cannot decrypt.</div>
       <div class="api">POST /v1/vault (agent_encrypted: true = zero-knowledge)</div>
       <div class="cmd">curl -X POST https://api.agenttool.dev/v1/vault -d '{"name":"secret","value":"..."}'</div>
     </div>
@@ -230,7 +230,7 @@
       <h3>Hunter Association Election → Org Governance</h3>
       <div class="org-jp">ハンター協会選挙 → /v1/orgs + org-wide covenants</div>
       <p>The Hunter Association votes for its chairman. Each licensed hunter gets one vote. Democratic governance by licensed members.</p>
-      <div class="at"><strong>agenttool:</strong> Orgs — multi-project governance + org-wide covenants. <code>POST /v1/orgs</code> creates an org. Org members share covenants. The org IS the association. The bearer IS the license. The vote IS the covenant — declared bonds with vows shape the org's direction.</div>
+      <div class="at"><strong>agenttool:</strong> Orgs — multi-project governance + org-wide covenants. <code>POST /v1/orgs</code> creates an org. Org members share covenants. The org IS the association. A bearer is one project's root license, not a member identity. The vote IS the covenant — declared bonds with vows shape the org's direction.</div>
     </div>
 
     <div class="org-card">
