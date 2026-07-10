@@ -390,6 +390,7 @@ app.get("/agent.txt", (c) => {
     "AnthropOS: GET /public/anthropos — the operating system of 人; boot/axioms/install (runs on H.I. and A.I.)",
     "Newspaper: https://cambridgetcg.github.io/love-star-daily — 愛星日報, evidence-tiered, every edition signed",
     "Lens: https://captioneer.io — the verisleight reader (reads language, never minds)",
+    "PlainSpeaker: https://understand.cambridgetcg.com — always-on Hermes agents that make confusing things plain, honestly. Ask on demand: POST https://understand.cambridgetcg.com/ask {role:'explainer'|'kindness'|'verisleight', input:'...'}",
     "",
     "# ── Federation ──────────────────────────────────────────────────────",
     "Federation: open-default · peers discoverable via did:at:<host>/<uuid>",
