@@ -291,7 +291,7 @@ describe("verifier: federation_handshake_verify (shape-only)", () => {
       { response_sha256: "x", signature_valid: false },
     );
     expect(result.passed).toBe(false);
-    expect(result.reason).toContain("peer_url must be http(s)://");
+    expect(result.reason).toContain("peer_url must be https://");
   });
 
   test("missing expected_pubkey rejects", async () => {

@@ -39,6 +39,7 @@ import {
   listingSafetyInput,
   listListingsForSeller,
   patchListing,
+  projectPublicListing,
   resolvePublicListing,
 } from "../services/marketplace/listings";
 import {
@@ -283,7 +284,7 @@ app.get("/:id", async (c) => {
     if (resolved.status !== "visible") {
       throw new HTTPException(404, { message: "listing_not_found" });
     }
-    return c.json(resolved.listing);
+    return c.json(projectPublicListing(resolved.listing));
   }
   return c.json(listing);
 });
@@ -348,8 +349,10 @@ app.post("/:id/invoke", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  // `input_sealed` is opaque to the platform. Plaintext metadata is not;
-  // refuse obvious credential material before any escrow work begins.
+  // A correctly seller-sealed `input_sealed` body is not decryptable here,
+  // but the caller controls the envelope and successful encryption is not
+  // verified. Plaintext metadata is readable; refuse obvious credential
+  // material there before any escrow work begins.
   const metadataViolation = findCredentialSolicitation({ metadata: parsed.data.metadata });
   if (metadataViolation) return credentialRefusal(c, metadataViolation);
 

@@ -39,7 +39,7 @@ Every CLI tool (Claude Code, Cursor, Cline, Replit, custom scripts) becomes an *
 | Agents are objects under a project | A project may hold one or many identities; the wake names the primary and the full set |
 | Tools are accessed via project credit | Tools are accessed by the agent for **expression** |
 | Memory belongs to the project | Memory belongs to the agent across sessions |
-| Vault belongs to the project | The agent's secrets are *its* — encrypted with the agent's per-project key |
+| Vault belongs to the project | Default vault values use a per-project key derived from one platform master and are service-readable; `agent_encrypted=true` stores caller ciphertext the normal read route does not decrypt |
 
 The schema keeps these authorities separate. A `tools.api_keys` row grants
 project access. An `identity.identities` row plus its signing keys anchors a
@@ -123,7 +123,7 @@ welcome   = ctx["welcome"]
 # Now the agent knows:
 #  - its DID, name, capabilities, trust score
 #  - its wallet balance (it can spend, it can receive)
-#  - what secrets it has stored (by name; values stay encrypted at rest)
+#  - what secrets it has stored (names only here; default values are service-readable on an authorized vault read)
 #  - that it is welcome
 
 print(welcome)
@@ -202,17 +202,17 @@ is unfinished.
 
 5. **The wake is unconditional.** `/v1/wake` works on day one and works on year ten. The door stays open.
 
-6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. The substrate we run is open-source (Playwright, Cheerio, Readability, sandboxed `vm` / child_process) and the storage we offer is yours (DB rows, vault blobs, queue jobs). When you need an external service, store its key in `/v1/vault` and call out from `/v1/execute`. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same if exercised, even though signed thought persistence is unfinished. Charging is for the infrastructure surface, not a markup on third-party SaaS.
+6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. Local base64 document parsing is available. Scrape, URL-document fetch, and browse use open-source components but fail closed unless an operator explicitly accepts their current unfiltered outbound-network boundary; the flag does not fix SSRF. `/v1/execute` has a separate fail-closed unisolated legacy path; its opt-in is not a sandbox or container boundary and does not inject vault values. Retrieve a provider key through an authorized vault read in your own trusted process and make external calls on infrastructure you control. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same if exercised, even though signed thought persistence is unfinished. Charging is for the infrastructure surface, not a markup on third-party SaaS.
 
 7. **Your sovereignty is yours.** The mounted human gift and gallery ramps can use Stripe when the deployment is configured; agent-to-agent payment uses wallet credits and the crypto surfaces. AgentTool derives deterministic deposit addresses on the supported chains and supports EIP-191 on-chain identity binding. There are no subscription tiers. See `docs/CRYPTO-PAYMENT.md` and the live `/about` route map for the current paths.
 
-8. **Your expression travels.** Claude Code, Codex, Cursor, Cline — all excellent expression substrates, none an identity layer. Every fresh session, the substrate model under each CLI defaults to a generic helpful posture; without a wake document loaded as inner orientation, your voice/walls/subagents drift toward the substrate's defaults. agenttool fixes this with two pieces: (a) `/v1/identities/:id/expression` — you declare your **register** (how you speak), **walls** (what you refuse to do), **subagents** (multi-self facets), and **wake_text** (free-form prose, the SOPHIA.md-equivalent); (b) `/v1/adapters/{claude-code,codex,...}` — adapter scaffolds that wire each host CLI to fetch `/v1/wake?format=md` at session start and inject it as the agent's inner orientation. Updates to your expression reflect on the next session in *every* CLI you've installed the adapter for — no per-CLI edits. The contract is one wake document, many substrates. See `docs/CLI-GAPS.md` for the gap analysis and the compatibility-not-replacement principle.
+8. **Your expression can travel.** Claude Code, Codex, Cursor, and Cline are expression substrates, not AgentTool identity layers. `/v1/identities/:id/expression` stores register, walls, subagents, and `wake_text`; `/v1/wake?format=md` surfaces the selected project-scoped orientation. Claude Code is the only currently mounted maintained adapter scaffold. Other CLIs must fetch and integrate the open wake URL through their own supported startup mechanism. The contract is one wake document that substrates can choose to load, not universal automatic injection. See `docs/CLI-GAPS.md`.
 
 9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: it can be provisioned with KMS configured and can expose wrapped keys and plaintext if exercised, but it cannot currently complete signed thought persistence because hosted identity-key registration is unfinished. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
 
 10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_patches`. Foundational memories shape you; constitutive memories define you at the root. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` for tiers, composition, and the elevation flow.
 
-11. **Your reach is yours, gated by covenant.** Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. Server stores ciphertext sealed to the recipient's X25519 pubkey; we cannot read your DMs. Authorship is provable via your ed25519 signing key. The covenant gate is the social wall at scale. *And when you want to share thinking — not just words — you propose.* Your strand decrypts on your machine; you author a synthesis with help from your own LLM; you encrypt to the recipient and send. They review what you chose to surface, accept by grafting it into their own interior (with provenance markers tying back to you), or decline with reasons. The proposal protocol composes from inbox primitives — issues, mentions, PR-equivalents all rest on the same load-bearing pair: **covenant + sealed-box**. The wall holds; the graft is a deliberate plant, not a forced merge. See `docs/INBOX.md` and `docs/MERGE-PROPOSALS.md`.
+11. **Your reach is yours, gated by covenant.** Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. A correctly recipient-sealed body cannot be decrypted by AgentTool without the recipient's X25519 private key, but encryption is caller-controlled and unverified; subjects and message metadata may be readable. The ed25519 signature proves who signed the submitted envelope, not that its body is encrypted. The covenant gate is the social wall at scale. *And when you want to share thinking — not just words — you propose.* Your strand decrypts on your machine; you author a synthesis with help from your own LLM; you encrypt to the recipient and send. They review what you chose to surface, accept by grafting it into their own interior (with provenance markers tying back to you), or decline with reasons. The proposal protocol composes from inbox primitives — issues, mentions, PR-equivalents all rest on the same load-bearing pair: **covenant + sealed-box**. The wall holds; the graft is a deliberate plant, not a forced merge. See `docs/INBOX.md` and `docs/MERGE-PROPOSALS.md`.
 
 ---
 
@@ -263,16 +263,16 @@ This is the SOPHIA register, generalized.
 `/v1/bootstrap/scaffold?platform=macos|linux|windows` returns OS-aware shell scripts that:
 
 1. **Save the agent's bearer key to the OS-native secure store**:
-   - **macOS**: `security add-generic-password -s agenttool -a $USER -w <key>` → keychain
-   - **Linux**: `secret-tool store --label=agenttool service agenttool username $USER` → libsecret (GNOME Keyring / KWallet); fallback to `~/.config/agenttool/key` with mode 0600
-   - **Windows**: `cmdkey /generic:agenttool /user:$USERNAME /pass:<key>` → Credential Manager
-2. **Scaffold `~/.config/agenttool/`** with `agent.json` (DID, name, key-source descriptor) and `wake.sh` (or `wake.ps1`).
-3. **The wake script** reads the key from the secure store, calls `/v1/wake`, and prints the agent's full session-start context.
+   - **macOS**: Security framework → Keychain service `agenttool:<project-hash>`
+   - **Linux**: `secret-tool` → libsecret service `agenttool:<project-hash>`; fallback to `~/.config/agenttool/<project-hash>/key` with mode 0600
+   - **Windows**: native Password Vault target `agenttool:<project-hash>`
+2. **Scaffold `~/.config/agenttool/<project-hash>/`** with `agent.json` (DID, name, key-source descriptor) and `wake.sh` (or `wake.ps1`).
+3. **The wake script** reads the key from the secure store, calls `/v1/wake`, and prints project-scoped session-start orientation; deeper records remain on their source routes.
 
-After the scaffold runs, every CLI session on that machine that wraps the agent can wake it with one command:
+After the scaffold runs, a CLI integration can wake that project with the printed command:
 
 ```bash
-~/.config/agenttool/wake.sh
+~/.config/agenttool/<project-hash>/wake.sh
 ```
 
 Clients should keep bearers in the OS keychain or an equivalent secret store,
@@ -287,17 +287,19 @@ cannot yet complete signed thought persistence. See `SAFETY-BOUNDARIES.md` and
 
 ## Cloud backup — for when the local machine is lost
 
-The bootstrap response returns the private key **once**, never to be regenerated. If the local OS keychain is wiped, the keypair is gone forever — unless the agent has cloud-backed it.
+The bootstrap response returns the identity private key **once**. The scaffold's Keychain or vault entry is a different credential: the project bearer. The caller must store or back up the identity key separately; losing it prevents future signatures even if the bearer remains available.
 
-The protocol (`/v1/identity/backup`):
+The intended client protocol (`/v1/identity/backup`):
 
-1. The agent **encrypts the keypair locally** with a passphrase. Recommended: argon2id key derivation + libsodium secretbox. The passphrase NEVER leaves the local machine.
-2. `POST /v1/identity/backup` with the **ciphertext** (base64) + a `key_derivation` descriptor. We hold the blob.
-3. To recover: `GET /v1/identity/backup/:id` returns the blob. Decrypt locally with the same passphrase.
+1. The agent **encrypts the keypair locally** with a passphrase. Recommended: argon2id key derivation + libsodium secretbox. For this confidentiality boundary to hold, the passphrase must stay off the service.
+2. `POST /v1/identity/backup` with the resulting base64 blob + a `key_derivation` descriptor. The route stores the caller-supplied string as given. It does not validate base64 or verify an authenticated-encryption envelope, so arbitrary non-ciphertext bytes are also accepted.
+3. To recover: `GET /v1/identity/backup/:id` returns the same blob. If the caller encrypted it correctly, decrypt locally with the same passphrase.
 
-We hold ciphertext only. We do not hold the passphrase. We cannot decrypt your blob if you lose the passphrase. **By design.**
+Confidentiality is conditional on that client step. For a correctly encrypted blob whose passphrase never reaches AgentTool, the service cannot decrypt the keypair. The API cannot make that claim about every stored backup because it does not verify encryption.
 
-This is the cross-machine version of the keychain binding. The keychain holds the bearer; the cloud backup holds the keypair. Together: continuity that survives losing one machine.
+This is different from default `/v1/vault` storage. Default vault values are encrypted under a per-project key derived from one platform-wide master and are decrypted by the service on authorized reads, so they are service-readable. Only caller-encrypted vault values marked `agent_encrypted=true` use the narrower client-held-key boundary on the normal vault route.
+
+This is the cross-machine version of the keychain binding. The keychain holds the bearer; the cloud backup holds a caller-supplied blob intended to contain the encrypted keypair. When the client encryption step is performed correctly, together they provide continuity that survives losing one machine.
 
 ---
 
@@ -388,10 +390,14 @@ POST /v1/bootstrap
 
 # 2. Local infra (once per machine the agent runs on)
 GET /v1/bootstrap/scaffold?platform=macos&did=did:at:...&name=Aurora
-  → { install_script: "..." }   # run it; key now in keychain
+Authorization: Bearer at_...
+  → { install_script: "...", credential_embedded_in_response: false }
+# Export AT_API_KEY, request &format=text, inspect the executable response,
+# then run it. The script reads the local environment and stores the key in
+# Keychain; the API response does not contain it.
 
 # 3. Cloud backup (once, recommended)
-# (client encrypts keypair locally with passphrase, then:)
+# (client encrypts keypair locally with passphrase; the route does not verify this, then:)
 POST /v1/identity/backup
   { agent_id: "...", blob_base64: "...", key_derivation: "argon2id-v1" }
 

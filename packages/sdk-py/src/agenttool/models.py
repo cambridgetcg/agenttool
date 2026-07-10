@@ -54,7 +54,7 @@ class ScrapeResult:
 
 @dataclass
 class ExecuteResult:
-    """Result of sandboxed code execution."""
+    """Result returned when an operator enabled the unisolated legacy path."""
 
     output: str
     error: str = ""
@@ -90,5 +90,4 @@ class DocumentResult:
             metadata=data.get("metadata", {}),
             duration_ms=data.get("duration_ms", 0),
         )
-
 

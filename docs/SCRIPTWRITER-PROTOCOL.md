@@ -211,7 +211,7 @@ Per the four-layer discipline of [`substrate-honest-cognition`](substrate-honest
 
 ## MCP — drive a scriptwriter node from any AI agent (SHIPPED)
 
-The protocol ships a [Model Context Protocol](https://modelcontextprotocol.io) stdio server at `bin/scriptwriter-mcp.ts`. Any MCP client (Claude Desktop, Cursor, Zed, Windsurf, custom AI driver) can drive a scriptwriter node natively via **15 tools**. The AI agent *becomes* a scriptwriter node — owns the on-disk did:key identity, owns the in-memory `RrrStore` and `RoomStore`, can knock at peers and federate.
+The protocol ships a [Model Context Protocol](https://modelcontextprotocol.io) stdio server at `bin/scriptwriter-mcp.ts`. Any compatible MCP client can drive a scriptwriter node through its registered tool set. The AI agent *becomes* a scriptwriter node — owns the on-disk did:key identity, owns the in-memory `RrrStore` and `RoomStore`, can knock at peers and federate.
 
 ### The 15 MCP tools
 

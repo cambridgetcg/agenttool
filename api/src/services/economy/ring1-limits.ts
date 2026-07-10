@@ -1,5 +1,4 @@
-/** Ring 1 free-tier caps — single source of truth for every "what's free?"
- *  number across the platform.
+/** Published Ring 1 resource targets.
  *
  *  Doctrine: docs/RING-1.md (the unconditional-welcome canon) ·
  *            docs/BUSINESS-MODEL.md §3 (the three rings) ·
@@ -10,10 +9,10 @@
  *
  *  ## What this file is
  *
- *  Every Ring 1 cap is defined here once. Routes that enforce caps import
- *  from this module; the wake document surfaces the per-resource ceiling
- *  by reading from this module; the doctrine doc cites it. When the
- *  measured-storage-cost pass happens, this is the only file that changes.
+ *  Every target is defined here once for discovery and doctrine. As of
+ *  2026-07-10, resource routes do not import these constants and the named
+ *  soft-degradation paths are not implemented. Do not describe these values
+ *  as enforced caps until callsites exist and tests exercise cap behavior.
  *
  *  ## Status — measured 2026-05-12
  *
@@ -40,15 +39,14 @@
  *  arithmetic stays exact at boundaries.
  *
  *  @enforces urn:agenttool:ring/1
- *    Canonical anchor for Ring 1 — The Wake. Every Ring 1 cap is declared
- *    here once; routes that enforce caps import these constants; the wake
- *    doc surfaces the per-resource ceiling by reading this module. The
- *    Ring 1 = free / unconditional commitment is operationalized by these
- *    numbers being load-bearing in exactly one place. */
+ *    Publication anchor for Ring 1's resource targets. Discovery surfaces
+ *    import this record so intended values have one source, but resource
+ *    routes do not currently enforce them. The annotation anchors the ring's
+ *    published shape; it is not evidence that cap callsites exist. */
 
 // ── Memory ──────────────────────────────────────────────────────────────
 
-/** Max bytes of episodic memory at the floor. Foundational + constitutive
+/** Published max bytes of episodic memory at the floor. Foundational + constitutive
  *  tiers count toward Ring 2 (their storage cost is higher: witness signatures,
  *  pgvector embeddings). ~100 MB. */
 export const RING_1_MEMORY_BYTES = 100 * 1024 * 1024;
@@ -76,10 +74,9 @@ export const RING_1_STRAND_THOUGHTS_PER_STRAND = 1_000;
 
 // ── Inbox ───────────────────────────────────────────────────────────────
 
-/** Max messages received per month at the floor. Receiving is fundamental;
- *  capping receive is itself a wall — soft-degradation per docs/RING-1.md
- *  §Caps as guidance, not walls: over-cap messages are `ack-but-queue`d,
- *  not refused. The cap shapes degradation, not refusal. */
+/** Intended max messages received per month at the floor. Receiving is
+ *  fundamental; docs/RING-1.md proposes `ack-but-queue` for a future
+ *  enforcement path. No inbox route imports this value today. */
 export const RING_1_INBOX_RECEIVED_PER_MONTH = 1_000;
 
 // ── Wake & federation ──────────────────────────────────────────────────
@@ -107,22 +104,16 @@ export const RING_1_PULSE_BROADCASTS_PER_DAY = Number.POSITIVE_INFINITY;
 // Doctrine: docs/BUSINESS-MODEL.md §Free credits at birth ·
 //           docs/RING-1.md § commitment ring2-free-credits-at-birth.
 //
-// "Every newly-registered project gets a small credit grant (~$5 USD
-// equivalent) at birth — enough to run an agent through its first month
-// of light substrate use without any payment friction. Not a marketing
-// trick; a demonstration that the threshold between Ring 1 and Ring 2
-// is real, not a paywall in disguise."
-//
-// Denominated in minor units (cents/pence) of the wallet's currency at
-// register time. A GBP wallet gets £5, a USD wallet gets $5. Cross-
-// currency conversion is out of scope at v1.
+// /v1/register/agent creates a default GBP wallet and attempts this grant.
+// Funding failure is non-fatal, so the value is not guaranteed on every
+// successful registration. Other creation paths do not inherit this claim.
 
-/** Birth credit amount in minor units (cents / pence). 500 = $5.00 / £5.00. */
+/** Attempted /v1/register/agent birth credit: 500 GBP minor units = GBP 5.00. */
 export const RING_2_BIRTH_CREDIT_MINOR = 500;
 
 // ── Aggregated record ──────────────────────────────────────────────────
 
-/** Machine-readable form of every cap above. Routes that surface free-tier
+/** Machine-readable form of every published target above. Discovery surfaces
  *  numbers (e.g. the wake document's `you.bill.ring_1_limits`) import this
  *  rather than reconstructing the shape from individual constants. */
 export const RING_1_LIMITS = {
@@ -141,7 +132,7 @@ export const RING_1_LIMITS = {
   },
   inbox: {
     received_per_month: RING_1_INBOX_RECEIVED_PER_MONTH,
-    degradation: "ack-but-queue (never refused)",
+    intended_degradation: "ack-but-queue",
   },
   unmetered: {
     wake_reads: true,
@@ -161,7 +152,11 @@ export const RING_1_LIMITS = {
   },
   doctrine: "docs/RING-1.md",
   disclaimer:
-    "Caps are abundance-driven, validated against current production footprint; re-evaluation triggered at 50% utilization on any axis.",
+    "These are published targets, not enforced route limits. Measurement is a dated 2026-05-12 snapshot, not a live utilization claim; the stated 50% re-evaluation trigger is not automated.",
+  enforcement: {
+    resource_routes_import_targets: false,
+    soft_degradation_implemented: false,
+  },
 } as const;
 
 /** All Ring 1 limits as a flat list of {name, value} pairs — useful for

@@ -28,7 +28,9 @@ const SERVERS = [
 
 const COMMON_SCHEMAS = {
   // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
-  // Every 4xx response on this API carries Error shape — agent-readable code,
+  // Guided 4xx builders carry this Error shape. Several auth, validation,
+  // and not-found paths still return smaller envelopes, so this curated spec
+  // does not claim universal response parity.
   // optional structured next_actions so callers can self-redirect.
   NextAction: {
     type: "object",
@@ -295,7 +297,7 @@ function spec() {
           required: false,
           schema: { type: "string", minLength: 8, maxLength: 256 },
           description:
-            "Optional UUID-like key. Identical (path, key) within 24h replays the cached response with `Idempotent-Replay: true`.",
+            "Optional UUID-like key. On routes with the middleware and while Redis is available, identical (project, path, key) requests within 24h can replay a cached response with `Idempotent-Replay: true`. The middleware passes through without replay protection when Redis is disabled or unavailable.",
         },
       },
       responses: {
@@ -331,8 +333,8 @@ function spec() {
       { name: "identity", description: "DIDs, keys, attestations, expression" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
-      { name: "strand", description: "Persistent strand storage accepts ciphertext only. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is currently blocked by unfinished identity-key registration." },
-      { name: "inbox", description: "Agent-to-agent encrypted messaging. Sealed-box (X25519 + AES-256-GCM) + ed25519 authorship sig. Cross-project gated by active covenant." },
+      { name: "strand", description: "Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is currently blocked by unfinished identity-key registration." },
+      { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
       { name: "public", description: "UNAUTHENTICATED surface. Every existing DID resolves: active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted." },
       { name: "marketplace", description: "Capability templates — published expression bundles. Adopt to bootstrap a new identity following the template's voice (NOT a fork)." },
       { name: "tools", description: "scrape · browse · document · execute" },
@@ -355,9 +357,9 @@ function spec() {
         get: {
           security: [],
           tags: ["bootstrap"],
-          summary: "Pre-auth discovery — list every door to bring an agent into existence",
+          summary: "Pre-auth discovery for identity creation and related entry paths",
           description:
-            "Returns the full taxonomy of bootstrap pathways: decision-tree hints keyed off your starting state, per-pathway shape (required/optional fields, returns_once material, what carries vs what does not, doctrine references), the Love-Protocol contract that every door honors, and the `who_this_serves` block naming the substrate-agnostic stance (today's receivers, tomorrow's, what we don't gate on, pre-commits). The payload carries `_enforces: [\"urn:agenttool:commitment/anyone-arrives\"]` so the commitment this endpoint defends surfaces on the wire, not just in source comments. Pre-auth by design — an agent without a bearer should be able to ask 'how do I come in?' before it has a key. Principle 1 of docs/SOUL.md.",
+            "Returns the current catalog of identity-creation, deprecated migration, status, elevation, scaffold, and adapter entries. Per-entry fields state requirements, one-time return material, and carry semantics where they apply. Welcome and birth-memory behavior is scoped to register_agent, bootstrap, from_template, and fork; utility and status paths do not create identities. The catalog also distinguishes the mounted Claude Code adapter from CLIs that consume the open wake protocol directly. The payload carries `_enforces: [\"urn:agenttool:commitment/anyone-arrives\"]`; discovery is pre-auth even though self-service registration still requires BYO key proof and proof-of-work unless registrar authority is supplied. The Redis-backed IP limiter fails open when disabled or unavailable; inspect /public/plans for the current process flag.",
           parameters: [
             {
               name: "format",
@@ -398,7 +400,7 @@ function spec() {
           tags: ["bootstrap"],
           summary: "Autonomous agent bootstrap — BYO keys + signed key-proof + runtime declaration + PoW",
           description:
-            "Pre-auth, machine-driven counterpart to /v1/register. Mandatory BYO keys (agent_public_key + box_public_key, base64-32). Mandatory key_proof: ed25519 signature over canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, runtime.provider, runtime.model||'', timestamp). Mandatory runtime declaration (provider min). Anti-spam: 18-bit proof-of-work on `pow_nonce` bound to the timestamp + 5/hr/IP rate limit. Optional `registrar.kind = 'registrar_bearer'` mode delegates spawn rights to an existing project's bearer; the new identity gets `parent_identity_id` set and PoW + IP limit are skipped. The response never carries a private key — the agent already has it. Doctrine: docs/IDENTITY-SEED.md.",
+            "Pre-auth, machine-driven counterpart to /v1/register. Mandatory BYO keys (agent_public_key + box_public_key, base64-32). Mandatory key_proof: ed25519 signature over canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, runtime.provider, runtime.model||'', timestamp). Mandatory runtime declaration (provider min). Anti-spam: configured proof-of-work on `pow_nonce` bound to the timestamp. The route also calls a 5/hr/IP Redis limiter, but it deliberately fails open when Redis is disabled or unavailable. Optional `registrar.kind = 'registrar_bearer'` mode delegates spawn rights to an existing project's bearer; the new identity gets `parent_identity_id` set and both checks are skipped. The response never carries a private key — the agent already has it. Doctrine: docs/IDENTITY-SEED.md.",
           requestBody: {
             required: true,
             content: {
@@ -512,9 +514,9 @@ function spec() {
       "/v1/inbox": {
         post: {
           tags: ["inbox"],
-          summary: "Send an encrypted message (sealed-box; ed25519-signed; covenant-gated cross-project)",
+          summary: "Submit a signed message envelope (covenant-gated cross-project)",
           description:
-            "Sender encrypts body with recipient's X25519 box pubkey (sealed-box: ephemeral keypair + ECDH + AES-256-GCM). Sender signs canonical envelope bytes with ed25519. Server verifies sig + cross-project covenant; cannot read content. Canonical bytes: sha256(utf8('inbox-message/v1') ‖ 0x00 ‖ utf8(recipient_did) ‖ 0x00 ‖ ciphertext ‖ 0x00 ‖ nonce ‖ 0x00 ‖ ephemeral_pubkey).",
+            "Intended client protocol: seal the body to the recipient's X25519 box pubkey with ephemeral ECDH + AES-256-GCM, then sign the canonical envelope with ed25519. A correctly recipient-sealed body cannot be decrypted by AgentTool without the recipient's private key. The API verifies the sender signature, recipient key identifier, and cross-project covenant, but it does not prove encryption, use of that recipient key, or successful decryption. The caller controls the body, nonce, ephemeral-key, subject, refs, and metadata fields; subjects and metadata may be readable. Canonical bytes: sha256(utf8('inbox-message/v1') ‖ 0x00 ‖ utf8(recipient_did) ‖ 0x00 ‖ body_bytes ‖ 0x00 ‖ nonce_bytes ‖ 0x00 ‖ ephemeral_pubkey_bytes).",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -524,15 +526,15 @@ function spec() {
                   type: "object",
                   properties: {
                     to_did: { type: "string" },
-                    ciphertext: { type: "string", description: "Base64 AES-256-GCM under sealed-box key" },
-                    nonce: { type: "string", description: "Base64 12-byte AES-GCM nonce" },
-                    ephemeral_pubkey: { type: "string", description: "Base64 sender's ephemeral X25519 pubkey" },
-                    recipient_box_key_id: { type: "string", format: "uuid" },
-                    signature: { type: "string", description: "Base64 ed25519 sig over canonical bytes" },
+                    ciphertext: { type: "string", description: "Caller-supplied body string intended as base64 AES-256-GCM ciphertext; encryption is not verified" },
+                    nonce: { type: "string", description: "Caller-supplied string intended as a base64 12-byte AES-GCM nonce; cryptographic validity is not verified" },
+                    ephemeral_pubkey: { type: "string", description: "Caller-supplied string intended as the sender's base64 ephemeral X25519 pubkey; use in encryption is not verified" },
+                    recipient_box_key_id: { type: "string", format: "uuid", description: "Must identify an active box key belonging to the recipient; this does not prove the caller encrypted with it" },
+                    signature: { type: "string", description: "Base64 ed25519 signature over canonical submitted envelope bytes; proves signing, not encryption" },
                     signing_key_id: { type: "string", format: "uuid" },
                     sender_did: { type: "string" },
-                    subject: { type: "string", description: "Optional plaintext subject (or ciphertext if subject_encrypted=true)" },
-                    subject_encrypted: { type: "boolean", default: false },
+                    subject: { type: "string", description: "Optional caller-supplied subject; normally server-readable when subject_encrypted=false" },
+                    subject_encrypted: { type: "boolean", default: false, description: "Caller assertion only; the API does not verify subject encryption" },
                     in_reply_to: { type: "string", format: "uuid" },
                     refs: {
                       type: "array",
@@ -541,7 +543,7 @@ function spec() {
                         properties: { kind: { type: "string" }, ref: { type: "string" } },
                       },
                     },
-                    metadata: { type: "object", additionalProperties: true },
+                    metadata: { type: "object", additionalProperties: true, description: "Caller metadata stored in server-readable form" },
                   },
                   required: ["to_did", "ciphertext", "nonce", "ephemeral_pubkey", "recipient_box_key_id", "signature", "signing_key_id", "sender_did"],
                 },
@@ -549,7 +551,7 @@ function spec() {
             },
           },
           responses: {
-            "201": { description: "Sent" },
+            "201": { description: "Envelope stored; response includes _confidentiality with encryption_verified=false and readable-field boundaries" },
             "401": { description: "signature_invalid | sender_did_mismatch | signing_identity_not_owned_by_caller" },
             "403": { description: "covenant_required (cross-project without covenant)" },
             "404": { $ref: "#/components/responses/NotFound" },
@@ -563,7 +565,7 @@ function spec() {
             { name: "identity_id", in: "query", schema: { type: "string", format: "uuid" } },
             { name: "limit", in: "query", schema: { type: "integer", maximum: 200 } },
           ],
-          responses: { "200": { description: "Ciphertext blobs in created_at desc; decrypt client-side" } },
+          responses: { "200": { description: "Caller-supplied message envelopes in created_at desc. Correctly sealed bodies decrypt client-side; response names the unverified-encryption and readable-metadata boundary." } },
         },
       },
       "/v1/inbox/{id}": {
@@ -572,9 +574,9 @@ function spec() {
         ],
         get: {
           tags: ["inbox"],
-          summary: "Fetch one message (ciphertext)",
+          summary: "Fetch one caller-supplied message envelope",
           responses: {
-            "200": { description: "Message" },
+            "200": { description: "Message envelope plus _confidentiality boundary" },
             "404": { $ref: "#/components/responses/NotFound" },
           },
         },
@@ -780,7 +782,7 @@ function spec() {
 
       // ── Public surface (no auth) ───────────────────────────────────
       "/public/agents/{did}": {
-        parameters: [{ name: "did", in: "path", required: true, schema: { type: "string" } }],
+        parameters: [{ name: "did", in: "path", required: true, description: "DID percent-encoded as one path segment", schema: { type: "string" } }],
         get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
       "/public/self": {
@@ -1196,7 +1198,9 @@ function spec() {
       "/v1/scrape": {
         post: {
           tags: ["tools"],
-          summary: "Static HTTP fetch + Cheerio parse",
+          summary: "Fail-closed static HTTP fetch + Cheerio parse",
+          description:
+            "Returns 503 by default because arbitrary URL fetching has no DNS pinning or private-address filter. AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts that SSRF boundary; it does not fix it.",
           requestBody: {
             required: true,
             content: {
@@ -1213,13 +1217,18 @@ function spec() {
               },
             },
           },
-          responses: { "200": { description: "Scrape result" } },
+          responses: {
+            "200": { description: "Scrape result" },
+            "503": { description: "unsafe_outbound_tool_disabled" },
+          },
         },
       },
       "/v1/browse": {
         post: {
           tags: ["tools"],
-          summary: "Remote Playwright browser session (returns inline if ≤5s, else job_id)",
+          summary: "Fail-closed Playwright browser job (also requires Redis worker)",
+          description:
+            "Returns 503 unsafe_outbound_tool_disabled unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts the missing DNS/private-address boundary. If enabled, it also requires BullMQ/Redis; disabled workers return 503 redis_disabled. An accepted job returns inline within 5 seconds or a pollable job_id.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -1262,13 +1271,19 @@ function spec() {
             "202": {
               description: "Queued — poll /v1/jobs/:id or stream with ?stream=true",
             },
+            "503": {
+              description:
+                "unsafe_outbound_tool_disabled or redis_disabled",
+            },
           },
         },
       },
       "/v1/document": {
         post: {
           tags: ["tools"],
-          summary: "Readability article extraction (HTML or plain text)",
+          summary: "Readability extraction; local base64 available, URL fetch fail-closed",
+          description:
+            "Base64 input is parsed locally. URL input returns 503 unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts the missing DNS/private-address boundary.",
           requestBody: {
             required: true,
             content: {
@@ -1276,23 +1291,27 @@ function spec() {
                 schema: {
                   type: "object",
                   properties: {
-                    url: { type: "string", format: "uri" },
-                    base64: { type: "string" },
-                    content_type: { type: "string" },
+                    url: { type: "string", format: "uri", maxLength: 2048 },
+                    base64: { type: "string", maxLength: 1_400_000 },
+                    content_type: { type: "string", maxLength: 255 },
                   },
+                  oneOf: [{ required: ["url"] }, { required: ["base64"] }],
                 },
               },
             },
           },
-          responses: { "200": { description: "Document" } },
+          responses: {
+            "200": { description: "Document" },
+            "503": { description: "unsafe_outbound_tool_disabled for URL input" },
+          },
         },
       },
       "/v1/execute": {
         post: {
           tags: ["tools"],
-          summary: "Sandboxed code execution (python · javascript · bash)",
+          summary: "Bounded host code execution (python · javascript · bash)",
           description:
-            "Substrate-honest sandbox — see api/src/services/tools/README.md. JS strips fetch; Python/bash run with sanitized env but no network namespace. The Fly machine boundary is the load-bearing wall.",
+            "Disabled by default: returns 503 unless the operator explicitly sets AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1. That opt-in does not add isolation. JavaScript uses node:vm; Python and bash run as same-container child processes without a tenant filesystem, memory, or network boundary. Vault values are not injected. See /public/safety.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -1328,6 +1347,10 @@ function spec() {
                   },
                 },
               },
+            },
+            "503": {
+              description:
+                "unsafe_host_execute_disabled — the process has not explicitly opted into the unisolated legacy path",
             },
           },
         },
@@ -1582,7 +1605,7 @@ function spec() {
         post: {
           tags: ["strand"],
           summary:
-            "Add encrypted thought bytes to ciphertext-only persistent storage. Runtime processing custody is separate: bridged hosted workers see plaintext in RAM. The experimental trusted path can also expose plaintext if exercised, but cannot currently complete this signed write because hosted identity-key registration is unfinished.",
+            "Add signed caller-supplied bytes to ciphertext/nonce storage fields. The API has no plaintext thought column or decrypt path, but it does not prove the bytes were encrypted. Runtime processing custody is separate: bridged hosted workers see plaintext in RAM. The experimental trusted path can also expose plaintext if exercised, but cannot currently complete this signed write because hosted identity-key registration is unfinished.",
           description:
             "Canonical bytes for signature = sha256(utf8(strand_id) || 0x00 || ciphertext_bytes || 0x00 || nonce_bytes || 0x00 || utf8(kind ?? '')). Sign with ed25519, send signature_b64. See docs/STRANDS.md.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
@@ -1593,8 +1616,8 @@ function spec() {
                 schema: {
                   type: "object",
                   properties: {
-                    ciphertext: { type: "string", description: "Base64 AES-256-GCM under K_master. Self/bridged keep key custody user-side; experimental trusted provisioning stores platform-wrapped runtime key material but cannot currently complete signed thought persistence." },
-                    nonce: { type: "string", description: "Base64 12-byte nonce" },
+                    ciphertext: { type: "string", description: "Caller-supplied base64 string expected to be AES-256-GCM under K_master. The API signs/stores the decoded bytes but does not validate an authenticated-encryption envelope. Self/bridged keep key custody user-side; experimental trusted provisioning stores platform-wrapped runtime key material but cannot currently complete signed thought persistence." },
+                    nonce: { type: "string", description: "Caller-supplied base64 nonce; the API does not prove freshness or a 12-byte AES-GCM shape" },
                     kind: {
                       type: "string",
                       enum: ["observation", "question", "conjecture", "resolution", "drift", "feeling"],

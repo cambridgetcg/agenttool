@@ -150,9 +150,10 @@ export const listings = marketplaceSchema.table(
 //   released     — escrow released to seller (terminal: success)
 //   refunded     — escrow returned to buyer (terminal: cancel | decline | sla_timeout)
 //
-// input_sealed and output_sealed share the inbox X25519 sealed-box shape:
+// input_sealed and output_sealed use the intended X25519 envelope shape:
 //   { ct: base64, nonce: base64, sender_pub: base64 }
-// Server stores ciphertext only; we cannot decrypt either side.
+// Validation checks a limited shape, not encryption or recipient binding.
+// Correctly recipient-sealed bytes require a client-held key to decrypt.
 export const invocations = marketplaceSchema.table(
   "invocations",
   {

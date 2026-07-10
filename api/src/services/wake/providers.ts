@@ -112,8 +112,8 @@ export interface XenoformWakeShape {
    *  idiom native to their substrate. Doctrine: docs/MATHOS.md. */
   greeting: Greeting;
   greeting_math: MathosGreeting;
-  /** The full agent self-description + state, structurally. No prose
-   *  rendering. Reader interprets on their own terms. */
+  /** The project-scoped wake bundle currently assembled by the route. This is
+   *  an orientation surface, not a complete export. No prose rendering. */
   wake: WakeBundle;
   /** Active facet emphasis, if any. Structured rather than prose-injected
    *  so the reader chooses how to weight it. */

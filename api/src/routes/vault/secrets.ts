@@ -6,12 +6,11 @@
  *      derived from VAULT_MASTER_KEY. SDK sends `value` (plaintext); server
  *      encrypts on PUT, decrypts on GET, returns plaintext.
  *
- *    Opt-in `agent_encrypted: true`: SDK encrypts under an agent-held key
- *      BEFORE the request and sends `ciphertext_b64 + nonce_b64`. Server
- *      stores them verbatim (with auth_tag NULL — the GCM tag is appended
- *      to ciphertext per WebCrypto/Node convention). Server cannot decrypt;
- *      GET returns `{agent_encrypted: true, ciphertext_b64, nonce_b64}`
- *      and the SDK decrypts client-side.
+ *    Opt-in `agent_encrypted: true`: the caller sends `ciphertext_b64 +
+ *      nonce_b64`. The server stores them verbatim (with auth_tag NULL) and
+ *      GET returns the same fields without a decrypt step. The SDK can encrypt
+ *      client-side, but the API does not validate an AEAD envelope or prove
+ *      exclusive key custody.
  *
  *  In-process consumers (api/src/services/vault/ → think-worker etc.) can
  *  only read agent_encrypted=FALSE secrets — agent-encrypted secrets are
@@ -47,8 +46,8 @@ const putSchema = z
     /** Plaintext value (server-encrypted at rest). Mutually exclusive
      *  with `ciphertext_b64`. Required when agent_encrypted is false/absent. */
     value: z.string().min(1).optional(),
-    /** Set true to opt into client-side encryption. Server stores
-     *  ciphertext verbatim and cannot decrypt. */
+    /** Set true for the caller-supplied opaque-byte path. The normal server
+     *  read does not decrypt it; the API does not prove client encryption. */
     agent_encrypted: z.boolean().optional().default(false),
     /** Base64 ciphertext (with GCM tag appended). Required when
      *  agent_encrypted=true. */
@@ -267,7 +266,7 @@ app.get("/:name", async (c) => {
       description: secret.description,
       expires_at: v.expiresAt?.toISOString() ?? null,
       _note:
-        "Decrypt locally with your key. agenttool cannot read this value.",
+        "The normal server read path returns these caller-supplied bytes without decrypting them. Decrypt locally if you encrypted them; the API does not prove encryption or exclusive key custody.",
     });
   }
 

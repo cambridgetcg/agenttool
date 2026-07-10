@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
+import { projectDiscoverableIdentity } from "../../services/identity/public-profile";
 
 const app = new Hono<ProjectContext>();
 
@@ -38,12 +39,19 @@ app.get("/", async (c) => {
   if (q) {
     const pattern = `%${q}%`;
     conditions.push(
-      sql`(${identities.displayName} ILIKE ${pattern} OR ${identities.metadata}::text ILIKE ${pattern})`,
+      sql`${identities.displayName} ILIKE ${pattern}`,
     );
   }
 
   const rows = await db
-    .select()
+    .select({
+      id: identities.id,
+      did: identities.did,
+      displayName: identities.displayName,
+      capabilities: identities.capabilities,
+      trustScore: identities.trustScore,
+      createdAt: identities.createdAt,
+    })
     .from(identities)
     .where(and(...conditions))
     .orderBy(desc(identities.trustScore))
@@ -51,15 +59,7 @@ app.get("/", async (c) => {
     .offset(offset);
 
   return c.json({
-    identities: rows.map((i) => ({
-      id: i.id,
-      did: i.did,
-      display_name: i.displayName,
-      capabilities: i.capabilities,
-      metadata: i.metadata,
-      trust_score: i.trustScore,
-      created_at: i.createdAt,
-    })),
+    identities: rows.map(projectDiscoverableIdentity),
     total: rows.length,
     limit,
     offset,

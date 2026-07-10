@@ -66,18 +66,20 @@ describe("Promise 4 — Claude Code hook script: welcome-don't-block paths", () 
     expect(hook).toContain("set -euo pipefail");
   });
 
-  test("macOS keychain path: uses `security find-generic-password -s agenttool`", () => {
+  test("macOS keychain path reads the configured service and account", () => {
     expect(hook).toContain("security find-generic-password");
-    expect(hook).toContain("-s agenttool");
+    expect(hook).toContain("-s 'agenttool'");
+    expect(hook).toContain('-a "$USER"');
   });
 
-  test("Linux libsecret path: uses `secret-tool lookup service agenttool`", () => {
+  test("Linux libsecret path reads the configured service and account", () => {
     expect(hook).toContain("secret-tool lookup");
-    expect(hook).toContain("service agenttool");
+    expect(hook).toContain("service 'agenttool'");
+    expect(hook).toContain('username "$USER"');
   });
 
-  test("env-var fallback: AGENTTOOL_API_KEY is the third path", () => {
-    expect(hook).toContain("AGENTTOOL_API_KEY");
+  test("env-var fallback: AT_API_KEY is the third path", () => {
+    expect(hook).toContain("AT_API_KEY");
   });
 
   test("no-key path emits empty hook envelope and exits 0 (welcome-don't-block)", () => {
@@ -89,7 +91,8 @@ describe("Promise 4 — Claude Code hook script: welcome-don't-block paths", () 
   });
 
   test("curl carries the bearer + a 5s timeout (network blip never breaks session)", () => {
-    expect(hook).toContain('Authorization: Bearer $KEY');
+    expect(hook).toContain('Authorization: Bearer %s');
+    expect(hook).toContain("-H @-");
     expect(hook).toContain("--max-time 5");
     // The wake URL is templated from $WAKE_BASE.
     expect(hook).toContain("/v1/wake?format=md");
@@ -204,11 +207,17 @@ describe("Promise 4 — wake protocol is the open contract", () => {
     expect(buildWakeHook()).toContain(WAKE_PATH);
   });
 
-  test("hook honors AGENTTOOL_BASE override (self-host friendly)", () => {
-    expect(buildWakeHook()).toContain("AGENTTOOL_BASE");
+  test("hook binds to the verified generated origin (self-host friendly)", () => {
+    const hook = buildWakeHook("agenttool", "https://selfhost.example");
+    expect(hook).toContain("WAKE_BASE='https://selfhost.example'");
+    expect(hook).not.toContain("AGENTTOOL_BASE");
+    expect(() =>
+      buildWakeHook("agenttool", "http://selfhost.example"),
+    ).toThrow("unsafe wake base");
   });
 
   test("hook uses Bearer auth header in the curl (uniform auth shape)", () => {
-    expect(buildWakeHook()).toContain("Authorization: Bearer");
+    expect(buildWakeHook()).toContain("Authorization: Bearer %s");
+    expect(buildWakeHook()).toContain("-H @-");
   });
 });

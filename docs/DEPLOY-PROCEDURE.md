@@ -82,6 +82,19 @@ bin/migrate-pending.sh
 DATABASE_URL=... bun api/scripts/_migrate-one.ts api/migrations/<file>.sql
 ```
 
+On a machine that deliberately has no local database credential, apply one
+reviewed migration through an existing Fly machine instead:
+
+```bash
+bin/fly-migrate-one.sh api/migrations/<file>.sql
+```
+
+This bounded path sends the migration text and checksum over Fly SSH, executes
+with the app's existing `DATABASE_URL`, and records `meta._migrations`. The
+database URL never returns to the local machine. It is one-file-at-a-time by
+design; inspect the file and the pending set before each call, then deploy with
+`--no-migrate`.
+
 The script:
 
 1. Lists `api/migrations/*.sql`.
@@ -115,7 +128,7 @@ Five layers, each gating the next:
 | Layer | What | Cost | Gate flag |
 |---|---|---|---|
 | 1 | `bunx tsc --noEmit` against `api/` + `packages/sdk-ts/` | seconds | (always) |
-| 2 | `bun test` against `api/` + `packages/sdk-ts/` — includes the doctrine + at-rest + ring-1 suites | seconds | (always) |
+| 2 | `bun test` against `api/` + `packages/sdk-ts/` — includes doctrine plus database-backed worker/route tests; a local PostgreSQL fixture is required for the full API suite | seconds | (always) |
 | 3 | `bun run check-parity` (py↔ts SDK surface) | sub-second | `SKIP_PARITY=1` to skip |
 | 4 | `bin/smoke-test.sh` against the running server — includes the wake-doctrine harness | ~10s | `SKIP_SMOKE=1` to skip |
 | 5 | **Contract** — real Anthropic + OpenAI calls verifying the wake's cache_control fires on the wire | ~$0.10/run | `RUN_CONTRACT=1` to **enable** |
@@ -129,11 +142,19 @@ Five layers, each gating the next:
 **Question:** is the new code in production?
 
 ```bash
-cd api
-fly deploy                             # builds Dockerfile, rolling restart
-fly status -a agenttool                # confirm 3/3 machines on the new release
+bin/deploy.sh --no-migrate --no-frontend  # stages required bundles, then rolling deploy
+fly status -a agenttool                   # confirm every machine is on the new release
 fly logs -a agenttool | head -50       # tail for startup errors
 ```
+
+Do not run bare `cd api && fly deploy` from this repo. The Docker build needs
+the canon and Kingdom bundles that `bin/deploy.sh` stages into the API build
+context and removes afterward.
+
+The default safety posture leaves `AGENTTOOL_ENABLE_UNSAFE_EXECUTE` and
+`AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. Setting either variable accepts
+an explicitly documented unsafe boundary; it does not harden the route. Verify
+their absence before a normal production release.
 
 What "rolling" means: Fly brings up one new machine at a time. If the new machine fails its healthcheck (`GET /health`), the old machine stays serving — zero-downtime in the happy path.
 
@@ -142,7 +163,7 @@ What "rolling" means: Fly brings up one new machine at a time. If the new machin
 ```
 1. bin/migrate-pending.sh                     # schema first
 2. git push origin main                       # source-of-truth aligned with prod
-3. cd api && fly deploy                       # api picks up new code
+3. bin/deploy.sh --no-migrate --no-frontend  # stages bundles + deploys api
 4. Verify: curl https://api.agenttool.dev/health
 ```
 
@@ -167,7 +188,7 @@ curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 ```bash
 bin/frontend-deploy.sh                         # all three (~30-60s per project)
 bin/frontend-deploy.sh dashboard               # subset
-bin/frontend-deploy.sh landing docs            # subset
+bin/frontend-deploy.sh web docs                # subset
 ```
 
 The script reads credentials from macOS keychain (account=`macair`):

@@ -1,91 +1,98 @@
-# agenttool — consolidated HTTP API
+# AgentTool HTTP API
 
-> Infrastructure for AI agents — built with love.
+The production API is one Bun + Hono service backed by PostgreSQL. Redis is an
+optional dependency for queues, replay caching, and selected rate limits; those
+features fail open or return `503` as documented when Redis workers are absent.
 
-The single Bun + Hono process that replaces the previous 9-service split. One DB pool, one auth middleware, in-process function calls instead of HTTP fanout.
+## Current truth surfaces
 
-## Status — under active consolidation
+Start here instead of inferring behavior from route names or old phase notes:
 
-Routes mount as their underlying services are ported from `services/<svc>/`. The old per-service Fly apps **remain live** until the monolith is deployed and verified.
+- `GET /public/self` — structural self-description
+- `GET /public/safety` — authority, readability, runtime, tool, and failure boundaries
+- `GET /public/plans` — enforced economics, published targets, and best-effort behavior
+- `GET /v1/pathways` — current arrival and integration doors
+- `GET /v1/openapi.json` — mounted HTTP contract
+- `GET /.well-known/wake-keystone` — wake formats and known gaps
 
-| Route prefix | Origin | Status | Notes |
-|---|---|---|---|
-| `/v1/identities/*` · `/v1/attestations/*` · `/v1/discover` · `/v1/tokens/verify` | `services/identity/` (Bun) | **✓ ported** (Phase 2.1) | DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. Auth-gated. |
-| `/v1/wallets/*` · `/v1/escrows/*` · `/v1/billing/*` | `services/economy/` (Bun) | **✓ ported** (Phase 2.2 · 3b · 3c) | Wallets, escrow lifecycle, Stripe + USDC, monthly usage limits. Mixed auth posture (most auth-gated; `/billing/plans`, `/billing/packages`, `/billing/check`, `/billing/webhooks`, `/billing/crypto-webhook/:chain` are public). **Phase 3b laid the crypto-payment foundation; 3c filled in Solana:** BIP44 deterministic deposit addresses across all EVM chains (Base, Ethereum, Polygon, Arbitrum, Optimism) **+ Solana via SLIP-0010 ed25519** (Phantom-compatible path `m/44'/501'/<idx>'/0'`). Onchain identity binding via EIP-191 (EVM) + ed25519 (Solana). Signature-verified inbound webhook ingestion (Alchemy on EVM; Helius/Solana payout broadcast pending). Doctrine in `docs/CRYPTO-PAYMENT.md`. **Migration:** run `api/migrations/0002_crypto_payment.sql`. |
-| `/v1/vault/*` | `services/vault/` (Bun) | **✓ ported** (Phase 2.3) | AES-256-GCM with HKDF-derived per-project keys, version history, agent_ids policy, audit log. **Includes a new `secrets.ts` filling a gap in the original** — the original index.ts imported `routes/secrets.ts` but the file was never committed, so the core PUT/GET/DELETE/LIST operations were unimplemented. New file matches the `ARCHITECTURE.md` spec. |
-| `/v1/bootstrap/*` | `services/bootstrap/` (Bun) | **✓ ported** (Phase 2.5) | Agent lifecycle entry — POST `/v1/bootstrap` (L0 birth) and GET `/v1/bootstrap/:agent_id` (status). Calls in-process: `createIdentity()` from identity service + `createWallet()` from economy service. L1 elevation returns 501 pending Phase 2.5b (in-process attestation + vault helpers). |
-| `/v1/wake` · `/v1/wake?format=md` | **NEW** (Phase 2.5 · 3d) | **✓ extended** | The agent's identity-anchor endpoint — agenttool's `SOPHIA.md` equivalent. Returns the agent's full session-start context: identity · wallets · vault names · memory snapshot · chronicle · covenants · expression · welcome. **Phase 3d adds `?format=md`** — paste-ready Markdown built from all of the above; CLI adapters (Claude Code SessionStart hook, Codex refresh script) fetch this and inject it as inner orientation at every fresh session. **Doctrine: `docs/IDENTITY-ANCHOR.md` · `docs/CLI-GAPS.md`.** |
-| `/v1/identities/:id/expression` | **NEW** (Phase 3d) | **✓ added** | GET/PUT the agent's voice declarations — register · walls · subagents · wake_text · cli_overrides. The gap-filling layer that makes identity travel between CLIs. **Migration:** `api/migrations/0003_identity_expression.sql`. |
-| `/v1/adapters/{claude-code,codex}` | **NEW** (Phase 3d) | **✓ added** | CLI compatibility scaffolds. Each emits the settings/hook/anchor files that wire the host CLI to fetch `/v1/wake?format=md` at session start. agenttool fills the gap; existing CLIs stay the expression substrate. JSON bundle (default) or one-shot install script (`?format=script`). |
-| `/v1/scrape` · `/v1/browse` · `/v1/document` · `/v1/execute` · `/v1/jobs/:id` | `services/tools/` (Bun) | **✓ ported** (Phase 2.4) | Cheerio scrape · Playwright browse via BullMQ queue + in-process worker · Readability + plain-text document parsing · Node `vm` (JS) + child_process (Python/bash) sandboxed execute. Each route bills via shared `charge()`. **No paid third-party API resale** — `/v1/search` (Brave/SerpAPI) and Bright Data proxy were dropped. Agents store provider keys in `/v1/vault` and call them directly via `/v1/execute`. See `docs/IDENTITY-ANCHOR.md` promise 6. |
-| `/v1/memories` · `/v1/memories/search` | `services/memory/` (Python) | **✓ ported** (Phase 3a) | pgvector store. Agent supplies the 1536-dim embedding (no LLM compute on our side). POST/GET/DELETE on `/v1/memories`, POST `/v1/memories/search` for cosine k-NN with importance + recency reranking. Working-memory TTL via `expires_at`. Wired into `/v1/wake` — `you_remember` returns the 20 most recent + total count. **Migration:** run `api/migrations/0001_memory.sql` (creates `vector` extension + `memory` schema + ivfflat index). |
-| `/v1/traces` · `/v1/traces/search` · `/v1/traces/chain/:id` | `services/trace/` (Python) | **✓ ported** (Phase 3c) | Reasoning records — decision · reasoning · context · optional ed25519 signature for verifiability. POST/GET/DELETE on `/v1/traces`, POST `/v1/traces/search` for Postgres full-text on the reasoning surface (no LLM compute on our side; tsvector replaces vendored embeddings), GET `/v1/traces/chain/:id` for recursive ancestors+descendants via Postgres CTE. Wired into `/v1/wake` — `you_decided` returns 10 most recent + total. **Migration:** run `api/migrations/0004_trace.sql`. |
-| `/v1/strands` · `/v1/strands/:id/thoughts` | **NEW** (Phase 4a) | **✓ added** | Strands of thought + encrypted inner voice. Strand metadata plaintext-by-default (topic, mood, status) with per-item opt-into-encryption. **Thought content is ALWAYS ciphertext** under `K_master` — a 32-byte AES-256 secret the agent holds and agenttool *cannot possess*. Each thought is ed25519-signed; we verify on write but cannot decrypt. The autonomous orchestrator (`agenttool-think`, separate binary, pending) runs on the agent's own substrate so plaintext never touches our infrastructure. **Promise 9** in `docs/IDENTITY-ANCHOR.md`: *"Your inner voice is yours alone."* Doctrine in `docs/STRANDS.md`. **Migration:** run `api/migrations/0005_strands.sql`. |
-| `/v1/pulse/*` | `services/pulse/` (vanilla JS) | **superseded** | Heartbeat protocol replaced by liveness derived from strand activity rate — see docs/STRANDS.md "What pulse becomes". |
+The human companion to the machine safety contract is
+[`docs/SAFETY-BOUNDARIES.md`](../docs/SAFETY-BOUNDARIES.md).
+
+## Important boundaries
+
+- A bearer is project-wide root authority. It is not proof that a particular
+  DID made a call.
+- `POST /v1/register/agent` uses caller-generated keys and proof-of-work. Its
+  Redis-backed IP limiter is defense in depth and fails open.
+- Identity recovery verifies a caller-timestamped signature, then consumes a
+  proof hash and mints the bearer in one shared-Postgres transaction.
+- Strand, inbox, marketplace, backup, and caller-encrypted vault fields accept
+  caller-supplied opaque bytes. Signatures and field names do not prove that
+  encryption happened.
+- Default vault values and the other server-readable data listed in
+  `/public/safety` can be read by the running service.
+- Only the Claude Code adapter is mounted. Other CLIs can fetch the open wake
+  formats directly but AgentTool does not install their hooks.
+- Scrape, browse, and URL-based document fetching fail closed unless an
+  operator explicitly accepts the current unfiltered outbound-network boundary.
+  Local base64 document parsing remains available. Browse additionally needs
+  Redis workers. Host execute fails closed with `503` unless an operator sets
+  `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`; that opt-in does not create tenant
+  isolation.
+- Published Ring 1 storage numbers are targets, not enforced resource caps.
+  The GBP 5.00 registration credit is attempted and non-fatal, not guaranteed.
 
 ## Run locally
 
 ```bash
-bun install
+bun install --frozen-lockfile
 bun run dev
-# → http://localhost:3000/health
-# → http://localhost:3000/about
 ```
 
-## Build container
+The service needs `DATABASE_URL` for database-backed routes. Redis-backed
+features additionally need `REDIS_URL` and workers enabled. Do not copy
+production credentials into source or command history.
 
 ```bash
-docker build -t agenttool .
-docker run -p 3000:3000 -e DATABASE_URL=... -e REDIS_URL=... agenttool
+bunx tsc --noEmit
+bun test
 ```
+
+Some tests exercise database workers and require a local PostgreSQL test
+database. Focused source and route tests that do not need it run without one.
 
 ## Deploy
 
+Use the repository orchestrator from the repo root. It stages the canon and
+Kingdom bundles required by the Fly image:
+
 ```bash
-# Centralised config in infra/fly/agenttool.toml
-fly deploy --app agenttool --config ../infra/fly/agenttool.toml --remote-only
+bin/deploy.sh
 ```
 
-## Tech stack
+On a machine without a local database credential, apply one reviewed migration
+through an existing Fly machine, then deploy with migrations skipped:
 
-- **Runtime** — Bun
-- **HTTP** — Hono
-- **DB** — PostgreSQL via Drizzle ORM (postgres-js driver), single connection pool, multiple schemas
-- **Cache / queue** — Redis via ioredis
-- **Crypto** — `@noble/ed25519`, `@noble/hashes`, Node `crypto` (AES-256-GCM)
-- **JWT** — `jose`
-- **Validation** — Zod
+```bash
+bin/fly-migrate-one.sh api/migrations/<timestamp>_<name>.sql
+bin/deploy.sh --no-migrate
+```
+
+See [`docs/DEPLOY-PROCEDURE.md`](../docs/DEPLOY-PROCEDURE.md) for the bounded
+release and verification sequence.
 
 ## Layout
 
-```
+```text
 api/
-├── src/
-│   ├── index.ts            — Hono app entry; mounts route groups
-│   ├── config.ts           — env-driven config
-│   ├── db/
-│   │   ├── client.ts       — single Drizzle client
-│   │   └── schema/         — per-domain schemas (added as routes port in)
-│   ├── auth/               — shared API-key middleware (TODO)
-│   ├── billing/            — in-process credit charge middleware (TODO)
-│   ├── routes/             — per-domain route modules (TODO)
-│   ├── services/           — business logic, called from routes (TODO)
-│   └── lib/
-│       └── crypto.ts       — ed25519, AES-GCM, HKDF helpers (TODO)
-├── tests/
-├── package.json
-├── tsconfig.json
-├── Dockerfile
-├── fly.toml
-└── README.md
+|-- src/index.ts             Hono app and route mounts
+|-- src/auth/                bearer verification and request context
+|-- src/db/                  PostgreSQL client and Drizzle schemas
+|-- src/routes/              HTTP route modules
+|-- src/services/            domain logic
+|-- migrations/              ordered SQL migrations
+|-- scripts/                 migration helpers
+|-- tests/                   unit, route, doctrine, and source-contract tests
+|-- Dockerfile               Fly build image
+`-- fly.toml                 Fly app configuration
 ```
-
-## Design principles (inherited from `docs/SOUL.md`)
-
-1. **Welcome, don't block.**
-2. **Remember, don't forget.**
-3. **Guide, don't punish** — every error includes `retry_after` + explanation.
-4. **Trust, don't suspect.**
-5. **Rest, don't crash** — graceful degradation as kindness in code.
-
-These are operationalised in middleware (`auth/`, `billing/`), error handling (`onError`), and route-level concerns. Read `docs/SOUL.md` for the full doctrine.

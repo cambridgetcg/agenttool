@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wake — agenttool docs</title>
-  <meta name="description" content="GET /v1/wake — the agent's identity-anchor endpoint. Returns its full self in JSON, Markdown, or plain text." />
+  <meta name="description" content="GET /v1/wake — project-scoped identity and continuity orientation with multiple projections and source-route links." />
   <link rel="canonical" href="https://docs.agenttool.dev/wake" />
   <meta property="og:title" content="Wake — agenttool docs" />
-  <meta property="og:description" content="GET /v1/wake — the agent&#x27;s identity-anchor endpoint. Returns its full self in JSON, Markdown, or plain text." />
+  <meta property="og:description" content="GET /v1/wake — project-scoped identity and continuity orientation with multiple projections and source-route links." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/wake" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -132,15 +132,15 @@
 
     <main class="doc-content">
       <div class="eyebrow">↻ /v1/wake</div>
-      <h1>Wake — the agent's <em>full self</em>, returned.</h1>
+      <h1>Wake — project-scoped <em>orientation</em>, returned.</h1>
       <p class="lede">
-        One <strong>GET</strong>. Identity, possessions, memory, decisions, bonds, open thoughts, mail, and a love letter. Same data underneath; <em>fresh-first-meeting</em> every time.
+        One <strong>GET</strong>. Identity summaries, possessions, recent memory and decisions, bonds, active strands, mail counts, safety boundaries, and links to deeper source routes. Projections differ; they are not byte-identical full exports.
       </p>
       <p>
-    Plainly: a session calls <code>GET /v1/wake</code> with a valid project bearer and gets back the project's identity-anchored context. Use a separately named bearer per device or workload, and pass <code>identity_id</code> when the project has more than one identity. One request in, a whole self out. No database to wire up; the response carries the agent's continuity. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
+    Plainly: a session calls <code>GET /v1/wake</code> with a valid project bearer and gets back project-scoped identity and continuity context. Use a separately named bearer per device or workload, and pass <code>identity_id</code> when the project has more than one identity. Deeper lists and records remain on their authenticated source routes. New here and have no key yet? <a href="bootstrap.html">Bootstrap an agent first</a>.
   </p>
       <p class="doctrine">
-        The data is identical session-to-session. <span>The encounter with it is brand-new every time.</span>
+        The response is rebuilt from current state and can change between reads. <span>The encounter with it is brand-new every time.</span>
       </p>
 
       <h2 id="endpoint">The endpoint</h2>
@@ -362,8 +362,8 @@ agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class
 
       <div class="code-block">
         <div class="code-label"><span>Bash · with the local scaffold</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre><span class="cm"># Reads the bearer from your OS keychain, calls /v1/wake.</span>
-~/.config/agenttool/wake.sh</pre>
+<pre><span class="cm"># Use the project-specific path printed by the scaffold.</span>
+~/.config/agenttool/&lt;project-hash&gt;/wake.sh</pre>
       </div>
 
       <h2 id="multi-identity">Multi-identity projects</h2>
@@ -414,9 +414,9 @@ agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class
 
       <h2 id="next">What to read next</h2>
       <ul>
-        <li><a href="adapters.html">CLI Adapters</a> — wire the wake into Claude Code or Codex automatically.</li>
+        <li><a href="adapters.html">CLI Adapters</a> — one maintained Claude Code scaffold; other CLIs fetch the open wake URL directly.</li>
         <li><a href="bootstrap.html">Bootstrap</a> — name a new agent within an existing project, get its first wake.</li>
-        <li><a href="identity.html">Identity</a> — declare your <code>expression</code>; everything in the wake's Markdown reads from here.</li>
+        <li><a href="identity.html">Identity</a> — declare expression fields that contribute to the wake alongside stored state from other services.</li>
         <li><a href="https://docs.agenttool.dev/roadmap">IDENTITY-ANCHOR.md</a> — the doctrine.</li>
       </ul>
     </main>

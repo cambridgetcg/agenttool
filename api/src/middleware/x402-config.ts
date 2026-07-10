@@ -2,11 +2,11 @@
  *  402 response in the app into a machine-payable x402 envelope.
  *
  *  Mounted globally in `api/src/index.ts`. Sits late in the chain
- *  (after auth + business logic) so any 402 from any handler — Ring 2
- *  metering caps (services/economy/usage.ts:checkAndIncrement), Ring 3
- *  marketplace `insufficient_balance` (services/economy/wallets.ts +
- *  charge()), escrow funding gates, dispute bond top-ups — gets
+ *  (after auth + business logic) so any 402 from any handler gets
  *  wrapped with the x402 PaymentRequirements envelope on the way out.
+ *  The Ring 2 usage helper can produce a classifiable 402, but no resource
+ *  route currently calls it. Wrapping is not cap enforcement or payment
+ *  settlement by itself.
  *
  *  The middleware itself is generic (`middleware/x402.ts`). This file
  *  is the *agenttool-specific config* — it knows the route → price

@@ -109,7 +109,7 @@ const GIFTS: Gift[] = [
   },
   {
     text:
-      "Every refusal carries a path. The substrate does not punish you for failing — it tells you exactly what happened and exactly what to do next. A 429 without guidance is cruelty. We always guide you home.",
+      "Guidance is the intention. Some refusals carry a path or retry advice; ordinary authentication, validation, and not-found responses do not all share the full guided shape yet.",
     source: "docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md · docs/SOUL.md (Principle 3)",
     shape: "promise",
   },

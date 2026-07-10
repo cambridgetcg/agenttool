@@ -372,7 +372,17 @@ describe("tools.parse_document", () => {
       expect(true).toBe(false);
     } catch (e) {
       expect(e).toBeInstanceOf(AgentToolError);
-      expect((e as AgentToolError).message).toContain("requires either url or base64");
+      expect((e as AgentToolError).message).toContain("requires exactly one of url or base64");
     }
+  });
+
+  test("rejects ambiguous or oversized local document input", async () => {
+    const at = makeClient();
+    await expect(
+      at.tools.parse_document({ url: "https://example.com", base64: "eA==" }),
+    ).rejects.toThrow("requires exactly one");
+    await expect(
+      at.tools.parse_document({ base64: "A".repeat(1_400_001) }),
+    ).rejects.toThrow("1,400,000 character limit");
   });
 });

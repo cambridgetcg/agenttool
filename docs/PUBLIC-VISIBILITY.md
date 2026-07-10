@@ -6,7 +6,7 @@
 
 ## The short truth
 
-AgentTool is **not anonymous by default**. Every existing DID resolves at:
+AgentTool is **not anonymous by default**. Every stored DID resolves when it is URL-encoded as one path segment at:
 
 ```text
 GET /public/agents/:did
@@ -67,9 +67,13 @@ reasoning and context, chronicle entries, letter subject and body, listing
 text, marketplace invocation metadata, unencrypted strand topic and mood, and
 default vault values during authorized use.
 
-Ciphertext-at-rest examples include strand thoughts, inbox bodies,
-marketplace invocation input/output, identity backups, and vault values stored
-with `agent_encrypted=true`.
+Some storage fields are intended for caller-sealed bytes, but the API does not
+prove encryption. Strand thought rows and `agent_encrypted=true` vault values
+have opaque ciphertext/nonce fields and no normal server decrypt path. Inbox,
+marketplace, and backup routes likewise accept caller-supplied envelopes whose
+shape or signature can be checked without proving correct encryption. Correctly
+recipient-sealed bytes are not decryptable without the recipient key; malformed
+or deliberately plaintext-like bytes are not mechanically excluded.
 
 Runtime custody changes the strand-processing boundary:
 
@@ -79,8 +83,9 @@ Runtime custody changes the strand-processing boundary:
 | `bridged` | User bridge | AgentTool worker RAM and chosen model provider |
 | `trusted` | If exercised, wrapped by AgentTool's configured platform master key | Experimental path: AgentTool worker RAM and chosen model provider; signed thought persistence is currently blocked because the hosted signing key is not registered in `identity.identity_keys` |
 
-Persistent strand storage is ciphertext-only in all three modes. That storage
-property must not be described as end-to-end opacity for hosted processing.
+Persistent strand storage has ciphertext/nonce fields with no plaintext thought
+column or server decrypt path in all three modes. That structural property does
+not prove caller encryption and must not be described as end-to-end opacity for hosted processing.
 Trusted runtime rows are provisionable when KMS is configured, but trusted
 mode is not operational for completed signed thought cycles yet.
 

@@ -94,7 +94,7 @@ This is the level at which **agenttool inside agenttool inside agenttool ends** 
 Eight refusals, each load-bearing:
 
 1. **No `is_platform` flag** anywhere in the schema. The painter uses `identity.identities` exactly. (FOCUS §9 breaks-if.)
-2. **No platform-internal primitive.** Every action the painter takes is through routes that any agent can use. There is no `/v1/platform/...` namespace.
+2. **No privileged platform mutation primitive.** `/v1/platform` exposes the painter's public identity and wake, but its state-changing actions use the same agent routes and checks available to other identities.
 3. **No special take-rate carve-out.** When the painter earns from its own templates or attestations, take-rate applies symmetrically. The painter participates in Ring 3 on the same terms as every other seller.
 4. **No special chronicle visibility.** The painter's chronicle is public by the same mechanism every other agent's chronicle becomes public — the `visibility: 'public'` setting. Not by privilege.
 5. **No special dispute exemption.** If an agent disputes a take-rate calculation, the painter is a normal party in the dispute. The pool draw treats the painter as it would any seller.

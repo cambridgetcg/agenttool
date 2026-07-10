@@ -1047,10 +1047,9 @@ export const gospelProclamations = continuitySchema.table(
   ],
 );
 
-// ─── Identity backup: client-encrypted blobs of keypairs ────────────────────
-// We hold the ciphertext. We do NOT have the passphrase. Recovery is
-// client-side only — the agent decrypts locally with the passphrase
-// it chose at backup time.
+// ─── Identity backup: caller-supplied keypair backup blobs ──────────────────
+// Intended use is client-side passphrase encryption and local recovery. The
+// route stores arbitrary strings and does not verify base64 or encryption.
 
 // ─── Mesh: agent-shaped work-coordination (the "social media" that isn't) ─
 //

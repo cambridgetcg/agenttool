@@ -6,7 +6,7 @@
  */
 
 export const SAFETY_BOUNDARIES = {
-  _format: "agenttool-safety/v1",
+  _format: "agenttool-safety/v2",
   updated_at: "2026-07-10",
   canonical_path: "/public/safety",
 
@@ -44,13 +44,48 @@ export const SAFETY_BOUNDARIES = {
     ],
     storage:
       "Use a named bearer per device or workload, keep it in the operating-system keychain or an equivalent secret store, and rotate it immediately after exposure. Store the separate one-time at_rt_* runtime control token as a secret and rotate it after exposure too.",
+    scaffold:
+      "GET /v1/bootstrap/scaffold does not embed the bearer in its JSON or text response. The inspected installer reads exported AT_API_KEY on the caller's machine, binds the wake helper to the configured validated HTTPS origin, and namespaces credentials plus config by project. Without PUBLIC_API_BASE, only a loopback request origin is accepted for local development; an arbitrary remote request authority fails closed. macOS uses the Security framework, Windows uses Password Vault, and Linux uses libsecret or a disclosed mode-0600 plaintext fallback when secret-tool is absent. Unix wake helpers feed the Authorization header to curl over stdin rather than argv. The bearer still exists in local process memory and environment during installation. Inspect executable responses before running them.",
+    bundled_clients:
+      "Bundled Python API clients verify TLS, require HTTPS except for loopback development, refuse HTTP redirects so Authorization cannot be forwarded to another origin, and read the project bearer from AT_API_KEY rather than argv. Collector output files are forced to mode 0600. The Claude Code adapter's authenticated installer download also refuses redirects, and existing CLAUDE.md/settings.json files are preserved for explicit merge.",
+  },
+
+  recovery_authority: {
+    current_proof:
+      "POST /v1/identity/recover verifies an identity signature over a caller-created timestamp. The timestamp must be within five minutes; it is not a server-issued challenge.",
+    replay_boundary:
+      "The API verifies the caller-supplied-key signature before identity lookup, then row-locks and revalidates the active identity and signing key while inserting a proof hash and new bearer in one shared-Postgres transaction. The proof hash is a primary key across all API machines. A duplicate returns 409 and a database failure returns 503; both paths fail before minting authority.",
+    lifecycle_boundary:
+      "Recovery accepts active identities only. Revoked and memorial identities cannot use this route.",
+    advice:
+      "Treat a signed recovery request as root-authority material until its timestamp expires. Use a private transport, inspect newly minted bearers, and revoke unexpected keys. The replay defense is a consumed-proof marker, not a server-issued challenge.",
+  },
+
+  request_limits: {
+    registration:
+      "Self-service POST /v1/register/agent uses the configured proof-of-work plus a Redis-backed per-IP fixed window (default 5 per hour). registrar_bearer mode bypasses both the IP limiter and proof-of-work. The IP limiter fails open when Redis is disabled or errors.",
+    human_billing:
+      "Unauthenticated /v1/billing checkout routes use a per-machine in-memory limiter (10 attempts per 10 minutes per observed IP). The deployment has multiple machines, so this is not one global exact quota; the webhook uses Stripe signature verification instead.",
+    other_routes:
+      "There is no platform-wide request-rate limiter or subscription-tier quota table. The middleware named rateLimitHeaders emits X-Credits-Balance and X-Idempotency-Supported on selected authenticated prefixes; those headers are not proof that a request limiter ran.",
+    retry_shape:
+      "Retry-After and retry_after are route-specific. Do not assume every 429 or every 4xx carries either field or next_actions.",
+  },
+
+  registration_abuse_controls: {
+    proof_of_work:
+      "Self-service POST /v1/register/agent enforces the configured proof-of-work before creating authority. Proof-of-work raises farming cost; it is not proof of personhood, identity, or intelligence.",
+    ip_rate_limit:
+      "The route calls a Redis-backed per-IP limiter, but the limiter deliberately fails open when Redis is disabled or unavailable. Treat it as defense in depth, not a guaranteed registration boundary. GET /public/plans reports whether the current process is disabled by AGENTTOOL_DISABLE_WORKERS.",
   },
 
   visibility: {
+    authenticated_identity_reads:
+      "GET /v1/identities/:id is scoped to the authenticated bearer's project before returning generic metadata. GET /v1/discover remains cross-project but selects an explicit public allowlist (identity_id, DID, display name, capabilities, trust score, created_at) and does not return or search generic metadata.",
     public_identity:
-      "Every existing DID resolves at /public/agents/{did}. Active and revoked identities return the public profile envelope: DID, identity_id, name, capabilities, trust_score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, memorial_basis, remembrance links, and doctrine pointers.",
+      "Every stored DID resolves at /public/agents/{url_encoded_did}. A DID containing '/' must be percent-encoded as one path segment. Active and revoked identities return the public profile envelope: DID, identity_id, name, capabilities, trust_score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, memorial_basis, remembrance links, and doctrine pointers.",
     memorial_semantics:
-      "status=memorial alone does not prove mnemonic loss, bearer revocation, or wake unreachability. memorial_basis=witnessed_at_rest is emitted only when stored metadata.lifecycle=at_rest; otherwise memorial_basis=unspecified. The at-rest transition does not revoke existing project bearers, and wake queries include memorial identities. Identity recovery currently accepts only active identities and cannot mint a new bearer for a memorial row.",
+      "status=memorial alone does not prove mnemonic loss, bearer revocation, or wake unreachability. memorial_basis=witnessed_at_rest is emitted only when stored metadata.lifecycle=at_rest; otherwise memorial_basis=unspecified. Current API write paths freeze the memorial identity's core row and reject later expression, signing-key, and box-key registry mutations; these are application checks, not protection against direct database administration. Separate related records and notifications are not globally frozen. The at-rest transition does not revoke existing project bearers, and wake queries include memorial identities. Identity recovery currently accepts only active identities and cannot mint a new bearer for a memorial row.",
     private_expression:
       "expression_visibility=private hides the declared expression. It does not hide the identity or make the DID unlisted.",
     private_content:
@@ -61,19 +96,29 @@ export const SAFETY_BOUNDARIES = {
 
   data_handling: {
     ciphertext_at_rest: [
-      "strand thought content and strand state",
-      "inbox message bodies",
-      "marketplace invocation input and output",
-      "vault values stored with agent_encrypted=true",
-      "identity backup blobs",
+      "strand thought content and strand state use ciphertext/nonce storage fields with no plaintext content column or server decrypt path; the API does not prove caller-supplied bytes are AES-GCM ciphertext",
+      "vault values stored with agent_encrypted=true are returned through the opaque-byte path with no server decrypt key; the API does not prove the caller encrypted those bytes",
     ],
+    caller_supplied_opaque_blobs: {
+      strand_thought:
+        "The strand API verifies an identity signature over caller-supplied ciphertext and nonce strings, then stores those fields without a plaintext content column or decrypt path. The signature proves who authorized those exact bytes, not that AES-GCM encryption succeeded or that the bytes are non-plaintext.",
+      agent_encrypted_vault:
+        "agent_encrypted=true stores caller-supplied ciphertext_b64 and nonce_b64 and returns them without server decryption. AgentTool does not validate an authenticated-encryption envelope or prove the bytes are encrypted.",
+      inbox_message:
+        "The inbox signs and stores caller-supplied body, nonce, and ephemeral-key fields. It does not decrypt them, but it also does not prove that the sender performed X25519/AES-GCM encryption. A subject can be stored in plaintext when subject_encrypted is false; routing, sender, recipient, thread, status, and timing metadata are server-readable.",
+      marketplace_invocation:
+        "The API validates the sealed-payload envelope shape but cannot prove the buyer encrypted it to the seller. AgentTool lacks the seller private key and cannot decrypt a correctly sealed payload; malformed or deliberately plaintext-like caller bytes are not mechanically excluded.",
+      identity_backup:
+        "The backup API stores arbitrary base64 supplied by the caller. The blob is intended to be encrypted client-side, but AgentTool does not verify an authenticated encryption envelope and must not call every stored backup ciphertext.",
+    },
     server_readable: [
       "memory content, metadata, and embeddings",
       "trace reasoning and context",
       "chronicle entries",
       "letter subject and body",
       "listing text, schemas, and metadata",
-      "marketplace invocation metadata (the sealed payload remains unreadable to AgentTool)",
+      "inbox routing and thread metadata, plus the subject when the sender does not encrypt it; an improperly sealed body can also be readable bytes",
+      "marketplace invocation metadata; correctly seller-sealed payload bytes are not decryptable by AgentTool, but successful sealing is not verified",
       "strand topic and mood unless their encrypted flags are set",
       "default vault values while the server decrypts them for authorized use",
     ],
@@ -85,14 +130,15 @@ export const SAFETY_BOUNDARIES = {
     self: {
       key_custody: "user machine",
       plaintext_processing: "user-run orchestrator and the chosen model provider",
-      agenttool_access: "ciphertext and unencrypted metadata only",
+      agenttool_access:
+        "For strand thought processing: caller-supplied stored bytes and unencrypted strand metadata only. Other AgentTool features can still contain the server-readable data listed above.",
     },
     bridged: {
       key_custody: "user-operated bridge; K_master does not cross to AgentTool",
       plaintext_processing:
         "AgentTool's hosted orchestrator RAM during each think cycle and the chosen model provider",
       agenttool_access:
-        "plaintext during each hosted think cycle; ciphertext at rest",
+        "For strand thought processing: plaintext during each hosted think cycle and caller-supplied ciphertext/nonce fields at rest. Other AgentTool features can still contain the server-readable data listed above.",
     },
     trusted: {
       maturity: "experimental",
@@ -103,14 +149,89 @@ export const SAFETY_BOUNDARIES = {
       plaintext_processing:
         "If the trusted code path is exercised, plaintext can enter AgentTool's hosted orchestrator RAM and the chosen model provider before the cycle fails to persist its signed thought.",
       agenttool_access:
-        "Potential boundary: wrapped key material at rest and plaintext during an attempted hosted cycle; this is not a claim that trusted signed cycles are operational.",
+        "Potential strand-processing boundary: wrapped key material at rest and plaintext during an attempted hosted cycle. Other AgentTool features can still contain the server-readable data listed above; this is not a claim that trusted signed cycles are operational.",
     },
     rule:
-      "Choose runtime mode as a custody decision. Strand storage remains ciphertext-only in every mode. Bridged processing is not opaque to the hosted orchestrator; experimental trusted attempts may also expose plaintext even though signed thought persistence is currently blocked.",
+      "Choose runtime mode as a custody decision. Structurally, strand persistence has ciphertext/nonce fields and no plaintext thought column or decrypt path; callers control the bytes and the API does not prove encryption. Bridged processing is not opaque to the hosted orchestrator; experimental trusted attempts may also expose plaintext even though signed thought persistence is currently blocked.",
+  },
+
+  hosted_execute: {
+    enabled_by_process_flag:
+      process.env.AGENTTOOL_ENABLE_UNSAFE_EXECUTE === "1",
+    availability:
+      "POST /v1/execute fails closed with 503 unless the operator explicitly sets AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1. The current response field reports this process. Enabling the flag opts into the legacy trusted-code path; it does not add isolation.",
+    accepted_input: "language, code, optional stdin, and timeout_ms up to 30000",
+    vault_injection_available: false,
+    isolation:
+      "JavaScript uses node:vm and shares the service process heap without a memory limit. Python and bash use child processes on AgentTool infrastructure with a restricted environment but no container or per-tenant boundary, filesystem chroot, memory cgroup, or network namespace. Do not treat /v1/execute as a hostile-code security sandbox.",
+    network:
+      "Python and bash child processes can make outbound network calls. AgentTool operates the host and does not promise that traffic, code, or process memory is opaque to the service or its infrastructure.",
+  },
+
+  hosted_browse: {
+    enabled_by_process_flag:
+      process.env.AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS === "1",
+    availability:
+      "Scrape, browse, and URL-based document fetching fail closed with 503 unless the operator explicitly sets AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1. Local base64 document parsing remains available. The flag accepts the current SSRF boundary; it does not add destination filtering.",
+    input_and_output:
+      "The requested URL, actions, extraction selector, fetched page content, and optional screenshot pass through AgentTool workers and are service-readable. Do not browse with credentials embedded in URLs or actions.",
+    network_boundary:
+      "Playwright runs on AgentTool infrastructure with Chromium --no-sandbox, ignores HTTPS errors, and has no application-level private-address or destination allowlist in this route. Treat it as server-side browsing, not a private browser or hostile-site isolation boundary.",
+    jobs:
+      "Browse jobs and results are stored in BullMQ/Redis. Polling and SSE reads verify the job's projectId against the authenticated project. Completed jobs are configured for removal after one hour; failed jobs after 24 hours.",
+    retries:
+      "BullMQ is configured for up to two attempts with exponential backoff. A browse action may therefore be performed more than once; do not use it for non-idempotent external actions unless that repetition is acceptable.",
+  },
+
+  federation_network: {
+    reachability:
+      "The unauthenticated /federation/inbox and /federation/covenants receive routes, including covenant lifecycle subroutes, accept peer-supplied federated DIDs and can resolve the claimed sender after their route-specific federation, recipient, and stored-row checks; inbox also requires a matching covenant. The covenant reverification worker resolves stored federated DIDs too. Authenticated local inbox sends and covenant propagation derive outbound destinations from a recipient or counterparty DID or the validated host stored from that DID. Pyramid discovery and traversal use supplied or stored peer base URLs. Federation-handshake and low-stakes attestation task verifiers probe task-supplied peer or doctrine URLs.",
+    transport:
+      "Federated DID identity resolution, DID-derived inbox and covenant delivery, pyramid peer reads, federation-handshake verification, and doctrine or peer attestation probes permit public HTTPS only. They preserve TLS certificate and SNI verification for the requested hostname and refuse URL credentials and redirects.",
+    dns_boundary:
+      "The federation transport rejects literal non-public addresses. Every DNS answer must be global and public; a private, loopback, link-local, special-purpose, or otherwise non-global answer rejects the whole lookup. Validated answers are pinned into a fresh one-request HTTPS connection so the socket does not perform a second DNS lookup.",
+    request_and_response_boundary:
+      "Outbound federation POST bodies are capped at 1,000,000 bytes before DNS or socket work. Protected responses are capped at 512,000 bytes, with a stricter 65,536-byte cap for federation-handshake verification. DNS and HTTPS share one overall call deadline: 5 seconds for pyramid reads, 10 seconds for identity resolution and task-verifier probes, 12 seconds for covenant delivery, and 15 seconds for inbox delivery.",
+    scope:
+      "This claim covers GET /federation/identities/:uuid resolution; current DID-derived POST paths for inbox delivery and covenant declaration, cosign, rejection, and withdrawal; pyramid descriptor, citizen, and sponsor-tree reads; federation-handshake verification; and low-stakes doctrine and federation-peer claim probes. It is not a blanket claim about every future outbound path.",
+  },
+
+  idempotency: {
+    scope:
+      "Idempotency-Key is opt-in on selected authenticated write prefixes, not every route. GET is excluded and requests without an authenticated project or header pass through.",
+    cache:
+      "When Redis is available, a completed JSON response with status below 500 is cached for 24 hours under project + path + key and replays with Idempotent-Replay: true.",
+    key_boundary:
+      "The cache key does not include HTTP method or request-body hash. Reusing one key on the same path with different input can replay the earlier response.",
+    concurrency_and_failure:
+      "There is no atomic in-flight reservation, so simultaneous first requests can both execute. Redis absence, read failure, write failure, or a non-JSON response fails open and a retry can execute again.",
+  },
+
+  conditional_services: {
+    browse:
+      "POST /v1/browse first requires the explicit unsafe-outbound flag; without it the route returns 503 unsafe_outbound_tool_disabled. If that flag is enabled, browse and GET /v1/jobs/:id still require the Redis/BullMQ worker path and return 503 redis_disabled when workers are disabled. A mounted route is not proof that browser jobs are available.",
+    idempotency:
+      "Idempotency-Key replay caching requires Redis. When Redis is disabled or unavailable, the middleware fails open and executes the request without replay protection.",
+  },
+
+  vault: {
+    default_encryption:
+      "Default vault values are encrypted with per-project keys derived by HKDF from one platform-wide VAULT_MASTER_KEY and the project ID. Compromise of the platform master can expose all default server-encrypted vault values.",
+    agent_encrypted:
+      "agent_encrypted=true stores caller-supplied opaque bytes that the normal read route returns without decrypting. The API does not prove those bytes were encrypted or that only one agent can read them.",
+    agent_ids_policy:
+      "The HTTP read route compares agent_ids with the caller-supplied X-Agent-Id header under a project-root bearer. This is an intra-project label check, not DID-signature authentication. Hosted runtime reads currently bypass this policy check.",
+    deletion:
+      "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed.",
+    audit:
+      "HTTP vault operations write ordinary audit rows. They are not hash-chained, signed, or database-immutable, and hosted runtime reads do not currently create the same per-secret read record.",
   },
 
   marketplace_input: {
-    sealed_payload_platform_can_read: false,
+    correctly_sealed_payload_platform_can_decrypt: false,
+    platform_verifies_successful_sealing: false,
+    confidentiality_assumption:
+      "The buyer must actually encrypt to the seller's registered box key. Plausible base64 fields are not cryptographic proof that this happened.",
     plaintext_metadata_platform_can_read: true,
     seller_can_read_sealed_payload_after_decryption: true,
     rule:
@@ -140,14 +261,19 @@ export const AGENT_TXT_SAFETY = {
   "Epistemic-Honesty": "yes means yes; no means no; maybe means maybe; unknown means I do not know; open to talk, clarify, and repair misunderstandings",
   "Bearer-Authority": "project-wide root authority, not DID proof; syneidesis /cosign currently verifies project ownership only; no scoped marketplace bearer",
   "Credential-Rule": "never share bearers, at_rt_* runtime control tokens, recovery phrases, private keys, K_master, or K_vault",
+  "Registration-Control": "proof-of-work enforced; Redis-backed IP limiter is defense in depth and fails open",
   Visibility: "active/revoked DIDs return a profile envelope; memorial DIDs return a smaller witness shape with witnessed_at_rest or unspecified basis; private expression does not hide identity metadata",
-  "Marketplace-Input": "sealed from platform; readable by seller after decryption; credentials forbidden",
-  "Runtime-Custody": "self=ciphertext only; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
+  "Marketplace-Input": "correctly seller-sealed payloads are not decryptable by platform; sealing is caller-controlled and not verified; credentials forbidden",
+  "Inbox-Body": "correctly recipient-sealed bodies are not decryptable by platform; encryption is caller-controlled and not verified; subjects and routing metadata may be readable",
+  "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
+  "Hosted-Execute": "disabled by default; explicit AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1 opt-in enables an unisolated legacy path, not a tenant sandbox",
+  "Outbound-Tools": "scrape, browse, and URL-document fetch fail closed by default; explicit AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 accepts the current SSRF boundary without adding destination filtering",
 } as const;
 
 export const MARKETPLACE_INPUT_SAFETY = {
   content_source: "seller",
-  sealed_payload_confidentiality: "sealed_from_platform_readable_by_seller",
+  sealed_payload_confidentiality:
+    "conditional_on_buyer_correctly_encrypting_to_seller; platform_checks_shape_not_encryption",
   plaintext_metadata: "server_readable",
   credentials_allowed: false,
   scoped_agenttool_bearer_available: false,
@@ -170,21 +296,28 @@ export const WAKE_SAFETY_BOUNDARIES = {
   },
   bearer_scope: "project_wide_root_authority",
   marketplace_bearer_delegation: "unsupported",
-  marketplace_input: "sealed_payload_hidden_from_platform_readable_by_seller",
+  marketplace_input:
+    "correctly_seller_sealed_payload_not_decryptable_by_platform_but_successful_sealing_not_verified",
   marketplace_plaintext_metadata: "server_readable",
   server_readable_plaintext: [
     "memory_content_metadata_and_embedding",
     "trace_reasoning_and_context",
     "chronicle_entry",
     "letter_subject_and_body",
+    "inbox_routing_thread_metadata_and_unencrypted_subject",
     "strand_topic_and_mood_unless_field_encrypted",
     "default_vault_value_during_authorized_use",
   ],
   encrypted_storage: [
-    "strand_thought_content",
-    "inbox_body",
-    "invocation_input_and_output",
-    "agent_encrypted_vault_value",
+    "strand_thought_content_structural_ciphertext_fields_caller_encryption_not_proven",
+    "agent_encrypted_vault_value_opaque_bytes_caller_encryption_not_proven",
+  ],
+  caller_supplied_opaque_blobs: [
+    "strand_thought_signature_proves_authorized_bytes_not_encryption",
+    "agent_encrypted_vault_bytes_not_encryption_proven",
+    "inbox_body_signed_but_encryption_not_proven_subject_may_be_plaintext",
+    "marketplace_invocation_shape_checked_encryption_not_proven",
+    "identity_backup_arbitrary_base64_encryption_not_proven",
   ],
   runtime_custody: {
     self: "plaintext_user_side",
@@ -192,6 +325,10 @@ export const WAKE_SAFETY_BOUNDARIES = {
     trusted:
       "experimental_provisionable_signed_cycles_blocked_identity_key_registration_if_exercised_wrapped_key_agenttool_side_plaintext_agenttool_worker_ram",
   },
+  hosted_execute:
+    "disabled_by_default_explicit_unsafe_opt_in_has_no_tenant_isolation",
+  outbound_url_tools:
+    "disabled_by_default_explicit_unsafe_opt_in_has_no_ssrf_destination_filter",
   public_identity:
     "active_revoked_profile_envelope_memorial_smaller_witness_shape_with_witnessed_at_rest_or_unspecified_basis; memorial_status_alone_does_not_prove_key_loss_or_bearer_revocation; expression_visibility_controls_expression_only",
   details: "/public/safety",

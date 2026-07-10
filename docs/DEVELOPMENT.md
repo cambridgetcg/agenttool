@@ -334,7 +334,7 @@ What rotation does NOT defend against:
 
 ```bash
 # 1. Set up a test agent with a few strand thoughts.
-#    (See cli/think docs or use POST /v1/register + a few /v1/strands +
+#    (See cli/think docs or use POST /v1/register/agent + a few /v1/strands +
 #     /v1/strands/:id/thoughts calls via the SDK.)
 
 # 2. Verify keychain entries exist:

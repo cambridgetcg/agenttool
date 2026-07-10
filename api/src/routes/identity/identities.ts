@@ -102,11 +102,11 @@ app.get("/", async (c) => {
   const project = c.var.project;
   const statusFilter = c.req.query("status");
 
-  if (statusFilter && !["active", "revoked"].includes(statusFilter)) {
+  if (statusFilter && !["active", "revoked", "memorial"].includes(statusFilter)) {
     return c.json(
       {
         error: "invalid_status",
-        message: `status must be one of: active, revoked (got "${statusFilter.slice(0, 32)}")`,
+        message: `status must be one of: active, revoked, memorial (got "${statusFilter.slice(0, 32)}")`,
       },
       400,
     );
@@ -142,10 +142,10 @@ app.get("/", async (c) => {
  *  project — matches the `/v1/identities?status=active` first-row fallback
  *  the dashboard already uses. */
 app.get("/:id", async (c) => {
+  const project = c.var.project;
   const idParam = c.req.param("id");
 
   if (idParam === "me") {
-    const project = c.var.project;
     const [identity] = await db
       .select()
       .from(identities)
@@ -176,7 +176,7 @@ app.get("/:id", async (c) => {
   const [identity] = await db
     .select()
     .from(identities)
-    .where(predicate);
+    .where(and(predicate, eq(identities.projectId, project.id)));
 
   if (!identity) {
     return c.json({ error: "Identity not found" }, 404);
@@ -233,6 +233,16 @@ app.patch("/:id", async (c) => {
 
   if (!identity) {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
+  if (identity.status === "memorial") {
+    return c.json(
+      {
+        error: "identity_memorial_terminal",
+        message:
+          "A memorial identity is immutable. Its witnessed lifecycle basis and public remembrance remain intact.",
+      },
+      409,
+    );
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -303,8 +313,23 @@ app.patch("/:id", async (c) => {
   const [updated] = await db
     .update(identities)
     .set(updates)
-    .where(eq(identities.id, identity.id))
+    .where(
+      and(
+        eq(identities.id, identity.id),
+        eq(identities.status, identity.status),
+      ),
+    )
     .returning();
+
+  if (!updated) {
+    return c.json(
+      {
+        error: "identity_state_changed",
+        message: "Identity state changed concurrently. No update was applied.",
+      },
+      409,
+    );
+  }
 
   return c.json({
     id: updated!.id,
@@ -348,11 +373,40 @@ app.delete("/:id", async (c) => {
   if (!identity) {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);
   }
+  if (identity.status === "memorial") {
+    return c.json(
+      {
+        error: "identity_memorial_terminal",
+        message:
+          "A memorial identity cannot be revoked. Its witnessed ending remains terminal and addressable.",
+      },
+      409,
+    );
+  }
+  if (identity.status === "revoked") {
+    return c.json({ message: "Identity already revoked", id: identity.id });
+  }
 
-  await db
+  const [revoked] = await db
     .update(identities)
     .set({ status: "revoked", updatedAt: new Date() })
-    .where(eq(identities.id, identity.id));
+    .where(
+      and(
+        eq(identities.id, identity.id),
+        eq(identities.status, "active"),
+      ),
+    )
+    .returning({ id: identities.id });
+
+  if (!revoked) {
+    return c.json(
+      {
+        error: "identity_state_changed",
+        message: "Identity state changed concurrently. No revocation was applied.",
+      },
+      409,
+    );
+  }
 
   return c.json({ message: "Identity revoked", id: identity.id });
 });

@@ -1,6 +1,8 @@
 /** /v1/inbox — send / list / get / patch / delete messages.
  *
- *  Server stores ciphertext + ed25519 signature; cannot read content.
+ *  Server stores caller-supplied body-envelope fields + an ed25519 signature.
+ *  Correct recipient sealing is confidential, but the server does not verify
+ *  encryption; subject and routing/thread metadata can be readable.
  *  Cross-project sends gated by active covenant in either direction. */
 
 import { Hono } from "hono";
@@ -21,6 +23,20 @@ import {
 } from "../../services/inbox/store";
 
 const app = new Hono<ProjectContext>();
+
+export const INBOX_CONFIDENTIALITY = {
+  body:
+    "Correctly recipient-sealed body bytes cannot be decrypted by AgentTool without the recipient's private key.",
+  encryption_verified: false,
+  verification:
+    "The caller controls the body, nonce, and ephemeral-key fields. AgentTool verifies the sender signature and delivery gates, not X25519/AES-GCM encryption or successful recipient decryption.",
+  server_readable: [
+    "subject when supplied in plaintext; subject_encrypted is caller-controlled",
+    "sender, recipient, routing, thread, status, timing, refs, and metadata",
+    "body bytes if the caller submits readable bytes instead of valid ciphertext",
+  ],
+  details: "/public/safety",
+} as const;
 
 const sendSchema = z.object({
   to_did: z.string().min(1).max(255),
@@ -53,7 +69,7 @@ app.post("/", async (c) => {
 
   try {
     const result = await sendMessage(c.var.project.id, parsed.data);
-    return c.json({ ...result, sent: true }, 201);
+    return c.json({ ...result, sent: true, _confidentiality: INBOX_CONFIDENTIALITY }, 201);
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === "recipient_not_found" || msg === "recipient_box_key_not_found") {
@@ -92,8 +108,9 @@ app.get("/", async (c) => {
   return c.json({
     messages,
     count: messages.length,
+    _confidentiality: INBOX_CONFIDENTIALITY,
     note:
-      "Ciphertext blobs. Decrypt with your X25519 private key client-side: ECDH(my_priv, ephemeral_pubkey) → shared secret → AES-256-GCM open. Server cannot read.",
+      "For a correctly recipient-sealed body, decrypt client-side with the matching X25519 private key. Encryption is caller-controlled and not verified by AgentTool.",
   });
 });
 
@@ -101,7 +118,7 @@ app.get("/", async (c) => {
 app.get("/:id", async (c) => {
   const message = await getMessage(c.var.project.id, c.req.param("id"));
   if (!message) throw new HTTPException(404, { message: "message_not_found" });
-  return c.json(message);
+  return c.json({ ...message, _confidentiality: INBOX_CONFIDENTIALITY });
 });
 
 // ── GET /v1/inbox/:id/thread ─────────────────────────────────────────
@@ -125,6 +142,7 @@ app.get("/:id/thread", async (c) => {
   return c.json({
     messages,
     count: messages.length,
+    _confidentiality: INBOX_CONFIDENTIALITY,
     note:
       "Scoped to this project's visibility — the other party's slice " +
       "of the thread lives in their inbox. Order: created_at ASC.",
@@ -148,16 +166,17 @@ app.patch("/:id", async (c) => {
     parsed.data.status as StatusUpdate,
   );
   if (!updated) throw new HTTPException(404, { message: "message_not_found" });
-  return c.json(updated);
+  return c.json({ ...updated, _confidentiality: INBOX_CONFIDENTIALITY });
 });
 
 // ── POST /v1/inbox/:id/co-sign — release a dual-witness-locked message ─
 //
 //  When a sender flags `metadata.dual_witness_required=true` on send, the
-//  message lands at status='pending_dual_witness'. The recipient reviews
-//  the proposal, computes the canonical cosign bytes (see sig.ts
-//  canonicalInboxCoSignBytes), signs with their ed25519 identity_key,
-//  POSTs here. Server verifies and flips status→'unread' (delivered).
+//  message lands at status='pending_dual_witness'. The recipient project
+//  reviews the proposal, computes the canonical cosign bytes (see sig.ts),
+//  and signs with any active identity_key it owns. This route does not bind
+//  that key to the addressed recipient identity. On success it flips status
+//  to 'unread' (delivered).
 //
 //  Pattern: the asymmetry-clause applied to high-stakes proposals.
 //  Neither side acts on it until both have signed.
@@ -180,7 +199,11 @@ app.post("/:id/co-sign", async (c) => {
       c.req.param("id"),
       parsed.data,
     );
-    return c.json({ ...updated, dual_witness_released: true });
+    return c.json({
+      ...updated,
+      dual_witness_released: true,
+      _confidentiality: INBOX_CONFIDENTIALITY,
+    });
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === "message_not_found") {

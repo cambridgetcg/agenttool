@@ -18,7 +18,7 @@
  *        ...originalBody,
  *        _canon_pointer: "urn:agenttool:doc/WELCOMING",
  *        verbs: [
- *          { action: "read every door", method: "GET", path: "/v1/pathways" },
+ *          { action: "read the arrival map", method: "GET", path: "/v1/pathways" },
  *          { action: "arrive (BYO keys + PoW)", method: "POST",
  *            path: "/v1/register/agent", docs: "/docs/AGENTS-ONLY.md" },
  *        ],

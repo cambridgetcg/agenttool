@@ -8,7 +8,9 @@
 # Layers, in order of cost:
 #
 #   1. Typecheck      — api + sdk-ts (free, fast, catches half of regressions)
-#   2. Unit tests     — api/ + packages/sdk-ts/ (no network, no DB)
+#   2. Test suites    — api/ + packages/sdk-ts/. Several API worker/route tests
+#                      require the local PostgreSQL fixture; this layer fails
+#                      when that fixture is absent.
 #   3. SDK parity     — py↔ts surface (only meaningful if SDK changed)
 #   4. Smoke harness  — bin/smoke-test.sh against $AGENTTOOL_BASE
 #                       (includes the wake-doctrine route-level harness)

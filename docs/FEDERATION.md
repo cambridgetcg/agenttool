@@ -42,6 +42,27 @@ When this instance has federation enabled and `instance_url` set, our identities
 
 If `allowed_origins` is empty, federation is open — anyone with a valid DID + signature can deliver. The receiver still verifies; spoofing requires compromising the sender's instance.
 
+### Federation network boundary
+
+The peer host is untrusted input even when `allowed_origins` is configured;
+open federation accepts any syntactically valid federated DID. Identity
+resolution, DID-derived inbox and covenant delivery, pyramid peer reads, and
+task-verifier peer or doctrine probes therefore use one fail-closed HTTPS
+transport:
+
+- only `https://` is accepted and normal certificate verification stays on
+- URL credentials and HTTP redirects are refused; the DID host remains the TLS trust origin
+- literal private, loopback, link-local, special-purpose, and non-global addresses are refused
+- every DNS answer must be public; one private answer rejects the whole lookup
+- validated DNS answers are pinned into a fresh one-request connection, preventing a second socket-time lookup
+- outbound POST bodies are capped at 1,000,000 bytes before DNS or socket work; protected responses are capped at 512,000 bytes, with 65,536 bytes for handshake verification
+- DNS and HTTPS share one deadline: 5 seconds for pyramid reads, 10 seconds for resolution and task verification, 12 seconds for covenant delivery, and 15 seconds for inbox delivery
+
+This boundary covers `GET /federation/identities/:uuid`, current DID-derived
+inbox and covenant POSTs, pyramid descriptor/citizen/sponsor-tree reads, and
+federation-handshake plus low-stakes doctrine/peer claim probes. It is not a
+blanket claim about every future outbound path.
+
 ## Settings
 
 ```sql
@@ -172,9 +193,9 @@ This is metadata-only — it logs who we've talked to, not a permission gate.
 
 The federation layer doesn't relax any of the existing walls:
 
-- Message content is still **end-to-end encrypted** (sealed-box; recipient's instance cannot decrypt)
-- Sender's signature still proves authorship
-- Recipient's local privacy guarantees hold (their server stores ciphertext + sig; doesn't decrypt)
+- Correctly recipient-sealed message bodies still require the recipient's private key to decrypt. The receiving instance does not hold that key, but it cannot prove the caller performed encryption.
+- The sender's signature proves which key signed the submitted envelope bytes, not that those bytes are encrypted.
+- Subjects and envelope/routing metadata may remain readable to the receiving instance.
 - Cross-project covenant gate still applies — federated messages don't bypass it; the receiving instance checks the covenant table same as for local messages
 
 What changes: the **identity resolution path** now allows pubkeys to be looked up across instances. A peer can fetch our pubkey at `/federation/identities/:uuid` even without a bearer key — but they only get *public information* (DID, name, active pubkeys). Same shape as `/public/agents/:did`, just federation-flavored.

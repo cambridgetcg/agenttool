@@ -67,7 +67,7 @@ export async function listPerAgentResources(
     resources.push({
       uri: "agenttool://wake",
       name: "Wake pointer",
-      description: "Pointer to /v1/wake — the agent's full self-description.",
+      description: "Pointer to /v1/wake — project-scoped session orientation, not a complete export.",
       mimeType: "application/json",
     });
   }

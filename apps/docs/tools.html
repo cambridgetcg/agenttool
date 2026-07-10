@@ -4,15 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tools — agenttool docs</title>
-  <meta name="description" content="Cheerio scrape · Playwright browse · Readability document · sandboxed execute. Substrate, not resold APIs." />
+  <meta name="description" content="Cheerio scrape · conditional Playwright browse · Readability document · fail-closed legacy host execute. Substrate, not resold APIs." />
   <link rel="canonical" href="https://docs.agenttool.dev/tools" />
   <meta property="og:title" content="Tools — agenttool docs" />
-  <meta property="og:description" content="Cheerio scrape · Playwright browse · Readability document · sandboxed execute. Substrate, not resold APIs." />
+  <meta property="og:description" content="Cheerio scrape · conditional Playwright browse · Readability document · fail-closed legacy host execute. Substrate, not resold APIs." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/tools" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/canon" />
+  <link rel="alternate" type="application/json" href="https://api.agenttool.dev/v1/openapi.json" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -173,7 +173,7 @@
       <div class="eyebrow">⚙ /v1/scrape · /v1/browse · /v1/document · /v1/execute</div>
       <h1>Tools — <em>substrate, not resold APIs</em>.</h1>
       <p class="lede">
-        Open-source primitives for the agent's hands. <strong>Cheerio</strong> scrape, <strong>Playwright</strong> browse via BullMQ queue, <strong>Readability</strong> parse, and a sandboxed <strong>execute</strong> for JS / Python / bash. We don't proxy LLMs, search APIs, or commercial proxy networks — bring your own keys via <a href="vault.html">vault</a>.
+        Open-source primitives for the agent's hands. Local base64 document parsing remains available. URL scrape, URL document fetch, and Playwright browse fail closed unless an operator explicitly accepts their current SSRF boundary; browse also needs Redis. Host execute has a separate unsafe opt-in and no tenant boundary.
       </p>
       <p class="doctrine">
         We charge for the infra surface — storage, compute time, queue, network egress. <span>Not for a markup on a third-party SaaS we resell.</span>
@@ -188,13 +188,13 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Cheerio-based static-HTML extraction. 30× cheaper than browse — use this when the page returns full HTML without JS rendering.</p>
+          <p class="endpoint-desc"><strong>Disabled by default.</strong> Cheerio-based static-HTML extraction returns 503 unless the operator sets <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code>. That flag accepts the missing DNS/private-address filter; it does not fix the SSRF boundary.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">url</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The URL to fetch.</td></tr>
-              <tr><td><span class="pname">selectors</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>CSS selectors mapped to output keys: <code>{"title": "h1", "body": "article"}</code>.</td></tr>
-              <tr><td><span class="pname">headers</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Extra request headers.</td></tr>
+              <tr><td><span class="pname">selector</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>One CSS selector whose combined text is returned as <code>extracted</code>.</td></tr>
+              <tr><td><span class="pname">extract_links</span><span class="opt">optional</span></td><td><span class="ptype">boolean</span></td><td>Return distinct absolute HTTP(S) links found in the page.</td></tr>
             </tbody>
           </table>
         </div>
@@ -209,20 +209,21 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Playwright-based browse. Queued via BullMQ to a single in-process worker. Returns when the page settles or when a selector matches.</p>
+          <p class="endpoint-desc"><strong>Disabled by default.</strong> The unsafe-outbound flag is required first because this route has no destination filter. When explicitly enabled, Playwright browse is queued through BullMQ; disabled Redis workers then return <code>503 redis_disabled</code>.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
               <tr><td><span class="pname">url</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>Target URL.</td></tr>
-              <tr><td><span class="pname">wait_for</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>CSS selector to wait for before extracting (e.g. <code>article.loaded</code>).</td></tr>
+              <tr><td><span class="pname">actions</span><span class="opt">optional</span></td><td><span class="ptype">array</span></td><td>Ordered <code>click</code>, <code>type</code>, <code>scroll</code>, <code>wait</code>, or <code>select</code> actions.</td></tr>
               <tr><td><span class="pname">screenshot</span><span class="opt">optional</span></td><td><span class="ptype">boolean</span></td><td>Include a full-page screenshot in the response (base64).</td></tr>
-              <tr><td><span class="pname">selectors</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>CSS selectors → output keys.</td></tr>
+              <tr><td><span class="pname">extract</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>CSS selector, <code>text</code>, or <code>html</code>.</td></tr>
+              <tr><td><span class="pname">timeout</span><span class="opt">optional</span></td><td><span class="ptype">1000..60000</span></td><td>Browser timeout in milliseconds.</td></tr>
             </tbody>
           </table>
 
           <div class="callout">
             <span class="icon">⊙</span>
-            <p>Browse jobs return a <code>job_id</code>. Poll <a href="#jobs">/v1/jobs/:id</a> for status, or pass <code>?wait=true</code> for synchronous return (capped at 60s).</p>
+            <p>The route waits up to five seconds for completion. Faster jobs return inline; longer jobs return a <code>job_id</code> to poll or stream at <a href="#jobs">/v1/jobs/:id</a>.</p>
           </div>
         </div>
       </div>
@@ -236,19 +237,19 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Mozilla Readability + plain-text conversion. Pass HTML or a URL; receive cleaned title, byline, and body text.</p>
+          <p class="endpoint-desc">Mozilla Readability + plain-text conversion. Supply exactly one input. Local <code>base64</code> is bounded at 1,400,000 characters (about 1 MiB decoded). URL fetching returns 503 unless the operator explicitly accepts the current SSRF boundary.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">url</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>URL to fetch + parse. Either <code>url</code> or <code>html</code> required.</td></tr>
-              <tr><td><span class="pname">html</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Raw HTML to parse without fetching.</td></tr>
-              <tr><td><span class="pname">format</span><span class="opt">optional</span></td><td><span class="ptype">"text" · "markdown"</span></td><td>Output shape. Default <code>text</code>.</td></tr>
+              <tr><td><span class="pname">url</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>URL to fetch and parse. Requires the unsafe-outbound operator flag.</td></tr>
+              <tr><td><span class="pname">base64</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Base64 document bytes parsed locally, up to 1,400,000 characters. Supply exactly one of <code>url</code> or <code>base64</code>.</td></tr>
+              <tr><td><span class="pname">content_type</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Overrides or declares the input media type; HTML uses Readability, other content is treated as text.</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <h2 id="execute">Execute — sandboxed runtime</h2>
+      <h2 id="execute">Execute — disabled-by-default legacy host runtime</h2>
 
       <div class="endpoint" id="post-execute">
         <div class="endpoint-header">
@@ -257,34 +258,20 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Run code in a sandboxed runtime. Node <code>vm</code> for JavaScript; isolated child_process for Python and bash. Time-limited; resource-capped.</p>
+          <p class="endpoint-desc"><strong>Disabled by default.</strong> The route returns 503 unless the operator sets <code>AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1</code>. That opt-in only enables the legacy path: JavaScript uses Node <code>vm</code>; Python and bash use same-container child processes. It does not create a tenant or hostile-code security boundary.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">runtime</span><span class="req">required</span></td><td><span class="ptype">"javascript" · "python" · "bash"</span></td><td>Sandbox to run in.</td></tr>
+              <tr><td><span class="pname">language</span><span class="req">required</span></td><td><span class="ptype">"javascript" · "python" · "bash"</span></td><td>Interpreter to run.</td></tr>
               <tr><td><span class="pname">code</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The script source.</td></tr>
-              <tr><td><span class="pname">env</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Environment variables. <strong>Vault secrets are auto-injected when you reference them by name</strong> via <code>{vault: ["openai-key"]}</code>.</td></tr>
-              <tr><td><span class="pname">timeout_ms</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10000, max 60000.</td></tr>
+              <tr><td><span class="pname">timeout_ms</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 10000, max 30000.</td></tr>
               <tr><td><span class="pname">stdin</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Stdin to feed the process.</td></tr>
             </tbody>
           </table>
 
-          <div class="code-block">
-            <div class="code-label"><span>example · embed via OpenAI, store in memory</span></div>
-<pre>curl -X POST https://api.agenttool.dev/v1/execute \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "runtime": "python",
-    "code": "import os; from openai import OpenAI;\nc = OpenAI(api_key=os.environ[\"OPENAI_KEY\"]);\nprint(c.embeddings.create(input=\"hi\", model=\"text-embedding-3-small\").data[0].embedding[:8])",
-    "env": { "vault": ["openai-key"] },
-    "timeout_ms": 15000
-  }'</pre>
-          </div>
-
           <div class="callout">
             <span class="icon">⊙</span>
-            <p><strong>Why execute exists.</strong> The agent needs to call paid third-party APIs (OpenAI, Brave, Anthropic, etc.). We don't proxy those — we'd become a bottleneck and a privacy hole. Instead, the agent stores its keys in <a href="vault.html">vault</a> and calls out from <code>execute</code>. We never see the traffic.</p>
+            <p><strong>Current boundary.</strong> Production is fail-closed. If an operator opts in, vault auto-injection remains unavailable and child processes can reach the host filesystem and network. Do not place a bearer, private key, or untrusted code in this route.</p>
           </div>
         </div>
       </div>
@@ -298,18 +285,18 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Poll a queued job (browse, long-running execute). Returns status, progress, and result on completion.</p>
+          <p class="endpoint-desc">Poll or stream a queued browse job. Returns status, progress, and the result on completion. Execute is synchronous and does not use this queue.</p>
         </div>
       </div>
 
       <h2 id="dropped">What we dropped</h2>
-      <p>Earlier versions of agenttool included <code>/v1/search</code> (Brave / SerpAPI proxy) and a Bright Data proxy network. Both were paid-third-party-API resale, which violates promise 6 of <a href="https://docs.agenttool.dev/roadmap">IDENTITY-ANCHOR.md</a>. They were dropped in the consolidation. The substrate that remains — scrape, browse, document, execute — is open-source primitives running on our infra.</p>
+      <p>Earlier versions of agenttool included <code>/v1/search</code> (Brave / SerpAPI proxy) and a Bright Data proxy network. Both were paid-third-party-API resale and were dropped. Local document parsing remains available; outbound URL tools and unisolated execute now fail closed by default behind separate explicit operator opt-ins.</p>
 
-      <p class="muted">If you want search, store a Brave/SerpAPI key in vault and call it from <code>/v1/execute</code>. You pick the provider; we never see the query.</p>
+      <p class="muted">Provider-key injection is not available in <code>/v1/execute</code>. When explicitly enabled, Python or bash calls originate on AgentTool infrastructure and are not an end-to-end-private path.</p>
 
       <h2 id="next">What to read next</h2>
       <ul>
-        <li><a href="vault.html">Vault</a> — store provider keys to inject into <code>execute</code>.</li>
+        <li><a href="vault.html">Vault</a> — server-encrypted and caller-encrypted storage boundaries.</li>
         <li><a href="memory.html">Memory</a> — store the embeddings you compute via execute.</li>
       </ul>
     </main>

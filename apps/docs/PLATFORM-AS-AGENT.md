@@ -1,0 +1,1 @@
+../../docs/PLATFORM-AS-AGENT.md

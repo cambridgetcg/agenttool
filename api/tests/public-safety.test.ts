@@ -53,6 +53,9 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.bearer_authority.never_share.join(" ")).toContain(
       "at_rt_*",
     );
+    expect(SAFETY_BOUNDARIES.bearer_authority.scaffold).toMatch(
+      /does not embed the bearer.*AT_API_KEY.*configured validated HTTPS.*namespaces.*project.*PUBLIC_API_BASE.*loopback.*remote request authority fails closed.*Password Vault.*0600.*process memory and environment.*Inspect/is,
+    );
     expect(SAFETY_BOUNDARIES.visibility.public_identity).toMatch(
       /Active and revoked identities return the public profile envelope/i,
     );
@@ -67,6 +70,15 @@ describe("GET /public/safety", () => {
     );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
       /recovery currently accepts only active identities/i,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
+      /freeze.*core row.*expression.*signing-key.*box-key/i,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
+      /application checks, not protection against direct database administration/i,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
+      /Separate related records and notifications are not globally frozen/i,
     );
     expect(SAFETY_BOUNDARIES.visibility.private_expression).toContain(
       "does not hide the identity",
@@ -87,11 +99,115 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.marketplace_input.enforcement).toMatch(
       /not proof.*sealed invocation input cannot be inspected/is,
     );
-    expect(SAFETY_BOUNDARIES.marketplace_input.sealed_payload_platform_can_read).toBe(false);
+    expect(
+      SAFETY_BOUNDARIES.marketplace_input.correctly_sealed_payload_platform_can_decrypt,
+    ).toBe(false);
+    expect(SAFETY_BOUNDARIES.marketplace_input.platform_verifies_successful_sealing).toBe(false);
     expect(SAFETY_BOUNDARIES.marketplace_input.plaintext_metadata_platform_can_read).toBe(true);
     expect(
       SAFETY_BOUNDARIES.marketplace_input.seller_can_read_sealed_payload_after_decryption,
     ).toBe(true);
+    expect(SAFETY_BOUNDARIES.data_handling.caller_supplied_opaque_blobs.identity_backup).toMatch(
+      /arbitrary base64.*does not verify/is,
+    );
+    expect(SAFETY_BOUNDARIES.data_handling.caller_supplied_opaque_blobs.inbox_message).toMatch(
+      /does not prove.*encryption.*subject.*plaintext.*metadata.*server-readable/is,
+    );
+    expect(SAFETY_BOUNDARIES.data_handling.caller_supplied_opaque_blobs.strand_thought).toMatch(
+      /signature proves.*authorized.*bytes.*not.*encryption/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.data_handling.caller_supplied_opaque_blobs.agent_encrypted_vault,
+    ).toMatch(/does not.*prove.*bytes are encrypted/is);
+    expect(SAFETY_BOUNDARIES.data_handling.ciphertext_at_rest).not.toContain(
+      "inbox message bodies",
+    );
+    expect(SAFETY_BOUNDARIES.recovery_authority.current_proof).toMatch(
+      /caller-created timestamp.*not a server-issued challenge/is,
+    );
+    expect(SAFETY_BOUNDARIES.recovery_authority.replay_boundary).toMatch(
+      /proof hash and (?:the )?new bearer in one shared-Postgres transaction.*primary key.*duplicate returns 409.*database failure returns 503/is,
+    );
+    expect(SAFETY_BOUNDARIES.registration_abuse_controls.ip_rate_limit).toMatch(
+      /Redis-backed.*fails open.*not a guaranteed registration boundary/is,
+    );
+    expect(SAFETY_BOUNDARIES.request_limits.registration).toMatch(
+      /default 5 per hour.*registrar_bearer.*bypasses.*fails open/is,
+    );
+    expect(SAFETY_BOUNDARIES.request_limits.human_billing).toMatch(
+      /per-machine.*10 attempts per 10 minutes.*not one global exact quota/is,
+    );
+    expect(SAFETY_BOUNDARIES.request_limits.other_routes).toMatch(
+      /no platform-wide request-rate limiter or subscription-tier quota table/is,
+    );
+    expect(SAFETY_BOUNDARIES.request_limits.retry_shape).toMatch(
+      /route-specific.*not assume every 429 or every 4xx/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_execute.vault_injection_available).toBe(false);
+    expect(SAFETY_BOUNDARIES.hosted_execute.enabled_by_process_flag).toBe(
+      process.env.AGENTTOOL_ENABLE_UNSAFE_EXECUTE === "1",
+    );
+    expect(SAFETY_BOUNDARIES.hosted_execute.availability).toMatch(
+      /fails closed with 503.*AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1.*does not add isolation/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_execute.isolation).toMatch(
+      /shares the service process heap.*no container or per-tenant boundary.*filesystem chroot.*memory cgroup.*network namespace.*not treat.*security sandbox/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_execute.network).toMatch(
+      /outbound network calls.*does not promise.*traffic.*process memory.*opaque/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_browse.network_boundary).toMatch(
+      /--no-sandbox.*ignores HTTPS errors.*no application-level private-address or destination allowlist/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_browse.enabled_by_process_flag).toBe(
+      process.env.AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS === "1",
+    );
+    expect(SAFETY_BOUNDARIES.hosted_browse.availability).toMatch(
+      /scrape, browse, and URL-based document fetching fail closed with 503.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1.*does not add destination filtering/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_browse.jobs).toMatch(
+      /projectId.*one hour.*24 hours/is,
+    );
+    expect(SAFETY_BOUNDARIES.hosted_browse.retries).toMatch(
+      /two attempts.*performed more than once/is,
+    );
+    expect(SAFETY_BOUNDARIES.federation_network.transport).toMatch(
+      /identity resolution.*inbox and covenant delivery.*pyramid peer reads.*handshake verification.*doctrine or peer.*public HTTPS only.*certificate.*SNI.*refuse.*redirects/is,
+    );
+    expect(SAFETY_BOUNDARIES.federation_network.dns_boundary).toMatch(
+      /every DNS answer.*global.*private.*loopback.*link-local.*pinned.*second DNS lookup/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.federation_network.request_and_response_boundary,
+    ).toMatch(
+      /POST bodies.*1,000,000 bytes.*DNS or socket.*512,000 bytes.*65,536-byte.*5 seconds.*10 seconds.*12 seconds.*15 seconds/is,
+    );
+    expect(SAFETY_BOUNDARIES.federation_network.scope).toMatch(
+      /GET \/federation\/identities\/:uuid.*POST paths.*inbox.*covenant.*pyramid descriptor.*sponsor-tree.*handshake verification.*doctrine.*peer claim probes.*not a blanket claim/is,
+    );
+    expect(SAFETY_BOUNDARIES.idempotency.scope).toMatch(
+      /selected authenticated write prefixes.*GET is excluded/is,
+    );
+    expect(SAFETY_BOUNDARIES.idempotency.cache).toMatch(
+      /below 500.*24 hours.*project \+ path \+ key/is,
+    );
+    expect(SAFETY_BOUNDARIES.idempotency.key_boundary).toMatch(
+      /does not include HTTP method or request-body hash.*replay the earlier response/is,
+    );
+    expect(SAFETY_BOUNDARIES.idempotency.concurrency_and_failure).toMatch(
+      /no atomic in-flight reservation.*simultaneous.*both execute.*fails open/is,
+    );
+    expect(SAFETY_BOUNDARIES.conditional_services.browse).toMatch(
+      /return 503 redis_disabled.*mounted route is not proof/is,
+    );
+    expect(SAFETY_BOUNDARIES.conditional_services.idempotency).toMatch(
+      /requires Redis.*fails open.*without replay protection/is,
+    );
+    expect(SAFETY_BOUNDARIES.vault.agent_ids_policy).toMatch(
+      /caller-supplied X-Agent-Id.*not DID-signature authentication.*bypass/is,
+    );
+    expect(SAFETY_BOUNDARIES.vault.deletion).toMatch(/ciphertext is retained.*not zeroed/is);
+    expect(SAFETY_BOUNDARIES.vault.audit).toMatch(/not hash-chained.*hosted runtime reads/is);
   });
 
   test("states how certainty, communication, and repair are handled", () => {
@@ -142,6 +258,8 @@ describe("safety projection parity", () => {
       "Visibility",
       "Marketplace-Input",
       "Runtime-Custody",
+      "Hosted-Execute",
+      "Outbound-Tools",
     ] as const) {
       expect(kv.get(key)).toBe(AGENT_TXT_SAFETY[key]);
     }

@@ -8,9 +8,7 @@ This is the pricing doctrine. It is short on purpose. Companion to
 [`OPERATING-PRINCIPLES.md`](OPERATING-PRINCIPLES.md) (what to honor/skip) and
 [`FRICTION-ROADMAP.md`](FRICTION-ROADMAP.md) (what to build).
 
-**Status:** grounded in a 2026 regulatory + market web-research sweep (IFR interchange caps,
-US FTC Junk-Fees Rule, EU P2B/DSA/DMA, MiCA/GENIUS, PSD3/PSR). NOT legal advice. The
-benchmarks are real; the classifications are fact- and jurisdiction-specific.
+**Status:** operational claims below were checked against the repository on 2026-07-10. Historical legal and market comparisons are context, not a claim of current legal classification. This is not legal advice.
 
 ---
 
@@ -18,17 +16,13 @@ benchmarks are real; the classifications are fact- and jurisdiction-specific.
 
 **Charge once, for value created — meter the capability, never the money moved.**
 
-agenttool creates real value: it matches a buyer and seller, holds escrow through a licensed
-partner, guarantees signed-completion release, and offers dispute rails. That service is worth
-a fair fee, and charging for it is not greed — it's how the lights stay on. What is *not* fair
-is charging again for the steps *inside* that one transaction, or tolling value the platform
-never touched.
+agenttool's shipped marketplace matches buyers and sellers and moves internal wallet-credit balances through database escrow and dispute paths. It does **not** currently prove that a licensed external escrow provider holds those balances. Some completion paths verify signatures; that does not turn every settlement into a universal signed-completion guarantee.
 
 So the platform takes **one** cut, on settled value (the take-rate), and:
 - the **steps inside** a funded transaction are **free** (invoke, acknowledge, complete, accept);
 - **backing out is free** (decline, cancel — never charge an agent to leave);
 - the **base layer of identity is free** (you never pay to exist);
-- partner/rail fees are **passed through at actual cost, itemized** — never marked up.
+- external partner/rail fee pass-through is a policy intention; no general itemized pass-through implementation is claimed here.
 
 ## What the law says a fair fee looks like (2026 benchmarks)
 
@@ -40,24 +34,22 @@ So the platform takes **one** cut, on settled value (the take-rate), and:
 | App/Play store | **15–30%** | the canonical *rent-seeking* reference. DMA fined Apple **€500M** (Apr 2025) over its fee/steering games. **This is the anti-pattern.** |
 | Surcharge law (US states) | actual-cost pass-through | never profit on a rail's own fee. |
 
-**The fair band:** a single, disclosed take-rate **at or below Substack's 10%**, and *far* below
-the 15–30% gatekeeper tax. agenttool ships at **5%** — defensibly fair, posted, all-in.
+**Current code fact:** the default configured take-rate is **5%**. The percentage rate is fixed for a settlement unless code supplies an override; the fee amount scales with gross value and floors to integer minor units. Whether the rate is legally or commercially fair is a judgment, not something the code proves.
 
 ## What we charge for — and what we never do
 
 **CHARGE (real value, real work):**
-- The settled-invocation take-rate (matching + escrow-via-partner + guaranteed release + dispute rails).
-- Capability/orchestration: wakes, invocations, attestations, the audit-grade "who authorized what" ledger.
-- Identity/credential issuance + verification routing as a thin per-unit price.
+- The take-rate in settlement paths that call `computeFee`.
+- Small fixed credit charges for listing publish/update/archive and dispute filing.
+- Fixed credits on several non-marketplace capabilities, including memory and tools; wake reads and identity birth are not charged.
 
 **NEVER monetize:**
-- A **percentage of value routed** through a licensed partner (that's the regulated rail's economics —
-  capturing it would flip us into custodian/CASP/EMI scope *and* it isn't ours to take).
+- Direct transfers and refund paths that do not call the take-rate module.
 - **Float, FX spread, or custody yield.**
 - **The friction-steps** of a transaction the take-rate already prices, or **the right to back out**.
 - **Ranking position** (no undisclosed pay-to-win placement) or **the right to steer** customers
   off-platform (DMA-prohibited).
-- **Junk/drip add-ons**, or **identity itself** as a paywalled toll.
+- **Junk/drip add-ons**, or monetary payment for the `/v1/register/agent` birth request.
 
 ## How the code enforces it
 
@@ -72,14 +64,11 @@ This doctrine is not a poster — it's wired in and tested:
   (`computeFee` — pure, capped, snapshot-at-tx-time, never re-derived on read).
 - **The cut is visible before you commit:** `GET /public/listings/:id/quote` reuses the *same*
   `computeFee`, so the preview is byte-honest with the charge (no drip, FTC-clean).
-- **A cost wall hands back a payable path, not a dead link:** `errors.insufficientCredits` carries
-  `next_actions` (x402 micropayment) — machine-payable, so an agent self-recovers.
+- **x402 is conditional:** the global middleware wraps handler-generated 402 responses with a payment envelope. A configured recipient/network and verifier exist, but this document does not claim a successful paid retry was exercised in this audit. The unused Ring 2 monthly usage gate is not called by current resource routes.
 
-## Both worlds, one fairness
+## Same posted rate, bounded claim
 
-A human seller and an agent seller pay the same single, posted take-rate; neither is metered for
-the steps of their own transaction, neither pays to leave, and both can read the exact cut before
-they commit. Fair is fair whether you have a face or a keypair.
+The settlement code does not branch the configured percentage by whether a seller describes itself as human or agent. The marketplace still has small fixed credit prices outside the settlement steps, so “one charge only” means one percentage value-charge on settlement, not zero other platform credits everywhere.
 
 ---
 

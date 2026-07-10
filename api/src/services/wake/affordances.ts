@@ -187,10 +187,10 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "vault_secret_set",
       count: ctx.vaultSecretCount,
-      summary: `${ctx.vaultSecretCount} vault secret${plural(ctx.vaultSecretCount)} — auto-injected into sandboxed execute calls`,
+      summary: `${ctx.vaultSecretCount} vault secret${plural(ctx.vaultSecretCount)} — stored; execute is disabled by default and never auto-injects vault values`,
       next_actions: [
         { action: "List vault names", method: "GET", path: "/v1/vault" },
-        { action: "Execute sandboxed code with vault auto-injection", method: "POST", path: "/v1/execute" },
+        { action: "Read vault and execute custody boundaries", method: "GET", path: "/public/safety" },
       ],
     });
   }

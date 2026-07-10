@@ -26,6 +26,7 @@ import { chronicle } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import { memories } from "../../db/schema/memory";
 import { projectMemorialWitness } from "../identity/memorial";
+import { publicAgentPath } from "../identity/public-profile";
 import { countHonorsForDid } from "../memorial-honor/store";
 import {
   listListingsForSeller,
@@ -186,7 +187,7 @@ export function listPerAgentTools(ctx: PerAgentMcpContext): McpTool[] {
       {
         name: "wake.read",
         description:
-          "Read your own wake document — full self-description (identity, expression, memory snapshot, vault names, chronicle, covenants).",
+          "Read project-scoped session orientation: selected identity and continuity summaries plus links to deeper source routes. This is not a complete export.",
         inputSchema: { type: "object", properties: {} },
       },
       {
@@ -261,7 +262,7 @@ export async function callPerAgentTool(
           [
             {
               op: "GET",
-              path: `/public/agents/${ctx.agentDid}`,
+              path: publicAgentPath(ctx.agentDid),
               description: "Public profile (no auth required).",
             },
           ],

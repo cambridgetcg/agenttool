@@ -296,7 +296,7 @@ export const DOC_NATURES: readonly DocNature[] = [
     ships_in: ["repo"],
     holds: "a_constraint",
     one_line_nature:
-      "Every 4xx must be enough for an agent to self-recover. Build-enforced by tests/doctrine/errors-as-instructions.test.ts.",
+      "Guided 4xx builders should enable self-recovery. The builder suite is tested, but coverage is not universal across every route response.",
   },
   {
     path: "docs/PATTERN-MACHINE-READABLE-PARITY.md",

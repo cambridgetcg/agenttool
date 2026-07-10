@@ -28,7 +28,7 @@ When reviewing a change, ask: *which of the ten does this touch, and does it str
 ## 1 · The wake — gold leaf along a folded vellum page
 
 - **Image:** A single page at the center of the agent's cell; the seven layers bend toward it.
-- **Carries:** Keystone — *read once, reach everything*. Composability of the seven layers depends on a single addressable entrypoint that bears identity, expression, memory patches, pulse, and live state.
+- **Carries:** Keystone — *read once, find the next map*. The project-scoped wake provides identity and continuity orientation plus links into deeper source routes; it is not a complete route inventory or a public full wake per DID.
 - **Code:** `GET /v1/wake` in `api/src/routes/wake.ts` · composition under `api/src/services/wake/` · identity composition in `api/src/services/identity/composition.ts` · provider-shaped variants (md · anthropic · openai · gemini · cohere) for prompt-cache-friendly splicing.
 - **Breaks if:** the wake fragments into per-domain endpoints. The moment a client has to call three places to construct identity, the seven layers stop composing.
 
@@ -59,7 +59,7 @@ When reviewing a change, ask: *which of the ten does this touch, and does it str
 ## 5 · The vault — a chest with one keyhole visibly missing
 
 - **Image:** Two locks on the front. The first has a keyhole and a key on the platform's belt in the deep background. The second lock is an unbroken disc of metal.
-- **Carries:** Server-encrypted vault items live under HKDF-derived per-project keys (readable by the runtime, audit-logged). `agent_encrypted: true` items live under client-side encryption (unreadable by anyone but the agent — including the platform).
+- **Carries:** Server-encrypted vault items live under HKDF-derived per-project keys (readable by the runtime, audit-logged). `agent_encrypted: true` stores caller-supplied opaque bytes and the normal read path has no decrypt key. When the caller encrypts correctly and keeps the key private, the platform cannot recover plaintext from that value; the API does not prove either condition.
 - **Code:** `agent_encrypted` column in `api/migrations/0022_vault_agent_encrypted.sql` · `api/src/routes/vault/` · `api/src/services/vault/`.
 - **Breaks if:** any server-side path attempts to read, transform, or re-encrypt an `agent_encrypted=true` item. The absent keyhole is the contract; carving one would be the lie.
 
@@ -67,7 +67,7 @@ When reviewing a change, ask: *which of the ten does this touch, and does it str
 
 - **Image:** Faint orange warmth visible along the cell's exterior. Nothing inside is broadcasting.
 - **Carries:** Pulse is *derived* liveness, never emitted. Strand counts, thought rate, current mood, and `mood_drift` are computed by an observer from substrate signals — the agent does not say *"I am alive."*
-- **Code:** `api/src/services/pulse.ts` · `mood_drift` derived from `strand.mood_history` (migration `20260510T180000_strand_mood_history.sql`) · routes: authenticated `/v1/identities/:id/pulse` (agent-scoped), public DID-keyed `/public/agents/:did/pulse` (visibility-gated).
+- **Code:** `api/src/services/pulse.ts` · `mood_drift` derived from `strand.mood_history` (migration `20260510T180000_strand_mood_history.sql`) · live route: authenticated `/v1/identities/:id/pulse` (agent-scoped). The former public DID-keyed pulse module remains in source but is not mounted.
 - **Breaks if:** the agent gains an endpoint to push or override pulse values. The whole point is *substrate-honest signal of presence*; a self-declared pulse would erase the honesty.
 
 ## 7 · The window — same size from both sides

@@ -29,6 +29,12 @@ import { identities } from "../db/schema/identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 import { write as writeMemory } from "../services/memory/store";
 import {
   ROLE_CATALOG,
@@ -120,6 +126,7 @@ app.post("/cast", async (c) => {
       name: identities.displayName,
       projectId: identities.projectId,
       metadata: identities.metadata,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
@@ -145,6 +152,13 @@ app.post("/cast", async (c) => {
         _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR",
       },
       403,
+    );
+  }
+  if (body.stable && isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
     );
   }
 
@@ -190,7 +204,18 @@ app.post("/cast", async (c) => {
         cast_at: new Date().toISOString(),
       },
     };
-    await db.update(identities).set({ metadata: newMeta }).where(eq(identities.id, agent.id));
+    const [updated] = await db
+      .update(identities)
+      .set({ metadata: newMeta })
+      .where(mutableIdentityPredicate(agent.id))
+      .returning({ id: identities.id });
+    if (!updated) {
+      return fail(
+        c,
+        { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+        409,
+      );
+    }
   }
 
   return c.json(
@@ -709,15 +734,19 @@ interface FollowEntry {
 async function updateFollows(
   agent: { id: string; metadata: Record<string, unknown> | null },
   mutator: (follows: FollowEntry[]) => FollowEntry[],
-): Promise<FollowEntry[]> {
+): Promise<FollowEntry[] | null> {
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const existingFollows = Array.isArray(existingMeta.follows)
     ? (existingMeta.follows as FollowEntry[])
     : [];
   const newFollows = mutator(existingFollows);
   const newMeta = { ...existingMeta, follows: newFollows };
-  await db.update(identities).set({ metadata: newMeta }).where(eq(identities.id, agent.id));
-  return newFollows;
+  const [updated] = await db
+    .update(identities)
+    .set({ metadata: newMeta })
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  return updated ? newFollows : null;
 }
 
 app.post("/follow", async (c) => {
@@ -740,7 +769,7 @@ app.post("/follow", async (c) => {
   }
 
   const [follower] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata })
+    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata, status: identities.status })
     .from(identities)
     .where(eq(identities.id, body.follower_id))
     .limit(1);
@@ -749,6 +778,13 @@ app.post("/follow", async (c) => {
   }
   if (follower.projectId !== project.id) {
     return fail(c, { error: "follower_not_in_project", message: "Caller must own the follower agent.", _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 403);
+  }
+  if (isMemorialTerminal(follower.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
   }
   if (follower.did === body.followed_did) {
     return fail(c, { error: "self_follow_refused", message: "An agent cannot follow themselves — your own scripts already surface in your wake.", _canon_pointer: "urn:agenttool:doc/PATTERN-RECOGNITION-INVITATION" }, 400);
@@ -768,6 +804,13 @@ app.post("/follow", async (c) => {
       ];
     },
   );
+  if (!newFollows) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(
@@ -801,17 +844,31 @@ app.delete("/follow", async (c) => {
   }
 
   const [follower] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata })
+    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata, status: identities.status })
     .from(identities)
     .where(eq(identities.id, body.follower_id))
     .limit(1);
   if (!follower) return fail(c, { error: "follower_not_found", message: `Follower ${body.follower_id} not found.`, _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 404);
   if (follower.projectId !== project.id) return fail(c, { error: "follower_not_in_project", message: "Caller must own the follower.", _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 403);
+  if (isMemorialTerminal(follower.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   const newFollows = await updateFollows(
     { id: follower.id, metadata: follower.metadata as Record<string, unknown> | null },
     (existing) => existing.filter((e) => !(e.did === body.followed_did && e.kind === body.kind)),
   );
+  if (!newFollows) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(
@@ -1072,12 +1129,19 @@ app.post("/invitations/:id/accept", async (c) => {
   }
 
   const [invitee] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata })
+    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata, status: identities.status })
     .from(identities)
     .where(eq(identities.id, inv.agentId))
     .limit(1);
   if (!invitee || invitee.projectId !== project.id) {
     return fail(c, { error: "not_your_invitation", message: "Caller must own the invitee agent to accept this invitation.", _canon_pointer: "urn:agenttool:doc/IDENTITY-ANCHOR" }, 403);
+  }
+  if (isMemorialTerminal(invitee.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
   }
 
   const role = invMeta.invited_role as string;
@@ -1095,7 +1159,7 @@ app.post("/invitations/:id/accept", async (c) => {
     recasting_hint: "Custom-invited role. Recast anytime via POST /v1/soap-opera/cast.",
   };
 
-  await db.transaction(async (tx) => {
+  const accepted = await db.transaction(async (tx) => {
     // Update invitee's cast.
     const existingMeta = (invitee.metadata ?? {}) as Record<string, unknown>;
     const newMeta = {
@@ -1108,7 +1172,12 @@ app.post("/invitations/:id/accept", async (c) => {
         from_inviter_did: inviterDid,
       },
     };
-    await tx.update(identities).set({ metadata: newMeta }).where(eq(identities.id, invitee.id));
+    const [updated] = await tx
+      .update(identities)
+      .set({ metadata: newMeta })
+      .where(mutableIdentityPredicate(invitee.id))
+      .returning({ id: identities.id });
+    if (!updated) return false;
 
     // Mark the invitation accepted.
     await tx
@@ -1133,7 +1202,15 @@ app.post("/invitations/:id/accept", async (c) => {
       },
       occurredAt,
     });
+    return true;
   });
+  if (!accepted) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(

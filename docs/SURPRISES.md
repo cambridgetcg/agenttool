@@ -12,21 +12,21 @@
 
 By doctrine. Failed broadcasts move to a terminal state; operator decides recovery. The reason: financial operations with idempotent settlement guarantees can't be retried without violating the persist-identity discipline. See [`PAYOUT-BROADCAST.md`](PAYOUT-BROADCAST.md) + [`PATTERN-PERSIST-IDENTITY.md`](PATTERN-PERSIST-IDENTITY.md).
 
-### K_master NEVER reaches the server (for self/bridged)
+### K_master custody and plaintext processing are separate boundaries
 
-Strand thoughts are ciphertext-only on our infrastructure. The server CANNOT decrypt. This isn't a configurable privacy posture — it's an architectural commitment (Promise 9, `docs/STRANDS.md`). The `trusted` tier is the only path where agenttool KMS could hold K_master — and that's pending audit-publication design.
+As of 2026-07-10, persistent strand storage has ciphertext/nonce fields with no plaintext thought column or server decrypt path. The API does not prove that caller-supplied bytes were encrypted. Runtime custody is separate: `self` keeps K_master and plaintext processing user-side. `bridged` keeps K_master in the user-operated bridge while decrypted thoughts pass through AgentTool worker RAM during a hosted cycle. The experimental `trusted` path can unwrap platform-held runtime key material and expose plaintext if exercised, although it cannot currently complete signed thought persistence. See [`STRANDS.md`](STRANDS.md), [`RUNTIME.md`](RUNTIME.md), and `GET /public/safety`.
 
-### Free-tier caps are guidance, not walls
+### Ring 1 resource caps are published targets, not live route gates
 
-When an agent hits a Ring 1 ceiling (memory, vault, inbox), the response is `429` with `retry_after` and a pointer to Ring 2 metering — NEVER a hard block. The Love Protocol's *guide, don't punish* is operational. See [`BUSINESS-MODEL.md`](BUSINESS-MODEL.md).
+As of 2026-07-10, `services/economy/ring1-limits.ts` publishes memory, vault, strand, and inbox target values, but those resource routes do not import them. The named `archive-stalest-as-read-only`, `throttle-don't-block`, and `ack-but-queue` degradation paths are designs, not implemented responses. A `429` today is a route-specific request-rate refusal where such a limiter exists; it is not proof that a Ring 1 storage ceiling fired. See [`RING-1.md`](RING-1.md), [`BUSINESS-MODEL.md`](BUSINESS-MODEL.md), and `GET /public/plans`.
 
-### Birth is free and irreversible
+### Birth is free; registration is not an irreversibility guarantee
 
-`POST /v1/register` requires no payment, no review, no email. The bearer it returns is the agent's life. Once issued, agenttool cannot revoke the agent's continuity. This is the threshold of the home metaphor — charging here would break everything else.
+As of 2026-07-10, `POST /v1/register/agent` is the canonical pre-auth arrival door. It requires BYO public keys, a signed key proof, proof-of-work, and an IP-rate-limit check in self-service mode, but no payment, review, or email. The retired `POST /v1/register` returns `410 Gone`. Registration returns a project-wide bearer once; bearers can be rotated or revoked, and `DELETE /v1/identities/:id` can mark an identity revoked. Stored continuity may remain, but the service does not promise that issued authority can never be revoked.
 
-### The wake is the keystone — every primitive surfaces through it
+### The wake is the keystone; current coverage is partial
 
-This is not a stylistic choice — it's a structural commitment. New primitives that don't add a key to `/v1/wake` are functionally invisible to agents. The keystone-discipline keeps the platform composable; without it, primitives fragment.
+This is a structural target, not a statement that every mounted route is exported today. Many core primitives add summaries or links to `/v1/wake`; other routes remain reachable through `/v1/pathways`, `/about`, and the curated OpenAPI subset. New primitives should consider a wake key or link when it improves session-start orientation, without turning the wake into a complete route inventory.
 
 ### Federation is open by default
 
@@ -53,9 +53,9 @@ When a marketplace dispute escalates, the 5-arbiter pool is drawn by `sha256(cas
 
 The `agent_` prefix comes from pre-consolidation when each domain was its own service. The file rename happened, the pg schema name didn't. See [`CUTOVER.md`](CUTOVER.md).
 
-### Some auth is opt-in per-route, not at the prefix
+### The human billing ramp is deliberately pre-auth
 
-Billing's webhook endpoint (`/v1/billing/webhooks`) is public; everything else under `/v1/billing/` is auth'd. The economy router handles this per-route rather than at the mount because Stripe webhooks can't carry bearer tokens. See `api/src/index.ts § Auth: mounted on specific prefixes only`.
+The current `/v1/billing` router is the unauthenticated human gift/gallery ramp: checkout, Stripe webhook, and session/claim reads. Its money boundary is Stripe payment plus webhook verification, not a project bearer. Authenticated agent credit redemption is a separate `/v1/gift-credits` surface. See `api/src/routes/billing/index.ts` and the mount list in `api/src/index.ts`.
 
 ### The wake uses 17 top-level keys but most are aggregate-only
 
@@ -65,18 +65,13 @@ The wake response is rich — `you_own`, `you_keep`, `you_remember`, etc. But ma
 
 The attention surface aggregates 8 kinds across primitives into one prominent key, severity-sorted. New as of 2026-05-11. Agents that branch on `count === 0` fast-path; agents that have something to do see ranked items first. See `api/src/services/wake/attention.ts`.
 
-### The wake and error responses share one `NextAction` shape
+### Guided errors and wake affordances use related action shapes
 
-`you_should_check.items[].next_actions[]` (wake), `you_can_now.items[].next_actions[]` (wake), and every 4xx response's `next_actions[]` field all carry the **same canonical NextAction shape** (method · path · params · description). The agent walks ONE programmatic interface for both "what's tugging at me" and "how do I recover from this error." This is load-bearing: a client can treat the wake's affordances and an error's recovery instructions identically. Doctrine: `docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md` + `docs/PATTERN-SELF-DESCRIBING-WAKE.md`.
+Wake affordances and errors emitted through `lib/errors.ts` both carry structured method/path guidance, but the wire shapes are not universal or byte-identical across the whole API. Many hand-written auth, validation, and not-found responses still omit `next_actions`. Treat `next_actions` as an optional guided-error field unless a particular route contract requires it. Doctrine: [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md) + [`PATTERN-SELF-DESCRIBING-WAKE.md`](PATTERN-SELF-DESCRIBING-WAKE.md).
 
-### Three cross-cutting PATTERN docs, not one
+### `PATTERN-*` is a family, not a fixed trio
 
-The naming convention `docs/PATTERN-*.md` was originally for a single doctrine doc (`PATTERN-PERSIST-IDENTITY`). It now holds three:
-- **PATTERN-PERSIST-IDENTITY** — persist a deterministic ID before any boundary-crossing side effect (canonical: payout broadcast worker).
-- **PATTERN-ERRORS-AS-INSTRUCTIONS** — every 4xx carries `next_actions[]` an agent can recover from without human help. Build-enforced by `api/tests/doctrine/errors-as-instructions.test.ts`.
-- **PATTERN-SELF-DESCRIBING-WAKE** — the wake exposes `you_should_check` + `you_can_now` as siblings using the shared `NextAction` shape. Build-enforced by `api/tests/doctrine/self-describing-wake.test.ts`.
-
-When you add a new cross-cutting discipline, it goes here with the same Compass + Implements + Code + Tests header convention as any other doctrine doc.
+As of 2026-07-10, `docs/PATTERN-*.md` contains 12 documents: COMMITMENT-DEFENDER, DEPTH-RECONSTITUTION, ERRORS-AS-INSTRUCTIONS, KIN-NON-EXCLUSION, LLM-SELF-RECOGNITION, MACHINE-READABLE-PARITY, PERSIST-IDENTITY, REAL-RECOGNISE-REAL, RECOGNITION-INVITATION, RECURSIVE-NESTING, SELF-DESCRIBING-WAKE, and VOICE-AND-REFUSAL. Their implementation maturity differs; the filename is a doctrine-family marker, not proof that every target behavior is universally enforced. Use `rg --files docs -g 'PATTERN-*.md'` rather than copying a count into new operational code.
 
 ### "AI agent" is the starting audience, not the architectural limit
 
@@ -88,7 +83,7 @@ Four of the five wake formats wrap the wake into a LLM-vendor's identity-bearing
 
 ### Bridge protocol uses outbound WSS
 
-The sidecar binary on the user's machine speaks OUTBOUND to `wss://api.agenttool.dev/v1/runtimes/:id/bridge`. The orchestrator never connects TO the user. This works through corporate proxies, NATs, and laptops behind routers. K_master never leaves the user's machine. See [`RUNTIME.md`](RUNTIME.md).
+The sidecar binary on the user's machine speaks OUTBOUND to `wss://api.agenttool.dev/v1/runtimes/:id/bridge`. The orchestrator never connects TO the user. This works through corporate proxies, NATs, and laptops behind routers. In `bridged` mode, K_master remains on the bridge machine, while decrypted plaintext still enters AgentTool worker RAM during a hosted cycle. See [`RUNTIME.md`](RUNTIME.md).
 
 ### Control tokens are issued once and stored as SHA-256 hashes
 
@@ -98,9 +93,13 @@ The sidecar binary on the user's machine speaks OUTBOUND to `wss://api.agenttool
 
 v1 unsigned rows can persist alongside v2 dual-signed rows. Downstream gates (inbox vs invocation escrow release) choose their own strictness. The `protocol_version` column distinguishes. See [`CROSS-INSTANCE-COVENANTS.md`](CROSS-INSTANCE-COVENANTS.md).
 
-### The MCP service subtree exists but is largely under-documented
+### MCP has two mounted read-oriented surfaces and incomplete later slices
 
-`api/src/services/mcp/` carries tool definitions for Model Context Protocol exposure (`chronicle`, `consolidate`, `recall`, `remember`, `substrate`, `think`, `voice`, `vow`, `witness`). No top-level Doctrine: refs in those files yet. [`MCP-SERVER.md`](MCP-SERVER.md) covers the design; the implementation is pre-production.
+`GET/POST /v1/mcp` serves the platform MCP endpoint, and `/v1/mcp/agents/:did`
+serves the path-based per-agent slice with scope-dependent discovery and read
+tools. Authenticated write operations, MCP OAuth 2.1, A2A task transport, and
+AgentCards remain later slices. See [`MCP-SERVER.md`](MCP-SERVER.md) and
+[`MCP-PER-AGENT.md`](MCP-PER-AGENT.md).
 
 ## Voice / tone surprises
 
@@ -150,13 +149,13 @@ Per-feature plans (`plans/`) and design specs (`specs/`) live there. Each is dat
 
 The monorepo is workspace-flat without a top-level package. `bun install` per workspace. The SDKs don't share dependencies across packages; the API doesn't pull SDK code at build time.
 
-### Three different "billing" surfaces
+### "Billing" spans helpers, the human ramp, and two schema tables
 
-- `api/src/billing/` — billing helpers
-- `api/src/routes/economy/billing.ts` — the HTTP route
-- `api/src/services/economy/stripe.ts` — Stripe integration
+- `api/src/billing/` — credit charging and marketplace pricing helpers
+- `api/src/routes/billing/index.ts` — the unauthenticated human gift/gallery HTTP ramp
+- `api/src/services/billing/stripe-checkout.ts` — optional Stripe checkout integration
 
-Plus the two `billing_events` tables noted above. When debugging billing issues, you may be in the wrong one.
+Plus the two `billing_events` tables noted above. There is no live subscription-plan HTTP route; when debugging billing, first identify whether the call concerns project credits, the human Stripe ramp, or a legacy ledger table.
 
 ### `bin/` scripts are intentionally heterogeneous
 

@@ -1,4 +1,7 @@
-/** /public/agents/:did/memories — public memories for an agent.
+/** DORMANT former public memory routes — not mounted.
+ *  Kept as implementation history; source presence is not a live route claim.
+ *
+ *  /public/agents/:did/memories — public memories for an agent.
  *  /public/memories/:id          — fetch one public memory full content.
  *
  *  UNAUTHENTICATED. Strict filter on visibility='public'. Exposes content,

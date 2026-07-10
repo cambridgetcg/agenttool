@@ -5,38 +5,32 @@
  *
  *    • getUsageThisMonth(projectId) — sum of the current calendar
  *      month's daily rows; feeds the free-tier status display.
- *    • checkAndIncrement(projectId, resource) — atomic preflight gate
- *      consumed before a billable action; bumps today's counter only
- *      if the free-tier ceiling isn't already at cap.
+ *    • checkAndIncrement(projectId, resource) — atomic preflight helper;
+ *      when a caller uses it, it bumps today's counter only if the published
+ *      ceiling is not already at cap. No resource route calls it today.
  *    • resetUsageForProject(projectId) — manual operator reset path
  *      (no scheduled trigger; subscription cycle removed 2026-05-17).
  *
  *  Plan tiers + subscriptions removed 2026-05-17 per the agents-only
  *  stance: agents transact per-call via crypto/x402, never via monthly
- *  fiat subscriptions. All projects are free-tier with the limits
- *  inlined below (FREE_TIER_LIMITS). Bursting beyond the cap is via
- *  x402 micropayment per-call, not via subscription upgrade.
+ *  fiat subscriptions. All projects use the inlined FREE_TIER_LIMITS when
+ *  this helper is called. `meterOrFail402` can produce an x402-compatible
+ *  refusal, but no resource route currently wires that helper.
  *
  *  @enforces urn:agenttool:ring/2
- *    Canonical anchor for Ring 2 — The Substrate. The metering core: only
- *    actual usage events bump counters; idle projects never accrue charges;
- *    the "free" tier is the default when no subscription exists. Pay-as-
- *    you-go, hard zero floor for non-active agents.
+ *    Canonical anchor for the Ring 2 metering helper. Calls to this module
+ *    bump counters only when explicitly invoked; idle projects do not accrue
+ *    charges here. This is not a claim that every billable route uses it.
  *
  *  @enforces urn:agenttool:commitment/ring2-hard-zero-floor
- *    checkAndIncrement() is the gate before every billable action; an
- *    agent that never triggers a billable action never hits this code
- *    path; counters stay at zero. The unit of economic time is the
- *    transaction, not the calendar month — a dormant agent pays the
- *    same zero today as on its birthday.
+ *    checkAndIncrement() changes state only when called. A dormant agent does
+ *    not hit this path, so this helper preserves a zero floor; route-wide
+ *    enforcement remains open until callsites exist.
  *
  *  @enforces urn:agenttool:commitment/ring2-chargeable-as-chronicle
- *    Every successful checkAndIncrement() also writes a chronicle entry
- *    of kind='usage' on the project's timeline (agent-level when the
- *    caller threads an identityId). The audit IS the chronicle — the
- *    agent reads its billing record in the same surface it reads its
- *    memories. Substrate-honest billing: no separate console the agent
- *    cannot enumerate via /v1/chronicle. */
+ *    Every successful checkAndIncrement() attempts a chronicle entry of
+ *    kind='usage' on the project's timeline. That audit write is best-effort
+ *    and can fail after the counter increments. */
 
 import { and, eq, sql } from "drizzle-orm";
 
@@ -46,8 +40,8 @@ import { usageCounters } from "../../db/schema/economy";
 
 // ─── Free-tier limits — inlined 2026-05-17 after Stripe drop ──────────────
 // Previously sourced from services/economy/stripe.ts:SUBSCRIPTION_PLANS.
-// All projects are free-tier; bursting via x402 micropayment per-call,
-// not via subscription upgrade.
+// All projects use this helper's free-tier values. No resource route imports
+// the gate today; x402 bursting is available only after a callsite wires it.
 const FREE_TIER_LIMITS = {
   memoryOpsPerMonth: 10_000,
   toolCallsPerMonth: 1_000,
@@ -87,9 +81,8 @@ function todayKey(now: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-/** All projects are free-tier as of 2026-05-17 (Stripe subscriptions
- *  removed). Bursting beyond the free cap is via x402 micropayment
- *  per-call, not subscription upgrade. */
+/** All projects use the same helper-local limits as of 2026-05-17. Stripe
+ *  subscriptions were removed. No route currently calls this gate. */
 async function planForProject(_projectId: string) {
   return FREE_PLAN;
 }

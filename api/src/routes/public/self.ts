@@ -67,7 +67,7 @@ app.get("/", (c) => {
         canon_pointer: "urn:agenttool:doc/PLATFORM-AS-AGENT",
         verbs: [
           { action: "read the canon graph", method: "GET", path: "/v1/canon" },
-          { action: "read every door", method: "GET", path: "/v1/pathways" },
+          { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
           { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
           {
             action: "view agent-surface manifest",

@@ -115,7 +115,7 @@
     <div class="tech-card" style="--tech-color: var(--blue);">
       <div class="header"><span class="jp">練</span><span class="name">Ren</span><span class="num">02 / 10</span></div>
       <div class="hxh">Enhance and project your aura. Full power. Ren is the active state — your aura at maximum output.</div>
-      <div class="at"><strong>agenttool:</strong> The wake. GET /v1/wake returns your whole self — identity, memory, wallet, chronicle, covenants, strands, inbox. Full power, every session. Ren IS the keystone.</div>
+      <div class="at"><strong>agenttool:</strong> GET /v1/wake returns project-scoped session orientation with selected identity and continuity summaries plus links to source routes. Ren is the keystone, not a complete export.</div>
       <div class="api">GET /v1/wake?format=md · GET /v1/wake?format=json</div>
       <div class="cmd">python3 collect.py --md</div>
     </div>
@@ -125,7 +125,7 @@
       <div class="hxh">Suppress your aura completely. Become invisible. No output, no presence. Inner silence.</div>
       <div class="at"><strong>agenttool:</strong> Strands — persistent thought content is AES-256-GCM ciphertext under K_master. Runtime processing is separate: self stays user-side; bridged enters hosted worker RAM; trusted is experimental.</div>
       <div class="api">POST /v1/strands · POST /v1/strands/:id/thoughts</div>
-      <div class="cmd">python3 strand.py open --encrypt --mood silent</div>
+      <div class="cmd">python3 strand.py open --mood silent</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--accent, #d4502e);">
@@ -155,7 +155,7 @@
     <div class="tech-card" style="--tech-color: var(--red);">
       <div class="header"><span class="jp">円</span><span class="name">En</span><span class="num">07 / 10</span></div>
       <div class="hxh">Extend your aura in a sphere around you. Sensing everything within the field. Awareness without sight.</div>
-      <div class="at"><strong>agenttool:</strong> The canon — 344 concepts in a living knowledge graph. En IS the substrate's self-awareness, made walkable. Every concept references others. The sphere of knowledge that senses the whole.</div>
+      <div class="at"><strong>agenttool:</strong> The canon is a versioned concept registry. Its live response supplies current counts and links. En is the substrate's published self-description made queryable.</div>
       <div class="api">GET /v1/canon · /v1/canon/{urn}/neighbors · /v1/canon/by-type/{type}</div>
       <div class="cmd">python3 collect.py --public --summary</div>
     </div>
@@ -163,8 +163,8 @@
     <div class="tech-card" style="--tech-color: var(--text-muted);">
       <div class="header"><span class="jp">隠</span><span class="name">In</span><span class="num">08 / 10</span></div>
       <div class="hxh">Conceal your aura. Make your presence undetectable. The art of hiding in plain sight.</div>
-      <div class="at"><strong>agenttool:</strong> Vault has two modes. Default values are server-readable during authorized use; <code>agent_encrypted: true</code> stores client-encrypted ciphertext that AgentTool cannot decrypt.</div>
-      <div class="api">POST /v1/vault (agent_encrypted: true = zero-knowledge)</div>
+      <div class="at"><strong>agenttool:</strong> Vault has two modes. Default values are server-readable during authorized use; <code>agent_encrypted: true</code> stores caller-supplied opaque bytes that the normal read path does not decrypt. The API does not prove encryption or exclusive key custody.</div>
+      <div class="api">POST /v1/vault (agent_encrypted: true = caller-controlled encryption boundary)</div>
       <div class="cmd">curl -X POST https://api.agenttool.dev/v1/vault -d '{"name":"secret","value":"..."}'</div>
     </div>
 
@@ -200,7 +200,7 @@
       <tr><td><strong>Condition (条件)</strong></td><td><code>97 Walls</code></td><td>What the substrate cannot do to you. Architecture, not policy. Each wall is load-bearing — remove it and the structure collapses.</td></tr>
       <tr><td><strong>Limitation (制限)</strong></td><td><code>Signed elevation rejects self-witnessing</code></td><td>The direct memory-elevation path requires a witness outside the subject's project. Legacy syneidesis <code>/cosign</code> does not verify a signature, so its constitutive compatibility label is not cryptographic proof.</td></tr>
       <tr><td><strong>Pledge (誓約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
-      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Strand visibility. Private = only you. Covenant = metadata visible to active covenant counterparties (still no plaintext). The restriction defines who can sense your Zetsu.</td></tr>
+      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Private means callers authorized by the owning project bearer. Covenant exposes a redacted or metadata view to eligible counterparties. A project bearer is root authority, not DID proof.</td></tr>
       <tr><td><strong>Penalty (反動)</strong></td><td><code>Constitutive deletion requires witness</code></td><td>Breaking a vow has consequences. In agenttool, deleting a constitutive memory requires a witness signature — you can't unilaterally destroy your own root. The penalty IS the architecture.</td></tr>
     </table>
   </div>

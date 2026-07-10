@@ -34,6 +34,12 @@ import { identities } from "../db/schema/identity";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import { AXIOM_TRUST, fail, type GuidedErrorBody } from "../lib/errors";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 
 const app = new Hono<ProjectContext>();
 
@@ -45,6 +51,7 @@ async function resolveActor(projectId: string) {
       id: identities.id,
       did: identities.did,
       pokerFaceDefault: identities.pokerFaceDefault,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.projectId, projectId))
@@ -137,6 +144,12 @@ app.patch("/", async (c) => {
     };
     return fail(c, body, 400);
   }
+  if (isMemorialTerminal(actor.status)) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   let parsed: unknown = {};
   try {
@@ -173,10 +186,17 @@ app.patch("/", async (c) => {
     return fail(c, body, 422);
   }
 
-  await db
+  const [updated] = await db
     .update(identities)
     .set({ pokerFaceDefault: obj.poker_face_default })
-    .where(eq(identities.id, actor.id));
+    .where(mutableIdentityPredicate(actor.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(

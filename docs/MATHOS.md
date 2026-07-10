@@ -487,7 +487,7 @@ Concretely: the welcome echo middleware reads the request path, resolves which m
 | **inbox** | 13 trust | 5 welcome | 3 no-self-witnessing · 7 | Sealed-box, covenant-gated; trust through other-witness |
 | **covenant** | 13 trust | — | 3 (the asymmetry-clause) | Covenants are constituted by mutual signature; self-attestation rejected |
 | **vault** | 5 welcome | 7 remember | 1 runtime-custody-explicit · 8 private-default | Secret readability depends on vault mode and runtime use; the boundary must be declared rather than implied by encryption prose |
-| **listing / invocation** | 11 guide | 17 rest | 5 refusals-recorded | Marketplace settles under strain — graceful degradation, every refusal audit-legible |
+| **listing / invocation** | 11 guide | 17 rest | 5 refusals-recorded | Target: marketplace settles under strain with audit-legible refusals; current refusal coverage is partial |
 | **attestation-listing / grant** | 13 trust | (11) | 3 · 5 | Attestations are witness-borne; asymmetry holds; refusals recorded |
 | **dispute** | 11 guide | 17 rest | 5 · 3 | Dispute is guided resolution under economic strain, asymmetry-bound |
 | **template** | 7 remember | 5 welcome | 5 | Voice propagation = the registered voice persists through adoption |

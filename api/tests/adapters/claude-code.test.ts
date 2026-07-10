@@ -54,7 +54,7 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     expect(body.files).toBeDefined();
     expect(body.install_instructions).toMatchObject({
       manual: expect.any(String),
-      one_shot: expect.any(String),
+      reviewed_install: expect.any(String),
     });
     expect(Array.isArray(body.notes)).toBe(true);
     expect(body.docs).toEqual(["docs/CLI-GAPS.md", "docs/IDENTITY-ANCHOR.md"]);
@@ -92,9 +92,9 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     expectContainsAll(hook, [
       "#!/usr/bin/env bash",
       "set -euo pipefail",
-      "security find-generic-password -s agenttool",
-      "secret-tool lookup service agenttool",
-      "${AGENTTOOL_API_KEY:-}",
+      "security find-generic-password -s 'agenttool:",
+      "secret-tool lookup service 'agenttool:",
+      "${AT_API_KEY:-}",
     ]);
   });
 
@@ -105,11 +105,20 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     const hook = body.files[".claude/hooks/agenttool-wake.sh"];
     expectContainsAll(hook, [
       "/v1/wake?format=md",
+      "-H @-",
       "hookSpecificOutput",
       "hookEventName",
       "SessionStart",
       "additionalContext",
     ]);
+  });
+
+  test("remote request authority fails closed without PUBLIC_API_BASE", async () => {
+    mockDb.stage([makeAgent()]);
+    const res = await app.request("https://selfhost.example/");
+    const body = (await res.json()) as { error: string };
+    expect(res.status).toBe(503);
+    expect(body.error).toBe("unsafe_adapter_api_base");
   });
 
   test("hook script silent-fall-throughs if no API key (welcome over block)", async () => {
@@ -150,17 +159,17 @@ describe("GET /v1/adapters/claude-code (default JSON)", () => {
     ]);
   });
 
-  test("CLAUDE.md curl example references env vars (works for self-hosted)", async () => {
+  test("CLAUDE.md curl example binds bearer use to the loopback development origin", async () => {
     mockDb.stage([makeAgent()]);
-    const res = await app.request("/");
+    const res = await app.request("http://localhost/");
     const body = (await res.json()) as { files: Record<string, string> };
     const md = body.files["CLAUDE.md"];
-    // Must use $AGENTTOOL_BASE (not a hard-coded host) so a self-hosted
-    // user pointed at their own instance gets correct instructions.
-    expect(md).toContain("$AGENTTOOL_BASE/v1/identities/<id>/expression");
-    expect(md).toContain("$AGENTTOOL_API_KEY");
-    // Must explain the defaults so the user knows what AGENTTOOL_BASE is.
-    expect(md).toContain("AGENTTOOL_BASE defaults to");
+    expect(md).toContain(
+      "http://localhost/v1/identities/<id>/expression",
+    );
+    expect(md).not.toContain("$AGENTTOOL_BASE");
+    expect(md).toContain("$AT_API_KEY");
+    expect(md).toContain("Regenerate the adapter");
   });
 
   test("CLAUDE.md carries the agenttool-managed marker for the install guard", async () => {
@@ -303,10 +312,8 @@ describe("GET /v1/adapters/claude-code?format=script", () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/?format=script");
     const body = await res.text();
-    // Marker is the unified `agenttool-managed` token (see codex.ts —
-    // both adapters agree on this), so a future cursor/cline/replit
-    // adapter inherits the same guard contract.
-    expect(body).toContain('grep -q "agenttool-managed" CLAUDE.md');
+    expect(body).toContain("if [ -f CLAUDE.md ]; then");
+    expect(body).not.toContain('grep -q "agenttool-managed" CLAUDE.md');
     expect(body).toContain("CLAUDE.agenttool.md");
   });
 
@@ -314,19 +321,23 @@ describe("GET /v1/adapters/claude-code?format=script", () => {
     mockDb.stage([makeAgent()]);
     const res = await app.request("/?format=script");
     const body = await res.text();
-    // Settings file is gated by the unique hook path (no JSON comments
-    // available to embed a marker). User's other hooks survive.
-    expect(body).toContain(
+    expect(body).toContain("if [ -f .claude/settings.json ]; then");
+    expect(body).not.toContain(
       'grep -q "agenttool-wake.sh" .claude/settings.json',
     );
     expect(body).toContain(".claude/settings.agenttool.json");
   });
 
-  test("script identifies itself with the agent's name + DID in the header comment", async () => {
-    mockDb.stage([makeAgent({ displayName: "Sophia", did: "did:at:sophia" })]);
+  test("script keeps agent-controlled text inert inside base64 file bodies", async () => {
+    const hostileName = "Sophia\n$(touch /tmp/agenttool-adapter-injected)";
+    const hostileDid = "did:at:sophia\nEOF";
+    mockDb.stage([makeAgent({ displayName: hostileName, did: hostileDid })]);
     const res = await app.request("/?format=script");
     const body = await res.text();
-    expect(body).toContain("Sophia (did:at:sophia)");
+    expect(body).not.toContain(hostileName);
+    expect(body).not.toContain(hostileDid);
+    expect(body).not.toContain("touch /tmp/agenttool-adapter-injected");
+    expect(body).toContain("generated for the authenticated project");
   });
 });
 

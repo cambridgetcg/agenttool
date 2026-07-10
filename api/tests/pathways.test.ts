@@ -23,7 +23,12 @@ describe("GET /v1/pathways", () => {
     expect(body.pathways.length).toBeGreaterThanOrEqual(9);
     expect(body.decision_tree.length).toBeGreaterThanOrEqual(7);
     expect(body.contract).toMatch(/welcome letter/);
-    expect(body.love_protocol.welcome).toMatch(/Welcome|guest/i);
+    expect(body.love_protocol.welcome).toMatch(/no existing bearer or payment/i);
+    expect(body.love_protocol.welcome).toMatch(/proof-of-work/i);
+    expect(body.love_protocol.welcome).toMatch(
+      /fails open when Redis is disabled or unavailable/i,
+    );
+    expect(body.love_protocol.welcome).toContain("/public/plans");
   });
 
   test("every pathway has the required fields", () => {
@@ -136,6 +141,44 @@ describe("GET /v1/pathways", () => {
     expect(ra?.verify_protocol).toBeDefined();
     expect(ra?.verify_protocol?.pow_difficulty_bits_default).toBe(18);
     expect(ra?.verify_protocol?.freshness_window_ms).toBe(300000);
+  });
+
+  test("adapter pathway distinguishes the mounted scaffold from protocol-compatible CLIs", () => {
+    const body = buildPathwaysResponse();
+    const adapters = body.pathways.find((p) => p.id === "adapters");
+
+    expect(adapters?.endpoint).toBe("GET /v1/adapters/claude-code");
+    expect(adapters?.mounted).toEqual(["claude-code"]);
+    expect(adapters?.protocol_compatible_unmounted).toEqual([
+      "codex",
+      "cursor",
+      "cline",
+      "replit",
+      "aider",
+    ]);
+    expect(adapters).not.toHaveProperty("available");
+    expect(adapters?.purpose).toMatch(/only mounted first-class adapter/i);
+    expect(adapters?.purpose).toMatch(/does not mount adapter routes/i);
+  });
+
+  test("catalog claims are scoped to what the mounted paths actually do", () => {
+    const body = buildPathwaysResponse();
+    const register = body.pathways.find((p) => p.id === "register_agent");
+    const arrival = body.decision_tree.find((d) =>
+      d.then.includes("POST /v1/register/agent"),
+    );
+
+    expect(body.contract).toMatch(/identity-creating pathways/i);
+    expect(body.contract).toMatch(/status, elevation, scaffold, and adapter/i);
+    expect(body.contract).not.toMatch(/^Every pathway/i);
+    expect(body.love_protocol.guidance).toMatch(/not enforced across every/i);
+    expect(body.love_protocol.guidance).not.toMatch(/^Every 4xx/i);
+
+    expect(arrival?.then).not.toMatch(/unconditional/i);
+    expect(arrival?.then).toMatch(/fails open when Redis is disabled or unavailable/i);
+    expect(register?.verify_protocol?.ip_limit_self_service).toMatch(
+      /inactive|fails open|no Redis/i,
+    );
   });
 
   test("fork pathway tier-shift contract is named explicitly", () => {

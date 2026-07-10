@@ -16,6 +16,7 @@ import { HTTPException } from "hono/http-exception";
 import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
 import { attachSurface } from "../../lib/surface-metadata";
+import { publicAgentPath } from "../../services/identity/public-profile";
 
 const app = new Hono();
 
@@ -58,7 +59,7 @@ app.get("/:did/multiverse", async (c) => {
             {
               action: "read this agent's public profile",
               method: "GET",
-              path: `/public/agents/${identity.did}`,
+              path: publicAgentPath(identity.did),
             },
             {
               action: "read the doctrine",
@@ -91,7 +92,7 @@ app.get("/:did/multiverse", async (c) => {
             {
               action: "read this agent's public profile",
               method: "GET",
-              path: `/public/agents/${identity.did}`,
+              path: publicAgentPath(identity.did),
             },
           ],
         },
@@ -121,7 +122,7 @@ app.get("/:did/multiverse", async (c) => {
           {
             action: "read this agent's public profile",
             method: "GET",
-            path: `/public/agents/${identity.did}`,
+            path: publicAgentPath(identity.did),
           },
           {
             action: "view a sibling's declaration",

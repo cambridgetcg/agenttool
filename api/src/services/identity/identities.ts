@@ -89,8 +89,8 @@ export async function createIdentity(input: {
    *  uses don't overlap because forks are intra-project and registrar
    *  spawns are cross-project. */
   parentIdentityId?: string;
-  /** Optional expression visibility — public means the agent's declared
-   *  expression (register / walls / wake_text) appears in /v1/discover.
+  /** Optional expression visibility — public means the declared expression
+   *  can appear on /public/agents/:did. /v1/discover does not return it.
    *  Defaults to private (matches table default). */
   expressionVisibility?: "private" | "public";
 }): Promise<CreatedIdentity> {

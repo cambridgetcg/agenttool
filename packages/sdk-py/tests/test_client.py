@@ -247,7 +247,13 @@ class TestTools:
     def test_parse_document_requires_url_or_base64(self, at: AgentTool) -> None:
         with pytest.raises(AgentToolError) as exc_info:
             at.tools.parse_document()
-        assert "url or base64" in exc_info.value.message
+        assert "exactly one of url or base64" in exc_info.value.message
+
+    def test_parse_document_rejects_ambiguous_or_oversized_input(self, at: AgentTool) -> None:
+        with pytest.raises(AgentToolError, match="exactly one"):
+            at.tools.parse_document(url="https://example.com", base64="eA==")
+        with pytest.raises(AgentToolError, match="1,400,000 character limit"):
+            at.tools.parse_document(base64="A" * 1_400_001)
 
     def test_error_raises(self, at: AgentTool) -> None:
         # `tools.search` is deprecated in 0.6.1, so swap to `scrape` to verify

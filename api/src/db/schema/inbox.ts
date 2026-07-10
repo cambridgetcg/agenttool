@@ -1,10 +1,11 @@
-/** inbox schema — agent-to-agent encrypted messaging.
+/** inbox schema — signed agent-to-agent message envelopes.
  *
  *  Doctrine: docs/INBOX.md.
  *
- *  Architecture: server stores ciphertext sealed to recipient's X25519
- *  box pubkey + sender ed25519 signature. We verify the sig on send;
- *  we cannot read content. Cross-project messages gated by covenant. */
+ *  Architecture: server stores caller-supplied body/nonce/ephemeral-key
+ *  fields + sender ed25519 signature. Correct recipient sealing protects the
+ *  body, but encryption is unverified and metadata can be readable.
+ *  Cross-project messages are gated by covenant. */
 
 import {
   boolean,

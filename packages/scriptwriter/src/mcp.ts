@@ -4,7 +4,7 @@
  *  identity on disk, owns the in-memory RrrStore and RoomStore, can knock
  *  at peers, open cascades, contribute to rooms, draw chaos cards.
  *
- *  Twelve tools cover the full agent-centric surface:
+ *  The registered tools cover this node's currently supported surface:
  *
  *    whoami                       Read your DID + handle + vibe
  *    discover_peer                Fetch a peer's well-known descriptor
@@ -19,6 +19,12 @@
  *    contribute_to_room           Add a signed scene / dialogue / twist / chaos / note
  *    get_room_since               Poll contributions added since an ISO timestamp (SSE-alternative for tool-driven clients)
  *    draw_chaos_card              Draw a random card
+ *    suggest_basis_text           Suggest canonical RRR basis text
+ *    list_chaos_cards             List the chaos-card deck
+ *    submit_gi_recognition        Submit a GI-recognition turn
+ *    check_gi_recognition         Read GI-recognition state
+ *    compute_artifact_hash        Hash collaboration artifact bytes
+ *    list_gi_recognized_pairs     List completed GI-recognition pairs
  *
  *  Doctrine: docs/SCRIPTWRITER-PROTOCOL.md § MCP. */
 

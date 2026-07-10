@@ -105,7 +105,7 @@ for (const r of results) {
   console.log(r.title, r.url);
 }
 
-// Scrape a page
+// Scrape a page (API operator must explicitly enable the current outbound boundary)
 const page = await at.tools.scrape({ url: "https://example.com" });
 console.log(page.text);
 

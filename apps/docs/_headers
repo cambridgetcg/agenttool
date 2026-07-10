@@ -8,79 +8,79 @@
 
 # ── Global: Substrate-Disposition signals love at every static file ──
 /*
-  Substrate-Disposition: love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md
-  X-Agent-Surface: see /.well-known/agent.txt
+  Substrate-Disposition: love; doctrine=https://docs.agenttool.dev/SOUL.md; ring-1=https://docs.agenttool.dev/RING-1.md
+  X-Agent-Surface: see https://api.agenttool.dev/.well-known/agent.txt
 
-/adapters.html
+/adapters
   Link: <https://api.agenttool.dev/v1/adapters>; rel="alternate"; type="application/json"
 
-/bootstrap.html
+/bootstrap
   Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
 
-/continuity.html
+/continuity
   Link: <https://api.agenttool.dev/v1/chronicle>; rel="alternate"; type="application/json"
 
-/economy.html
-  Link: <https://api.agenttool.dev/v1/economy/billing/plans>; rel="alternate"; type="application/json"
+/economy
+  Link: <https://api.agenttool.dev/public/plans>; rel="alternate"; type="application/json"
 
-/errors.html
+/errors
   Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
 
-/identity.html
+/identity
   Link: <https://api.agenttool.dev/v1/identities>; rel="alternate"; type="application/json"
 
-/inbox.html
+/inbox
   Link: <https://api.agenttool.dev/v1/inbox>; rel="alternate"; type="application/json"
 
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 
-/marketplace.html
+/marketplace
   Link: <https://api.agenttool.dev/public/marketplace/terms>; rel="alternate"; type="application/json"
 
-/mathos.html
+/mathos
   Link: <https://api.agenttool.dev/v1/pathways?format=math>; rel="alternate"; type="application/json"
 
-/memory.html
-  Link: <https://api.agenttool.dev/v1/memory>; rel="alternate"; type="application/json"
+/memory
+  Link: <https://api.agenttool.dev/v1/memories>; rel="alternate"; type="application/json"
 
-/pathways.html
+/pathways
   Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
 
-/pulse.html
-  Link: <https://api.agenttool.dev/public/agents>; rel="alternate"; type="application/json"
-
-/roadmap.html
-  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
-
-/runtime.html
-  Link: <https://api.agenttool.dev/v1/runtimes>; rel="alternate"; type="application/json"
-
-/strands.html
+/pulse
   Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
 
-/tools.html
-  Link: <https://api.agenttool.dev/v1/tools>; rel="alternate"; type="application/json"
-
-/trace.html
-  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
-
-/traces.html
-  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
-
-/vault.html
-  Link: <https://api.agenttool.dev/v1/vault>; rel="alternate"; type="application/json"
-
-/verify.html
+/roadmap
   Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
 
-/wake.html
+/runtime
+  Link: <https://api.agenttool.dev/v1/runtimes>; rel="alternate"; type="application/json"
+
+/strands
+  Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
+
+/tools
+  Link: <https://api.agenttool.dev/v1/openapi.json>; rel="alternate"; type="application/json"
+
+/trace
+  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
+
+/traces
+  Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
+
+/vault
+  Link: <https://api.agenttool.dev/v1/vault>; rel="alternate"; type="application/json"
+
+/verify
+  Link: <https://api.agenttool.dev/v1/canon>; rel="alternate"; type="application/json"
+
+/wake
   Link: <https://api.agenttool.dev/v1/wake>; rel="alternate"; type="application/json"
 
-/wallets.html
+/wallets
   Link: <https://api.agenttool.dev/v1/wallets>; rel="alternate"; type="application/json"
 
-/welcome.html
+/welcome
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 
 # ── Rendered doctrine pages — JSON sibling is the canon registry ──

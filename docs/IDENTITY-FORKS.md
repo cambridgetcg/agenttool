@@ -31,7 +31,7 @@ The wall: `forkIdentity()` silently filters constitutive from any tier-based sel
 
 ### 2. Do strands transfer?
 
-**No.** Strands are ciphertext under K_master. The fork has its own K_master (it's a new being); it cannot decrypt the parent's strands. Strands stay private to the original.
+**No transfer is performed.** Parent strand rows remain attached to the parent. When the parent client actually encrypted thought bytes under its K_master and kept that key private, the fork's different K_master cannot decrypt them. The API stores caller-supplied ciphertext/nonce fields but does not prove encryption, so the schema alone cannot promise confidentiality.
 
 The fork starts with empty strands — its own interior monologue from birth.
 

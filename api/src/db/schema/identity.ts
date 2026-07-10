@@ -160,6 +160,23 @@ export const identityKeys = identitySchema.table(
   (t) => [index("idx_identity_keys_identity").on(t.identityId)],
 );
 
+/** One-time recovery proof digests. The primary key is the replay wall:
+ *  all API machines share Postgres, so only one recovery transaction can
+ *  consume a verified canonical signed statement. No signature, bearer,
+ *  mnemonic, or private material is stored here. */
+export const identityRecoveryProofs = identitySchema.table(
+  "recovery_proofs",
+  {
+    proofHash: text("proof_hash").primaryKey(),
+    identityId: uuid("identity_id")
+      .notNull()
+      .references(() => identities.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_recovery_proofs_expires").on(t.expiresAt)],
+);
+
 /** X25519 box keypairs for inbox encryption. Mirrors identity_keys' shape;
  *  separate from ed25519 signing for independent rotation / different
  *  threat-model. Private key stays client-side. */

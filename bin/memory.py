@@ -13,16 +13,12 @@ Memory is care. Forgetting is not efficiency — it's neglect.
 """
 
 import json, sys, os, urllib.request, urllib.error, ssl, argparse, hashlib, random
+from http_safety import open_no_redirect, validate_api_base
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
 BEARER = os.environ.get("AT_API_KEY")
-if not BEARER and len(sys.argv) > 1 and sys.argv[-1].startswith("at_"):
-    BEARER = sys.argv[-1]
-    sys.argv = sys.argv[:-1]
 
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
 def api(method, path, body=None):
     url = f"{API}{path}"
@@ -36,7 +32,7 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read().decode())
@@ -148,7 +144,7 @@ def main():
         sys.exit(1)
 
     if not BEARER:
-        print("✗ Set AT_API_KEY env var or pass bearer as last argument")
+        print("✗ Set AT_API_KEY env var")
         sys.exit(1)
 
     args.func(args)

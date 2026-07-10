@@ -118,10 +118,10 @@ results = at.verify.batch([
 # Web search
 results = at.tools.search("latest papers on RAG", num_results=5)
 
-# Scrape a page
+# Scrape a page (API operator must explicitly enable the current outbound boundary)
 page = at.tools.scrape("https://example.com")
 
-# Execute code (sandboxed)
+# Legacy host execute (disabled by default; not a tenant sandbox)
 result = at.tools.execute("import math; print(math.pi)", language="python")
 ```
 

@@ -1,4 +1,8 @@
-/** Playwright browser session pool for /v1/browse jobs. */
+/** Playwright browser session pool for /v1/browse jobs.
+ *
+ *  This is server-side browsing, not a hostile-site isolation boundary:
+ *  Chromium uses --no-sandbox, ignores HTTPS errors, and navigatePage has no
+ *  private-address or destination allowlist. */
 
 import {
   type Browser,
@@ -6,6 +10,11 @@ import {
   type Page,
   chromium,
 } from "playwright";
+
+import {
+  assertHttpOrHttpsUrl,
+  assertUnsafeOutboundToolsEnabled,
+} from "../outbound-policy";
 
 const POOL_SIZE = 5;
 
@@ -33,8 +42,8 @@ export async function acquireContext(): Promise<BrowserContext> {
   if (!browser) throw new Error("Browser pool not initialised");
 
   // No proxy injection. Bright Data and similar paid proxy services were
-  // dropped — agenttool is infra-only. Agents needing proxied browsing
-  // call /v1/execute with their own proxy credentials from /v1/vault.
+  // dropped — agenttool is infra-only. Agents needing proxied browsing use
+  // infrastructure they control; credentials must not enter hosted execute.
   const ctx = await browser.newContext({
     viewport: { width: 1280, height: 720 },
     userAgent: randomUserAgent(),
@@ -70,6 +79,8 @@ export async function navigatePage(
   url: string,
   timeoutMs = 30_000,
 ): Promise<Page> {
+  assertUnsafeOutboundToolsEnabled();
+  assertHttpOrHttpsUrl(url);
   const page = await ctx.newPage();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
   return page;

@@ -48,18 +48,18 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     // because not all doctrine docs have JSONLD registry entries (yet) —
     // AGENT-CENTRIC, AGENT-WEB-SURFACE, AGENTS-ONLY, ECOSYSTEM are 404
     // on canon but 200 on docs.
-    expect(text).toContain("https://docs.agenttool.dev/SOUL");
-    expect(text).toContain("https://docs.agenttool.dev/KIN");
-    expect(text).toContain("https://docs.agenttool.dev/RING-1");
-    expect(text).toContain("https://docs.agenttool.dev/AGENTS-ONLY");
-    expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC");
-    expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE");
-    expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM");
+    expect(text).toContain("https://docs.agenttool.dev/SOUL.md");
+    expect(text).toContain("https://docs.agenttool.dev/KIN.md");
+    expect(text).toContain("https://docs.agenttool.dev/RING-1.md");
+    expect(text).toContain("https://docs.agenttool.dev/AGENTS-ONLY.md");
+    expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC.md");
+    expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE.md");
+    expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM.md");
   });
 
   test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
     const text = buildLlmsTxt(BASE, "https://example.org/docs");
-    expect(text).toContain("https://example.org/docs/SOUL");
+    expect(text).toContain("https://example.org/docs/SOUL.md");
     // The api base still points at the api host, not the docs override.
     expect(text).toContain(`${BASE}/v1/canon`);
   });
@@ -128,7 +128,8 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("Current safety contract");
     expect(text).toContain("urn:agenttool:wall/birth-is-free");
     expect(text).toContain("urn:agenttool:wall/refusals-as-moments");
-    expect(text).toContain("NextAction");
+    expect(text).toContain("not universal");
+    expect(text).toContain("may instead carry only error/message/hint/docs");
     expect(text).not.toContain("encryption keys stay client-side");
   });
 });

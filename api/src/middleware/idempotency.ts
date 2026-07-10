@@ -2,7 +2,7 @@
  *
  *  Pattern (industry-standard Idempotency-Key shape, also used by OpenAI):
  *    - Client sends `Idempotency-Key: <uuid>` on a write request
- *    - Server stores (key → response body + status) on success
+ *    - Server stores (key → JSON response body + status) after completion
  *    - On retry with the same key, server replays the cached response
  *      and adds `Idempotent-Replay: true` header so the client knows
  *      the work didn't run again
@@ -11,11 +11,13 @@
  *    - Only POST/PUT/PATCH/DELETE — GET retries are already idempotent
  *    - Only when Idempotency-Key header is present (opt-in)
  *    - Only when project is auth'd (key is namespaced by project)
- *    - Caches 2xx + 4xx; never 5xx (those are likely transient)
+ *    - Caches JSON responses below 500; never 5xx
+ *    - Cache key is project + path + key. It does not include method or body.
+ *    - No atomic in-flight reservation: concurrent first requests may both run.
  *
  *  Failure mode:
- *    - Redis unreachable → fail open (pass-through). The agent's call
- *      succeeds; idempotency just isn't enforced for that request.
+ *    - Redis absent/unreachable or a non-JSON response → fail open. The call
+ *      succeeds; idempotency is not enforced for that request.
  *      Better than blocking writes when our cache is down. */
 
 import type { MiddlewareHandler } from "hono";

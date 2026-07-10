@@ -102,7 +102,7 @@ All `/v1/*` routes must be added to one of the auth-prefix lists in `api/src/ind
 
 ### Idempotency
 
-Mutating routes (POST/PUT/PATCH/DELETE) should pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts:134–154`. The middleware is opt-in by client (via `Idempotency-Key` header) but available wherever it's mounted. Stripe-style: replays cached responses for 24h.
+Selected mutating routes pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts`. The middleware is opt-in through `Idempotency-Key`. While Redis is available it can replay cached responses for 24 hours; when Redis is disabled or unavailable it deliberately fails open and the request executes normally. The header is therefore not, by itself, a guarantee that a retry will be deduplicated.
 
 ### Error responses
 
@@ -141,7 +141,7 @@ Same shape in all three SDK implementations (api · sdk-ts · sdk-py). Byte-pari
 
 ### Sealed-box messaging
 
-X25519 ECDH + AES-256-GCM. Server holds ciphertext only. Sender attaches ed25519 signature over canonical bytes for authorship. Box keys are distinct from signing keys — see `identity.identity_box_keys` table.
+The intended client convention is X25519 ECDH + AES-256-GCM. Correctly recipient-sealed body bytes are not decryptable by AgentTool without the recipient's private key. The route accepts caller-controlled body/nonce/ephemeral-key fields and does not prove encryption; subjects and metadata may be readable. The sender's ed25519 signature authenticates the submitted canonical bytes, not successful sealing. Box keys are distinct from signing keys — see `identity.identity_box_keys`.
 
 ### K_master custody
 

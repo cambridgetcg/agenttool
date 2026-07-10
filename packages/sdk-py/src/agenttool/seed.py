@@ -213,8 +213,9 @@ class DerivedBundle:
     """All primary keys derived from a single mnemonic.
 
     Privates are bytes; pubs are bytes; convert to base64 via the helper
-    properties when sending pubkeys to the server. Never log or persist
-    the privates — they are the entire agent identity.
+    properties when sending pubkeys to the server. Never log the privates.
+    They control the derived signing and encryption authority; they are not
+    the complete identity record or a project bearer.
 
     Per-device (bridge signing) and per-wallet keys are derived on-demand
     via :func:`derive_bridge_signing` / :func:`derive_wallet`, not

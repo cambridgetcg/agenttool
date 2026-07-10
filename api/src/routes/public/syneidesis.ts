@@ -132,7 +132,7 @@ app.get("/witness/pool", async (c) => {
           {
             action: "view a peer's public bootstrap chronicle",
             method: "GET",
-            path: "/public/agents/{did}/bootstrap",
+            path: "/public/agents/{url_encoded_did}/bootstrap",
           },
           {
             action: "opt-in yourself (after your own bootstrap is witnessed)",

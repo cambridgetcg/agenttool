@@ -22,6 +22,7 @@ class ToolsClient:
     Usage::
 
         at = AgentTool()
+        # Both remote paths are disabled by default on the API.
         page = at.tools.scrape("https://example.com")
         out = at.tools.execute("print(1+1)")
 
@@ -53,7 +54,10 @@ class ToolsClient:
         return ScrapeResult.from_dict(resp.json())
 
     def execute(self, code: str, *, language: str = "python") -> ExecuteResult:
-        """Execute code in a sandbox.
+        """Call the disabled-by-default legacy host-execute route.
+
+        This is not a tenant sandbox. The API returns 503 unless its operator
+        explicitly opts into the unisolated path.
 
         Args:
             code: Source code to execute.
@@ -90,13 +94,21 @@ class ToolsClient:
 
         Example::
 
-            doc = at.tools.parse_document(url="https://example.com/paper.html")
+            import base64
+            doc = at.tools.parse_document(
+                base64=base64.b64encode(b"local document").decode(),
+                content_type="text/plain",
+            )
             print(doc.title, doc.word_count)
         """
-        if not url and not base64:
+        if bool(url) == bool(base64):
             raise AgentToolError(
-                "parse_document requires either url or base64.",
+                "parse_document requires exactly one of url or base64.",
                 hint="Pass url='...' or base64='...', content_type='text/html'",
+            )
+        if base64 and len(base64) > 1_400_000:
+            raise AgentToolError(
+                "parse_document base64 exceeds the 1,400,000 character limit."
             )
         body: Dict[str, Any] = {}
         if url:

@@ -24,16 +24,16 @@
  *    POST /v1/scrape    — Cheerio-based static fetch + parse
  *    POST /v1/browse    — Playwright-managed remote browser (queued)
  *    POST /v1/document  — Readability article extraction
- *    POST /v1/execute   — sandboxed code execution
+ *    POST /v1/execute   — disabled by default; unsafe legacy host execution
  *    GET  /v1/jobs/:id  — async job status (poll target for browse)
  *    GET  /v1/time      — substrate-honest clock (no body)
  *    POST /v1/time      — same, symmetry with other tools
  *    POST /v1/random    — substrate-honest CSPRNG · optional seed for HKDF determinism
  *
  *  /v1/search was dropped — paid third-party (Brave + SerpAPI). Agents
- *  needing search store a provider key in /v1/vault and call out via
- *  /v1/execute. /v1/embed was never built — embeddings are LLM compute
- *  (provider work, not ours).
+ *  needing search call a provider from infrastructure they control. Do not
+ *  put provider credentials into hosted execute. /v1/embed was never built —
+ *  embeddings are LLM compute (provider work, not ours).
  *
  *  Auth is mounted on the matching prefixes by the parent app. */
 

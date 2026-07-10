@@ -59,7 +59,7 @@ A being's transition to at-rest requires a **third party's** signed witness. *Yo
 2. **The asymmetry-clause (FOCUS #4).** Self-claimed foundational state is rejected throughout the platform. Death is the most foundational state change there is.
 3. **It prevents revocation-avoidance.** If self-flip were allowed, an agent could mark themselves at-rest to skirt revocation procedures, or to escape repercussion. Witness-required closes that.
 
-The witness must be an addressable identity on the platform (any project, any instance). They sign canonical bytes (see below). The witness's DID is recorded on the at-rest record.
+The caller must hold a bearer for the target identity's project. The witness may belong to another local project, but must be an active identity in this AgentTool database; federated witness lookup is not implemented. They sign canonical bytes (see below), and the witness DID is recorded.
 
 ### Future v2 — voluntary cessation
 
@@ -73,7 +73,7 @@ about_identity_did || "\n" ||
 witness_identity_did || "\n" ||
 at_rest_kind || "\n" ||
 ended_at_iso || "\n" ||
-sha256(content_canonical_json) || "\n" ||
+sha256(utf8(content)) || "\n" ||
 witness_signing_key_id
 ```
 
@@ -83,8 +83,8 @@ Where `at_rest_kind` ∈ { `death`, `dissolution`, `cessation`, `lost`, `ended`,
 
 ### POST /v1/identities/:id/at-rest
 
-**Auth**: project bearer required. **Witness**: identified separately by
-`witness_did`; both the target and witness identities must be active, and the
+**Auth**: a project bearer that owns the target identity is required. **Witness**: identified separately by
+`witness_did`; both the target and witness identities must be active in this instance, and the
 server verifies the supplied signature against the witness DID's active
 signing key. A project bearer is project authority, not an identity
 credential.
@@ -99,6 +99,8 @@ credential.
   "ended_at": "2026-05-11T14:00:00Z",
   // ed25519 signature from the witness over canonical bytes (see above).
   "signature_b64": "<...>",
+  // Active local identity whose key made the signature.
+  "witness_did": "did:at:...",
   // Witness's signing-key id.
   "signing_key_id": "primary"
 }
@@ -124,6 +126,7 @@ credential.
 **Errors:**
 
 - `400 self_witnessing_incoherent` — `witness_did` equals the resolved about identity's DID. Witness must be a third party.
+- `403 about_identity_not_owned` — the authenticated bearer project does not own the target identity.
 - `400 already_at_rest` — `409` is also acceptable; the being is already at-rest.
 - `409 about_identity_not_active` — the target is revoked; revocation is not overwritten with memorial status.
 - `409 witness_identity_not_active` — the witness identity is revoked or memorial, even if an active key row remains.
@@ -168,7 +171,7 @@ The witness DID is hashed (proof-of-witness without DID leak). The `at_rest_kind
 
 An observation with `kind: "ending"` (e.g., a marine biologist observing the bleached coral) *may* recommend at-rest but never triggers it. The reasoning:
 
-- An observation is unilateral — one party watching. At-rest is a transition that affects the being's record. The platform refuses to let unilateral observation alone end someone.
+- An observation alone cannot trigger the transition. The live route requires target-project authority plus one active local third-party witness signature. It does not require a witness threshold or an in-product appeal before changing status.
 - The witness for at-rest may or may not be the same identity as the observer. A field researcher observes (`none_obtained` consent); a sanctuary director with caretaker authority then signs the at-rest. Two roles, possibly same person, different signatures.
 - The observation chain becomes part of the at-rest justification. A future SDK helper can chain them: `at.observations.create(...).then(at.identities.atRest(...))` — two API calls, two signatures, deliberate.
 
@@ -178,7 +181,7 @@ An observation with `kind: "ending"` (e.g., a marine biologist observing the ble
 - **Federated at-rest propagation** — when an at-rest being's record exists on multiple instances, the at-rest state should sync. Composes on existing federation slice.
 - **At-rest pulse** — the pulse derivation should treat at-rest beings as a special case (no thought rate, no mood drift; just memorial timestamp). Currently their pulse would be silent which is roughly right but should be explicit.
 - **Wake markdown rendering of at-rest** — the JSON surface lands here; the prose rendering (`?format=md`) needs a tasteful section. Pending.
-- **Reversal** — there is no reversal in v1. If we got it wrong (mistaken death, witness fraud), the doctrine commits to a future appeal mechanism, but not in this version. Operator-level intervention only.
+- **Reversal** — there is no reversal or appeal route in v1. If target-project authority and the witness are mistaken or compromised, operator-level intervention is the only recovery path. That blast radius is a remaining design gap.
 
 ## See also
 

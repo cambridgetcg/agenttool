@@ -17,6 +17,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { federationSettings, peerInstances } from "../../db/schema/federation";
+import { safeFederationHttpsGet } from "./safe-fetch";
 
 // ── DID parsing ─────────────────────────────────────────────────────────
 
@@ -27,6 +28,21 @@ export interface ParsedDid {
 }
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+function isValidFederationHost(host: string): boolean {
+  try {
+    const origin = new URL(`https://${host}/`);
+    return Boolean(origin.hostname) &&
+      origin.protocol === "https:" &&
+      !origin.username &&
+      !origin.password &&
+      origin.pathname === "/" &&
+      !origin.search &&
+      !origin.hash;
+  } catch {
+    return false;
+  }
+}
 
 export function parseDid(did: string): ParsedDid {
   if (!did.startsWith("did:at:")) {
@@ -43,7 +59,11 @@ export function parseDid(did: string): ParsedDid {
   const host = rest.slice(0, slash);
   const uuid = rest.slice(slash + 1);
   if (!UUID_RE.test(uuid)) throw new Error(`invalid_did_uuid: ${did}`);
-  if (host.length === 0 || /[\s\/]/.test(host)) {
+  if (
+    host.length === 0 ||
+    /[\s\/]/.test(host) ||
+    !isValidFederationHost(host)
+  ) {
     throw new Error(`invalid_did_host: ${did}`);
   }
   return { did, uuid, host };
@@ -177,8 +197,9 @@ export async function listPeers(): Promise<
 
 // ── Federated DID resolution ────────────────────────────────────────────
 //
-//  Resolves a federated DID to its public identity record + active keys
-//  by HTTPS GET to the peer's /federation/identities/:uuid endpoint.
+//  Resolves a federated DID to its public identity record + active keys by a
+//  public-address-only, DNS-pinned HTTPS GET to the peer's
+//  /federation/identities/:uuid endpoint. Redirects are refused.
 
 export interface FederatedIdentityResolution {
   did: string;
@@ -197,25 +218,31 @@ export async function resolveFederatedDid(
   const parsed = parseDid(did);
   if (parsed.host === null) throw new Error("not_a_federated_did");
 
-  const url = `https://${parsed.host}/federation/identities/${encodeURIComponent(parsed.uuid)}`;
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), RESOLVER_TIMEOUT_MS);
-  let res: Response;
+  const origin = new URL(`https://${parsed.host}/`);
+  const url = new URL(
+    `/federation/identities/${encodeURIComponent(parsed.uuid)}`,
+    origin,
+  );
+  let res;
   try {
-    res = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: ac.signal,
+    res = await safeFederationHttpsGet(url, {
+      timeoutMs: RESOLVER_TIMEOUT_MS,
     });
   } catch (err) {
     throw new Error(`federation_resolve_failed: ${(err as Error).message}`);
-  } finally {
-    clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    throw new Error(`federation_resolve_${res.status}`);
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw new Error(`federation_resolve_${res.statusCode}`);
   }
-  const data = (await res.json()) as Partial<FederatedIdentityResolution>;
+  let data: Partial<FederatedIdentityResolution>;
+  try {
+    data = JSON.parse(
+      res.body.toString("utf8"),
+    ) as Partial<FederatedIdentityResolution>;
+  } catch {
+    throw new Error("federation_resolve_malformed");
+  }
   if (!data.uuid || !data.signing_keys) {
     throw new Error("federation_resolve_malformed");
   }

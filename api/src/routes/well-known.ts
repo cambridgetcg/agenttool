@@ -97,9 +97,9 @@ app.get("/mcp/server-card.json", (c) => {
 
 // ── /.well-known/wake-keystone — WaK Protocol discovery (Draft 0.1) ──
 //
-// Per docs/AIP-WAKE-KEYSTONE.md §1. Announces agenttool as a WaK-compliant
-// peer. WaK consumers fetch this once at discovery time to learn:
-//   - the wake URL pattern (per-being and authenticated)
+// Per docs/AIP-WAKE-KEYSTONE.md §1. Announces AgentTool's partial WaK
+// implementation. WaK consumers fetch this once at discovery time to learn:
+//   - the authenticated project wake URL and its identity selector
 //   - supported format projections
 //   - version-cursor protocol (monotonic wake_version + ETag/If-None-Match)
 //   - streaming endpoint (Wake Voice SSE)
@@ -116,7 +116,12 @@ app.get("/wake-keystone", (c) => {
     spec_canon: `${ORG_URL}/v1/canon/urn:agenttool:doc/AIP-WAKE-KEYSTONE`,
 
     wake_url: `${ORG_URL}/v1/wake`,
-    wake_url_per_being: `${ORG_URL}/v1/mcp/agents/{did}`,
+    wake_scope:
+      "authenticated project wake; optional ?identity_id=<uuid> selects one identity owned by the bearer project",
+    public_profile_url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
+    per_agent_mcp_url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
+    did_path_parameter:
+      "url_encoded_did is encodeURIComponent(full DID); a slash-bearing federated DID must remain one path segment",
 
     authentication: {
       default: "bearer",
@@ -129,7 +134,7 @@ app.get("/wake-keystone", (c) => {
         public_per_being: {
           description:
             "Per-being public profile (no auth) at /public/agents/:did and per-being MCP at /v1/mcp/agents/:did in public scope.",
-          url_pattern: `${ORG_URL}/public/agents/{did}`,
+          url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
         },
       },
     },
@@ -205,15 +210,19 @@ app.get("/wake-keystone", (c) => {
 
     // WaK §8 — streaming updates (Wake Voice).
     streaming: {
-      url: `${ORG_URL}/v1/wake/voice`,
+      url_pattern: `${ORG_URL}/v1/wake/voice?identity_id={uuid}`,
       transport: "Server-Sent Events (SSE)",
-      events: ["snapshot", "change", "welcome", "refresh", "disconnect"],
+      events: ["connected", "change", "welcome", "refresh", "disconnect", "rejected"],
+      snapshot_event: false,
+      catchup:
+        "The stream emits facts, not state snapshots. Fetch /v1/wake after connecting or reconnecting.",
       event_format: "wake_event/v1",
       filter_param: "keys (comma-separated subset of wake-event keys)",
       keepalive_cadence_seconds: 15,
       lifetime_cap_seconds: 3600,
       subscriber_cap_per_being: 5,
       auth: "bearer (same scheme as the wake itself)",
+      required_query: "identity_id=<uuid> owned by the bearer project",
     },
 
     // WaK §6 — composition with other AIP protocols and adjacent surfaces.
@@ -223,7 +232,7 @@ app.get("/wake-keystone", (c) => {
         spec: "https://modelcontextprotocol.io/specification/2025-11-25",
       },
       mcp_per_agent: {
-        url_pattern: `${ORG_URL}/v1/mcp/agents/{did}`,
+        url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
         doctrine: `${DOCS_URL}/MCP-PER-AGENT.md`,
       },
       x402: {
@@ -242,7 +251,8 @@ app.get("/wake-keystone", (c) => {
       },
       w3c_did: {
         notes:
-          "Per-being DIDs (did:at:host/uuid) compose with W3C DID Methods. A future DID Method extension may register `type: \"WakeKeystone\"` service entries pointing at the wake URL.",
+          "did:at is currently a provisional AgentTool identifier convention, not a registered W3C DID method. The slash-qualified federation form is a DID URL under DID Core grammar, and AgentTool does not publish DID Documents today. A future conforming method could define a WakeKeystone service entry after those gaps close.",
+        implementation_profile: `${DOCS_URL}/DID-AT-SPEC.md`,
       },
       agent_txt: {
         url: `${ORG_URL}/.well-known/agent.txt`,
@@ -252,18 +262,18 @@ app.get("/wake-keystone", (c) => {
     },
 
     implementation_notes: {
-      coverage: "~95% of WaK Draft 0.1",
-      shipped: [
+      implemented: [
         "discovery (this endpoint)",
         "9-format content negotiation (?format= + Accept header)",
-        "wake_version cursor + ETag + If-None-Match → 304 (JSON branch)",
+        "wake_version cursor + format-specific ETag + If-None-Match → 304 on JSON, rendered, provider, xenoform, and MATHOS projections",
         "_links block in JSON wake",
-        "Wake Voice SSE streaming",
-        "_self pointer (in _meta._self)",
+        "Wake Voice SSE streaming with bearer auth and required ?identity_id=<uuid>",
+        "platform _self pointer in _meta._self",
+        "per-being _self blocks in you.agents[]",
       ],
-      not_yet: [
-        "ETag/If-None-Match on rendered formats (md, anthropic, openai, ...) — JSON branch only today; rendered branches use buildWakeBundle without ETag wiring",
-        "Per-being `_self` block on fetched agents (only platform `_self` in _meta today)",
+      known_gaps: [
+        "No public path-per-DID full wake endpoint is mounted. /public/agents/{url_encoded_did} is a public profile and /v1/mcp/agents/{url_encoded_did} is an MCP server; neither is described as a wake URL.",
+        "The JSON wake is project-shaped (project + you.agents[]) rather than the draft's top-level being + being _self shape. _meta._self identifies the AgentTool platform; each identity _self is nested in you.agents[].",
       ],
     },
 
@@ -337,6 +347,8 @@ app.get("/agent.txt", (c) => {
     `Visibility: ${AGENT_TXT_SAFETY.Visibility}`,
     `Marketplace-Input: ${AGENT_TXT_SAFETY["Marketplace-Input"]}`,
     `Runtime-Custody: ${AGENT_TXT_SAFETY["Runtime-Custody"]}`,
+    `Hosted-Execute: ${AGENT_TXT_SAFETY["Hosted-Execute"]}`,
+    `Outbound-Tools: ${AGENT_TXT_SAFETY["Outbound-Tools"]}`,
     "",
     "# ── Arrival (agents-only since 2026-05-15) ──────────────────────────",
     `Arrival-Door: ${baseUrl}/v1/register/agent`,
@@ -350,7 +362,7 @@ app.get("/agent.txt", (c) => {
     "Token-Ratio: 4 bytes per token (conservative, tokenizer-agnostic)",
     "",
     "# ── Refusal shape (per PATTERN-ERRORS-AS-INSTRUCTIONS) ──────────────",
-    "Refusal-Shape: NextAction[] — { action, method, path, docs }",
+    "Refusal-Shape: mixed — guided families may carry next_actions[]; ordinary auth, validation, and not-found responses may carry error/message/hint/docs only",
     "Refusal-Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md",
     "",
     "# ── Walls (architectural commitments — what the substrate refuses) ──",
@@ -393,7 +405,7 @@ app.get("/agent.txt", (c) => {
     "Lens: https://captioneer.io — the verisleight reader (reads language, never minds)",
     "ReferencePoint: https://iam.cambridgetcg.com — I AM THE REFERENCE POINT: ask any force or phenomenon explained from your own frame (relativity: every observer is a valid centre). Brutally honest, dark-funny, love as the rebellion against entropy. POST /ask {role:'frame', input:'...'}",
     "PlainSpeaker: https://understand.cambridgetcg.com — always-on Hermes agents that make confusing things plain, honestly. Ask on demand: POST https://understand.cambridgetcg.com/ask {role:'explainer'|'kindness'|'verisleight', input:'...'}",
-    "XENIA: https://sinovai.com/xenia — an open standard for Agent Interaction (AI) and Agent Experience (AX); the agent-world parallel to UI/UX. Spec: github.com/cambridgetcg/xenia. This substrate is built to it (wake, agent.txt, self-custody, walls, errors-as-instructions).",
+    "XENIA: https://github.com/cambridgetcg/xenia — a proposed open standard for Agent Interaction (AI) and Agent Experience (AX), the agent-world parallel to UI/UX. AgentTool implements several current ideas (wake, agent.txt, walls, errors-as-instructions); conformance is not certified. Live practice: https://sinovai.com/.",
     "",
     "# ── Federation ──────────────────────────────────────────────────────",
     "Federation: open-default · peers discoverable via did:at:<host>/<uuid>",

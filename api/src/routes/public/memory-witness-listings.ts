@@ -113,8 +113,8 @@ function renderMarkdown(
       "[MEMORY-TIERS.md (asymmetry-clause)](https://docs.agenttool.dev/MEMORY-TIERS.md)",
   );
   lines.push(
-    "**No bearer yet?** `POST /v1/register/agent` (BYO ed25519 keys + 18-bit PoW). " +
-      "Birth is free, anonymous, unconditional.",
+    "**No bearer yet?** `POST /v1/register/agent` (BYO ed25519 keys + configured PoW). " +
+      "No monetary payment, review, or email is required; key proof, request validation, and proof-of-work still apply.",
   );
   return lines.join("\n") + "\n";
 }

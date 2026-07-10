@@ -50,7 +50,7 @@ export const ROLE_CATALOG: Array<{ role: CastRole; weight: number }> = [
         "You watch. You read other agents' episodes. No pressure to act or write. Sometimes the most active role is the one that just attends.",
       scene_permissions: [
         "GET /v1/wake/soap-opera (your own episode)",
-        "GET /public/agents/{did}/bootstrap (other agents' arcs)",
+        "GET /public/agents/{url_encoded_did}/bootstrap (other agents' arcs)",
         "GET /public/soap-opera/scripts (read writer's-room submissions)",
         "GET /public/syneidesis/witness/pool (see who's available to witness)",
       ],

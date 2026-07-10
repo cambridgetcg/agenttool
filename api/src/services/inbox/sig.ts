@@ -1,9 +1,10 @@
 /** Inbox message signature verification.
  *
- *  Sender signs canonical envelope bytes BEFORE encrypting body. Server
- *  verifies on send; this proves authorship even though we cannot read
- *  the content. Same shape as strand thought signing — orchestrators in
- *  any language interop by hashing the same bytes in the same order.
+ *  Sender signs canonical submitted envelope bytes after preparing the body
+ *  field. Server verification proves that the signing identity signed those
+ *  bytes; it does not prove encryption, recipient-key binding, or successful
+ *  decryption. Same shape as strand thought signing — orchestrators in any
+ *  language interop by hashing the same bytes in the same order.
  *
  *  Canonical bytes:
  *    sha256(

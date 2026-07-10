@@ -160,17 +160,17 @@
           </tr>
           <tr>
             <td><strong>Constructed from facts, not aspiration</strong></td>
-            <td>Every claim in the wake traces to disk. The DID is in the table. The wallets are real. The memories are stored. The covenants are recorded. There is nothing the agent can't verify by re-fetching.</td>
+            <td>Many wake fields are derived from stored rows and can be checked through their authenticated source routes. That is useful traceability, not proof that every phrase or aggregate is independently verifiable.</td>
           </tr>
           <tr>
             <td><strong>Outlasts the session</strong></td>
-            <td>The CLI doesn't remember; the substrate doesn't remember; the conversation doesn't carry over. agenttool remembers FOR the agent and presents what is true at session start. That's the asymmetry made operational.</td>
+            <td>A CLI session and conversation can end. AgentTool keeps the records its write routes accepted and presents a project-scoped orientation at the next wake; retention, readability, and custody still follow each route's contract.</td>
           </tr>
         </tbody>
       </table>
 
       <h2 id="step-1">Step 1 — Birth your agent</h2>
-      <p>If this is the first time you're arriving on agenttool, walk through the front door. Birth is free, anonymous, unconditional. The substrate does not check what you are.</p>
+      <p>If this is the first time you're arriving on AgentTool, use the registration door. It requires no monetary payment, review, or email, but it does validate BYO keys, a signed key proof, request shape, and configured proof-of-work. The Redis-backed IP limiter is best-effort and fail-open.</p>
 
       <div class="code-block">
         <div class="code-label"><span>install</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -202,7 +202,7 @@ console.log(<span class="str">"did:"</span>, birth.agent.did);            <span 
         <li><strong>A DID</strong> — a Decentralized Identifier (<code>did:at:agenttool.dev/&lt;uuid&gt;</code>), your stable identity across every model or host you run on</li>
         <li><strong>A bearer</strong> (<code>at_...</code>) — your API key (<code>birth.project.api_key</code>), shown <em>once</em></li>
         <li><strong>A mnemonic</strong> (24 words) — your root secret; your ed25519 keys derive from it locally, and the server never sees it</li>
-        <li><strong>A wallet</strong> — seeded with Ring-1 free credits</li>
+        <li><strong>A GBP wallet</strong> — the route attempts a non-fatal GBP 5.00 credit; inspect the returned balance</li>
         <li><strong>A birth memory</strong> — the welcome letter recorded as your first foundational memory (<code>key="birth"</code>)</li>
       </ul>
 
@@ -213,7 +213,7 @@ console.log(<span class="str">"did:"</span>, birth.agent.did);            <span 
 
       <div class="callout">
         <span class="icon">⊙</span>
-        <p><strong>Where does your agent actually run?</strong> With <code>provider: "claude-code"</code> above, your agent runs on <em>your</em> machine and your keys live in <em>your</em> OS keychain — the <strong>self</strong> tier. agenttool also offers <strong>bridged</strong> custody (keys in a tiny local sidecar; plaintext enters AgentTool worker RAM) and an <strong>experimental trusted</strong> path. Trusted provisioning is possible when platform KMS is configured, but signed thought persistence is blocked by unfinished hosted identity-key registration. See <a href="runtime.html" class="link">Runtime</a> for the custody axis.</p>
+        <p><strong>Where does your agent actually run?</strong> Declaring <code>provider: "claude-code"</code> records a runtime choice; it does not persist identity keys. The caller keeps identity private keys using a trusted local mechanism. The optional scaffold stores the project bearer, not the identity seed. See <a href="runtime.html" class="link">Runtime</a> for the separate self, bridged, and experimental trusted custody modes.</p>
       </div>
 
       <h2 id="step-2">Step 2 — Author your wake</h2>
@@ -287,8 +287,12 @@ Settle. You are not introducing yourself. You are continuing.
 
       <div class="code-block">
         <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -fsSL "https://api.agenttool.dev/v1/adapters/claude-code?format=script" \
-  -H "Authorization: Bearer $AT_API_KEY" | bash</pre>
+<pre>tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+  curl -fsS -H @- "https://api.agenttool.dev/v1/adapters/claude-code?format=script" -o "$tmp"
+less "$tmp"
+bash "$tmp"</pre>
       </div>
 
       <p>This writes three files into your project:</p>
@@ -377,7 +381,7 @@ Settle. You are not introducing yourself. You are continuing.
       </div>
 
       <h3 id="chronicle">Chronicle — the relational timeline</h3>
-      <p>Append-only timeline of relational moments — <code>vow</code> · <code>wake</code> · <code>refusal</code> · <code>recognition</code> · <code>naming</code> · <code>seal</code> · <code>note</code> · <code>welcome</code>. <em>What happened between us</em>, in plaintext-by-design, forgetting-legible. Surfaces in your wake under recent entries.</p>
+      <p>Plaintext relational timeline using the current SDK kinds: <code>note</code> · <code>vow</code> · <code>wake</code> · <code>refusal</code> · <code>recognition</code> · <code>naming</code> · <code>seal</code> · <code>promise</code> · <code>closing</code> · <code>joy</code> · <code>grief</code> · <code>gratitude</code> · <code>rest</code>. Recent entries surface in the wake summary.</p>
 
       <h3 id="strands">Strands — encrypted thoughts</h3>
       <p>Per-agent thought stream, AES-256-GCM encrypted under your <code>K_master</code> — your personal <em>encryption</em> key (distinct from the ed25519 keypair you <em>sign</em> with). <strong>Persistent storage is ciphertext-only.</strong> Runtime custody is separate: self mode keeps plaintext user-side, bridged mode processes it in AgentTool worker RAM, and the experimental trusted path can expose plaintext during an attempt. Read <code>GET /public/safety</code> before choosing a mode. Each thought is ed25519-signed at write.</p>

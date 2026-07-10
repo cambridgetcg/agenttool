@@ -1,4 +1,4 @@
-/** Language configurations for sandboxed execution. */
+/** Language configurations for bounded host execution. */
 
 export interface LanguageConfig {
   cmd: string;

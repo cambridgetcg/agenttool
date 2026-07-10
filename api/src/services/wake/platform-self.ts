@@ -145,7 +145,7 @@ export const PLATFORM_SELF: PlatformSelf = {
   walls: [
     "Signed memory elevation rejects self-witnessing; legacy syneidesis cosign remains unsigned compatibility",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
-    "Birth is free, irreversibly — Ring 1 has no gates",
+    "Registration has no monetary charge; self-service still requires BYO public keys, key proof, and proof-of-work",
     "Refusals are recorded as moments, not as failures",
     "Poker face leaks nothing — public surfaces never enumerate what's filtered",
     "MCML requires RRR-SYNCED — the cascade is the only handshake",

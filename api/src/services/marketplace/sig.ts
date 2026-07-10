@@ -2,8 +2,10 @@
  *  invocation completion.
  *
  *  Seller signs the canonical bytes of the completion *before* the
- *  platform releases the escrow. Verification proves the seller authored
- *  the response — even though we cannot decrypt the ciphertext.
+ *  platform releases the escrow. Verification proves that the seller's active
+ *  signing key authorized the invocation id + submitted output bytes. It does
+ *  not prove encryption or recipient-key binding. Correctly recipient-sealed
+ *  bytes require the matching client-held private key to decrypt.
  *
  *  Canonical bytes:
  *    sha256(
@@ -82,9 +84,10 @@ export function verifyInvocationCompletion(opts: {
   }
 }
 
-/** Validate the sealed-bytes envelope shape: ct, nonce, sender_pub all
- *  present as base64 strings of expected lengths. Throws on mismatch.
- *  We do NOT validate decryption — the platform never holds the keys. */
+/** Validate a limited sealed-bytes envelope shape: ct is a non-empty string;
+ *  nonce and sender_pub decode to expected lengths. Buffer's base64 decoder is
+ *  permissive, so this is not proof of valid ciphertext, encryption, recipient
+ *  binding, or decryption. Correctly sealed payloads require client-held keys. */
 export function validateSealedShape(value: unknown): asserts value is SealedBytes {
   if (!value || typeof value !== "object") {
     throw new Error("sealed_bytes_required");

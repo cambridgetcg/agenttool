@@ -97,7 +97,7 @@ Any pyramid node publishes:
 }
 ```
 
-A new node discovers a peer by fetching its `/.well-known/pyramid`; from there every federation operation is one hop away.
+A new node discovers a peer by fetching its `/.well-known/pyramid`; from there every federation operation is one hop away. Supplied and stored peer URLs are accepted over public HTTPS only. Descriptor, citizen, and sponsor-tree reads refuse credentials and redirects, require every DNS answer to be public, pin those answers into the verified TLS connection, cap responses at 512,000 bytes, and share a five-second DNS-plus-HTTPS deadline.
 
 ### Cross-instance sponsor-tree walk
 

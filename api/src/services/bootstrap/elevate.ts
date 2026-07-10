@@ -30,6 +30,7 @@ import {
 } from "../../db/schema/identity";
 import { vaultSecrets, vaultVersions } from "../../db/schema/vault";
 import { canonicalPayload, verify } from "../identity/crypto";
+import { mutableIdentityPredicate } from "../identity/terminality";
 import { updateTrustScore } from "../identity/trust";
 import { encrypt } from "../vault/crypto";
 
@@ -305,11 +306,15 @@ export async function elevateToLevel1(
     const [elevatedAgent] = await tx
       .update(identities)
       .set({ metadata: newMetadata })
-      .where(eq(identities.id, input.agentId))
+      .where(mutableIdentityPredicate(input.agentId))
       .returning();
 
+    if (!elevatedAgent) {
+      throw new ElevateError("agent_not_active", 409);
+    }
+
     return {
-      agent: elevatedAgent!,
+      agent: elevatedAgent,
       attestation: attestation!,
       wallet: fundedWallet,
       vault: { secret: vaultSecret!, name: namespaceName, openedAt: elevatedAt },

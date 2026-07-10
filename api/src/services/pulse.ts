@@ -1,5 +1,6 @@
 /** Shared aggregator behind /v1/identities/:id/pulse and
- *  /public/agents/:did/pulse. Pure SQL aggregation — no new schema.
+ *  the authenticated /v1/identities/:id/pulse route. The former public
+ *  per-agent pulse route module still imports this helper but is not mounted.
  *
  *  Two routes, two privacy postures, one helper:
  *    • includePrivate=true  — auth route; project owner sees everything

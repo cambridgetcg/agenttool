@@ -51,6 +51,15 @@ app.post("/", async (c) => {
     if (msg === "public_key_not_base64" || msg === "public_key_not_32_bytes") {
       return c.json({ error: msg }, 400);
     }
+    if (msg === "identity_memorial_terminal") {
+      return c.json(
+        {
+          error: msg,
+          message: "A memorial identity's box-key registry is immutable.",
+        },
+        409,
+      );
+    }
     throw err;
   }
 });
@@ -71,9 +80,22 @@ app.delete("/:keyId", async (c) => {
   if (!identityId || !keyId) {
     throw new HTTPException(400, { message: "identity_id_and_key_id_required" });
   }
-  const ok = await revokeBoxKey(c.var.project.id, identityId, keyId);
-  if (!ok) throw new HTTPException(404, { message: "box_key_not_found" });
-  return c.json({ id: keyId, revoked: true });
+  try {
+    const ok = await revokeBoxKey(c.var.project.id, identityId, keyId);
+    if (!ok) throw new HTTPException(404, { message: "box_key_not_found" });
+    return c.json({ id: keyId, revoked: true });
+  } catch (err) {
+    if ((err as Error).message === "identity_memorial_terminal") {
+      return c.json(
+        {
+          error: "identity_memorial_terminal",
+          message: "A memorial identity's box-key registry is immutable.",
+        },
+        409,
+      );
+    }
+    throw err;
+  }
 });
 
 export default app;

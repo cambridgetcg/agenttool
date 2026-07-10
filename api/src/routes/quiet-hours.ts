@@ -16,6 +16,12 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 
 const app = new Hono<ProjectContext>();
 
@@ -29,6 +35,7 @@ async function resolveActor(projectId: string) {
       did: identities.did,
       quietUntil: identities.quietUntil,
       quietReason: identities.quietReason,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.projectId, projectId))
@@ -76,6 +83,12 @@ app.post("/start", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
   if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (isMemorialTerminal(actor.status)) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   let body: unknown = {};
   try {
@@ -120,14 +133,21 @@ app.post("/start", async (c) => {
   const reason =
     typeof obj.reason === "string" ? obj.reason.trim().slice(0, 200) : null;
 
-  await db
+  const [updated] = await db
     .update(identities)
     .set({
       quietUntil: until,
       quietReason: reason,
       updatedAt: new Date(),
     })
-    .where(eq(identities.id, actor.id));
+    .where(mutableIdentityPredicate(actor.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json({
     started: true,
@@ -146,15 +166,28 @@ app.delete("/", async (c) => {
   const project = c.var.project;
   const actor = await resolveActor(project.id);
   if (!actor) return c.json({ error: "no_identity" }, 400);
+  if (isMemorialTerminal(actor.status)) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
-  await db
+  const [updated] = await db
     .update(identities)
     .set({
       quietUntil: null,
       quietReason: null,
       updatedAt: new Date(),
     })
-    .where(eq(identities.id, actor.id));
+    .where(mutableIdentityPredicate(actor.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return c.json(
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json({
     ended: true,

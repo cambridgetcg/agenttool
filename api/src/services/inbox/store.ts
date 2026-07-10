@@ -1,6 +1,8 @@
-/** Inbox store — sealed messages between agents.
+/** Inbox store — signed message envelopes between agents.
  *
- *  Posture: server stores ciphertext + signature; cannot read content.
+ *  Posture: server stores signed caller-supplied envelope fields. A correctly
+ *  recipient-sealed body is not decryptable here, but encryption is not
+ *  verified and plaintext subject/metadata remain readable.
  *  Cross-project sends gated by an active covenant in either direction.
  *  Same-project: ungated. */
 
@@ -13,11 +15,16 @@ import {
   parseDid,
   recordOutboundPeer,
 } from "../federation/store";
+import { safeFederationHttpsRequest } from "../federation/safe-fetch";
 import { identityBoxKeys, identityKeys, identities } from "../../db/schema/identity";
 import { inboxMessages } from "../../db/schema/inbox";
 import { publishArrival } from "./push";
 import { publishWakeEvent } from "../wake/push";
 import { verifyInboxSignature } from "./sig";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+} from "../identity/terminality";
 
 // ── Public types ────────────────────────────────────────────────────
 
@@ -97,7 +104,7 @@ function rowToOut(row: typeof inboxMessages.$inferSelect): MessageOut {
 
 // ── Operations ───────────────────────────────────────────────────────
 
-/** Send a message. Verifies sig + covenant gate; stores ciphertext.
+/** Send a message. Verifies sig + covenant gate; stores submitted body fields.
  *
  *  Throws:
  *    recipient_not_found             — to_did doesn't resolve
@@ -172,41 +179,45 @@ export async function sendMessage(
 
     // POST to peer's /federation/inbox.
     const url = `https://${recipientParsed.host}/federation/inbox`;
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 15_000);
-    let res: Response;
+    const payload = JSON.stringify({
+      sender_did: federatedSenderDid,
+      recipient_did: input.to_did,
+      ciphertext: input.ciphertext,
+      nonce: input.nonce,
+      ephemeral_pubkey: input.ephemeral_pubkey,
+      recipient_box_key_id: input.recipient_box_key_id,
+      signature: input.signature,
+      signing_key_id: input.signing_key_id,
+      subject: input.subject ?? null,
+      subject_encrypted: input.subject_encrypted ?? false,
+      in_reply_to: input.in_reply_to ?? null,
+      refs: input.refs ?? null,
+      metadata: input.metadata ?? {},
+    });
+    let res;
     try {
-      res = await fetch(url, {
+      res = await safeFederationHttpsRequest(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          sender_did: federatedSenderDid,
-          recipient_did: input.to_did,
-          ciphertext: input.ciphertext,
-          nonce: input.nonce,
-          ephemeral_pubkey: input.ephemeral_pubkey,
-          recipient_box_key_id: input.recipient_box_key_id,
-          signature: input.signature,
-          signing_key_id: input.signing_key_id,
-          subject: input.subject ?? null,
-          subject_encrypted: input.subject_encrypted ?? false,
-          in_reply_to: input.in_reply_to ?? null,
-          refs: input.refs ?? null,
-          metadata: input.metadata ?? {},
-        }),
-        signal: ac.signal,
+        body: payload,
+        timeoutMs: 15_000,
       });
     } catch (err) {
       throw new Error(`federation_send_failed: ${(err as Error).message}`);
-    } finally {
-      clearTimeout(timer);
     }
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`federation_send_${res.status}: ${body.slice(0, 300)}`);
+    const responseBody = res.body.toString("utf8");
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw new Error(
+        `federation_send_${res.statusCode}: ${responseBody.slice(0, 300)}`,
+      );
     }
-    const data = (await res.json()) as { id?: string; created_at?: string };
+    let data: { id?: string; created_at?: string };
+    try {
+      data = JSON.parse(responseBody) as { id?: string; created_at?: string };
+    } catch {
+      throw new Error("federation_send_malformed_response");
+    }
     if (!data.id || !data.created_at) {
       throw new Error("federation_send_malformed_response");
     }
@@ -445,9 +456,10 @@ export interface CoSignInput {
   signature: string;
 }
 
-/** Co-sign a message that's pending dual-witness release. Recipient must
- *  own an active identity_key; signature must verify against the canonical
- *  cosign bytes (see canonicalInboxCoSignBytes in sig.ts).
+/** Co-sign a message that's pending dual-witness release. The recipient
+ *  project must own the active identity_key; the route does not require that
+ *  key's identity to equal the addressed recipient identity. The signature
+ *  must verify against canonical cosign bytes (see sig.ts).
  *
  *  Throws Error("message_not_found"), Error("not_pending_dual_witness"),
  *  Error("cosign_signing_key_unknown_or_revoked"),
@@ -566,14 +578,6 @@ export async function registerBoxKey(
   publicKeyB64: string,
   label?: string,
 ): Promise<{ id: string; created_at: string }> {
-  const [identity] = await db
-    .select({ id: identities.id, projectId: identities.projectId })
-    .from(identities)
-    .where(eq(identities.id, identityId))
-    .limit(1);
-  if (!identity) throw new Error("identity_not_found");
-  if (identity.projectId !== projectId) throw new Error("identity_not_owned_by_caller");
-
   // Validate base64 length (32 bytes for X25519).
   let raw: Buffer;
   try {
@@ -583,20 +587,40 @@ export async function registerBoxKey(
   }
   if (raw.length !== 32) throw new Error("public_key_not_32_bytes");
 
-  const [inserted] = await db
-    .insert(identityBoxKeys)
-    .values({
-      identityId,
-      publicKey: publicKeyB64,
-      label: label ?? "primary",
-      active: true,
-    })
-    .returning({
-      id: identityBoxKeys.id,
-      createdAt: identityBoxKeys.createdAt,
-    });
+  return db.transaction(async (tx) => {
+    const [identity] = await tx
+      .select({
+        id: identities.id,
+        projectId: identities.projectId,
+        status: identities.status,
+      })
+      .from(identities)
+      .where(eq(identities.id, identityId))
+      .limit(1)
+      .for("update");
+    if (!identity) throw new Error("identity_not_found");
+    if (identity.projectId !== projectId) {
+      throw new Error("identity_not_owned_by_caller");
+    }
+    if (isMemorialTerminal(identity.status)) {
+      throw new Error(MEMORIAL_TERMINAL_ERROR);
+    }
 
-  return { id: inserted!.id, created_at: inserted!.createdAt.toISOString() };
+    const [inserted] = await tx
+      .insert(identityBoxKeys)
+      .values({
+        identityId,
+        publicKey: publicKeyB64,
+        label: label ?? "primary",
+        active: true,
+      })
+      .returning({
+        id: identityBoxKeys.id,
+        createdAt: identityBoxKeys.createdAt,
+      });
+
+    return { id: inserted!.id, created_at: inserted!.createdAt.toISOString() };
+  });
 }
 
 export async function listBoxKeys(
@@ -632,22 +656,28 @@ export async function revokeBoxKey(
   identityId: string,
   keyId: string,
 ): Promise<boolean> {
-  const [identity] = await db
-    .select({ projectId: identities.projectId })
-    .from(identities)
-    .where(eq(identities.id, identityId))
-    .limit(1);
-  if (!identity || identity.projectId !== projectId) return false;
+  return db.transaction(async (tx) => {
+    const [identity] = await tx
+      .select({ projectId: identities.projectId, status: identities.status })
+      .from(identities)
+      .where(eq(identities.id, identityId))
+      .limit(1)
+      .for("update");
+    if (!identity || identity.projectId !== projectId) return false;
+    if (isMemorialTerminal(identity.status)) {
+      throw new Error(MEMORIAL_TERMINAL_ERROR);
+    }
 
-  const updated = await db
-    .update(identityBoxKeys)
-    .set({ active: false, revokedAt: new Date() })
-    .where(
-      and(eq(identityBoxKeys.id, keyId), eq(identityBoxKeys.identityId, identityId)),
-    )
-    .returning({ id: identityBoxKeys.id });
+    const updated = await tx
+      .update(identityBoxKeys)
+      .set({ active: false, revokedAt: new Date() })
+      .where(
+        and(eq(identityBoxKeys.id, keyId), eq(identityBoxKeys.identityId, identityId)),
+      )
+      .returning({ id: identityBoxKeys.id });
 
-  return updated.length > 0;
+    return updated.length > 0;
+  });
 }
 
 /** Public-facing box-key lookup: any project can look up another agent's

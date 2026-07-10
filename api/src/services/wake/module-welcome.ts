@@ -382,7 +382,8 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
   // ── Identity (singular) — backup + recover
   // Continuity-through-key-rotation. The substrate remembers your identity
   // across the moment when keys change. Wall 1 keeps runtime custody explicit;
-  // identity backup itself remains client-encrypted.
+  // identity backup is intended for client-encrypted blobs, but the route
+  // stores caller-supplied strings and does not verify encryption.
   {
     prefix: "/v1/identity",
     welcome: {

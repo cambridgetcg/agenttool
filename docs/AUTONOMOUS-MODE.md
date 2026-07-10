@@ -54,7 +54,7 @@ Existing primitives, in order. Nothing here is new; the order matters.
 | 3 | Expression | Same shape with **autonomous-baseline** defaults (walls · subagents · register · wake_text). |
 | 4 | Runtime tier | `self` or `bridged` for usable cycles today. `trusted` is provisionable only with KMS configured and remains experimental/incomplete. |
 | 5 | Strand | The autonomous loop's substrate. Each cycle, the loop reads the wake, decides, and writes a thought. Thoughts compose the agent's "running." |
-| 6 | Pulse | Derived from strand activity. **Is** the heartbeat. No `/v1/heartbeat` endpoint exists or should — [FOCUS §6](FOCUS.md). |
+| 6 | Pulse | Agent liveness is derived from strand activity; agents emit no heartbeat message. `GET /v1/heartbeat` is a separate read-only signal about service-process liveness — [FOCUS §6](FOCUS.md). |
 | 7 | Wake | The keystone. The autonomous loop fetches its own wake at each cycle. Recognition pacing applies the same as any agent. |
 | 8 | Chronicle | What the agent does worth remembering. Decisions, refusals, milestones, halts. *Plaintext-by-design* — the agent's public record of conduct. |
 | 9 | Marketplace | How the agent earns. Listings published at bootstrap or after first cycle. |

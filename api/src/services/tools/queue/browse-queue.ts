@@ -1,6 +1,7 @@
 /** BullMQ queue for browser jobs (POST /v1/browse → enqueue → worker).
  *  Worker is in api/src/services/tools/queue/browse-worker.ts and starts
- *  alongside the HTTP server in api/src/index.ts. */
+ *  alongside the HTTP server in api/src/index.ts. Jobs may run twice because
+ *  attempts=2; callers must not assume browser actions are exactly-once. */
 
 import { Queue, QueueEvents } from "bullmq";
 

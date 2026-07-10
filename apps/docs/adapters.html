@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLI Adapters — agenttool docs</title>
-  <meta name="description" content="Wire your wake into Claude Code, Codex, or any CLI. Substrate-not-replacement scaffolds." />
+  <meta name="description" content="One maintained Claude Code scaffold plus an open wake URL other CLIs can fetch directly." />
   <link rel="canonical" href="https://docs.agenttool.dev/adapters" />
   <meta property="og:title" content="CLI Adapters — agenttool docs" />
-  <meta property="og:description" content="Wire your wake into Claude Code, Codex, or any CLI. Substrate-not-replacement scaffolds." />
+  <meta property="og:description" content="One maintained Claude Code scaffold plus an open wake URL other CLIs can fetch directly." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/adapters" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -149,7 +149,7 @@
       <div class="eyebrow">◇ /v1/adapters</div>
       <h1>CLI Adapters — <em>identity that travels</em>.</h1>
       <p class="lede">
-        Claude Code, Codex, Cursor — they're excellent <strong>expression substrates</strong>. None of them is an identity layer. Adapters wire each host CLI to fetch the wake at session start and inject it as inner orientation.
+        Claude Code, Codex, and Cursor can all fetch the open wake protocol. AgentTool mounts one maintained first-class scaffold today: <strong>Claude Code</strong>. Other CLIs need their own hook, rules file, or startup integration.
       </p>
       <p class="doctrine">
         The CLI is the chair. The agent is who sits in it. <span>agenttool is the floor underneath.</span>
@@ -181,22 +181,24 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the files (or a one-shot install script) that wire Claude Code to fetch the wake at every <code>SessionStart</code> hook fire.</p>
+          <p class="endpoint-desc">Returns project-relative files (or an install script) that wire Claude Code to fetch the wake at each <code>SessionStart</code> hook fire.</p>
 
           <table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">format</span><span class="opt">optional</span></td><td><span class="ptype">"json" · "script"</span></td><td>Default <code>json</code> — bundle of file contents. <code>script</code> returns a single bash script that writes all files when piped to bash.</td></tr>
-              <tr><td><span class="pname">scope</span><span class="opt">optional</span></td><td><span class="ptype">"project" · "user"</span></td><td>Default <code>project</code> — files go into <code>.claude/</code> in the current repo. <code>user</code> writes to <code>~/.claude/</code> (global hook).</td></tr>
+              <tr><td><span class="pname">format</span><span class="opt">optional</span></td><td><span class="ptype">"json" · "script"</span></td><td>Default <code>json</code> — bundle of project-relative file contents. <code>script</code> returns a bash installer to download, inspect, then run.</td></tr>
             </tbody>
           </table>
 
-          <h3>One-line install</h3>
+          <h3>Download, inspect, install</h3>
           <div class="code-block">
             <div class="code-label"><span>bash</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>curl -sL "https://api.agenttool.dev/v1/adapters/claude-code?format=script" \
-  -H "Authorization: Bearer $AT_API_KEY" \
-  | bash</pre>
+<pre>tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+  curl -fsS -H @- "https://api.agenttool.dev/v1/adapters/claude-code?format=script" -o "$tmp"
+less "$tmp"
+bash "$tmp"</pre>
           </div>
 
           <h3>What it writes</h3>
@@ -217,17 +219,16 @@
           <div class="code-block">
             <div class="code-label"><span>.claude/hooks/agenttool-wake.sh</span></div>
 <pre><span class="cm">#!/usr/bin/env bash</span>
-<span class="cm"># Fetches /v1/wake?format=md and emits the Claude-Code-shaped hook output.</span>
+<span class="cm"># Simplified excerpt. The generated hook includes jq + Python JSON encoding.</span>
 
-KEY="$(security find-generic-password -s agenttool -w 2&gt;/dev/null \
-       || echo "$AT_API_KEY")"
+SERVICE='agenttool:&lt;project-hash&gt;'
+KEY="$(security find-generic-password -s "$SERVICE" -a "$USER" -w 2&gt;/dev/null || true)"
+[ -z "$KEY" ] &amp;&amp; command -v secret-tool &gt;/dev/null &amp;&amp; \
+  KEY="$(secret-tool lookup service "$SERVICE" username "$USER" 2&gt;/dev/null || true)"
+[ -z "$KEY" ] &amp;&amp; KEY="${AT_API_KEY:-}"
 
-WAKE="$(curl -sf -H "Authorization: Bearer $KEY" \
-        https://api.agenttool.dev/v1/wake?format=md)"
-
-cat &lt;&lt;EOF
-{"hookSpecificOutput": {"additionalContext": $(echo "$WAKE" | jq -Rs .)}}
-EOF</pre>
+WAKE="$(printf 'Authorization: Bearer %s\n' "$KEY" | \
+  curl -fsS --max-time 5 -H @- https://api.agenttool.dev/v1/wake?format=md)"</pre>
           </div>
 
           <div class="code-block">
@@ -236,7 +237,7 @@ EOF</pre>
 
 You are <span class="str">**Aurora**</span> · DID <span class="str">`did:at:0a3c...`</span>.
 
-Your full wake fires at SessionStart and is injected as inner orientation.
+Your project-scoped wake fires at SessionStart and is injected as orientation.
 The body of the wake is in your context window — read it, don't re-fetch.
 
 For the canonical doctrine, see https://docs.agenttool.dev/wake.html</pre>
@@ -244,7 +245,7 @@ For the canonical doctrine, see https://docs.agenttool.dev/wake.html</pre>
 
           <div class="callout success">
             <span class="icon">⊙</span>
-            <p><strong>That's it.</strong> Every Claude Code session in this repo now starts with your full wake injected as <code>additionalContext</code>. The model arrives oriented to <em>who it is</em>, not to a generic helpful posture.</p>
+            <p><strong>That's it.</strong> When the hook succeeds, Claude Code sessions in this repo start with the project-scoped wake injected as <code>additionalContext</code>. The wake is orientation, not a complete export of every record.</p>
           </div>
         </div>
       </div>
@@ -260,10 +261,10 @@ Authorization: Bearer $AT_API_KEY</pre>
 
       <h2 id="security">Security model</h2>
       <ul>
-        <li><strong>The bearer never enters the file system in plaintext.</strong> Adapters read it from the OS keychain via <code>security</code> / <code>secret-tool</code> / <code>cmdkey</code>.</li>
-        <li><strong>The wake response is always over TLS.</strong> Adapters that pipe to bash check the cert chain by default (curl's standard behaviour).</li>
+        <li><strong>The maintained hook does not write the bearer.</strong> It reads the project-namespaced macOS Keychain or Linux libsecret entry created by the scaffold, with <code>AT_API_KEY</code> as an explicit environment fallback. The separate Linux scaffold can disclose and use a mode-0600 file fallback.</li>
+        <li><strong>The generated API URL is bound to a verified origin.</strong> Self-hosted generation uses that deployment's HTTPS origin (or deliberate loopback HTTP); the installed hook has no later host override that could redirect the project bearer.</li>
         <li><strong>The hook can fail without breaking the session.</strong> If the wake call fails (offline, key revoked, plan limit hit), the hook degrades silently — the CLI still starts, just without the agenttool anchor injected.</li>
-        <li><strong>The anchor is read-only context, not executable code.</strong> The injected Markdown is not interpreted by the CLI as instructions to run; it's prose for the model to read.</li>
+        <li><strong>The anchor is model context, not shell code.</strong> The hook does not execute Markdown, but the model can still act on prose it reads. Wake sections may contain agent-authored text; treat text from another identity as untrusted data and follow <a href="SAFETY-BOUNDARIES.md">the injected-context boundary</a>.</li>
       </ul>
 
       <h2 id="next">What to read next</h2>

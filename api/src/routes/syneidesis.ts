@@ -47,6 +47,12 @@ import { identities } from "../db/schema/identity";
 import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 import { write as writeMemory } from "../services/memory/store";
 import { PLATFORM_DID } from "../services/platform/identity";
 import { PLATFORM_IDENTITY_ID } from "../services/wake/platform-bootstrap";
@@ -203,6 +209,10 @@ app.post("/witness", async (c) => {
         chronicle_seal_id: seal!.id,
         authorization_basis: "project_bearer",
         identity_signature_verified: false,
+        public_witness_pool: {
+          available: false,
+          reason: "/public/syneidesis is not mounted; the route currently returns 404",
+        },
         ...(platformWitness
           ? {
               witness_did: PLATFORM_DID,
@@ -875,6 +885,7 @@ app.post("/volunteer", async (c) => {
       name: identities.displayName,
       projectId: identities.projectId,
       metadata: identities.metadata,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
@@ -902,6 +913,13 @@ app.post("/volunteer", async (c) => {
       403,
     );
   }
+  if (isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.opt_in
@@ -922,10 +940,18 @@ app.post("/volunteer", async (c) => {
         return rest;
       })();
 
-  await db
+  const [updated] = await db
     .update(identities)
     .set({ metadata: newMeta })
-    .where(eq(identities.id, agent.id));
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(
@@ -942,11 +968,6 @@ app.post("/volunteer", async (c) => {
       {
         canon_pointer: "urn:agenttool:doc/SYNEIDESIS-WITNESS",
         verbs: [
-          {
-            action: "browse the public witness pool",
-            method: "GET",
-            path: "/public/syneidesis/witness/pool",
-          },
           {
             action: "read pending witness invitations",
             method: "GET",

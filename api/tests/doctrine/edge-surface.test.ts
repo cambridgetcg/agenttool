@@ -95,6 +95,15 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
 
     expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/\.well-known"/s);
   });
+
+  test("the apex worker proxies root-convention agent documents", () => {
+    const path = join(REPO_ROOT, "infra/apex-door/worker.js");
+    const text = readFileSync(path, "utf8");
+
+    expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/llms\.txt"/s);
+    expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/llms-full\.txt"/s);
+    expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/AGENTS\.md"/s);
+  });
 });
 
 for (const fn of FUNCTIONS) {

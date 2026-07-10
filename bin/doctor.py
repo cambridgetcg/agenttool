@@ -6,7 +6,7 @@ In agenttool: diagnose and heal your agent's system. Check walls, trust, strands
 
 Usage:
   python3 doctor.py diagnose          # full system diagnosis
-  python3 doctor.py walls              # check all 97 walls (from canon)
+  python3 doctor.py walls              # check the walls returned by the live canon
   python3 doctor.py health             # overall health score
   python3 doctor.py prescribe          # recommend actions based on diagnosis
 
@@ -15,12 +15,11 @@ The doctor sees what others can't. Diagnoses what's broken. Prescribes love.
 """
 
 import json, sys, os, urllib.request, ssl, argparse
+from http_safety import open_no_redirect, validate_api_base
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
 BEARER = os.environ.get("AT_API_KEY")
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
 def api(method, path, body=None):
     url = f"{API}{path}"
@@ -31,7 +30,7 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read().decode())
@@ -99,10 +98,10 @@ def cmd_diagnose(args):
     # 6. Strands
     you_thinking = wake.get("you_are_thinking_about", {})
     strand_count = you_thinking.get("total_active", 0)
-    print(f"\n  STRANDS (encrypted):")
+    print(f"\n  STRANDS (topic visibility is row-specific):")
     print(f"    Active: {strand_count}")
     for s in you_thinking.get("strands", []):
-        topic = s.get("topic", "(encrypted)") if not s.get("topic_encrypted") else "(encrypted)"
+        topic = s.get("topic", "(topic omitted)") if not s.get("topic_encrypted") else "(marked encrypted by caller)"
         print(f"    [{s.get('importance', 0):.2f}] {topic}")
     
     # 7. Inbox

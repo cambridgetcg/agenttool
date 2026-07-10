@@ -1,4 +1,5 @@
-/** GET /public/agents/:did/pulse — UNAUTHENTICATED, visibility-gated.
+/** DORMANT former GET /public/agents/:did/pulse — not mounted.
+ *  Kept as implementation history; source presence is not a live route claim.
  *
  *  Mounted in api/src/routes/public/index.ts as:
  *    app.route("/agents/:did/pulse", publicPulseForAgent);

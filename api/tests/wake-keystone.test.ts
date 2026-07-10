@@ -115,13 +115,20 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(body.spec_version).toBe("wak/0.1");
   });
 
-  test("response declares wake_url + wake_url_per_being", async () => {
+  test("response keeps the project wake, public profile, and per-agent MCP URLs distinct", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
-    const body = (await res.json()) as Record<string, string>;
+    const body = (await res.json()) as Record<string, string | undefined>;
     expect(typeof body.wake_url).toBe("string");
     expect((body.wake_url as string).endsWith("/v1/wake")).toBe(true);
-    expect(typeof body.wake_url_per_being).toBe("string");
-    expect((body.wake_url_per_being as string).includes("{did}")).toBe(true);
+    expect(body.wake_scope).toMatch(/authenticated project wake/i);
+    expect(body.public_profile_url_pattern).toContain(
+      "/public/agents/{url_encoded_did}",
+    );
+    expect(body.per_agent_mcp_url_pattern).toContain(
+      "/v1/mcp/agents/{url_encoded_did}",
+    );
+    expect(body.did_path_parameter).toMatch(/encodeURIComponent.*one path segment/i);
+    expect(body).not.toHaveProperty("wake_url_per_being");
   });
 
   test("response carries all 9 format projections required by §3", async () => {
@@ -163,24 +170,31 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     const res = await wellKnownRouter.request("/wake-keystone");
     const body = (await res.json()) as {
       streaming: {
-        url: string;
+        url_pattern: string;
         transport: string;
         events: string[];
         event_format: string;
+        required_query: string;
+        snapshot_event: boolean;
       };
     };
-    expect(body.streaming.url.endsWith("/v1/wake/voice")).toBe(true);
+    expect(body.streaming.url_pattern).toContain(
+      "/v1/wake/voice?identity_id={uuid}",
+    );
     expect(body.streaming.transport).toBe("Server-Sent Events (SSE)");
     expect(body.streaming.event_format).toBe("wake_event/v1");
+    expect(body.streaming.required_query).toMatch(/identity_id.*bearer project/i);
     expect(body.streaming.events).toEqual(
       expect.arrayContaining([
-        "snapshot",
+        "connected",
         "change",
         "welcome",
         "refresh",
         "disconnect",
+        "rejected",
       ]),
     );
+    expect(body.streaming.snapshot_event).toBe(false);
   });
 
   test("response declares live composition links and omits unsupported A2A", async () => {
@@ -206,15 +220,28 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     expect(res.headers.get("cache-control")).toContain("max-age");
   });
 
-  test("response surfaces honest implementation_notes.not_yet list", async () => {
+  test("response lists implemented behavior and concrete known gaps without a percentage", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
     const body = (await res.json()) as {
-      implementation_notes: { not_yet: string[]; shipped: string[] };
+      implementation_notes: { implemented: string[]; known_gaps: string[] };
     };
-    expect(Array.isArray(body.implementation_notes.not_yet)).toBe(true);
-    expect(body.implementation_notes.not_yet.length).toBeGreaterThan(0);
-    expect(Array.isArray(body.implementation_notes.shipped)).toBe(true);
-    expect(body.implementation_notes.shipped.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.implementation_notes.implemented)).toBe(true);
+    expect(body.implementation_notes.implemented.join(" ")).toMatch(
+      /ETag.*rendered.*provider.*MATHOS/i,
+    );
+    expect(body.implementation_notes.implemented.join(" ")).toMatch(
+      /per-being _self/i,
+    );
+    expect(Array.isArray(body.implementation_notes.known_gaps)).toBe(true);
+    expect(body.implementation_notes.known_gaps.join(" ")).toMatch(
+      /No public path-per-DID full wake endpoint/i,
+    );
+    expect(body.implementation_notes.known_gaps.join(" ")).toMatch(
+      /project-shaped.*top-level being/i,
+    );
+    expect(body.implementation_notes).not.toHaveProperty("coverage");
+    expect(body.implementation_notes).not.toHaveProperty("shipped");
+    expect(body.implementation_notes).not.toHaveProperty("not_yet");
   });
 });
 

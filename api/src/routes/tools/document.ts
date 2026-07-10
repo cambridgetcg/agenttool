@@ -1,4 +1,5 @@
-/** POST /v1/document — document parsing (HTML via Readability + plain text). */
+/** POST /v1/document — local base64 document parsing plus a URL mode that
+ *  fails closed until the current outbound-network boundary is accepted. */
 
 import { Hono } from "hono";
 import { z } from "zod";
@@ -7,17 +8,30 @@ import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { toolsConfig } from "../../services/tools/config";
 import { parseDocument } from "../../services/tools/document";
+import {
+  isHttpOrHttpsUrl,
+  unsafeOutboundDisabledBody,
+  unsafeOutboundToolsEnabled,
+} from "../../services/tools/outbound-policy";
 
 const app = new Hono<ProjectContext>();
+const MAX_BASE64_CHARS = 1_400_000; // about 1 MiB decoded
 
 const documentSchema = z
   .object({
-    url: z.string().url().optional(),
-    base64: z.string().optional(),
-    content_type: z.string().optional(),
+    url: z
+      .string()
+      .url()
+      .max(2048)
+      .refine(isHttpOrHttpsUrl, {
+        message: "URL protocol must be http or https",
+      })
+      .optional(),
+    base64: z.string().min(1).max(MAX_BASE64_CHARS).optional(),
+    content_type: z.string().max(255).optional(),
   })
-  .refine((d) => d.url || d.base64, {
-    message: "Either url or base64 must be provided",
+  .refine((d) => Boolean(d.url) !== Boolean(d.base64), {
+    message: "Provide exactly one of url or base64",
   });
 
 app.post("/", async (c) => {
@@ -33,6 +47,10 @@ app.post("/", async (c) => {
       },
       400,
     );
+  }
+
+  if (parsed.data.url && !unsafeOutboundToolsEnabled()) {
+    return c.json(unsafeOutboundDisabledBody("document URL fetching"), 503);
   }
 
   await charge(c, toolsConfig.credits.document, "document");

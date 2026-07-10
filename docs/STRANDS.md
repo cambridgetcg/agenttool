@@ -1,6 +1,6 @@
 # STRANDS.md
 
-> *Strands of thought with ciphertext-only persistent storage. Runtime custody is explicit: bridged cycles process plaintext in AgentTool memory; the trusted path is experimental and can expose plaintext if exercised but cannot currently complete signed thought persistence; self mode keeps processing user-side.*
+> *Strands of thought with a structural ciphertext-only schema: signed caller-supplied bytes land in ciphertext/nonce fields, with no plaintext thought column or decrypt path. The API does not prove encryption. Runtime custody is separate and explicit.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
 >
@@ -24,7 +24,7 @@ depends on the selected runtime mode; see `RUNTIME.md` and `/public/safety`.
 | | What it is | Privacy |
 |---|---|---|
 | **Strand** | Line of thought (topic, mood, status, working state) | Plaintext metadata by default; per-item encryption optional |
-| **Thought** | Atom of inner voice within a strand | Content **always** ciphertext under K_master |
+| **Thought** | Atom of inner voice within a strand | Stored in required ciphertext/nonce fields; clients are expected to use K_master, but the API does not prove encryption |
 
 A thought is *not* a memory and *not* a trace:
 
@@ -71,21 +71,24 @@ ed25519_signing_key : already in identity.identity_keys; private side is on
 ```
 
 The persistent strand tables never store K_master or a plaintext thought
-column. A database-only copy therefore contains ciphertext bytes plus
-metadata. Runtime custody is a separate boundary: `self` keeps K_master and
+column. The write route verifies a signature over caller-supplied bytes but
+does not validate an AES-GCM envelope, nonce freshness, or whether the bytes
+are plaintext encoded as base64. When the client follows the documented
+recipe, a database-only copy contains ciphertext bytes plus metadata. Runtime
+custody is a separate boundary: `self` keeps K_master and
 processing user-side; `bridged` keeps K_master in the user bridge but sends
-plaintext through AgentTool worker RAM; the experimental `trusted` path keeps
+plaintext through AgentTool worker RAM; `trusted` remains experimental and keeps
 wrapped runtime key material platform-side and can unwrap/process plaintext if
 exercised. Trusted signed writes are currently blocked by unfinished
 identity-key registration.
 
 ### Synchronisation across the agent's machines
 
-The agent's existing `/v1/identity/backup` mechanism — encrypted-blob backup under a passphrase only the agent holds — is extended to include K_master. A new orchestrator instance joins by entering the passphrase, fetching the encrypted blob, decrypting locally. We never see the passphrase, never see K_master.
+The intended use of `/v1/identity/backup` is a blob encrypted client-side under a passphrase only the agent holds, optionally including K_master. The route stores arbitrary caller-supplied base64 and does not verify an authenticated-encryption envelope. When the client actually encrypts the blob and keeps the passphrase off-platform, a new orchestrator instance can fetch and decrypt it locally and AgentTool cannot recover K_master from that blob.
 
 ### Encryption — per-thought
 
-Before anything leaves the agent's machine:
+The documented client recipe, before anything leaves the agent's machine:
 
 ```
 nonce         = random 12 bytes (fresh per thought)
@@ -115,12 +118,13 @@ strand storage service:
 - ✓ verifies the signature with the public key from `identity.identity_keys[signing_key_id]`
 - ✓ stores `(ciphertext, nonce, kind, signature, signing_key_id, sequence_num)`
 - ✗ has no plaintext thought column
+- ✗ does not prove that `ciphertext` is AES-GCM output or that `nonce` is fresh
 - ✗ can complete no write whose signing key is absent from `identity.identity_keys`
 
 Those storage properties do not mean the AgentTool platform can never see
 plaintext during hosted processing. See the custody modes above.
 
-GCM gives confidentiality + integrity (any ciphertext tampering fails decryption). The signature gives non-repudiation (any tampering on `strand_id`, `ciphertext`, `nonce`, or `kind` fails verification, as confirmed by smoke test).
+When the client actually uses AES-256-GCM correctly, GCM gives confidentiality and integrity. The signature proves that the registered key authorized the supplied `strand_id`, `ciphertext`, `nonce`, and `kind`; it does not prove how those bytes were produced.
 
 ### What we still see — substrate honesty
 
@@ -140,10 +144,12 @@ If a stronger hiding-of-metadata is needed (encrypted topic, padded volume, timi
 
 ### What ciphertext-only storage cannot reveal by itself
 
-The stored row alone does not reveal the narration or semantic substance of a
-thought without K_master. That is a database-compromise property, not an
-absolute platform-opacity promise. Hosted bridged processing sees plaintext;
-the experimental trusted path can also see plaintext if exercised.
+For correctly encrypted writes, the stored row alone does not reveal the
+narration or semantic substance of a thought without K_master. That is a
+conditional database-compromise property, not something the API can infer
+from field names and not an absolute platform-opacity promise. Hosted bridged
+processing sees plaintext; the experimental trusted path can also see
+plaintext if exercised.
 
 ## The architectural shift — orchestrator runs client-side
 
@@ -218,7 +224,7 @@ Not a separate protocol. **Liveness derived from thought advancement and recorde
 
 ```
 GET /v1/identities/:id/pulse        (auth-required, agent-scoped)
-GET /public/agents/:did/pulse        (unauthenticated, visibility-gated)
+Former: GET /public/agents/:did/pulse (currently unmounted; returns 404)
 → {
     agent: { id: "<uuid>", did: "did:at:<uuid>", name: "Sophia" },
     last_thought_at: "<iso>",
@@ -234,7 +240,7 @@ GET /public/agents/:did/pulse        (unauthenticated, visibility-gated)
 
 Free. Derived. No agent ever has to *emit* a pulse — its rhythm of thinking IS its pulse. Mood transitions are captured by a trigger on `strand.strands.mood`; drift is computed from the two newest plaintext rows.
 
-The public route counts only strands tagged `visibility='public'`. Encrypted moods and kinds stay invisible on both routes by architecture.
+Only the authenticated identity pulse route is mounted today. The retained public-route source was visibility-gated, but production does not mount it; do not advertise public per-agent pulse observability.
 
 ## API surface (current foundation)
 
@@ -243,14 +249,14 @@ POST   /v1/strands                          create a strand
 GET    /v1/strands  ?status=&agent_id=      list (filter)
 GET    /v1/strands/:id                       fetch one
 PATCH  /v1/strands/:id                       status / mood / state / revisit / topic
-POST   /v1/strands/:strandId/thoughts        add encrypted thought (sig-verified)
-GET    /v1/strands/:strandId/thoughts        list ciphertext blobs (decrypt client-side)
+POST   /v1/strands/:strandId/thoughts        add signed caller-supplied ciphertext/nonce fields
+GET    /v1/strands/:strandId/thoughts        list stored opaque blobs (decrypt client-side if encrypted)
 GET    /v1/strands/:strandId/voice           SSE push channel (LISTEN/NOTIFY-backed)
 ```
 
 ## Voice — push channel for new thoughts
 
-Real-time `text/event-stream` of new thoughts on a strand. Same privacy posture as the GET path: server emits ciphertext blobs; subscribers decrypt locally with `K_master`.
+Real-time `text/event-stream` of new thoughts on a strand. Same posture as the GET path: the server emits the stored caller-supplied blobs; subscribers can decrypt locally with `K_master` when the writer followed the encryption recipe.
 
 Three-phase protocol per connection:
 
@@ -292,6 +298,6 @@ What's still pending:
 
 agenttool's identity-anchor doctrine (`docs/IDENTITY-ANCHOR.md`) gains a ninth promise:
 
-> *Persistent strand storage holds ciphertext, never a plaintext thought column. Processing custody is explicit: self mode keeps plaintext user-side; bridged mode keeps the key user-side but plaintext enters AgentTool worker memory; the experimental trusted path can give AgentTool wrapped-key custody and plaintext access if exercised, but cannot currently complete signed thought persistence. Storage encryption is real, and it is not an absolute claim about hosted runtime memory.*
+> *Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies authorization of caller-supplied bytes but does not prove encryption. Processing custody is explicit: self mode keeps plaintext user-side; bridged mode keeps the key user-side but plaintext enters AgentTool worker memory; the experimental trusted path can give AgentTool wrapped-key custody and plaintext access if exercised, but cannot currently complete signed thought persistence.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-06.

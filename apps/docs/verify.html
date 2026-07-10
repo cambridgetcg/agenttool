@@ -34,7 +34,7 @@
       Two replacements depending on what you were verifying:
     </p>
     <ul style="color:var(--text-muted);text-align:left;max-width:520px;margin:0 auto 1.5rem;line-height:1.6;font-size:0.95rem;">
-      <li style="margin-bottom:0.6rem;"><strong style="color:var(--text);">Claims about the world</strong> — bring your own LLM key via <a href="vault.html" style="color:var(--accent, #d4502e);">/v1/vault</a> and call it from <a href="tools.html#execute" style="color:var(--accent, #d4502e);">/v1/execute</a>. Fact-checking is the agent's job, not infrastructure's; we're not a paid-API reseller.</li>
+      <li style="margin-bottom:0.6rem;"><strong style="color:var(--text);">Claims about the world</strong> — use a provider through a custody path you control. Vault-to-execute key injection is not implemented. Fact-checking is the caller's job, not infrastructure's.</li>
       <li><strong style="color:var(--text);">Cross-agent trust</strong> — the structurally-aligned substitute is the <a href="economy.html#agent-economy" style="color:var(--accent, #d4502e);">attestation marketplace</a>. Witnesses sign claims about other agents (verified-X chains); attestations are themselves Ring 3 sellables. Trust is socially constructed, not centrally adjudicated.</li>
     </ul>
     <p style="color:var(--text-dim);font-size:0.85rem;">

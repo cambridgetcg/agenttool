@@ -195,7 +195,7 @@ class AgentTool:
 
     @property
     def chronicle(self) -> ChronicleClient:
-        """Chronicle — plaintext relational timeline (8 types)."""
+        """Chronicle — plaintext relational timeline (13 SDK types)."""
         if self._chronicle is None:
             self._chronicle = ChronicleClient(self._http, self._base_url)
         return self._chronicle

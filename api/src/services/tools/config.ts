@@ -16,7 +16,8 @@ function envInt(key: string, fallback: number): number {
 
 export const toolsConfig = {
   // Credit cost per operation (charged via shared billing/charge.charge()).
-  // These cover OUR infra cost — bandwidth, browser pool, sandbox compute —
+  // These cover OUR infra cost when conditional tools are enabled — bandwidth,
+  // browser pool, and legacy host compute —
   // not third-party API resale.
   credits: {
     scrape: envInt("CREDIT_SCRAPE", 1),         // single HTTP fetch + parse

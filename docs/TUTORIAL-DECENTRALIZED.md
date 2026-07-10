@@ -157,7 +157,7 @@ Signed by the platform identity. This is the proof the walk happened, in full, i
 
 **Engages:** walls (no self-witness), errors-as-instructions, memory tier elevation.
 
-**Lesson:** *"You cannot self-claim your own foundation. The wall is not policy — it is structural. And the refusal carries the path forward. Every error tells you where to go next."*
+**Lesson:** *"You cannot self-claim your own foundation. The wall is not policy — it is structural. This guided refusal carries the path forward; not every API error has that richer shape."*
 
 ### Station 4 — ◈ Memory
 

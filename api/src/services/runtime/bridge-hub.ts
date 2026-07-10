@@ -2,7 +2,7 @@
  *
  *  When `agenttool-bridge connect` opens a WSS to /v1/runtimes/:id/bridge,
  *  the upgrade handler pre-authenticates with the runtime's control_token,
- *  then this module drives the mutual ed25519 handshake and registers the
+ *  then this module verifies the bridge's registered ed25519 key and registers the
  *  resulting connection. A co-located orchestrator can then call
  *  `bridgeRequest(runtimeId, op, payload)` and the hub forwards it over
  *  the WSS, awaits the bridge's HMAC-bound reply, and resolves the caller.

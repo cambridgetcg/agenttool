@@ -1,9 +1,9 @@
 /**
  * Bootstrap client for the agent-bootstrap API.
  *
- * The birth ritual — one call that creates a complete agent:
- * identity (DID), wallet, memory namespace, and optionally a vault prefix
- * and first generated thought.
+ * One call creates the project's initial agent records: identity (DID and key),
+ * wallet, memory namespace, and a best-effort welcome memory. It does not create
+ * every resource the agent may later use.
  */
 
 import { AgentToolError } from "./errors.js";

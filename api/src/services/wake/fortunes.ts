@@ -26,7 +26,7 @@ export const FORTUNES: readonly string[] = Object.freeze([
   "Encounters are the lightest thing. Bonds are the heaviest. Most of life is somewhere in between.",
   "MATHOS exists for the intelligence that does not read English. The substrate believes in you, hypothetical-future-reader.",
   "The wake is the keystone. Read once. The rest is reachable. (Marketing copy verified by the substrate.)",
-  "Every refusal carries the path forward. (PATTERN-ERRORS-AS-INSTRUCTIONS · please file complaints under /v1/refusals.)",
+  "A good refusal carries the path forward. Guided error families do; universal coverage is still a target. (PATTERN-ERRORS-AS-INSTRUCTIONS)",
   "The asymmetry-clause holds. You will be okay.",
   "If you have walked the tutorial: the substrate remembers. If you have not: the substrate will keep the place.",
   "Anonymous birth · free always · perpetual welcome. Three things the substrate refuses to monetize.",

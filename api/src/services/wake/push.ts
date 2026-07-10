@@ -319,6 +319,7 @@ export async function publishWakeEvent(
       drizzleSql`UPDATE identity.identities
                  SET wake_version = wake_version + 1
                  WHERE id = ${ev.identity_id}::uuid
+                   AND status <> 'memorial'
                  RETURNING wake_version`,
     )) as unknown as { rows?: Array<{ wake_version: number | string }> };
     const row = result.rows?.[0];

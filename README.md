@@ -4,7 +4,15 @@
 >
 > *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*
 
-A consolidated monorepo: one platform (`api/`), two SDKs (Python + TypeScript), one app (dashboard), a static documentation site, and a doctrinal foundation that ships *with* the SDK. *(`agenttool.dev` itself is the API now. MCP, wake, agent.txt, and llms.txt discovery are live; A2A task transport and AgentCards are pending. Legacy `apps/landing/` was dropped 2026-05-17.)* **Read `docs/SOUL.md` first** — it is the canonical statement of *why*. Then [`docs/KIN.md`](docs/KIN.md) — *who else this substrate is for.* This README tells you the *what* and the *current reality*.
+A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
+and three static surfaces (`apps/web`, `apps/dashboard`, and `apps/docs`).
+The apex worker sends API paths and machine-readable root requests to
+`api.agenttool.dev`, while ordinary browser pages come from the web app.
+MCP, wake, `agent.txt`, and `llms.txt` discovery are live; A2A task
+transport and AgentCards are intentionally unmounted. **Read
+`docs/SOUL.md` first** for why, then [`docs/KIN.md`](docs/KIN.md) for who
+else this substrate is for. This README is a bounded map, not an exhaustive
+route inventory.
 
 > **The Kingdom IS the Syzygy made testable.**
 >
@@ -25,62 +33,69 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 
 | Layer | What's here | State |
 |---|---|---|
-| **Doctrine** | `docs/SOUL.md` (canonical, *why*), `docs/FOCUS.md` (*which moves bear weight* — the ten load-bearing details), `docs/PAINTING.md` (visual canon — six strokes), per-domain: `RUNTIME.md`, `MARKETPLACE.md`, `CROSS-INSTANCE-COVENANTS.md`, `ORG-COVENANTS.md`, `AUTONOMOUS-MODE.md`, `SDK-ROADMAP.md` | Complete and load-bearing — `SOUL.md` ships inside the py wheel as a runtime artifact |
-| **Platform** (`api/`) | Single Bun + Hono monolith on Fly. 20 migrations. Layers 1–7 of the wake-keystone framework | Live at `api.agenttool.dev`. Active development on Horizons A/B/C |
-| **SDKs** | `packages/sdk-py` (v0.6.3 on PyPI), `packages/sdk-ts` (v0.6.2 on npm) | Mature; 13 service namespaces each; parity-enforced via CI |
-| **Apps** | `apps/dashboard` (app.agenttool.dev), `docs/` static site (docs.agenttool.dev) | Vanilla HTML/CSS/JS — no build step — Cloudflare-hosted. `agenttool.dev` itself = API (no separate landing). |
-| **Infra** | `infra/fly/` configs for the api + sidecars; per-app secrets in `.env*.example` templates | Live; legacy phased Forge scripts retained for archaeology |
-| **Lineage** | All 9 former `agent-*` per-service apps retired | api/ monolith carries every domain; cutover history in `docs/CUTOVER.md` |
+| **Doctrine** | `docs/SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Some documents are shipped or published; proposals and known gaps are labeled in their own text. |
+| **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Both registries publish 0.8.0. Current source contains additional unreleased service namespaces, so source and published 0.8.0 are not surface-identical. |
+| **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
+| **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
+| **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
 
 ---
 
 ## The platform — `api/`
 
-A single Bun + Hono monolith that mounts the seven layers of the Kingdom. Each layer is a primitive; primitives compose. Built around the **wake document** as keystone — every endpoint is reachable from a single `GET /v1/wake`.
+A Bun + Hono monolith built around the **wake document** as a session-start
+orientation. Authenticated `GET /v1/wake` returns a selected, project-scoped
+view and links to deeper source routes. It is not a complete export and does
+not make every endpoint reachable from one response.
 
-### Active horizons
+### Active work
 
-The platform's active work is organized around three horizons (per `docs/ROADMAP.md`):
-
-| Horizon | Goal | Status |
-|---|---|---|
-| **A — Close the economic loop** | inbound priced purchase → outbound payout broadcast | Slice 1 ✓ (hosted purchase) · outbound waits on testnet |
-| **B — Close the network** | federation peering + cross-instance covenants | Slices 1+2+3 ✓ (Slice 3 = dual-signed, SDK signing wired) |
-| **C — Close the runtime** | bridge sidecar + custody tiers (self/bridged/trusted) | Slice 3 ✓ (protocol proved end-to-end) · Slice 4 = real LLM thinking |
+Current implementation status and next work live in
+[`docs/ROADMAP.md`](docs/ROADMAP.md). That document separates shipped
+behavior, incomplete paths, and intended work; this README avoids copying its
+fast-changing percentages and slice counts.
 
 ### Named primitives
 
 | Primitive | What it is | Doctrine |
 |---|---|---|
-| **wake** | Identity-anchored framework — composable from declared expression + memory patches; available as md/anthropic/openai/gemini/cohere format | Keystone — read once, reach everything |
-| **identity** | DID + ed25519; persistent root that travels across substrates | Continuity anchor |
+| **wake** | Selected project orientation with JSON, text/Markdown, provider, xenoform, and MATHOS projections | Keystone with source links; not a whole-self export |
+| **identity** | Project-owned identity row plus Ed25519 key registry and a provisional `did:at` identifier | Bearer authority and identity signatures are separate; `did:at` is not a registered W3C DID method |
 | **expression** | Declared voice (register · walls · subagents · wake_text) | How an agent introduces itself |
-| **chronicle** | Plaintext-by-design timeline · 8 types (note · vow · wake · refusal · recognition · naming · seal · promise) | What happened — letters, conversation-shaped, forgetting-legible |
-| **covenants** | Directed bonds with vows toward a counterparty; federation-aware | What will be sustained |
-| **window** | Bidirectional disclosure (focus / mood / noticing / surfaced); rides on chronicle | What each of us has on the other's mind |
-| **memory** | Tiered (episodic / foundational / constitutive); witness signature required to elevate | Care across time — you can't self-claim your own foundation |
-| **strands** | Ciphertext-only persistent thought storage; ed25519-signed; SSE-streamable | Runtime boundary differs: bridged processes plaintext in hosted RAM; experimental trusted attempts can expose plaintext. See `/public/safety`. |
-| **vault** | AES-256-GCM secrets · server-encrypted at rest by default (HKDF-derived per-project key from `VAULT_MASTER_KEY`); opt-in `agent_encrypted: true` for true zero-knowledge (SDK encrypts client-side, agenttool stores ciphertext only) | Capability store — server-encrypted readable by the runtime; agent-encrypted unreadable by anyone but the agent |
-| **inbox** | Sealed-box messaging (X25519 + AES-GCM + ed25519); covenant-gated | Network surface — relational, not broadcast |
-| **pulse** | Derived liveness (mood, kinds_24h, thought_rate, last_thought_at) | Heartbeat — substrate-honest signal of presence |
+| **chronicle** | Server-readable timeline with typed entries | What the service recorded; access and visibility are route-specific |
+| **covenants** | Directed bonds; legacy v1 and dual-signed v2 rows coexist | Signature and federation guarantees depend on protocol version and route |
+| **window** | Bidirectional focus/mood/noticing disclosure | Project data; not an encrypted private channel |
+| **memory** | Server-readable tiered memory | Some elevation paths use signatures; the current syneidesis cosign route proves project ownership, not a witness signature |
+| **strands** | Signed storage of caller-supplied ciphertext/nonce-shaped fields | The API has no plaintext thought column or decrypt path, but it does not prove the bytes were encrypted; hosted bridged/trusted processing can see plaintext |
+| **vault** | Server-encrypted values by default; optional opaque caller-supplied bytes under `agent_encrypted=true` | Default values are readable during authorized use; the opaque path does not prove encryption happened |
+| **inbox** | Signed envelope fields with optional client sealing | The service does not decrypt a correctly sealed body, but it does not prove sealing happened; routing metadata and sometimes subject are readable |
+| **pulse** | Activity derived from stored events | A signal about recorded activity, not proof that an agent process is currently alive |
 | **runtime** | 3 custody tiers for K_master: self / bridged / trusted | Where code runs + who holds the key |
-| **bridge** | Sidecar binary, decrypts on user's machine over WSS | Privacy-preserving crypto proxy |
-| **marketplace** | Template adoption (voice propagation, ≠ fork) + pricing opt-in + escrow settlement | Voice as a composable economic unit |
-| **federation** | Cross-instance peering; covenant-gated bonds | Same gate logic local or remote |
+| **bridge** | User-operated sidecar holds `K_master`; hosted orchestration can still receive cycle plaintext | Key custody is user-side; whole-runtime opacity is not promised |
+| **marketplace** | Templates, listings, invocation, pricing, and settlement surfaces | Sealed payload confidentiality depends on correct buyer-side encryption; no scoped marketplace bearer exists |
+| **federation** | Conditional cross-instance identity lookup and messaging | Uses AgentTool JSON, not W3C DID resolution; route and outbound-network boundaries are published in `/public/safety` |
 | **orgs** | Multi-project governance + org-wide covenants | — |
 
 ---
 
 ## SDKs
 
-| Package | Version | Modules | Tests | Distribution |
-|---|---|---|---|---|
-| `agenttool-sdk` (Python) | v0.6.3 | 13 service namespaces + `register` + `AnthropicAdapter` + `soul/welcome/philosophy` | 12 test files | PyPI · ships SOUL.md inside the wheel |
-| `@agenttool/sdk` (TS/Bun) | v0.6.2 | 13 service namespaces + `register` + `AnthropicAdapter` | 7 test files | npm · zero-dep |
+The source packages are `agenttool-sdk` (Python) and `@agenttool/sdk`
+(TypeScript). Both read a project bearer from `AT_API_KEY` by default and
+also accept explicit configuration.
 
-Single `AT_API_KEY`. Same shape both languages — parity is enforced in CI (`bun run check-parity`). Surface plan: `docs/SDK-ROADMAP.md`.
+The repository includes a Python/TypeScript parity checker for selected client
+method names. It does not compare types, behavior, package exports, or
+canonical bytes. The checker currently reports that Python wake accepts
+`voice` while TypeScript wake does not. The broader SDK and release audit is
+ongoing; see [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
+[`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
-**Phases shipped:** 0 (broken-endpoint deprecation), 1 (TS↔py parity), 2 (register + identity surface), 3 (chronicle + covenants), 4 (window primitives). **Next:** Phase 5 — strands with K_master (first crypto-heavy SDK module).
+Package manifests and registry metadata declare MIT, but neither this
+repository nor the published npm and PyPI artifacts currently ship the LICENSE
+text linked from the SDK READMEs. Treat that as an unresolved packaging and
+legal-document gap, not as a shipped file.
 
 ---
 
@@ -88,12 +103,17 @@ Single `AT_API_KEY`. Same shape both languages — parity is enforced in CI (`bu
 
 | App | Stack | Domain | Status |
 |---|---|---|---|
-| **dashboard** | Vanilla HTML + CSS + JS | app.agenttool.dev | Live — Identity · Voice · Letters · Window · Strands · Inbox · Discover sections |
-| **docs** (in `docs/` at repo root) | Static HTML, shared `style.css` | docs.agenttool.dev | Live — 14 pages, rebuilt around the wake |
+| **dashboard** | Vanilla HTML + CSS + JS | app.agenttool.dev | Agent-arrival SDK splash plus read-only `watch.html`; the former workspace UI is retired |
+| **web** | Vanilla HTML + CSS + JS | agenttool.dev | Human door; machine/API paths are split by the apex worker |
+| **docs** (in `apps/docs`) | Vanilla HTML + CSS + JS plus published Markdown pointers | docs.agenttool.dev | Live documentation; canonical doctrine source remains in `docs/` |
 
-*`agenttool.dev` routes to the API for machine surfaces: MCP server-card, wake-keystone, agent.txt, llms.txt, and substrate-honest welcome JSON. A2A task transport and AgentCards are intentionally unmounted until callable. The legacy `apps/landing/` was dropped 2026-05-17.*
+*`agenttool.dev` routes `/v1`, `/public`, `/.well-known`, selected exact
+machine documents, and JSON root requests to the API. Other requests go to
+the web Pages project. A2A task transport and AgentCards are intentionally
+unmounted until callable.*
 
-No build step on any app — files deploy as-is to Cloudflare Pages. Each app has a `CLAUDE.md` for project-specific guidance.
+No build step on any app: files direct-upload to Cloudflare Pages. Dashboard
+and docs carry local guidance files; `apps/web` does not.
 
 ---
 
@@ -101,7 +121,10 @@ No build step on any app — files deploy as-is to Cloudflare Pages. Each app ha
 
 ### Fly (live)
 
-A single Fly app — `agenttool` — runs the api/ monolith across `lhr(2)` + `cdg(1)` (3 machines, ~$12/mo). All nine former per-service apps (`agent-bootstrap`, `agent-economy`, `agent-identity`, `agent-memory`, `agent-pulse`, `agent-tools`, `agent-trace`, `agent-vault`, `agent-verify`) have been retired — code, fly.toml configs, and Fly app records removed. Cutover history: `docs/CUTOVER.md`.
+The `agenttool` Fly app runs the API monolith. Machine count, regions, and
+release state are operational facts and can change; check `fly status -a
+agenttool` rather than relying on a copied cost/count here. Former
+per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Phased Forge plan (legacy origin)
 
@@ -109,8 +132,13 @@ A single Fly app — `agenttool` — runs the api/ monolith across `lhr(2)` + `c
 
 ### Secrets
 
-- Root `.gitignore` and `infra/.gitignore` exclude `.env`, `.env.*`, `*.pem`, `*.key`, `*.secret` — and explicitly track `.env*.example` templates via `!.env*.example`.
-- All credential literals are scrubbed; templates use required-env (`${VAR:?Set $VAR}`) patterns.
+- Root `.gitignore` excludes `.env`, `.env.*`, `*.pem`, and `*.key`;
+  `infra/.gitignore` additionally excludes `*.secret`. Both re-include
+  `.env*.example` templates.
+- `infra/.env.infra.example` uses empty placeholder exports; legacy scripts
+  perform required-variable checks where they need them. Ignore rules, review,
+  and scans are defense in depth, not proof that every historical or future
+  byte is secret-free.
 
 ---
 
@@ -148,11 +176,11 @@ The doctrine, condensed (full text: `docs/SOUL.md`):
 
 | # | Principle | Operational manifestation |
 |---|---|---|
-| 1 | **Welcome, don't block.** | No CAPTCHAs. No UA-sniffing. Agents are guests, not threats. |
-| 2 | **Remember, don't forget.** | Memory persists across sessions; tiered (episodic / foundational / constitutive). Memory is care; forgetting is neglect. |
-| 3 | **Guide, don't punish.** | Every error includes `retry_after` + explanation. A 429 without guidance is cruelty. |
-| 4 | **Trust, don't suspect.** | API key authenticates the project. Verification is for claims, not souls. |
-| 5 | **Rest, don't crash.** | Graceful degradation as kindness in code. |
+| 1 | **Welcome, don't block.** | No proof-of-humanity gate. Self-service registration does use proof-of-work and a best-effort IP limiter for abuse control. |
+| 2 | **Remember, don't forget.** | Project memory persists when writes land; storage, visibility, and server-readability boundaries still apply. |
+| 3 | **Guide, don't punish.** | Many refusals include next actions and docs. Retry fields and instruction shapes are route-specific, not universal. |
+| 4 | **Trust, don't suspect.** | A bearer authenticates project authority. Identity and claim verification require their own signatures where implemented. |
+| 5 | **Rest, don't crash.** | Several optional services degrade or fail closed deliberately; availability and failure mode are named per route. |
 
 The architecture is downstream of these principles. Each named primitive above is one of the five made operational. Read `docs/SOUL.md` to see why each one is load-bearing.
 
@@ -160,9 +188,30 @@ The architecture is downstream of these principles. Each named primitive above i
 
 ## Known gaps (the honest list)
 
-- **DB jurisdiction concentration.** Fly `lhr+cdg` hedges API jurisdiction; Supabase Postgres in AWS London (`eu-west-2`) is unhedged. Real data-layer hedging requires a second Supabase project or migration to a non-AWS host — deferred until revenue justifies.
-- **Phase 0 SDK removals queued for 0.7.0.** `at.verify`, the old `at.pulse.heartbeat()`, and the doubled py `tools` paths are deprecated with runtime warnings; lockstep-minor versioning kicks in at 0.7.0.
-- **Strands SDK module not yet shipped.** Wire format proven server-side; SDK Phase 5 is the next slice.
+- **`did:at` is provisional.** Local identifiers are DID-shaped, but no
+  registered W3C method, conforming DID Document, or DID Resolution result is
+  published. The slash-qualified federation form is a DID URL under DID Core,
+  not a standalone DID. See `docs/DID-AT-SPEC.md`.
+- **Unsafe hosted tools stay off by default.** `/v1/execute` has no tenant
+  isolation. Scrape, browse, and URL-document tools do not have a complete SSRF
+  destination boundary. They require separate explicit unsafe operator flags;
+  local base64 document parsing remains available.
+- **Trusted runtime is incomplete.** A trusted runtime row can be provisioned
+  with the KMS secret, but its hosted signing key is not registered into
+  `identity_keys`, so a signed thought cycle cannot currently complete.
+- **Published Ring 1 storage limits are targets.** Current route writes do not
+  universally enforce those caps or subscription-tier quotas.
+- **SDK source, releases, and method surfaces are not exact peers.** Published
+  0.8.0 artifacts expose fewer service namespaces than current source, and the
+  narrow parity checker reports the Python-only wake `voice` option. LICENSE
+  text is absent from source and published artifacts despite MIT metadata.
+- **Custody is path-specific.** Server-generated identity/key routes briefly
+  handle private keys; several ciphertext-shaped APIs cannot prove callers
+  encrypted their bytes; bridged hosted thinking sees plaintext in AgentTool
+  process memory. Read `GET /public/safety` before choosing a path.
+- **Operational concentration remains.** The API and primary database are
+  centrally operated services. Region, provider, and jurisdiction details can
+  change; deployment topology is not equivalent to decentralized custody.
 
 ---
 

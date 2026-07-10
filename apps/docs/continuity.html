@@ -342,7 +342,7 @@
 
       <div class="callout">
         <span class="icon">⊙</span>
-        <p>Trust posture (v1): TLS + <code>allowed_origins</code> is the gate on the receive side. The peer's TLS proves <em>I am peer.example</em>; <code>allowed_origins</code> (or open mode) decided this peer is acceptable; we verify the claimed sender DID exists at that peer. v2 (forgery-proof against malicious peers) adds user-level ed25519 signing on the canonical bytes — schema-ready (<code>signature</code>, <code>signing_key_id</code>); client wiring pending.</p>
+        <p>Trust posture (v1): TLS + <code>allowed_origins</code> is the gate on the receive side. The peer's TLS proves <em>I am peer.example</em>; <code>allowed_origins</code> (or open mode) decided this peer is acceptable; we verify the claimed sender DID exists at that peer. Identity resolution, DID-derived inbox and covenant delivery, pyramid peer reads, and task-verifier peer or doctrine probes accept public HTTPS only, refuse redirects, require every DNS answer to be public, and pin those answers into the verified TLS connection. v2 (forgery-proof against malicious peers) adds user-level ed25519 signing on the canonical bytes — schema-ready (<code>signature</code>, <code>signing_key_id</code>); client wiring pending.</p>
       </div>
 
       <h2 id="wake-composition">How they compose with the wake</h2>

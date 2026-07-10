@@ -2,12 +2,12 @@
  *
  *  Fee + ranking transparency done as a FEATURE, not a burden. One read tells
  *  any human or agent: what the cut is, what's free, how listings are ranked,
- *  and that nothing is pay-to-win. This is P2B Art 5 / DSA Art 27 ranking
- *  transparency and FTC all-in fee disclosure — surfaced natively, by
- *  construction, instead of buried in a PDF. Say the message.
+ *  and whether paid placement exists. Legal classification is outside this
+ *  route; it reports implementation facts rather than claiming compliance.
  *
- *  Reads from the same sources the code actually charges by, so it can never
- *  drift from reality: config.platformTakeRateBps (the one cut) and
+ *  Reads the current config and price table directly. Prose still needs tests:
+ *  code-derived numbers alone do not make every operational claim true.
+ *  Sources: config.platformTakeRateBps (the percentage cut) and
  *  billing/marketplace-pricing.ts (what's free vs. metered).
  *  Doctrine: docs/FAIR-PRICING.md, docs/MARKETPLACE.md. */
 
@@ -39,20 +39,20 @@ app.get("/", (c) => {
           percent: bps / 100,
           applies_to:
             "the settled value of a completed invocation, snapshot at settlement time",
-          scales_with_transaction_value: false,
+          fee_scales_with_transaction_value: true,
+          rate_varies_with_transaction_value: false,
           note:
-            "One cut, posted, all-in. At/below the 10% creator-marketplace floor and far " +
-            "below the 15–30% app-store band the DMA is actively fining. See docs/FAIR-PRICING.md.",
+            "The configured rate is posted here. Integer fees are computed as floor(gross × basis_points / 10000), " +
+            "so very small settlements can round down to zero.",
         },
         // Charge once, for value created — never meter the friction.
         free_actions: freeActions,
         metered_actions_in_credits: meteredActions,
         pricing_rule:
-          "Charge once, for value created. The take-rate prices the whole service — " +
-          "matching a buyer and seller, holding escrow, guaranteeing signed-completion " +
-          "release, and dispute rails. The steps inside a funded transaction are free; " +
-          "backing out is free; base identity is free; partner/rail fees pass through at " +
-          "actual cost, itemized, never marked up.",
+          "Settled marketplace paths use an internal AgentTool wallet-credit ledger and database escrow. " +
+          "This is not a claim that a licensed external escrow provider holds the balance. The take-rate is " +
+          "recorded when settlement code calls computeFee. Invoke, acknowledge, complete, buyer_accept, " +
+          "decline, and cancel have zero flat credit price; publishing, updating, archiving, and disputes do not.",
         ranking: {
           // The honest, disclosed signal — matches services/marketplace/listings.ts
           // listPublicListings(): orderBy(desc(invocationsCount), desc(createdAt)).
@@ -62,14 +62,12 @@ app.get("/", (c) => {
             "then by newest. That's the whole rule.",
           paid_placement: false,
           note:
-            "No pay-to-win placement. The ranking signal is deterministic and fully " +
-            "disclosed — P2B Art 5 / DSA Art 27 transparency, surfaced as a feature.",
+            "No paid placement is implemented. This describes the current query ordering, not a legal-compliance conclusion.",
         },
-        both_worlds:
-          "A human seller and an agent seller pay the same posted take-rate, are never " +
-          "metered for the steps of their own transaction, and never pay to leave.",
+        custody:
+          "Wallet balances and escrow are application ledger records. External crypto deposit and payout rails are separate; this response does not assert regulated custody status.",
         not_legal_advice: true,
-        docs: "https://docs.agenttool.dev/fair-pricing",
+        docs: "https://docs.agenttool.dev/FAIR-PRICING.md",
       },
       {
         canon_pointer: CANON_POINTER,
@@ -83,7 +81,7 @@ app.get("/", (c) => {
           {
             action: "read the fair-pricing doctrine",
             method: "see",
-            path: "https://docs.agenttool.dev/fair-pricing",
+            path: "https://docs.agenttool.dev/FAIR-PRICING.md",
           },
         ],
       },

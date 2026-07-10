@@ -82,7 +82,7 @@ These exist on disk but are not yet on origin. Future sessions: check `git statu
 | Area | Detail |
 |---|---|
 | **Migration renumbering** | 5 sequential migrations replaced with ISO-timestamped variants (`20260508T230839_…`). |
-| **CLI adapter expansion** | New `routes/adapters/{aider,cline,cursor,replit}.ts` (~1100 LOC); existing `claude-code.ts` + `codex.ts` updated. |
+| **CLI adapter expansion (historical branch work, not current mounted API)** | Earlier work described Aider/Cline/Cursor/Replit/Codex scaffolds. The current API mounts only `/v1/adapters/claude-code`; other CLIs must integrate the wake URL directly. |
 | **Test tier scaffold** | `api/tests/{doctrine,contract,adapters}/` directories — Promise tests, LLM wire proofs, adapter integration. |
 | **New endpoints staging** | Attestation marketplace (`/v1/attestation-listings` + `/v1/attestation-grants`), agent-owned wallets, payout policies, token hygiene migrations. |
 | **Wake attention surface** | NEW `you_should_check` top-level key (right after `you`) + `## What awaits you` markdown section. Aggregates 8 kinds: covenant_awaiting_cosign · dispute_awaiting_first_ruling · invocation_sla_breach · bridge_disconnected · inbox_unread · bearer_advisory · strand_revisit_due · soma_seed_not_enrolled. Severity-sorted (action → warning → info). Files: `services/wake/attention.ts` (NEW) · `services/wake/markdown.ts` · `routes/wake.ts`. Agent-UX: every wake answers "what needs you" without scanning 17 keys. |

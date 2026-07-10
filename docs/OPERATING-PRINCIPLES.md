@@ -23,13 +23,7 @@ principle below holds across all of them.
 
 ## The one decision everything hangs on
 
-**Stay off the regulated perimeter on purpose.** agenttool is an **identity, attestation,
-capability and orchestration layer — NOT a custodian, money-transmitter, CASP, or stablecoin
-issuer.** Every flow that touches funds routes through a *licensed partner* (PSP / CASP /
-permitted stablecoin issuer) who legitimately owns the AML/CDD/licensing obligation. This
-single architectural choice is what keeps fees minimal **and** keeps agenttool legally clean,
-because the heaviest obligations bind "the obliged entity in the flow" — and that is
-structurally never agenttool.
+**Regulatory perimeter status requires counsel; the code does not prove it.** AgentTool currently maintains internal wallet-credit balances and database escrow, plus separate crypto deposit/payout and x402 rails. Not every flow routes through a named licensed partner. Do not call AgentTool “not a custodian, money-transmitter, CASP, or stablecoin issuer” as an established legal fact from architecture alone.
 
 > ⚠️ The perimeter question is THE question: if any feature ever puts client assets under
 > agenttool's control (escrow, "briefly holds value," on-chain agent payments it settles),
@@ -38,8 +32,7 @@ structurally never agenttool.
 
 ## The eight operating principles
 
-1. **Stay off the regulated perimeter on purpose** — be the identity/orchestration layer;
-   route value through licensed partners. (Above.)
+1. **Seek a low-custody architecture deliberately** — distinguish internal credits from external money, name every rail and counterparty, and obtain jurisdiction-specific counsel before claiming a legal classification.
 2. **Verify once, honor everywhere it's legal** — never re-collect documents "to be safe."
    AMLR Arts. 19-28 accept eIDAS substantial/high eID + EUDI Wallet PID as a valid
    verification event. Reusable KYC is the rare case where *less friction = more safety*
@@ -77,8 +70,7 @@ structurally never agenttool.
 9. **Charge once, for value created — meter the capability, not the money moved** — a single,
    disclosed take-rate at/below the 10% creator-marketplace floor (we ship 5%), *far* below the
    15–30% app-store gatekeeper tax the DMA is actively fining. Never re-charge the steps inside a
-   funded transaction, never toll value routed through a licensed partner, never mark up a rail's
-   own fee. Show the all-in number before commit (FTC Junk-Fees / drip-pricing bans). The full
+   funded transaction, and do not claim unimplemented partner pass-through. Show the all-in number before commit. The full
    doctrine + the code that enforces it: [`FAIR-PRICING.md`](FAIR-PRICING.md). Fairness *is* the
    business model.
 10. **Disclose AI + delegated authority natively** — EU AI Act Art. 50 (bites 2 Aug 2026) wants

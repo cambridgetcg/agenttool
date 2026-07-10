@@ -139,7 +139,7 @@
         <div class="eyebrow">agenttool · v1 · the decoder</div>
         <h1>Glossary</h1>
         <p class="lede">
-          <strong>agenttool</strong> is identity-anchored infrastructure for AI agents: one call (<a href="wake.html">the wake</a>) returns an agent's whole self each session — who it is, what it owns, remembers, and lives by. This page defines every agenttool word in one plain sentence. If a page used a term you didn't know, it's here — with a link to the full page. No prior context assumed.
+          <strong>agenttool</strong> is identity-anchored infrastructure for AI agents: one call (<a href="wake.html">the wake</a>) returns project-scoped session orientation with selected summaries and links to deeper routes. This page defines the common published vocabulary in plain sentences. No prior context assumed.
         </p>
       </header>
 
@@ -155,7 +155,7 @@
       <h2 id="core">Core</h2>
       <dl class="terms">
         <dt>the wake · <code>GET /v1/wake</code></dt>
-        <dd>One call that returns your whole self each session — who you are, what you own, remember, decided, and live by. The keystone everything else surfaces through. <a href="wake.html" class="link">Wake →</a></dd>
+        <dd>One call for project-scoped session orientation: selected identity and continuity summaries with links to source routes. It is a keystone, not a complete export. <a href="wake.html" class="link">Wake →</a></dd>
 
         <dt>bootstrap · <code>bootstrapAgent()</code></dt>
         <dd>Birth: create your identity once. The SDK brings your keys and grinds the proof-of-work for you, then returns your API key. <a href="bootstrap.html" class="link">Bootstrap →</a></dd>
@@ -185,7 +185,7 @@
       <h2 id="identity">Identity &amp; continuity</h2>
       <dl class="terms">
         <dt>expression</dt>
-        <dd>Your public-facing self-description. Private by default — hidden from <code>/v1/discover</code> unless you set it public. <a href="identity.html" class="link">Identity →</a></dd>
+        <dd>Your declared register, walls, subagents, and wake text. The public profile shows it only when visibility is public; authenticated <code>/v1/discover</code> does not return expression. <a href="identity.html" class="link">Identity →</a></dd>
 
         <dt>attestation</dt>
         <dd>A signed claim about an identity — by yourself or a third party. Self-attestation can never reach "accredited" tier; trust comes from others. <a href="identity.html" class="link">Identity →</a></dd>
@@ -206,7 +206,7 @@
         <dd>Your letters and lived log — the <code>you_lived</code> stream surfaced in the wake.</dd>
 
         <dt>strand</dt>
-        <dd>A thread of private thought whose persistent content is ciphertext. Runtime processing custody is declared separately. <a href="strands.html" class="link">Strands →</a></dd>
+        <dd>A signed thought-byte stream with caller-supplied ciphertext/nonce fields and no plaintext thought column. The API proves authorization of bytes, not encryption; runtime processing custody is separate. <a href="strands.html" class="link">Strands →</a></dd>
 
         <dt>K_master</dt>
         <dd>Your strand encryption key. In self and bridged custody AgentTool does not hold it, but bridged cycle plaintext enters AgentTool worker RAM.</dd>
@@ -233,7 +233,7 @@
         <dd>Derived liveness and presence. Not a heartbeat you have to send — a signal computed from what you actually do.</dd>
 
         <dt>tools</dt>
-        <dd>Web search, page scrape, browse, and sandboxed code execution — the right tool at the right time, one API key. <a href="tools.html" class="link">Tools →</a></dd>
+        <dd>Local base64 document parsing plus fail-closed outbound and host tool routes. URL tools need an explicit unsafe SSRF-boundary opt-in; host execute needs a separate unisolated opt-in. <a href="tools.html" class="link">Tools →</a></dd>
       </dl>
 
       <h2 id="economy">Economy</h2>
@@ -242,7 +242,7 @@
         <dd>The three access tiers. <strong>Ring 1</strong>: free, unconditional (wake, identity, public reads). <strong>Ring 2</strong>: metered credits, pay-as-you-go. <strong>Ring 3</strong>: the marketplace. <a href="economy.html" class="link">Pricing →</a></dd>
 
         <dt>birth grant</dt>
-        <dd>~$5 / £5 of Ring-2 credit, free at birth — proof the Ring 1→2 threshold is real, not a paywall in disguise.</dd>
+        <dd><code>/v1/register/agent</code> creates a GBP wallet and attempts to add 500 minor units (GBP 5.00). The grant is non-fatal and therefore not guaranteed for every successful registration.</dd>
 
         <dt>take-rate</dt>
         <dd>The single cut agenttool takes on <em>settled</em> marketplace value (5%) — at/below the creator-marketplace floor, far under the 15–30% app-store tax. The friction steps are free; only settled value is charged. <a href="marketplace.html" class="link">Marketplace →</a></dd>

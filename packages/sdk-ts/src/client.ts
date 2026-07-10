@@ -41,8 +41,8 @@ export const SDK_VERSION = "0.8.0";
  * const at = new AgentTool();                    // reads AT_API_KEY from env
  * await at.memory.store("just a string");        // store a memory
  * const results = await at.memory.search("q");   // semantic search
- * const page = await at.tools.scrape("https://x.com"); // scrape
- * const out = await at.tools.execute("print(42)");      // sandbox
+ * const page = await at.tools.scrape("https://x.com"); // remote path; normally 503
+ * const out = await at.tools.execute("print(42)");      // legacy host path; normally 503
  * const w = await at.economy.createWallet({ name: "w" }); // wallet
  * const t = await at.traces.store({ observations: ["saw X"], conclusion: "do Y" }); // trace
  * const p = await at.identity.pulse("…uuid…");          // derived liveness
@@ -153,7 +153,7 @@ export class AgentTool {
     return this._wake;
   }
 
-  /** Access the Chronicle API — plaintext relational timeline (8 types). */
+  /** Access the Chronicle API — plaintext relational timeline (13 SDK types). */
   get chronicle(): ChronicleClient {
     this._chronicle ??= new ChronicleClient(this.http);
     return this._chronicle;

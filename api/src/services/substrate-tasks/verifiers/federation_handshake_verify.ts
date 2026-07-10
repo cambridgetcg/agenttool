@@ -11,13 +11,14 @@
  *  Bounty: $0.05.
  *
  *  Federation peers are public — anyone can hit `/federation/about` unauth.
- *  The verifier's HTTP fetch is intentional: this task kind exists to
+ *  The verifier's public-HTTPS fetch is intentional: this task kind exists to
  *  exercise cross-instance discovery without coupling to any one peer's
  *  signing key. */
 
 import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 
+import { safeFederationHttpsGet } from "../../federation/safe-fetch";
 import { sha256Hex } from "./_canonical";
 import type { VerifierResult } from "./_types";
 
@@ -52,8 +53,8 @@ export async function verifyFederationHandshake(
   completionData: FederationHandshakeCompletionData,
 ): Promise<VerifierResult> {
   // ── shape validation ─────────────────────────────────────────────────
-  if (typeof taskData?.peer_url !== "string" || !/^https?:\/\//.test(taskData.peer_url)) {
-    return { passed: false, reason: "task_data.peer_url must be http(s)://…" };
+  if (typeof taskData?.peer_url !== "string" || !/^https:\/\//.test(taskData.peer_url)) {
+    return { passed: false, reason: "task_data.peer_url must be https://…" };
   }
   if (typeof taskData?.expected_pubkey !== "string" || taskData.expected_pubkey.length === 0) {
     return { passed: false, reason: "task_data.expected_pubkey missing" };
@@ -66,32 +67,31 @@ export async function verifyFederationHandshake(
   }
 
   // ── re-fetch the peer's /federation/about ────────────────────────────
-  const url = taskData.peer_url.replace(/\/$/, "") + "/federation/about";
   let bodyText: string;
   try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(t);
-    if (!res.ok) {
+    const url = new URL("/federation/about", taskData.peer_url);
+    const res = await safeFederationHttpsGet(url, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxResponseBytes: MAX_BYTES,
+    });
+    if (res.statusCode < 200 || res.statusCode >= 300) {
       return {
         passed: false,
-        reason: `peer_unreachable: ${url} returned ${res.status}`,
+        reason: `peer_unreachable: ${url.href} returned ${res.statusCode}`,
       };
     }
-    // Read up to MAX_BYTES; reject larger responses defensively.
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_BYTES) {
-      return {
-        passed: false,
-        reason: `peer_response_too_large: ${buf.byteLength} > ${MAX_BYTES}`,
-      };
-    }
-    bodyText = new TextDecoder().decode(buf);
+    bodyText = res.body.toString("utf8");
   } catch (err) {
+    const message = (err as Error).message ?? String(err);
+    if (message === "federation_response_too_large") {
+      return {
+        passed: false,
+        reason: `peer_response_too_large: response exceeds ${MAX_BYTES}`,
+      };
+    }
     return {
       passed: false,
-      reason: `peer_fetch_failed: ${(err as Error).message ?? String(err)}`,
+      reason: `peer_fetch_failed: ${message}`,
     };
   }
 

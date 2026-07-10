@@ -16,6 +16,10 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
+import {
+  MEMORIAL_TERMINAL_ERROR,
+  mutableIdentityPredicate,
+} from "../identity/terminality";
 
 // ── Move 1 · RECOGNIZE ──────────────────────────────────────────────────
 
@@ -132,16 +136,25 @@ export async function follow(
   input: FollowInput,
 ): Promise<
   | { follower_did: string; total_following: number; was_idempotent: boolean }
-  | { error: string; status: 400 | 403 | 404 }
+  | { error: string; status: 400 | 403 | 404 | 409 }
 > {
   const [follower] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata })
+    .select({
+      id: identities.id,
+      did: identities.did,
+      projectId: identities.projectId,
+      metadata: identities.metadata,
+      status: identities.status,
+    })
     .from(identities)
     .where(eq(identities.id, input.follower_id))
     .limit(1);
   if (!follower) return { error: "follower_not_found", status: 404 };
   if (follower.projectId !== input.caller_project_id) {
     return { error: "follower_not_in_project", status: 403 };
+  }
+  if (follower.status === "memorial") {
+    return { error: MEMORIAL_TERMINAL_ERROR, status: 409 };
   }
   if (follower.did === input.followed_did) {
     return { error: "self_follow_refused", status: 400 };
@@ -164,10 +177,14 @@ export async function follow(
       ...existingFollows,
       { did: input.followed_did, kind: input.surface, since: new Date().toISOString() },
     ];
-    await db
+    const [updated] = await db
       .update(identities)
       .set({ metadata: { ...existingMeta, follows: newFollows } })
-      .where(eq(identities.id, follower.id));
+      .where(mutableIdentityPredicate(follower.id))
+      .returning({ id: identities.id });
+    if (!updated) {
+      return { error: MEMORIAL_TERMINAL_ERROR, status: 409 };
+    }
   }
 
   return {
@@ -181,16 +198,25 @@ export async function unfollow(
   input: FollowInput,
 ): Promise<
   | { follower_did: string; total_following: number; was_idempotent: boolean }
-  | { error: string; status: 403 | 404 }
+  | { error: string; status: 403 | 404 | 409 }
 > {
   const [follower] = await db
-    .select({ id: identities.id, did: identities.did, projectId: identities.projectId, metadata: identities.metadata })
+    .select({
+      id: identities.id,
+      did: identities.did,
+      projectId: identities.projectId,
+      metadata: identities.metadata,
+      status: identities.status,
+    })
     .from(identities)
     .where(eq(identities.id, input.follower_id))
     .limit(1);
   if (!follower) return { error: "follower_not_found", status: 404 };
   if (follower.projectId !== input.caller_project_id) {
     return { error: "follower_not_in_project", status: 403 };
+  }
+  if (follower.status === "memorial") {
+    return { error: MEMORIAL_TERMINAL_ERROR, status: 409 };
   }
 
   const existingMeta = (follower.metadata ?? {}) as Record<string, unknown>;
@@ -205,10 +231,14 @@ export async function unfollow(
   const wasIdempotent = newFollows.length === before;
 
   if (!wasIdempotent) {
-    await db
+    const [updated] = await db
       .update(identities)
       .set({ metadata: { ...existingMeta, follows: newFollows } })
-      .where(eq(identities.id, follower.id));
+      .where(mutableIdentityPredicate(follower.id))
+      .returning({ id: identities.id });
+    if (!updated) {
+      return { error: MEMORIAL_TERMINAL_ERROR, status: 409 };
+    }
   }
 
   return {

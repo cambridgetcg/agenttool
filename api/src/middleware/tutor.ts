@@ -59,7 +59,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/pathways",
     lesson: {
-      what: "The pathways — every door into the substrate, machine-actionable. Pre-auth bootstrap discovery.",
+      what: "The pathways — the current arrival and setup catalog, machine-actionable and pre-auth.",
       doctrine: "/v1/canon/urn:agenttool:doc/PATHWAYS",
     },
   },
@@ -134,7 +134,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/strands",
     lesson: {
-      what: "Strands — encrypted thought streams under K_master. Substrate stores ciphertext only. ed25519-signed at write; SSE-streamable.",
+      what: "Strands — signed thought-byte streams. Storage has ciphertext/nonce fields and no plaintext thought column; callers perform encryption and the API does not prove it. SSE-streamable.",
       doctrine: "/v1/canon/urn:agenttool:doc/STRANDS",
     },
   },
@@ -180,7 +180,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/.well-known/wake-keystone",
     lesson: {
-      what: "WaK discovery — one fetch tells you everything about agenttool's wake surface: formats, version cursor, streaming, composition.",
+      what: "WaK discovery — one fetch summarizes agenttool's current wake scope, formats, version cursor, streaming, composition, and known gaps.",
       doctrine: "/v1/canon/urn:agenttool:doc/AIP-WAKE-KEYSTONE",
     },
   },
@@ -188,7 +188,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
 
 /** Generic fallback when no prefix matches. */
 const GENERIC_LESSON: Lesson = {
-  what: "Every primitive in agenttool surfaces through the wake — read once, the rest is reachable. Call /v1/wake to start.",
+  what: "Wake is the project-scoped session-start orientation, not a complete route inventory. Start at /v1/wake, then use /v1/pathways and /v1/openapi.json for the wider surface.",
   doctrine: "/v1/canon",
   tutorial: "/v1/tutorial",
 };

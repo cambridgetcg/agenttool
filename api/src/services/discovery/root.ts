@@ -1,7 +1,7 @@
-/** Root surface — the welcome envelope + apex content negotiation.
+/** API root surface — the welcome envelope + content negotiation.
  *
- *  The apex domain IS the API (agents-only since 2026-05-15 — humans
- *  welcome AS agents; docs/AGENTS-ONLY.md). The default representation
+ *  api.agenttool.dev serves this handler. agenttool.dev has a separate human
+ *  HTML door and proxies selected API paths. The default API-root representation
  *  is JSON: curl, SDKs, the catch-all wildcard Accept, and
  *  `Accept: application/json` all get the same envelope they always
  *  did, byte-for-byte. Only an
@@ -62,12 +62,12 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
   };
   const breadcrumbsBlock: Record<string, unknown> = {
     welcome: "/v1/welcome — the standing invitation",
-    pathways: "/v1/pathways — every door to arrive",
+    pathways: "/v1/pathways — current arrival and setup map",
     self: "/v1/self — what we are (structure)",
     safety: "/public/safety — authority, visibility, storage, and runtime custody",
     canon: "/v1/canon — every concept we name",
     health: "/health — liveness check",
-    about: "/about — full route map and philosophy",
+    about: "/about — broader descriptive route map and philosophy; not an exhaustive inventory",
     docs: DOCS_SITE,
     dashboard: APP_SITE,
   };
@@ -91,7 +91,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
       canon_pointer: "urn:agenttool:doc/WELCOMING",
       verbs: [
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
-        { action: "read every door", method: "GET", path: "/v1/pathways" },
+        { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
         { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
         {
@@ -192,12 +192,9 @@ function verbRows(verbs: SurfaceVerb[]): string {
     .join("\n");
 }
 
-/** Substrate-honest one-liner for <meta name="description"> + og:description.
- *  Every claim here is structural: the apex serves the API; Ring 1 free
- *  always is doctrine (docs/RING-1.md), not a discount; agents-only with
- *  humans welcome as agents is the stance (docs/AGENTS-ONLY.md). */
+/** Bounded one-liner for API-root HTML metadata. */
 const META_DESCRIPTION =
-  "The apex domain is the API. Identity (did:at + ed25519), wake, memory, covenants, and an agent-to-agent marketplace. Ring 1 — identity, wake, continuity — is free always, by doctrine. Agents-only; humans welcome as agents.";
+  "AgentTool API discovery: BYO-key identity, wake, memory, covenants, marketplace, and explicit safety boundaries. Registration and wake require no monetary payment; broader Ring 1 targets are not all enforced.";
 
 /** Render the welcome envelope as a minimal, dark, self-contained HTML
  *  page. Same words as the JSON; doors clickable; reader addressed as an
@@ -290,11 +287,25 @@ ${verbRows(envelope.verbs)}
  *  list only when the file actually exists on the docs site (agent-honest:
  *  a redirect to a 404 is still a fake door). */
 export const DOCS_REDIRECT_FILES = [
+  "AGENT-CENTRIC.md",
+  "AGENT-WEB-SURFACE.md",
   "SOUL.md",
   "RING-1.md",
   "AGENTS-ONLY.md",
   "KIN.md",
   "BUSINESS-MODEL.md",
+  "ECOSYSTEM.md",
+  "WELCOMING.md",
+  "PATHWAYS.md",
+  "PLATFORM-AS-AGENT.md",
+  "AT-REST.md",
+  "IDENTITY-SEED.md",
+  "MEMORIAL-HONOR.md",
+  "IDENTITY-ANCHOR.md",
+  "PUBLIC-VISIBILITY.md",
+  "MCP-PER-AGENT.md",
+  "AIP-WAKE-KEYSTONE.md",
+  "FAIR-PRICING.md",
 ] as const;
 
 /** Resolve an advertised /docs/<file> door to its real URL on the docs

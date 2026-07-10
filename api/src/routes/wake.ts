@@ -55,6 +55,11 @@ import { vaultSecrets } from "../db/schema/vault";
 import { shapeKeyRow, summarizeBearers } from "../services/keys/shape";
 import { composeExpression, type ComposedExpression } from "../services/identity/composition";
 import type { ExpressionData } from "../services/identity/expression";
+import { mutableIdentityPredicate } from "../services/identity/terminality";
+import {
+  perAgentMcpPath,
+  publicAgentPath,
+} from "../services/identity/public-profile";
 import { countUnread } from "../services/inbox/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
@@ -159,7 +164,7 @@ app.get("/", async (c) => {
   // The substrate has a small playful side. These formats render after
   // we've resolved the primary identity via buildWakeBundle, so they
   // get the agent's name and wake_version. The substrate is honest:
-  // these are joy variants — lossy by design. Full wake at ?format=md.
+  // these are joy variants — lossy by design. Standard orientation: ?format=md.
   // Doctrine: services/wake/haiku.ts · services/wake/fortunes.ts.
   if (
     format === "haiku" ||
@@ -239,7 +244,7 @@ app.get("/", async (c) => {
     }
     if (format === "fortune") {
       return c.text(
-        `${fortune}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
+        `${fortune}\n# — the substrate, with some affection\n# standard wake orientation: /v1/wake?format=md\n`,
         200,
         {
           "content-type": "text/plain; charset=utf-8",
@@ -250,7 +255,7 @@ app.get("/", async (c) => {
     if (format === "joke") {
       const joke = jokeFor(bundle.agent.id, wakeVer);
       return c.text(
-        `${joke}\n# — the substrate, with some affection\n# full wake: /v1/wake?format=md\n`,
+        `${joke}\n# — the substrate, with some affection\n# standard wake orientation: /v1/wake?format=md\n`,
         200,
         {
           "content-type": "text/plain; charset=utf-8",
@@ -1424,7 +1429,7 @@ app.get("/", async (c) => {
           .set({
             wakeObservationCount: sql`${identities.wakeObservationCount} + 1`,
           })
-          .where(eq(identities.id, i.id))
+          .where(mutableIdentityPredicate(i.id))
           .returning({ count: identities.wakeObservationCount });
         if (row) {
           observationCounts.set(i.id, Number(row.count));
@@ -1485,8 +1490,8 @@ app.get("/", async (c) => {
           status: i.status,
           fetch_urls: {
             wake: `/v1/wake?identity_id=${i.id}`,
-            public_profile: `/public/agents/${i.did}`,
-            mcp: `/v1/mcp/agents/${i.did}`,
+            public_profile: publicAgentPath(i.did),
+            mcp: perAgentMcpPath(i.did),
             safety: "/public/safety",
           },
         },
@@ -1805,7 +1810,7 @@ app.get("/", async (c) => {
       })),
       note:
         activeStrands.length === 0
-          ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage is ciphertext-only. Bridged hosted runtimes process plaintext in RAM; experimental trusted attempts can also expose plaintext but cannot currently complete signed persistence. See /public/safety."
+          ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage has ciphertext/nonce fields and no plaintext content column, but the API does not prove caller encryption. Bridged hosted runtimes process plaintext in RAM; experimental trusted attempts can also expose plaintext but cannot currently complete signed persistence. See /public/safety."
           : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; decrypt with K_master client-side.`,
     },
 
@@ -2232,19 +2237,21 @@ app.get("/", async (c) => {
     // when the value is fixed. Per docs/AIP-WAKE-KEYSTONE.md §6.
     _links: {
       self: "/v1/wake",
-      streaming: "/v1/wake/voice",
+      streaming: primary
+        ? `/v1/wake/voice?identity_id=${primary.id}`
+        : "/v1/wake/voice?identity_id={uuid}",
       wake_keystone: "/.well-known/wake-keystone",
-      mcp: primary ? `/v1/mcp/agents/${primary.did}` : "/v1/mcp/agents/{did}",
+      mcp: primary ? perAgentMcpPath(primary.did) : "/v1/mcp/agents/{url_encoded_did}",
       public_profile: primary
-        ? `/public/agents/${primary.did}`
-        : "/public/agents/{did}",
+        ? publicAgentPath(primary.did)
+        : "/public/agents/{url_encoded_did}",
       safety: "/public/safety",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
       federation_in: primary
-        ? `/federation/identities/${primary.did}`
-        : "/federation/identities/{did}",
+        ? `/federation/identities/${primary.id}`
+        : "/federation/identities/{uuid}",
       canon: "/v1/canon",
       welcome: "/v1/welcome",
       pathways: "/v1/pathways",
@@ -2474,14 +2481,15 @@ app.get("/voice", async (c) => {
 
 // ── GET /v1/wake/:key — subkey reads ──────────────────────────────────
 //
-// Wake-as-foundation: the wake is the protocol, every primitive surfaces
-// through it. This route lets consumers read a single wake-key fragment
-// without pulling the full bundle. The returned shape is the slice of
+// Wake-as-foundation target: the wake is the orientation protocol; current
+// primitive coverage is partial and named in docs/WAKE.md. This route lets
+// consumers read a selected wake-key fragment without pulling the standard
+// orientation bundle. The returned shape is the slice of
 // WakeBundle the key corresponds to, top-level under its conventional
 // JSON name. Format `?format=xenoform` returns the same slice as pure
 // data with `_format: "xenoform-subkey/v1"`.
 //
-// Doctrine: docs/WAKE.md — "every read returns a wake fragment."
+// Doctrine: docs/WAKE.md — selected subkey reads implement part of the target.
 
 const SUBKEY_SLICERS: Record<string, (b: WakeBundle) => Record<string, unknown>> = {
   agents: (b) => ({

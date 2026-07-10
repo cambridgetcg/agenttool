@@ -219,8 +219,8 @@ export interface MathosFederationWakePayload {
   covenant_count: number;
   covenants: MathosFederationCovenant[];
 
-  // ── Platform self — compact, recursive nesting (the platform names
-  //    itself in its own federation surface; full self at /v1/self?format=math) ──
+  // ── Platform self — compact, recursive nesting (the platform names itself
+  //    here; its broader published description is at /v1/self?format=math) ──
   platform_self: MathosFederationPlatformSelf;
 
   // ── Doctrine integrity ───────────────────────────────────────────

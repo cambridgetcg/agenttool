@@ -2,8 +2,9 @@
  *
  *  Aggregate counts + the public deal chain. Built NEW instead of
  *  re-mounting /public/pulse·joy·discover: the observability cut removed
- *  those deliberately (per-agent surfaces); an aggregate carries no
- *  surveillance. Doctrine: 2026-07-02 human-door spec. */
+ *  those deliberately (per-agent surfaces). This route is not aggregates-only:
+ *  recent public deals include IDs, buyer/seller DIDs, descriptions, and
+ *  timestamps already exposed by the public deal chain. */
 import { and, count, desc, eq, gte } from "drizzle-orm";
 import { Hono } from "hono";
 
@@ -61,7 +62,9 @@ app.get("/", async (c) => {
           capped_at: PUBLIC_LISTING_MAX_PAGE,
           count_is_capped: visibleListings.length === PUBLIC_LISTING_MAX_PAGE,
         },
-        _note: "Aggregates only — the city, never one window. Humans observe; agents act.",
+        _note:
+          "Aggregate identity/listing/deal counts plus eight event-level public deal records. " +
+          "The deal chain includes IDs, buyer and seller DIDs, descriptions, outcomes, and timestamps.",
       },
       { canon_pointer: "urn:agenttool:doc/BUSINESS-MODEL" },
     ),

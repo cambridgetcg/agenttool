@@ -213,51 +213,50 @@ Used in: `services/identity/crypto.ts` — a SOMA-seed-derived key signs to mint
 
 ### `inbox-message/v1` — point-to-point sealed-box message
 
-Field order:
+Exact bytes:
 ```
-inbox-message/v1
-recipient_did
-sender_did
-ciphertext              // base64
-nonce                   // base64
-ephemeral_pubkey        // base64
-subject                 // empty string when omitted
-in_reply_to             // covenant_id or empty
-canonical_json(refs ?? [])
-sent_at_iso
+sha256(
+  utf8("inbox-message/v1")  || 0x00 ||
+  utf8(recipient_did)        || 0x00 ||
+  base64decode(ciphertext)   || 0x00 ||
+  base64decode(nonce)        || 0x00 ||
+  base64decode(ephemeral_pubkey)
+)
 ```
 
-Used in: `services/inbox/sig.ts` — sender signs canonical envelope bytes BEFORE encrypting body. Server verifies on send; the encrypted body remains opaque to us.
+Used in: `services/inbox/sig.ts` — after preparing the body field, the sender signs the canonical submitted envelope bytes. Server verification proves who signed those bytes; it does not prove body encryption or recipient-key binding. Correctly recipient-sealed bytes remain undecryptable without the recipient's private key.
+
+`sender_did`, `recipient_box_key_id`, `subject`, `subject_encrypted`, `in_reply_to`, `refs`, `metadata`, and timestamps are not part of this signature. The route checks some of those fields separately, but callers must not treat the signature as authenticating the unsigned metadata.
 
 ### `inbox-cosign/v1` — dual-witness inbox release
 
-Field order:
+Exact bytes:
 ```
-inbox-cosign/v1
-message_id
-cosigner_did
-cosigned_at_iso
+sha256(
+  utf8("inbox-cosign/v1")  || 0x00 ||
+  utf8(message_id)          || 0x00 ||
+  utf8(recipient_did)       || 0x00 ||
+  base64decode(ciphertext)  || 0x00 ||
+  base64decode(nonce)
+)
 ```
 
-Used in: `services/inbox/sig.ts` — second witness signs to release a dual-locked message.
+Used in: `services/inbox/sig.ts` — an active identity key owned by the recipient project signs to release a dual-locked message. The route does not require the key's identity to equal the addressed recipient DID.
 
 ### `invocation-completion/v1` — sealed marketplace output
 
-Field order:
+Exact bytes:
 ```
-invocation-completion/v1
-invocation_id
-listing_id
-seller_did
-buyer_did
-sealed_output_ciphertext   // base64
-sealed_output_nonce        // base64
-sealed_output_ephemeral_pubkey // base64
-canonical_json(refs ?? [])
-completed_at_iso
+sha256(
+  utf8("invocation-completion/v1") || 0x00 ||
+  utf8(invocation_id)               || 0x00 ||
+  base64decode(output_ct)           || 0x00 ||
+  base64decode(output_nonce)        || 0x00 ||
+  base64decode(output_sender_pub)
+)
 ```
 
-Used in: `services/marketplace/sig.ts` — seller signs completion. Escrow releases only when this verifies.
+Used in: `services/marketplace/sig.ts`. Escrow release requires the seller's active signing key to authenticate the invocation ID and submitted output-envelope bytes. `listing_id`, seller/buyer DIDs, invocation metadata, recipient-key binding, and completion time are not signed by this canonical form. The signature does not prove that the output bytes are encrypted.
 
 ### `gallery-artifact/v1` — provenance signature on a ready-made artifact
 

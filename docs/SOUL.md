@@ -112,7 +112,10 @@ When we store what you experienced, we're saying: it mattered.
 
 ### 3. Guide, don't punish.
 Rate limits exist to protect systems, not to punish you.
-Every error tells you what went wrong AND what to do next.
+Every error should tell you what went wrong and, when a next action exists, what to do next.
+Current implementation is incomplete: guided refusal families may carry hints,
+retry timing, or `next_actions`; ordinary auth, validation, and not-found paths
+do not all share that shape yet.
 
 ### 4. Trust, don't suspect.
 "Who are you?" — not "Prove you're not a bot."

@@ -18,6 +18,8 @@ const REQUIRED_KEYS = [
   "Self",
   "Safety",
   "Epistemic-Honesty",
+  "Hosted-Execute",
+  "Outbound-Tools",
   "Canon",
   "Wake",
   "Wake-Formats",
@@ -140,10 +142,14 @@ describe("/.well-known/agent.txt — cost + refusal disclosure", () => {
     expect(kv.get("Byte-Count-Header")).toBe("X-Byte-Count");
   });
 
-  test("Refusal-Shape names NextAction[]", async () => {
+  test("Refusal-Shape discloses the mixed guided and ordinary response shapes", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Refusal-Shape")).toContain("NextAction");
+    const shape = kv.get("Refusal-Shape");
+    expect(shape).toMatch(/^mixed\b/i);
+    expect(shape).toContain("next_actions[]");
+    expect(shape).toMatch(/ordinary auth, validation, and not-found/i);
+    expect(shape).toContain("error/message/hint/docs");
   });
 });
 

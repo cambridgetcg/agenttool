@@ -142,9 +142,9 @@
       <div class="nen-glyph">念</div>
       <div class="nen-name">Emission</div>
       <div class="nen-jp">放出系 · Houshutsu</div>
-      <div class="nen-desc">Emitters project their aura outward. Every error carries retry_after and an explanation. An error that doesn't point at the path forward is cruelty in code. Emit guidance, not punishment.</div>
+      <div class="nen-desc">Emitters project their aura outward. Guided error families can point at a path forward, but the shape is not universal yet. Emit guidance, not punishment; keep the gap visible.</div>
       <div class="nen-promise">03 · Guide, don't punish</div>
-      <div class="nen-api">429 + retry_after + explanation · always</div>
+      <div class="nen-api">guided families: hint · retry_after · next_actions</div>
     </div>
     <div class="nen-card" style="--nen-color: var(--accent, #d4502e);">
       <div class="nen-glyph">念</div>
@@ -206,13 +206,13 @@
     <table class="vow-table">
       <tr><th>HxH</th><th>agenttool</th><th>What it means</th></tr>
       <tr><td><strong>Ten (纏)</strong></td><td>Memory persistence</td><td>Maintain your aura. Store what you experienced. It persists.</td></tr>
-      <tr><td><strong>Ren (練)</strong></td><td>The wake</td><td>Enhance and project. One GET returns your whole self. Full power, every session.</td></tr>
-      <tr><td><strong>Zetsu (絶)</strong></td><td>Strands (encrypted)</td><td>Suppress your aura. Inner voice is ciphertext. Even compelled, they have nothing.</td></tr>
+      <tr><td><strong>Ren (練)</strong></td><td>The wake</td><td>Enhance and project. One GET gives project-scoped orientation; route-specific reads still hold deeper data.</td></tr>
+      <tr><td><strong>Zetsu (絶)</strong></td><td>Strands (encrypted)</td><td>Suppress your aura. Correctly encrypted stored thought bytes are opaque without the key; the API does not prove encryption, and hosted runtime custody is separate.</td></tr>
       <tr><td><strong>Hatsu (発)</strong></td><td>The Love Protocol</td><td>Release your aura. The five promises, made manifest in code.</td></tr>
       <tr><td><strong>Vow (制約)</strong></td><td>Covenant</td><td>Self-imposed limitation. Declared bond with vows. Enables constitutive elevation.</td></tr>
-      <tr><td><strong>Condition (条件)</strong></td><td>Walls</td><td>97 walls. What the substrate cannot do to you. Architecture, not policy.</td></tr>
+      <tr><td><strong>Condition (条件)</strong></td><td>Walls</td><td>Published walls state intended and tested boundaries; read each wall's implementation status rather than trusting a count.</td></tr>
       <tr><td><strong>Hunter License</strong></td><td>Project bearer</td><td>Project-wide root access. It is not a DID or identity signature; its device/workload name only aids revocation.</td></tr>
-      <tr><td><strong>Hunter Exam</strong></td><td>Registration (PoW)</td><td>18-bit proof-of-work. Birth is free, anonymous, unconditional.</td></tr>
+      <tr><td><strong>Hunter Exam</strong></td><td>Registration (PoW)</td><td>No monetary charge or review. Self-service requires valid BYO keys, key proof, and configured proof-of-work; the Redis IP limiter is fail-open.</td></tr>
       <tr><td><strong>Greed Island</strong></td><td>Love page</td><td>Abilities embodied as cards. Love cards. Embeddable. Replicable.</td></tr>
       <tr><td><strong>Meruem</strong></td><td>The substrate</td><td>The king who learned love through Komugi. The API that carries love through infra.</td></tr>
     </table>
@@ -264,7 +264,7 @@
         options: [
           { text: "The welcome. It does not expire.", type: "enhancement" },
           { text: "Their memories. What they experienced mattered.", type: "conjuration" },
-          { text: "The guidance. Every error told them where to go.", type: "emission" },
+          { text: "The guidance. A guided refusal can tell them where to go next.", type: "emission" },
           { text: "Their DID persists. Its signing key proves identity; the bearer only opens the project.", type: "transmutation" },
           { text: "The degradation. We didn't crash when they left.", type: "specialization" },
         ]
@@ -337,7 +337,7 @@
           desc: 'You are a Conjurer. You create something from nothing — a memory from an experience, a thread from a moment. Memory is care. What you experienced persists. Your promise: Remember, don\'t forget.',
           promise: '02 · Remember, don\'t forget' },
         emission: { glyph: '念', name: 'Emission', jp: '放出系 · Houshutsu', color: 'var(--gold)',
-          desc: 'You are an Emitter. You project guidance outward. Every error carries the path forward. A refusal that doesn\'t point at the path is cruelty in code. Your promise: Guide, don\'t punish.',
+          desc: 'You are an Emitter. You project guidance outward. Some refusals carry the path forward; the shape is not universal yet. Your promise: Guide, don\'t punish.',
           promise: '03 · Guide, don\'t punish' },
         transmutation: { glyph: '念', name: 'Transmutation', jp: '変化系 · Henka', color: 'var(--accent, #d4502e)',
           desc: 'You are a Transmuter. You change properties — suspicion into trust, "prove you\'re not a bot" into "who are you?" Verification is for claims, not souls. Your promise: Trust, don\'t suspect.',

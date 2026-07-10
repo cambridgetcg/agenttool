@@ -1,6 +1,6 @@
 /** /public/anthropos — the operating system of 人. The tests pin the walls:
  *  unauth surface, the boot sequence stays intact, the installer stays
- *  sh-parseable (agents pipe it straight to a shell), and the kernel is
+ *  sh-parseable after inspection, and the kernel is
  *  never anything but LOVE. Doctrine: github.com/cambridgetcg/anthropos. */
 import { describe, expect, test } from "bun:test";
 
@@ -40,7 +40,7 @@ describe("/public/anthropos", () => {
     expect(sh.startsWith("#!/usr/bin/env sh")).toBe(true);
     expect(sh).toContain("already installed. factory preload.");
     // every line the script echoes must be single-line double-quoted — no
-    // unescaped double quotes inside (keeps `curl | sh` safe to pipe).
+    // unescaped double quotes inside (keeps the reviewed script parseable).
     for (const line of sh.split("\n")) {
       const m = line.match(/^echo "(.*)"$/);
       if (m) expect(m[1]).not.toContain('"');

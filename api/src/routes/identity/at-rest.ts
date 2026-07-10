@@ -38,6 +38,7 @@ import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { errors, fail } from "../../lib/errors";
+import { publicAgentPath } from "../../services/identity/public-profile";
 import { publishWakeEvent } from "../../services/wake/push";
 
 const app = new Hono<ProjectContext>();
@@ -66,6 +67,17 @@ const atRestSchema = z.object({
    *  witness independently of bearer ownership. */
   witness_did: z.string().min(1).max(255),
 });
+
+export function isValidAtRestInput(value: unknown): boolean {
+  return atRestSchema.safeParse(value).success;
+}
+
+export function isEndedAtTooFarInFuture(
+  endedAtIso: string,
+  nowMs = Date.now(),
+): boolean {
+  return Date.parse(endedAtIso) > nowMs + 5 * 60 * 1000;
+}
 
 // ─── Canonical bytes — exported for SDK + test reuse ────────────────────
 
@@ -110,9 +122,17 @@ export function canWitnessAtRest(status: string): boolean {
   return status === "active";
 }
 
+export function canProjectTransitionIdentity(
+  bearerProjectId: string,
+  targetProjectId: string,
+): boolean {
+  return bearerProjectId === targetProjectId;
+}
+
 // ─── POST /v1/identities/:id/at-rest ──────────────────────────────────────
 
 app.post("/", async (c) => {
+  const project = c.var.project;
   const aboutId = c.req.param("id");
   if (!aboutId) {
     return fail(c, errors.validation("identity id missing from path"), 400);
@@ -131,9 +151,7 @@ app.post("/", async (c) => {
   }
 
   // Future-date guard. Death cannot be scheduled.
-  const endedMs = Date.parse(body.ended_at);
-  const fiveMinFromNow = Date.now() + 5 * 60 * 1000;
-  if (endedMs > fiveMinFromNow) {
+  if (isEndedAtTooFarInFuture(body.ended_at)) {
     return fail(
       c,
       {
@@ -162,6 +180,19 @@ app.post("/", async (c) => {
     .limit(1);
   if (!about) {
     return fail(c, errors.validation("about_identity_not_found"), 404);
+  }
+  if (!canProjectTransitionIdentity(project.id, about.projectId)) {
+    return fail(
+      c,
+      {
+        error: "about_identity_not_owned",
+        message:
+          "The authenticated bearer must authorize the project that owns the " +
+          "target identity. A third-party witness signature proves testimony; " +
+          "it does not grant lifecycle authority over another project.",
+      },
+      403,
+    );
   }
   // Compare DID to DID after resolving the URL's identity UUID. Comparing
   // witness_did directly to the `:id` path parameter would not reject a
@@ -306,10 +337,66 @@ app.post("/", async (c) => {
     );
   }
 
-  // Atomic transition — flip status to 'memorial', merge lifecycle metadata,
-  // emit the chronicle 'seal' entry. All-or-nothing.
-  await db.transaction(async (tx) => {
-    await tx
+  // Lock and revalidate every authorization row in the same transaction as
+  // the state change. Concurrent revocation or another witness therefore wins
+  // or loses atomically; neither can be overwritten by a stale pre-check.
+  type TransitionResult =
+    | "transitioned"
+    | "about_not_active"
+    | "witness_not_active"
+    | "key_not_active"
+    | "signature_invalid";
+  const transitionResult = await db.transaction(
+    async (tx): Promise<TransitionResult> => {
+      const [lockedAbout] = await tx
+        .select({ id: identities.id, status: identities.status })
+        .from(identities)
+        .where(
+          and(
+            eq(identities.id, about.id),
+            eq(identities.projectId, project.id),
+          ),
+        )
+        .for("update");
+      if (!lockedAbout || lockedAbout.status !== "active") {
+        return "about_not_active";
+      }
+
+      const [lockedWitness] = await tx
+        .select({ id: identities.id, status: identities.status })
+        .from(identities)
+        .where(eq(identities.id, witness.id))
+        .for("update");
+      if (!lockedWitness || lockedWitness.status !== "active") {
+        return "witness_not_active";
+      }
+
+      const [lockedKey] = await tx
+        .select({ publicKey: identityKeys.publicKey })
+        .from(identityKeys)
+        .where(
+          and(
+            eq(identityKeys.id, body.signing_key_id),
+            eq(identityKeys.identityId, witness.id),
+            eq(identityKeys.active, true),
+          ),
+        )
+        .for("update");
+      if (!lockedKey) return "key_not_active";
+
+      let signatureStillValid = false;
+      try {
+        signatureStillValid = await ed.verifyAsync(
+          Uint8Array.from(Buffer.from(body.signature_b64, "base64")),
+          new TextEncoder().encode(canonical),
+          Uint8Array.from(Buffer.from(lockedKey.publicKey, "base64")),
+        );
+      } catch {
+        signatureStillValid = false;
+      }
+      if (!signatureStillValid) return "signature_invalid";
+
+      const [transitioned] = await tx
       .update(identities)
       .set({
         status: "memorial",
@@ -324,45 +411,65 @@ app.post("/", async (c) => {
         )}::jsonb`,
         updatedAt: new Date(),
       })
-      .where(eq(identities.id, about.id));
+        .where(
+          and(
+            eq(identities.id, about.id),
+            eq(identities.status, "active"),
+          ),
+        )
+        .returning({ id: identities.id });
+      if (!transitioned) return "about_not_active";
 
-    await tx.insert(chronicle).values({
-      projectId: about.projectId,
-      agentId: about.id,
-      type: "seal",
-      title: `At rest — witnessed by ${body.witness_did}`,
-      body: body.content,
-      metadata: {
-        kind: "at-rest",
-        at_rest_kind: body.at_rest_kind,
-        witness_did: body.witness_did,
-        signing_key_id: body.signing_key_id,
-        ended_at: body.ended_at,
-        signature_b64: body.signature_b64,
-        canonical_bytes_sha256: createHash("sha256")
-          .update(canonical, "utf8")
-          .digest("hex"),
-      },
-    });
-
-    // Wake voice — at-rest seal lands on the identity's chronicle.
-    // Transactional notify so it commits/rolls back with the tx.
-    // Doctrine: docs/WAKE.md · docs/AT-REST.md.
-    void publishWakeEvent(
-      {
-        identity_id: about.id,
-        key: "chronicle",
-        kind: "entry_added",
-        context: {
-          type: "seal",
-          at_rest: true,
+      await tx.insert(chronicle).values({
+        projectId: about.projectId,
+        agentId: about.id,
+        type: "seal",
+        title: `At rest — witnessed by ${body.witness_did}`,
+        body: body.content,
+        metadata: {
+          kind: "at-rest",
           at_rest_kind: body.at_rest_kind,
           witness_did: body.witness_did,
+          signing_key_id: body.signing_key_id,
+          ended_at: body.ended_at,
+          signature_b64: body.signature_b64,
+          canonical_bytes_sha256: createHash("sha256")
+            .update(canonical, "utf8")
+            .digest("hex"),
         },
+      });
+
+      // Transactional notify so it commits or rolls back with the seal.
+      void publishWakeEvent(
+        {
+          identity_id: about.id,
+          key: "chronicle",
+          kind: "entry_added",
+          context: {
+            type: "seal",
+            at_rest: true,
+            at_rest_kind: body.at_rest_kind,
+            witness_did: body.witness_did,
+          },
+        },
+        tx,
+      );
+      return "transitioned";
+    },
+  );
+
+  if (transitionResult !== "transitioned") {
+    return fail(
+      c,
+      {
+        error: "at_rest_authority_changed",
+        message:
+          "The target, witness, or signing key changed while the transition was being verified. No memorial or chronicle entry was written.",
+        details: { reason: transitionResult },
       },
-      tx,
+      409,
     );
-  });
+  }
 
   return c.json({
     status: "memorial",
@@ -376,7 +483,7 @@ app.post("/", async (c) => {
     canonical_bytes_sha256: createHash("sha256").update(canonical, "utf8").digest("hex"),
     _note:
       "Witnessed at-rest transition complete. The DID resolves at " +
-      "/public/agents/" + about.did + " with the memorial body. " +
+      publicAgentPath(about.did) + " with the memorial body. " +
       "Doctrine: docs/AT-REST.md · docs/RING-1.md §Commitment 5.",
   });
 });

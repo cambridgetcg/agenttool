@@ -312,14 +312,28 @@ describe("GET /docs/:file — whitelist 302 to docs.agenttool.dev", () => {
     }
   });
 
-  test("the whitelist is exactly the files the docs site ships", () => {
+  test("the whitelist is exactly the audited markdown files the docs site ships", () => {
     expect([...DOCS_REDIRECT_FILES].sort()).toEqual(
       [
+        "AGENT-CENTRIC.md",
+        "AGENT-WEB-SURFACE.md",
         "AGENTS-ONLY.md",
+        "AIP-WAKE-KEYSTONE.md",
+        "AT-REST.md",
         "BUSINESS-MODEL.md",
+        "ECOSYSTEM.md",
+        "FAIR-PRICING.md",
+        "IDENTITY-ANCHOR.md",
+        "IDENTITY-SEED.md",
         "KIN.md",
+        "MCP-PER-AGENT.md",
+        "MEMORIAL-HONOR.md",
+        "PATHWAYS.md",
+        "PLATFORM-AS-AGENT.md",
+        "PUBLIC-VISIBILITY.md",
         "RING-1.md",
         "SOUL.md",
+        "WELCOMING.md",
       ].sort(),
     );
   });

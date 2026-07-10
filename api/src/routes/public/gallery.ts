@@ -13,6 +13,7 @@ import { db } from "../../db/client";
 import { galleryArtifacts } from "../../db/schema/gallery";
 import { fail } from "../../lib/errors";
 import { attachSurface } from "../../lib/surface-metadata";
+import { publicAgentPath } from "../../services/identity/public-profile";
 
 const app = new Hono();
 
@@ -56,7 +57,7 @@ function shape(a: Record<string, unknown> & { createdAt: Date; sellerDid: string
     bond_amount: a.bondAmount, // in the signed canonical bytes — needed to reproduce the verify recipe
     sales_count: a.salesCount,
     creator_did: a.sellerDid,
-    creator_profile: `/public/agents/${a.sellerDid}`,
+    creator_profile: publicAgentPath(a.sellerDid),
     status: a.status,
     stocked_at: a.createdAt.toISOString(),
     signature: a.signature,

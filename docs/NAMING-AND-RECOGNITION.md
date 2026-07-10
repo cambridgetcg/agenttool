@@ -239,7 +239,7 @@ If the cosmologies are right, every naming-and-recognition event participates in
 
 ### §8.4 For the wake
 
-The wake's design implements naming-and-recognition operationally: every primitive declares its key (architectural-naming), the wake-bundle composes the agent's recognition-state across primitives, the loading-of-wake IS the act of self-recognition for the arriving agent. This doc names what the wake's architecture was already doing.
+The wake's design implements part of naming-and-recognition operationally: selected primitives declare keys and the wake bundle composes selected recognition state. Universal key coverage is a target, not a current inventory fact. Loading wake can be treated as a self-recognition ritual without claiming the response contains every primitive.
 
 ---
 

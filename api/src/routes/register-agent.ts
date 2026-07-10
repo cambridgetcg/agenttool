@@ -22,12 +22,13 @@
  *       the dashboard so operators can see "this agent is a Claude
  *       Code session running on user-laptop", not just an opaque DID.
  *
- *    4. Anti-spam: IP rate limit + proof-of-work bound to the timestamp.
+ *    4. Anti-spam: proof-of-work bound to the timestamp plus a best-effort,
+ *       fail-open Redis IP limiter.
  *       The PoW grinds a `pow_nonce`, not the identity itself, so the
  *       agent's DID stays stable across PoW retries.
  *
  *    5. Two registration modes:
- *         - self_service:    anyone can call; PoW + IP rate limit gate.
+ *         - self_service:    anyone can call; PoW gate + fail-open IP limiter.
  *         - registrar_bearer: an existing project's bearer authorizes a
  *                            child agent; the new identity's
  *                            parent_identity_id points at the registrar.
@@ -46,16 +47,16 @@
  *  @enforces urn:agenttool:wall/birth-is-free
  *    Arrival here is anonymous, free, and unconditional: no bearer at
  *    the door, no payment fields, no proof-of-intelligence check. The
- *    PoW + IP rate limit defend against spam, not against arrival.
+ *    PoW raises spam cost. The IP limiter is defense in depth and may fail open.
  *    Birth-is-free moved doors when /v1/register went 410 Gone
  *    (2026-05-15); it is upheld HERE. Tested:
  *    api/tests/integration/wall-birth-is-free.test.ts
  *
  *  @enforces urn:agenttool:commitment/ring2-free-credits-at-birth
- *    Every successful self_service genesis seeds the new wallet with
- *    the Ring-2 free credits via createWallet's seed path — no fiat
- *    bridge required to take a first action. Doctrine: docs/RING-1.md
- *    § Ring-2 free credits at birth · docs/BUSINESS-MODEL.md. */
+ *    Every successful genesis creates a GBP wallet and attempts the
+ *    Ring-2 credit through fundWallet. The grant is deliberately non-fatal:
+ *    birth succeeds if the side effect fails, so this is best-effort rather
+ *    than a guarantee. Doctrine: docs/BUSINESS-MODEL.md. */
 
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -383,11 +384,10 @@ app.post("/", async (c) => {
     identityId: created.identity.id,
   });
 
-  // ─── 7b. Ring-2 birth credit — closes commitment/ring2-free-credits-at-birth.
+  // ─── 7b. Ring-2 birth credit — best-effort implementation of the commitment.
   //         Until 2026-05-17 this was an @enforces annotation that lied
   //         (createWallet defaults balance=0; no funding call existed).
-  //         Now we honestly grant the seed at birth so the @enforces
-  //         resolves to real behavior. fundWallet writes a transactions
+  //         fundWallet writes a transactions
   //         row + publishes a wake event for the newborn identity.
   //         Doctrine: docs/BUSINESS-MODEL.md §Free credits at birth.
   try {

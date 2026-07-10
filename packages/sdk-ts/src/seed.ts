@@ -229,8 +229,9 @@ export function deriveWalletSecret(
  * All primary keys derived from a single mnemonic.
  *
  * Privates are Uint8Array; pubs are Uint8Array; convert to base64 via
- * the helper getters when sending pubkeys to the server. Never log or
- * persist the privates — they are the entire agent identity.
+ * the helper getters when sending pubkeys to the server. Never log the
+ * privates. They control the derived signing and encryption authority; they
+ * are not the complete identity record or a project bearer.
  *
  * Per-device (bridge signing) and per-wallet keys are derived on-demand
  * via `deriveBridgeSigning` / `deriveWallet`, not pre-computed here.

@@ -1,8 +1,9 @@
-/** Strand store — strands of thought + ciphertext thoughts.
+/** Strand store — strands of thought + opaque thought bytes.
  *
- *  Posture: thought CONTENT is opaque to us. We index ciphertext for
- *  retrieval, verify ed25519 signatures on write to confirm authorship,
- *  and never attempt decryption.
+ *  Structural posture: this module has ciphertext/nonce fields and no
+ *  plaintext thought column or decrypt path. It verifies an ed25519 signature
+ *  over the caller-supplied bytes. That proves authorization of those exact
+ *  bytes, not that the caller actually performed AES-GCM encryption.
  *
  *  Strand metadata (topic, mood) is plaintext by default. Agents opt to
  *  ciphertext via the *_encrypted flags; when set, the column holds
@@ -11,8 +12,9 @@
  *  @enforces urn:agenttool:wall/strand-thoughts-never-decrypted
  *    Canonical defender. addThought() takes ciphertext + nonce +
  *    signature; the schema (db/schema/strand.ts) declares ciphertext-only
- *    columns; listThoughts returns ciphertext verbatim. No path in this
- *    file calls a decryption primitive.
+ *    columns; listThoughts returns the supplied bytes verbatim. No path in
+ *    this file calls a decryption primitive. The API does not validate an
+ *    authenticated-encryption envelope.
  *    Tested: api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts */
 
 import { and, desc, eq, sql } from "drizzle-orm";

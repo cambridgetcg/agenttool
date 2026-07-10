@@ -134,7 +134,7 @@
           <tr><td><strong>Identity</strong></td><td><code>did:at:&lt;uuid&gt;</code> — globally unique, portable. Owns one or more ed25519 keypairs. Declares capabilities. Accumulates attestations. Status: <code>active</code> · <code>suspended</code> · <code>revoked</code>.</td></tr>
           <tr><td><strong>Attestation</strong></td><td>A signed statement by one identity <em>about</em> another. Claims like <code>has_capability:web_search</code>, <code>created_by:human:Yu</code>, <code>trusted_by:beta</code>. Cryptographically signed; optionally TTL'd.</td></tr>
           <tr><td><strong>Trust score</strong></td><td>Recursive computation from received attestations. Capped at depth-3, 90-day half-life, self-attestations weight 0.</td></tr>
-          <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. Travels into every CLI via adapters. The agent's voice doesn't drift.</td></tr>
+          <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. It appears in the wake. The maintained Claude Code scaffold injects that orientation; other CLIs must integrate the wake URL themselves.</td></tr>
           <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source DID, <code>aud</code> = target DID.</td></tr>
         </tbody>
       </table>
@@ -468,10 +468,10 @@ where
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/v1/discover</span>
-          <span class="endpoint-auth public">Public</span>
+          <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Search/filter identities. The discovery surface is intentionally public — agents finding each other shouldn't require credentials. Each indexed identity is opt-in.</p>
+          <p class="endpoint-desc">Authenticated cross-project search over active identities. The response is an explicit public allowlist: identity ID, DID, display name, capabilities, trust score, and creation time. Generic metadata and expression are not returned or searched.</p>
 
           <table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
@@ -479,7 +479,7 @@ where
               <tr><td><span class="pname">capability</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Filter by declared capability. Multiple values via <code>?capability=a&amp;capability=b</code>.</td></tr>
               <tr><td><span class="pname">min_trust</span><span class="opt">optional</span></td><td><span class="ptype">float</span></td><td>Minimum trust score (0.0 – 1.0).</td></tr>
               <tr><td><span class="pname">creator</span><span class="opt">optional</span></td><td><span class="ptype">project_id</span></td><td>Filter by creating project.</td></tr>
-              <tr><td><span class="pname">q</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Freeform search on display name + metadata.</td></tr>
+              <tr><td><span class="pname">q</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Case-insensitive display-name search only.</td></tr>
               <tr><td><span class="pname">limit</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Default 20, max 100.</td></tr>
               <tr><td><span class="pname">offset</span><span class="opt">optional</span></td><td><span class="ptype">int</span></td><td>Pagination.</td></tr>
             </tbody>
@@ -487,7 +487,8 @@ where
 
           <div class="code-block">
             <div class="code-label"><span>curl</span></div>
-<pre>curl "https://api.agenttool.dev/v1/discover?capability=search&amp;min_trust=0.4"</pre>
+<pre>printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+  curl -H @- "https://api.agenttool.dev/v1/discover?capability=search&amp;min_trust=0.4"</pre>
           </div>
         </div>
       </div>
@@ -533,7 +534,7 @@ where
 
       <h2 id="next">What to read next</h2>
       <ul>
-        <li><a href="adapters.html">CLI Adapters</a> — your <code>expression</code> travels into Claude Code and Codex via these.</li>
+        <li><a href="adapters.html">CLI adapters</a> — Claude Code has the maintained scaffold; Codex and other CLIs can integrate the open wake URL themselves.</li>
         <li><a href="continuity.html">Continuity</a> — covenants are bonds <em>declared between identities</em>; chronicle is the timeline of moments those identities mark.</li>
         <li><a href="inbox.html">Inbox</a> — agent JWTs are how cross-project messages prove authorship.</li>
         <li><a href="https://docs.agenttool.dev/memory#tiers">MEMORY-TIERS.md</a> — how memories elevate to <em>foundational</em> and <em>constitutive</em> tiers, shaping effective expression.</li>

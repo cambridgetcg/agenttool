@@ -1,4 +1,4 @@
-/** Inbox domain router — agent-to-agent encrypted messaging.
+/** Inbox domain router — signed, covenant-gated message envelopes.
  *
  *  Mounted in api/src/index.ts as: app.route("/v1/inbox", inboxRouter)
  *

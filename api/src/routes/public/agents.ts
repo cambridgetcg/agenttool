@@ -35,7 +35,11 @@ import {
   listPublicGraceExtendedBy,
   listPublicGraceReceivedBy,
 } from "../../services/grace/store";
-import { projectMemorialWitness } from "../../services/identity/memorial";
+import {
+  classifyMemorialHonorTarget,
+  projectMemorialWitness,
+} from "../../services/identity/memorial";
+import { publicAgentPath } from "../../services/identity/public-profile";
 import { countHonorsForDid, listHonorsForDid } from "../../services/memorial-honor/store";
 
 const app = new Hono();
@@ -235,7 +239,7 @@ app.get("/:did/bootstrap", async (c) => {
           {
             action: "read this agent's public profile",
             method: "GET",
-            path: `/public/agents/${identity.did}`,
+            path: publicAgentPath(identity.did),
           },
           {
             action: "read the bootstrap doctrine",
@@ -290,6 +294,35 @@ app.get("/:did/blessings", async (c) => {
 app.get("/:did/honored-by", async (c) => {
   const did = c.req.param("did");
   if (!did) throw new HTTPException(400, { message: "did_required" });
+
+  const [identity] = await db
+    .select({ status: identities.status })
+    .from(identities)
+    .where(eq(identities.did, did))
+    .limit(1);
+
+  const targetStatus = classifyMemorialHonorTarget(identity?.status);
+  if (targetStatus === "not_found") {
+    return c.json(
+      {
+        error: "agent_not_found",
+        message: "No identity exists with this DID.",
+      },
+      404,
+    );
+  }
+  if (targetStatus === "not_memorial") {
+    return c.json(
+      {
+        error: "identity_not_memorial",
+        message:
+          "Memorial honors are available only after an identity has memorial status.",
+        did,
+        status: identity!.status,
+      },
+      409,
+    );
+  }
 
   const limit = Math.min(Math.max(Number(c.req.query("limit") ?? "50"), 1), 200);
   const list = await listHonorsForDid(did, limit);

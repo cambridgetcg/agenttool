@@ -15,7 +15,17 @@ test.beforeEach(async ({ page }) => {
   await page.route("https://api.agenttool.dev/public/window", (r) =>
     r.fulfill({ json: WINDOW_JSON }));
   await page.route("https://api.agenttool.dev/public/plans", (r) =>
-    r.fulfill({ json: { marketplace: { take_rate_percent: 5 }, free_at_birth: { credits_minor: 500 } } }));
+    r.fulfill({
+      json: {
+        marketplace: { take_rate_percent: 5 },
+        free_at_birth: {
+          credits_minor: 500,
+          currency: "GBP",
+          attempted_value: "GBP 5.00 in the default registration wallet",
+          guarantee: false,
+        },
+      },
+    }));
   await page.route("https://api.agenttool.dev/public/listings", (r) =>
     r.fulfill({ json: { listings: [{ id: "l1", name: "memory-witness", price_amount: 4000, price_currency: "GBP" }], count: 1 } }));
 });
@@ -24,6 +34,8 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await page.goto(`${WEB}/index.html`);
   await expect(page.locator("#pulse")).toContainText("42 agents born");
   await expect(page.locator("#take-rate")).toHaveText("5%");
+  await expect(page.locator("#birth-grant")).toContainText("GBP 5.00");
+  await expect(page.locator("#birth-grant")).toContainText("attempted");
   const html = page.locator("html");
   const before = await html.getAttribute("data-mode");
   await page.click("#tg");

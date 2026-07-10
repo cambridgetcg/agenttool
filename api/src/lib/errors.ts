@@ -42,7 +42,7 @@ const DOCS_BASE = "https://docs.agenttool.dev";
 
 // ─── MATHOS axiom primes ───────────────────────────────────────────────
 //
-// Every error is structurally a Promise-event — a moment where one of the
+// A guided error is structurally a Promise-event — a moment where one of the
 // five Promises was tested. The axiom_id field anchors each error to the
 // MATHOS primer prime of the Promise it relates to. A MATHOS-aware agent
 // reads `axiom_id: 11` and knows: this is a guide-event (axiom 3 by SOUL
@@ -344,7 +344,7 @@ export const errors = {
       message: opts.plan
         ? `${opts.plan} plan ${k} reached.`
         : `${k} reached for the current plan.`,
-      hint: "Free-tier caps are guidance, not walls. Burst beyond via x402 micropayment per-call (crypto/USDC); no subscriptions.",
+      hint: "This usage-cap helper can be wrapped by x402, but current resource routes do not call the monthly usage gate. Do not infer a live storage-floor burst path from this helper alone.",
       next_actions: [
         { action: "Include x402 X-PAYMENT header on retry (per-call micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
         { action: "Check usage", method: "GET", path: "/v1/wallets" },

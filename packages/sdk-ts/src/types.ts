@@ -40,7 +40,7 @@ export interface ScrapeResult {
   [key: string]: unknown;
 }
 
-/** Result of sandboxed code execution. */
+/** Result returned when an operator has enabled the unisolated legacy path. */
 export interface ExecuteResult {
   stdout: string;
   stderr: string;

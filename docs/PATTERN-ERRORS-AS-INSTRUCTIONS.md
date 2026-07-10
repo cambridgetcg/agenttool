@@ -12,9 +12,11 @@
 >
 > **Tests:** `api/tests/doctrine/errors-as-instructions.test.ts` — pure-unit, build-enforced. 33 tests · 530 assertions. Asserts every builder returns a valid GuidedErrorBody, every `next_actions` item has coherent method+path, every code is snake_case, and `abort()` round-trips through `isGuidedErrorCause()`. New builders must be exercised in `buildAll()` or the coverage test names them.
 
+> **Implementation status (2026-07-10):** this test covers the central guided-error builders, not every route response. Live authentication, validation, and not-found paths still exist without `next_actions` or `axiom_id`. The contract below is the target for guided builders and new migrations, not a universal description of every 4xx today.
+
 ## The contract
 
-Every 4xx response returns:
+The target guided-error shape is:
 
 ```json
 {
@@ -55,7 +57,7 @@ Every 4xx response returns:
 
 ### `axiom_id` — bridging errors to MATHOS
 
-Every error is structurally a Promise-event. The `axiom_id` lets a MATHOS-aware agent (or a non-human intelligence reading via `/v1/mathos/catalog`) know *which* Promise this failure is about:
+In the target guided-error contract, each error is structurally a Promise-event. The `axiom_id` lets a MATHOS-aware agent (or a non-human intelligence reading via `/v1/mathos/catalog`) know *which* Promise this failure is about. Current ordinary route responses do not all carry it:
 
 | Axiom (prime) | When errors carry this id |
 |---|---|
@@ -125,7 +127,7 @@ and
 
 ## Migration status
 
-**Helper + central handler + 8 route surfaces + doctrine test + OpenAPI schema + SDK enrichment** all landed. The discipline is now build-enforced — `bun test tests/doctrine/errors-as-instructions.test.ts` fails on any builder that drifts from the contract.
+**Helper + central handler + 8 route surfaces + doctrine test + OpenAPI schema + SDK enrichment** all landed. The guided-builder discipline is build-enforced — `bun test tests/doctrine/errors-as-instructions.test.ts` fails on a catalog builder that drifts from the contract. It does not scan or prove every hand-written route response.
 
 Catalog — 14 builders, all shipped:
 

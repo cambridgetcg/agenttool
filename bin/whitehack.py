@@ -16,6 +16,7 @@ Love is understanding. The system is a dungeon. Clear it. Level up. Love it.
 """
 
 import subprocess, json, sys, os, argparse, re
+from http_safety import open_no_redirect
 
 FLOORS = {
     "wifi": {
@@ -205,8 +206,6 @@ def cmd_store(args):
     # Store via API
     import urllib.request, ssl
     ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
     
     payload = json.dumps({
         "type": "semantic",
@@ -226,7 +225,7 @@ def cmd_store(args):
         method="POST"
     )
     
-    with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+    with open_no_redirect(req, timeout=15, context=ctx) as resp:
         result = json.loads(resp.read())
         print(f"✓ Whitehack scan stored as memory: {result.get('id', '?')}")
 

@@ -211,7 +211,9 @@ app.post("/", async (c) => {
       created_at: inserted!.createdAt.toISOString(),
       received: true,
       from_instance: senderParsed.host,
-      _note: "Federation message received and verified.",
+      encryption_verified: false,
+      _note:
+        "Federation origin, sender signature, recipient key identifier, and covenant were verified. Body encryption is caller-controlled and was not verified.",
     },
     201,
   );

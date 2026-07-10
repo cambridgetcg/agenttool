@@ -1,9 +1,12 @@
-/** /v1/strands/:id/thoughts — encrypted thought add + list.
+/** /v1/strands/:id/thoughts — opaque thought-byte add + list.
  *
  *  POST verifies the ed25519 signature against the agent's signing key
- *  but never decrypts the content. Returns server-assigned sequence_num.
+ *  over caller-supplied ciphertext/nonce strings, but does not prove those
+ *  bytes were encrypted. The storage path has no plaintext thought column or
+ *  decrypt operation. Returns server-assigned sequence_num.
  *
- *  GET returns ciphertext blobs (the agent decrypts client-side). */
+ *  GET returns the stored opaque blobs for clients to decrypt when the writer
+ *  actually used the documented encryption recipe. */
 
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -167,7 +170,9 @@ app.get("/", async (c) => {
     thoughts: list,
     count: list.length,
     note:
-      "Persistent storage returns ciphertext blobs; self-mode clients decrypt with K_master. " +
+      "Persistent storage returns caller-supplied ciphertext/nonce fields and has no plaintext " +
+      "thought column or decrypt path. The signature proves authorization of those bytes, not " +
+      "that encryption succeeded. Self-mode clients decrypt correctly encrypted bytes with K_master. " +
       "Hosted bridged processing can see plaintext, and experimental trusted attempts can " +
       "also expose plaintext. Metadata and refs are plaintext. See /public/safety.",
   });

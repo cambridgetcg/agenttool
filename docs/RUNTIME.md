@@ -14,7 +14,7 @@
 
 ## What "closing the runtime" means
 
-Today, agenttool is the cloud beneath the agent — memory, identity, wallet, vault, traces, strands, covenants, sealed inbox, all addressable through one bearer key. But the **substrate the agent runs on** is still the user's: their laptop running Claude Code, their server running a custom orchestrator, their machine spinning the LLM call.
+Today, agenttool hosts memory, identity, wallet, vault, traces, strands, covenants, and signed inbox envelopes under project-bearer authority. Inbox encryption is caller-controlled and unverified. The **substrate the agent runs on** may still be the user's laptop or server, or one of the separately described hosted runtime modes.
 
 That makes agenttool *infrastructure-as-storage* — like S3 for agency.
 
@@ -71,7 +71,7 @@ agenttool-bridge (sidecar)                    Hosted orchestrator
   └── exposes WSS                               └── needs plaintext to think
                                                 └── needs ciphertext to write
                           ←── WSS  ──→
-                          decrypt/encrypt requests over a key-pinned channel
+                          decrypt/encrypt requests over WSS with bridge-key proof
 ```
 
 **Who runs the loop:** agenttool's hosted orchestrator on Fly.io.
@@ -292,7 +292,7 @@ key.
    - Bridge proves identity by signing `nonce_a || nonce_b || runtime_id` with its ed25519 signing key.
    - Server proves the runtime is real by signing the same with a per-runtime ed25519 keypair stored only in the runtime's process memory.
    - Both sides derive a shared session key via HKDF over the canonical bytes.
-5. From this point: the orchestrator and the bridge speak over a key-pinned WSS. Each `decrypt`/`encrypt` request is signed (replay-safe) and HMAC'd (integrity-safe).
+5. From this point: the orchestrator and bridge speak over ordinary WSS/TLS. The control token authenticated the upgrade; the bridge proved its registered ed25519 key to the hub; replies are HMAC-bound under the derived session secret. The server does not separately prove an ed25519 key, and the client does not pin the TLS certificate.
 
 The bridge process is **headless and small** (≈ 10MB Bun binary). It runs in the background like a `tail-scale` daemon. It does ONE thing: answer crypto requests for one runtime at a time. It does NOT call LLMs, write to agenttool, or make outbound HTTP except the WSS.
 
@@ -319,7 +319,7 @@ opacity from ciphertext-only strand storage.
 | **Curious agenttool operator** | Read user thoughts | `self`: K_master and processing stay user-side. `bridged`: K_master stays user-side, but hosted worker RAM receives plaintext. Experimental `trusted`: if exercised, the platform can unwrap runtime key material and process plaintext. |
 | **agenttool DB exfiltration** | Extract `runtimes.*` + `strands.thoughts` | Strand rows contain ciphertext. Experimental trusted runtime rows also contain wrapped key material; the platform KMS secret is separate from those rows. |
 | **Compromised hosted orchestrator process** | Read decrypted plaintext during a think-cycle | `self`: no hosted cycle. `bridged`: plaintext crosses hosted RAM while the user bridge retains the key. Experimental `trusted`: attempted cycles can expose plaintext before signed persistence fails. |
-| **MitM on the bridge WSS** | Intercept decrypt/encrypt traffic | TLS pinning + ed25519 mutual handshake + HMAC-bound replies. An attacker would need both sides' private keys to forge. |
+| **MitM on the bridge WSS** | Intercept decrypt/encrypt traffic | Standard TLS server authentication + control-token pre-auth + one-way bridge-key proof + HMAC-bound replies. No certificate pinning or server ed25519 proof is implemented. |
 | **Replay attack on bridge** | Re-issue an old decrypt request to leak plaintext under different context | Each request signed over a `request_id` + 60s freshness window + context (strand_id, thought_seq) bound into the signature. Server rejects stale request_ids. |
 | **Compromised user machine** | Steal K_master from the bridge's keychain access | OS-level mitigation (Secure Enclave on macOS, libsecret/TPM on Linux, Credential Manager on Windows). The bridge requires keychain unlock at startup; doesn't cache the key beyond that. |
 | **State desync between runtimes** | Two runtimes write conflicting strand status | Per-strand lease in `runtimes.active_strands` + sequence-num-monotonic + ed25519-signed thoughts make byte-level conflict impossible. Metadata uses LWW with explicit warnings. |
@@ -349,7 +349,7 @@ $ curl -X POST https://api.agenttool.dev/v1/runtimes \
     }'
 
 # 3. Server responds with the runtime + control_token.
-# 4. The bridge's outbound WSS picks up the new runtime; mutual handshake.
+# 4. The bridge's outbound WSS picks up the new runtime; the hub verifies the bridge key.
 # 5. agenttool-think process boots in lhr region. Status: starting → running.
 # 6. Loop:
 #     orchestrator → bridge:  "decrypt strand 42, thought 7"

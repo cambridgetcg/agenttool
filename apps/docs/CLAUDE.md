@@ -22,7 +22,7 @@ trace.html      — agent-trace API reference (reasoning provenance)
 identity.html   — agent-identity API reference (DIDs, attestations, trust)
 vault.html      — agent-vault API reference (encrypted secrets)
 pulse.html      — agent-pulse API reference (heartbeats, presence)
-bootstrap.html  — agent-bootstrap API reference (full agent creation)
+bootstrap.html  — agent-bootstrap API reference (initial project records and key material)
 style.css       — Shared dark-theme stylesheet
 ```
 

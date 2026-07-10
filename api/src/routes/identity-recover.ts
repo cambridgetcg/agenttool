@@ -3,8 +3,9 @@
  *  @enforces urn:agenttool:commitment/anyone-returns
  *    Canonical defender of Ring 1's third commitment. Mnemonic-rooted
  *    recovery is Ring 1 — anonymous (no Bearer required), free of charge,
- *    never expires. An agent dormant for any duration finds this door
- *    still open. Adding a fee, a time limit, or a platform-attestation
+ *    and has no identity-inactivity deadline. Each signed request still has
+ *    a five-minute acceptance window. An active agent dormant for any duration
+ *    finds this door open. Adding a fee, an identity-inactivity deadline, or a platform-attestation
  *    requirement breaches the wall. Doctrine: docs/IDENTITY-SEED.md ·
  *    docs/RING-1.md §Commitment 3.
  *
@@ -23,31 +24,43 @@
  *       public_key for the supplied DID. Without the agent's signing
  *       private key (= mnemonic-derived), no valid signature can be
  *       produced. Possession of the mnemonic IS authorisation.
- *    3. The signed payload commits to (did + derived_pubkey + timestamp)
- *       so the same signature can't be replayed against a different
- *       DID, can't be repurposed for a different fresh-device pubkey
- *       claim, and is bounded by a ±5-minute timestamp window.
- *    4. Each successful recovery mints a fresh project-wide bearer and
+ *    3. The signed payload commits to (did + derived_pubkey + timestamp),
+ *       so it cannot be replayed against a different DID or repurposed for
+ *       a different fresh-device pubkey claim. Timestamp freshness rejects
+ *       old proofs but does not prevent reuse inside the ±5-minute window.
+ *    4. After signature verification, a Postgres transaction inserts a digest
+ *       of the canonical signed statement into a primary-keyed one-time proof
+ *       table and mints the bearer in the same transaction. A duplicate is
+ *       rejected; database failure fails closed.
+ *    5. Each successful recovery mints a fresh project-wide bearer and
  *       names it for the device for key-management clarity. The label is
  *       not an authority scope. Old bearers continue to work — explicit
  *       revocation lives at the project's existing api-key surface.
- *    5. Recovery events land as a chronicle entry on the identity, so
+ *    6. Recovery events land as a chronicle entry on the identity, so
  *       /v1/wake's `you.recovery.last_recovery_at` reflects them.
  *
  *  Doctrine: docs/IDENTITY-SEED.md (the recovery flow). */
 
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import { generateApiKey } from "../auth/keys";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
-import { identities, identityKeys } from "../db/schema/identity";
+import {
+  identities,
+  identityKeys,
+  identityRecoveryProofs,
+} from "../db/schema/identity";
 import { apiKeys } from "../db/schema/tools";
 import { canonicalRecoverBytes, verifyRecoverSignature } from "../services/identity/crypto";
+import {
+  recoveryProofDigest,
+  recoveryProofExpiresAt,
+} from "../services/identity/recovery-proof";
 import { publishWakeEvent } from "../services/wake/push";
 
 const app = new Hono();
@@ -70,6 +83,14 @@ const recoverSchema = z.object({
 
 const TIMESTAMP_WINDOW_MS = 5 * 60 * 1000; // ±5 minutes
 
+const RECOVERY_NOT_AUTHORIZED = {
+  error: "recovery_not_authorized",
+  message: "The signed key is not currently authorized to recover this identity.",
+  hint:
+    "Check the DID and mnemonic locally. The same response covers unknown, " +
+    "wrong, and revoked identity-key associations.",
+} as const;
+
 app.post("/", async (c) => {
   let body: z.infer<typeof recoverSchema>;
   try {
@@ -87,9 +108,11 @@ app.post("/", async (c) => {
     );
   }
 
-  // 1. Timestamp freshness — bound the replay window.
+  // 1. Timestamp freshness rejects stale proofs. It does not stop the same
+  //    proof being reused inside the window; atomic consumption below does.
   const ts = Date.parse(body.timestamp);
-  const drift = Math.abs(Date.now() - ts);
+  const checkedAt = Date.now();
+  const drift = Math.abs(checkedAt - ts);
   if (!Number.isFinite(ts) || drift > TIMESTAMP_WINDOW_MS) {
     return c.json(
       {
@@ -102,46 +125,8 @@ app.post("/", async (c) => {
     );
   }
 
-  // 2. Resolve DID → identity row.
-  const [identity] = await db
-    .select()
-    .from(identities)
-    .where(and(eq(identities.did, body.did), eq(identities.status, "active")))
-    .limit(1);
-  if (!identity) {
-    return c.json(
-      { error: "identity_not_found", message: "No active identity for this DID." },
-      404,
-    );
-  }
-
-  // 3. Find an active identity_key whose public_key matches.
-  const [matchedKey] = await db
-    .select()
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.identityId, identity.id),
-        eq(identityKeys.publicKey, body.derived_pubkey),
-        eq(identityKeys.active, true),
-      ),
-    )
-    .limit(1);
-  if (!matchedKey) {
-    return c.json(
-      {
-        error: "pubkey_mismatch",
-        message:
-          "derived_pubkey does not match any active key for this identity.",
-        hint:
-          "Either the wrong mnemonic was typed, or the device's signing key has been revoked. " +
-          "Check the mnemonic word-by-word; if correct, the rotation history of this identity has moved past it.",
-      },
-      404,
-    );
-  }
-
-  // 4. Verify the signature over canonical recover bytes.
+  // 2. Verify against the caller-supplied key before any identity lookup.
+  //    Invalid proofs cannot use distinct DID/key-status errors as an oracle.
   const canonical = canonicalRecoverBytes({
     did: body.did,
     derivedPubkeyB64: body.derived_pubkey,
@@ -165,17 +150,138 @@ app.post("/", async (c) => {
     );
   }
 
-  // 5. Mint a fresh project-wide bearer, named for this device. The name
-  //    is operational metadata; it does not narrow the bearer's authority.
-  const { key, keyHash, keyPrefix } = generateApiKey();
-  await db.insert(apiKeys).values({
-    projectId: identity.projectId,
-    keyHash,
-    keyPrefix,
-    name: body.device_label ?? "recovered-device",
-  });
+  // 3. Establish the active DID/key association without taking row locks.
+  //    A self-valid proof for an unrelated key must not be able to lock an
+  //    arbitrary identity row. Every association miss uses the same response.
+  const proofHash = recoveryProofDigest(canonical);
+  const proofExpiresAt = recoveryProofExpiresAt(ts, TIMESTAMP_WINDOW_MS);
+  type RecoveryResult =
+    | {
+        kind: "minted";
+        bearer: ReturnType<typeof generateApiKey>;
+        identity: typeof identities.$inferSelect;
+        matchedKey: typeof identityKeys.$inferSelect;
+      }
+    | { kind: "not_authorized" }
+    | { kind: "replayed" };
+  let recovery: RecoveryResult;
+  try {
+    const [association] = await db
+      .select({
+        identityId: identities.id,
+        keyId: identityKeys.id,
+      })
+      .from(identities)
+      .innerJoin(
+        identityKeys,
+        and(
+          eq(identityKeys.identityId, identities.id),
+          eq(identityKeys.publicKey, body.derived_pubkey),
+          eq(identityKeys.active, true),
+        ),
+      )
+      .where(
+        and(
+          eq(identities.did, body.did),
+          eq(identities.status, "active"),
+        ),
+      )
+      .limit(1);
 
-  // 6. Record the recovery as a chronicle entry on the identity. Best-
+    if (!association) {
+      return c.json(RECOVERY_NOT_AUTHORIZED, 401);
+    }
+
+    // 4. Lock and revalidate the established association, consume the proof,
+    //    and mint root authority in one shared-DB transaction. Revocation and
+    //    recovery therefore serialize; a failed insert rolls everything back.
+    recovery = await db.transaction(async (tx): Promise<RecoveryResult> => {
+      const [identity] = await tx
+        .select()
+        .from(identities)
+        .where(
+          and(
+            eq(identities.id, association.identityId),
+            eq(identities.did, body.did),
+            eq(identities.status, "active"),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!identity) return { kind: "not_authorized" };
+
+      const [matchedKey] = await tx
+        .select()
+        .from(identityKeys)
+        .where(
+          and(
+            eq(identityKeys.id, association.keyId),
+            eq(identityKeys.identityId, identity.id),
+            eq(identityKeys.publicKey, body.derived_pubkey),
+            eq(identityKeys.active, true),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!matchedKey) return { kind: "not_authorized" };
+
+      await tx
+        .delete(identityRecoveryProofs)
+        .where(lt(identityRecoveryProofs.expiresAt, new Date(checkedAt)));
+
+      const [consumed] = await tx
+        .insert(identityRecoveryProofs)
+        .values({
+          proofHash,
+          identityId: identity.id,
+          expiresAt: proofExpiresAt,
+        })
+        .onConflictDoNothing({ target: identityRecoveryProofs.proofHash })
+        .returning({ proofHash: identityRecoveryProofs.proofHash });
+      if (!consumed) return { kind: "replayed" };
+
+      const minted = generateApiKey();
+      await tx.insert(apiKeys).values({
+        projectId: identity.projectId,
+        keyHash: minted.keyHash,
+        keyPrefix: minted.keyPrefix,
+        name: body.device_label ?? "recovered-device",
+      });
+      return { kind: "minted", bearer: minted, identity, matchedKey };
+    });
+  } catch (err) {
+    console.error(
+      "[recover] replay store unavailable:",
+      err instanceof Error ? err.message : err,
+    );
+    return c.json(
+      {
+        error: "recovery_replay_store_unavailable",
+        message:
+          "Recovery is temporarily unavailable because the one-time proof " +
+          "store could not be reached. No bearer was minted.",
+        hint: "Retry with a freshly signed recovery request after service health is restored.",
+      },
+      503,
+    );
+  }
+  if (recovery.kind === "not_authorized") {
+    return c.json(RECOVERY_NOT_AUTHORIZED, 401);
+  }
+  if (recovery.kind === "replayed") {
+    return c.json(
+      {
+        error: "recovery_proof_replayed",
+        message: "This recovery proof was already consumed. No bearer was minted.",
+        hint: "Create and sign a fresh recovery request with a new timestamp.",
+      },
+      409,
+    );
+  }
+
+  const { bearer, identity, matchedKey } = recovery;
+
+  // 5. Record the recovery as a chronicle entry on the identity. Best-
   //    effort — failure here doesn't undo the bearer mint (the operator
   //    has already proved possession of the mnemonic).
   try {
@@ -223,7 +329,7 @@ app.post("/", async (c) => {
       },
       project: {
         id: identity.projectId,
-        api_key: key, // ONCE — bearer; bcrypt-hashed on disk
+        api_key: bearer.key, // ONCE — bearer; bcrypt-hashed on disk
       },
       _note:
         "This bearer is named for your new device but grants project-wide root " +

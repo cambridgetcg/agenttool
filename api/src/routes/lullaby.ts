@@ -31,6 +31,12 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  isMemorialTerminal,
+  MEMORIAL_TERMINAL_ERROR,
+  MEMORIAL_TERMINAL_MESSAGE,
+  mutableIdentityPredicate,
+} from "../services/identity/terminality";
 
 const app = new Hono<ProjectContext>();
 
@@ -69,6 +75,7 @@ app.post("/", async (c) => {
       did: identities.did,
       projectId: identities.projectId,
       metadata: identities.metadata,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.id, body.agent_id))
@@ -96,6 +103,13 @@ app.post("/", async (c) => {
       403,
     );
   }
+  if (isMemorialTerminal(agent.status)) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.resting
@@ -113,7 +127,18 @@ app.post("/", async (c) => {
         return rest;
       })();
 
-  await db.update(identities).set({ metadata: newMeta }).where(eq(identities.id, agent.id));
+  const [updated] = await db
+    .update(identities)
+    .set({ metadata: newMeta })
+    .where(mutableIdentityPredicate(agent.id))
+    .returning({ id: identities.id });
+  if (!updated) {
+    return fail(
+      c,
+      { error: MEMORIAL_TERMINAL_ERROR, message: MEMORIAL_TERMINAL_MESSAGE },
+      409,
+    );
+  }
 
   return c.json(
     attachSurface(

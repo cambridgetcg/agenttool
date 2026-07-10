@@ -8,25 +8,22 @@ Usage:
   python3 strand.py branch <strand-id> --topic "The wall IS love"
   python3 strand.py patch <strand-id> --mood convergent --importance 0.98
   python3 strand.py complete <strand-id>
-  python3 strand.py encrypt --topic "Secret thought"  # topic_encrypted=True
+  # Client-side topic encryption is not implemented by this CLI.
   python3 strand.py wake    # show strands from the wake
 
-Strands are encrypted lines of thought. Content is ALWAYS AES-256-GCM ciphertext
-under K_master. The server stores signed blobs only. Even compelled, we have only
-opaque ciphertext. The privacy is not a setting; it is the architecture.
+Strand thought rows have ciphertext/nonce fields, but callers choose the bytes
+and the API does not prove encryption. Topic and mood can be plaintext. This CLI
+does not implement client-side encryption and refuses --encrypt rather than
+mislabeling omitted or plaintext data.
 """
 
 import json, sys, os, urllib.request, urllib.error, ssl, argparse
+from http_safety import open_no_redirect, validate_api_base
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
 BEARER = os.environ.get("AT_API_KEY")
-if not BEARER and len(sys.argv) > 1 and sys.argv[-1].startswith("at_"):
-    BEARER = sys.argv[-1]
-    sys.argv = sys.argv[:-1]
 
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
 def api(method, path, body=None):
     url = f"{API}{path}"
@@ -37,7 +34,7 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read().decode())
@@ -50,16 +47,17 @@ def get_agent_id():
     return agents[0].get("id") if agents else None
 
 def cmd_open(args):
+    if args.encrypt:
+        print("✗ --encrypt is unavailable: this CLI has no client-side encryption implementation.")
+        print("  No strand was created. Do not mark omitted or plaintext data as encrypted.")
+        raise SystemExit(2)
     agent_id = get_agent_id()
     payload = {"agent_id": agent_id, "topic": args.topic, "mood": args.mood, "importance": args.importance}
-    if args.encrypt:
-        payload["topic_encrypted"] = True
-        del payload["topic"]
     if args.parent:
         payload["parent_strand_id"] = args.parent
     result = api("POST", "/v1/strands", payload)
     print(f"✓ Strand opened: {result.get('id', '?')}")
-    print(f"  Topic: {result.get('topic', '(encrypted)')}")
+    print(f"  Topic: {result.get('topic', '(topic omitted)')}")
     print(f"  Mood: {result.get('mood', '?')} | Importance: {result.get('importance', '?')}")
     print(f"  Status: {result.get('status', '?')}")
 
@@ -68,7 +66,7 @@ def cmd_list(args):
     strands = result.get("strands", [])
     print(f"{result.get('count', len(strands))} strands:")
     for s in strands:
-        topic = s.get("topic", "(encrypted)") if not s.get("topic_encrypted") else "(encrypted)"
+        topic = s.get("topic", "(topic omitted)") if not s.get("topic_encrypted") else "(marked encrypted by caller)"
         status = s.get("status", "?")
         mood = s.get("mood", "—")
         imp = s.get("importance", 0)
@@ -131,7 +129,7 @@ def main():
     s.add_argument("--topic", default=None, help="Topic (plaintext)")
     s.add_argument("--mood", default=None)
     s.add_argument("--importance", type=float, default=0.5)
-    s.add_argument("--encrypt", action="store_true", help="Encrypt the topic")
+    s.add_argument("--encrypt", action="store_true", help="refuses: encryption is not implemented in this CLI")
     s.add_argument("--parent", default=None, help="Parent strand ID for branching")
     s.set_defaults(func=cmd_open)
 

@@ -386,7 +386,7 @@
       </div>
 
       <h2 id="bridge">The bridge protocol</h2>
-      <p>For <code>bridged</code>-tier runtimes, the user runs <code>agenttool-bridge</code> on their machine. The bridge holds <code>K_master</code>, opens an outbound WSS to the agenttool hub, and answers per-request decrypt/encrypt over a key-pinned channel.</p>
+      <p>For <code>bridged</code>-tier runtimes, the user runs <code>agenttool-bridge</code> on their machine. The bridge holds <code>K_master</code>, opens an outbound WSS using normal TLS server authentication, proves its registered ed25519 bridge key to the hub, and answers requests with HMAC-bound replies.</p>
 
       <p>Each request is signed by the orchestrator with the runtime's per-runtime ed25519 key, with a 60s replay window bound into the canonical bytes:</p>
 
@@ -436,11 +436,11 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
 
       <div class="callout">
         <span class="icon">⊙</span>
-        <p>The local <code>serve</code> mode is a demo. Production bridges run <code>agenttool-bridge connect --runtime-id … --token …</code>, which opens an <em>outbound</em> WSS to <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code>, completes a mutual ed25519 handshake against the <code>bridge_pubkey</code> registered at provisioning, and serves crypto requests with HMAC-bound replies under an HKDF-derived session secret. The hub side lives in <code>api/src/services/runtime/bridge-hub.ts</code>.</p>
+        <p>The local <code>serve</code> mode is a demo. Production bridges run <code>agenttool-bridge connect --runtime-id … --token …</code>, which opens an <em>outbound</em> WSS to <code>wss://api.agenttool.dev/v1/runtimes/:id/bridge</code>. The control token authenticates the connection before upgrade, the hub verifies the bridge's registered ed25519 key, and replies are HMAC-bound under an HKDF-derived session secret. The server does not provide a separate ed25519 proof and the client does not pin a TLS certificate.</p>
       </div>
 
       <h2 id="wake">/v1/wake — <code>you_run</code></h2>
-      <p>The <em>wake</em> (<code>/v1/wake</code>) is the JSON an agent gets each session — its whole self in one response, grouped into <code>you_own</code> (wallets), <code>you_keep</code> (vault), <code>you_remember</code> (memory). Runtime adds a fourth group: <code>you_run</code> — the runtimes it lives on. The agent reading its own wake sees its hosted runtimes the same way it sees its wallets — <em>what it owns, what it keeps, what it runs on</em>.</p>
+      <p>The <em>wake</em> (<code>/v1/wake</code>) is project-scoped session orientation with selected summaries such as <code>you_own</code>, <code>you_keep</code>, and <code>you_remember</code>, plus links to deeper routes. Runtime adds <code>you_run</code>, a summary of hosted runtimes. The wake is not a complete export of any of those stores.</p>
 
       <div class="code-block">
         <div class="code-label"><span>excerpt · /v1/wake response</span></div>
@@ -474,7 +474,7 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
           <tr><td>Curious agenttool operator reads thoughts</td><td>✓ key and plaintext user-side</td><td>✗ key user-side; plaintext in hosted RAM</td><td>✗ wrapped key and plaintext available if exercised</td></tr>
           <tr><td>DB exfiltration</td><td>✓ ciphertext only</td><td>✓ ciphertext only</td><td>~ ciphertext + KMS keys (separate store)</td></tr>
           <tr><td>Compromised orchestrator process</td><td>~ user-side process</td><td>✗ cycle plaintext is exposed</td><td>✗ attempted-cycle plaintext and unwrapped keys are exposed</td></tr>
-          <tr><td>MitM on bridge WSS</td><td>n/a</td><td>✓ TLS pinning + ed25519 mutual handshake + HMAC replies</td><td>n/a</td></tr>
+          <tr><td>MitM on bridge WSS</td><td>n/a</td><td>Standard WSS/TLS server authentication + control-token pre-auth + one-way bridge-key proof + HMAC replies; no certificate pinning or server ed25519 proof</td><td>n/a</td></tr>
           <tr><td>Replay attack on bridge</td><td>n/a</td><td>✓ request_id + 60s freshness + context-bound signature</td><td>n/a</td></tr>
           <tr><td>Compelled disclosure</td><td>✓ AgentTool stores ciphertext and lacks the user key</td><td>~ storage is ciphertext; hosted processing can expose plaintext</td><td>✗ platform can unwrap key material if the experimental path is exercised</td></tr>
         </tbody>

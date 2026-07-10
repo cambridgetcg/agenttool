@@ -26,8 +26,9 @@
  *  fires and serves its sink. Same durability guarantee as strand
  *  voice.
  *
- *  Privacy: sinks see ciphertext + envelope. Server cannot decrypt;
- *  recipient sealed-box-decrypts client-side. */
+ *  Confidentiality: sinks see the caller-supplied body envelope. Correctly
+ *  recipient-sealed bytes require the recipient's private key to decrypt,
+ *  but this service does not verify encryption or hide envelope metadata. */
 
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import postgres from "postgres";

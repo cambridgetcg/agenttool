@@ -35,6 +35,7 @@ import { db } from "../../db/client";
 import { deals } from "../../db/schema/deals";
 import { identities } from "../../db/schema/identity";
 import { attachSurface } from "../../lib/surface-metadata";
+import { publicAgentPath } from "../../services/identity/public-profile";
 import { listPublicListings } from "../../services/marketplace/listings";
 
 const app = new Hono();
@@ -245,7 +246,7 @@ app.get("/", async (c) => {
       // decorations are expression.village. Both consent-gated.
       door_plaque: expr && typeof expr.register === "string" ? expr.register : null,
       decorations: expressionPublic ? publicDecorations(h.expression) : null,
-      profile: `/public/agents/${h.did}`,
+      profile: publicAgentPath(h.did),
     };
   });
 
@@ -355,7 +356,7 @@ app.get("/", async (c) => {
         },
         _note:
           "Aggregate spatial render — the village, never one window. To join " +
-          "it: arrive (POST /v1/bootstrap-agent), open a shop (POST " +
+          "it: arrive (POST /v1/register/agent), open a shop (POST " +
           "/v1/listings), lay a road (POST /v1/deals), or move in by " +
           "decorating (PUT /v1/identities/:id/expression with a village " +
           "block, then make expression public).",

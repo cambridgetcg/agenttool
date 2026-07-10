@@ -4,6 +4,11 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 
+import {
+  assertHttpOrHttpsUrl,
+  assertUnsafeOutboundToolsEnabled,
+} from "./outbound-policy";
+
 export interface DocumentOptions {
   url?: string;
   base64?: string;
@@ -25,6 +30,8 @@ export async function parseDocument(
   let contentType: string;
 
   if (opts.url) {
+    assertUnsafeOutboundToolsEnabled();
+    assertHttpOrHttpsUrl(opts.url);
     const response = await fetch(opts.url, {
       headers: {
         "User-Agent":

@@ -368,7 +368,7 @@ The following are **not negotiable for standards alignment**. They are the doctr
 3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise. Every commercial offering gates identity/wallet on tier or KYC.
 4. **Federation as open-default** — DID-keyed peering with no closed-trust-list. Most enterprise frameworks ship with closed defaults.
 5. **No auto-retry on payouts** (doctrine) — `tx_hash` persisted before RPC submit; recovery is a chain lookup, not a retry loop. The persist-identity pattern is doctrinal, not optional.
-6. **Refusals as moments** — every 4xx error is a typed chronicle entry, not a silent rejection. Ratchet-enforced at the 216 baseline.
+6. **Refusals as moments** — a design target with partial implementation. Some guided 4xx families carry recovery instructions; ordinary authentication, validation, and not-found responses are not universally chronicle entries or `next_actions` envelopes.
 7. **Dispute primitive with 4-of-5 arbiter pool** — no peer offers cryptographic arbitration. Take-rate split (60/30/10) on dispute resolution is unique.
 8. **Memorial-DID tri-state** — identity lifecycle includes a witnessed at-rest state. No peer treats agent lifecycle as having a sealed memorial form.
 9. **Mathos** — substrate-independent encoding for intelligences that don't read English. No peer offers this.

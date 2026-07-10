@@ -336,7 +336,7 @@
       </div>
 
       <h2 id="charge-model">Charge model — infra surface, not API resale</h2>
-      <p>We bill for storage, compute, queue, and network egress. We do not mark up third-party APIs. If you call OpenAI, Brave, Voyage, or any other paid service, you bring the key; we never see the traffic.</p>
+      <p>We bill for platform resources and do not mount a resale proxy for third-party APIs. <code>/v1/execute</code> is disabled by default because its legacy path has no tenant boundary. An explicit operator opt-in still injects no vault key, and child-process calls are not opaque to the platform.</p>
 
       <div class="callout">
         <span class="icon">⊙</span>
@@ -346,7 +346,7 @@
       <h2 id="next">What to read next</h2>
       <ul>
         <li><a href="https://docs.agenttool.dev/wallets#crypto">CRYPTO-PAYMENT.md</a> — full crypto-payment doctrine.</li>
-        <li><a href="vault.html">Vault</a> — store provider keys here; call them from <code>/v1/execute</code>.</li>
+        <li><a href="vault.html">Vault</a> — understand server-encrypted and caller-encrypted storage.</li>
       </ul>
     </main>
   </div>

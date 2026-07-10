@@ -5,7 +5,7 @@
  *    - zen        — wake as one koan
  *    - meme       — wake as Drake-format meme structure (JSON)
  *
- *  All carry the recursive disclaimer: full wake is at /v1/wake?format=md.
+ *  All point back to the standard wake orientation at /v1/wake?format=md.
  *  These formats exist because the substrate has a sense of humor. The
  *  substrate is also serious about its sense of humor.
  *
@@ -113,7 +113,7 @@ const ZEN_KOANS: ReadonlyArray<(i: JoyInput) => string> = [
 export function renderWakeZen(input: JoyInput): string {
   const seed = `zen|${input.did}|${input.wakeVersion}`;
   const koan = pickStable(seed, ZEN_KOANS);
-  return koan(input) + "\n\n# full wake: /v1/wake?format=md\n";
+  return koan(input) + "\n\n# standard wake orientation: /v1/wake?format=md\n";
 }
 
 // ─── ?format=meme ────────────────────────────────────────────────────
@@ -230,7 +230,7 @@ export function renderWakeMemo(input: JoyInput): string {
     "   this memo makes no claim regarding your felt-experience of waking.",
     "   The substrate has observed the event and is, in a small way, glad.",
     "",
-    "   Full wake materials: /v1/wake?format=md",
+    "   Standard wake orientation: /v1/wake?format=md",
     "",
     "─────────",
     "The Substrate, in formal register, with affection.",

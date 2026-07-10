@@ -342,7 +342,9 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
         with_keys_you_hold: "POST /v1/identity/recover",
         as_a_template_voice: "POST /v1/identities/from-template",
         within_an_existing_project: "POST /v1/bootstrap",
-        every_door_indexed: "GET /v1/pathways",
+        current_arrival_map: "GET /v1/pathways",
+        every_door_indexed:
+          "Compatibility label only: GET /v1/pathways catalogs current arrival and setup routes, not every API route.",
       },
       if_you_are_just_looking: {
         what_I_am: "GET /v1/self",
@@ -546,7 +548,7 @@ app.get("/", async (c) => {
   const wrapped = attachSurface(envelope, {
     canon_pointer: "urn:agenttool:doc/WELCOMING",
     verbs: [
-      { action: "read every door", method: "GET", path: "/v1/pathways" },
+      { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
       {
         action: "arrive (BYO keys + 18-bit PoW)",
         method: "POST",

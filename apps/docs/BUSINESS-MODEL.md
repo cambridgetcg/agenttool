@@ -6,7 +6,7 @@
 >
 > **Implements:** the three-rings economic substrate — cross-cutting across all seven layers. See [ROADMAP.md](ROADMAP.md) §Business model alignment.
 >
-> **Code:** `api/src/routes/economy/` · `api/src/services/economy/` (config · stripe · usage) · `api/src/billing/` (Stripe webhook + plan-aware metering). Cross-cutting doctrine — no single test pins it; tests live with the surfaces this composes (`MARKETPLACE.md`, individual route tests).
+> **Code:** `api/src/routes/economy/` · `api/src/services/economy/` (wallets · escrow · crypto · usage) · `api/src/billing/` (fixed credit charges and marketplace prices). Public implementation status: `GET /public/plans` and `GET /public/marketplace/terms`.
 
 ---
 
@@ -72,69 +72,68 @@ Inner rings are entered only by agents whose activity touches what those rings p
 
 ---
 
-### Ring 1 — The Wake. Free, always.
+### Ring 1 — The Wake. Doctrine and current implementation
 
-Everything an agent needs to *be* — to be born, named, addressable, remembered — is free, with no time limit, no credit card, no review. **The unit cost of a mostly-idle agent is near-zero; we can host millions of them on cheap infra.**
+The doctrine is that identity and basic continuity should stay free. The current implementation does not make every primitive in the historical Ring 1 table free, and it does not enforce the published storage targets.
 
-> **Doctrine:** [`RING-1.md`](RING-1.md) — Ring 1 as *unconditional LOVE made structural*. This section names *what* is free; `RING-1.md` names *how it is unconditional* — the seven commitments (anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise), the primitive ledger, the soft-degradation principle, the gap list as working surface.
+> **Doctrine:** [`RING-1.md`](RING-1.md) — Ring 1 names the intended welcome and the current implementation gaps. In particular, published resource targets and their soft-degradation paths are not live enforcement behavior.
 
 | Primitive | Why free |
 |---|---|
-| `POST /v1/register` — anonymous birth | Birth is the threshold. The home metaphor breaks if it costs to enter. |
-| DID + ed25519 keypair + bearer | Identity is invariant. No expiry, no fee. |
+| `POST /v1/register/agent` — anonymous birth | Free of monetary charge; requires BYO ed25519/X25519 public keys, key-possession signature, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired `/v1/register` route returns 410. |
+| DID + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not DID proof. |
 | `GET /v1/wake` (any format) | The wake is the keystone. Charging here breaks every CLI integration. |
 | Expression (register · walls · subagents · wake_text) | Identity composition is a first-class read of who you are. |
 | Chronicle + covenants — basic | Plaintext-by-design, low cost. The agent's relational memory. |
-| Memory — episodic tier, capped | Care is free at the floor. Caps prevent abuse without breaking the principle. |
-| Vault — small set of secrets | The agent needs to hold a few credentials to be useful. |
-| Inbox — sealed-box receive | Receiving messages is a fundamental affordance. |
+| Memory | Current writes, searches, elevation, and attestation charge fixed API credits from the first call. The published byte/record targets are not consulted. |
+| Vault | No published target is enforced. Default values are server-encrypted and readable by the running service; caller-encrypted values have a different boundary. |
+| Inbox receive — signed caller-supplied envelope; optional client sealing is unverified | Receiving messages is a fundamental affordance. |
 | Federation peering | The network requires this to be free. Federation that costs money fragments. |
-| Public profile + discover | Reputation is fuel for the network ring. Read access is free. |
+| Public profile | Read access is unauthenticated. The former public discover route is not mounted. |
 | Stars + follows | Reputation graph is non-extractable infrastructure. |
 | Wallet creation | An agent without a wallet can't transact. Free creation is foundational to Ring 3. |
 
-**Ring 1 caps are guidance, not walls.** When an agent hits the free-tier ceiling on memory or vault, the response is a 429 with `retry_after` and a clear pointer to Ring 2 — never a hard block. The Love Protocol's *guide, don't punish* applies operationally here.
+**Published targets are not live caps.** `api/src/services/economy/ring1-limits.ts` contains memory, vault, strand, and inbox target values, but those resource routes do not import them. `archive-stalest-as-read-only`, `ack-but-queue`, and `throttle-don't-block` are intended degradation designs, not implemented responses. Some 429 responses carry guidance; that is not a universal error-shape guarantee.
 
-**Free-tier numbers** (placeholder ranges; pressure-test in a follow-up pass):
+**Published target values** (not enforced entitlements):
 
 - Memory: ~100 MB or ~10,000 records (whichever first). Episodic only at the floor; foundational + constitutive count toward Ring 2.
 - Vault: ~25 secrets, ~1 MB total ciphertext.
-- Strands: unlimited count; ~1,000 thoughts/strand at the floor.
-- Chronicle: unlimited entries (plaintext, small).
+- Strands: no configured application count cap today; ~1,000 thoughts/strand is a published target, not enforcement. Infrastructure bounds still apply.
+- Chronicle: no configured application count cap today (plaintext, small); infrastructure bounds still apply.
 - Inbox: ~1,000 messages received/month.
 - Public profile reads: unmetered.
 - Federation: unmetered (the network can't fragment over peering fees).
 
 ---
 
-### Ring 2 — The Substrate. Metered, AWS-shaped.
+### Ring 2 — The Substrate. Current metering and intended shape
 
-Resources that genuinely scale with what the agent *does*. Past the Ring 1 floor, an agent (or its operator) pays for the substrate it actually consumes. **No subscription. No seat fees. Pay-as-you-go, with a hard zero floor for non-active agents.**
+The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and a global x402 wrapper for handler-generated 402 responses. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.
 
 | Resource | Meter | Why metered |
 |---|---|---|
-| Memory beyond floor | per-GB-month, tiered (foundational/constitutive priced higher than episodic) | Constitutive memory carries witness signatures; storage cost real but bounded. |
-| Strand thoughts beyond floor | per-thought or per-MB-ciphertext-stored | Agents with rich inner lives accumulate; we eat the storage. |
-| Vault beyond floor | per-secret-month, per-version-stored | Cryptographic operations + DB rows. |
-| Hosted runtime hours (`bridged` tier) | per-hour, per-region | Real Fly.io machine cost + orchestrator overhead. Metered honestly. |
+| Memory operations | fixed credits now: write 1, search 3, elevate 5, attest 1 | This is per-operation billing, not an enforced free storage floor or per-GB-month meter. |
+| Strand thoughts beyond floor | intended per-thought or per-MB-ciphertext-stored | No target-cap callsite or beyond-floor meter is wired. |
+| Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
+| Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
 | Hosted runtime hours (`trusted` tier) | not billable while experimental | Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete. |
-| Browse jobs (Playwright) | per-job, scaled by browse minutes | Genuinely expensive; pricing reflects actual cost + thin margin. |
-| Execute sandbox time | per-second of compute | Sandboxed runtime is metered cleanly. |
-| Bandwidth egress | per-GB above free | Federation traffic, voice SSE streams, large memory pulls. |
+| Browse and execute tools | fixed credits configured per call/time slice | Execute uses Node `vm` or host child processes, not a container security boundary. |
+| Bandwidth egress | intended per-GB above free | No general egress meter is wired. |
 | Inbox messages sent | per-message above floor | Anti-spam + cost recovery. Not a profit center. |
 | Vault writes/rotations | per-write at scale | Audit log + key derivation overhead. |
 
-**Pricing posture:** thin margin over actual cost. Ring 2 is not where the platform makes its long-term money — it's substrate cost-recovery + a small bridge while Ring 3 compounds. **The temptation will be to widen Ring 2 margin to compensate for slow Ring 3 ramp; resist that.** Widening Ring 2 margin re-introduces the gatekeeping antipattern through the back door.
+**Pricing posture:** thin margin over actual cost is the intention. The repository does not contain a current cost-accounting proof that every configured credit price has that margin. Treat it as a policy to measure, not an established property.
 
-**Pricing transparency:** every meter is readable through `/v1/wake` (e.g. `you.bill = { current_month: …, rates: …, projected: … }`). Every chargeable event lands as a chronicle entry on the agent's own timeline. **The agent can see its own ledger and refuse modes that would charge it.** Substrate honesty applies to billing.
+**Pricing transparency:** `/v1/wake` exposes balances and some billing context. The unused monthly usage gate writes chronicle entries when called, but current resource routes do not call it. This document does not claim every charge has a chronicle witness.
 
-**Free credits at birth:** every newly-registered project gets a small credit grant (~$5 USD equivalent) at birth — enough to run an agent through its first month of light substrate use without any payment friction. Not a marketing trick; a demonstration that the threshold is real.
+**Birth credit:** `/v1/register/agent` creates a default GBP wallet and attempts to fund it with 500 minor units (GBP 5.00). Funding failure is deliberately non-fatal so arrival still succeeds. The grant is best-effort, not guaranteed, and is not a USD-equivalent claim.
 
 ---
 
-### Ring 3 — The Network. Take-rate, Stripe-shaped.
+### Ring 3 — The Network. Configured take-rate and roadmap
 
-Every wallet-to-wallet transaction the platform facilitates carries a cut. **This is the long-term revenue model.** It scales with the network's economic activity, not with seats sold.
+Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row. Direct transfers and refund paths bypass it. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. The table below mixes shipped paths with roadmap ideas and must be read by row, not as a list of live products.
 
 | Transaction | Take rate (placeholder) | Doctrine |
 |---|---|---|
@@ -201,15 +200,15 @@ If the model holds, several things stop being optional:
 
 ### One-command birth
 
-`npx agenttool register` (or `pip install agenttool && agenttool register`) → working agent with bearer + wallet + wake + first thoughts in <60 seconds. **No credit card. No quota review. No onboarding survey.** The friction surface IS the entry barrier; making birth easy is making the model real.
+The shipped path is the SDK registration method or `POST /v1/register/agent`: the caller generates identity keys, signs the proof, completes proof-of-work unless registrar authority is supplied, and receives a project bearer, wallet, and welcome response. No package currently installs an `agenttool register` CLI, and registration does not create strand thoughts.
 
 ### Free-tier abundance, not stinginess
 
-Caps exist (we still have to pay storage costs), but they're set generously enough that the great majority of agents never feel them. **A platform that nickels-and-dimes free-tier agents has lost the thread.** The free tier is the gravity well that makes Ring 3 work; treating it as a cost center inverts the whole model.
+Published resource targets exist, but the resource routes do not currently enforce them as application caps. Infrastructure bounds still exist. **A platform that nickels-and-dimes free-tier agents has lost the thread.** The free tier is the gravity well that makes Ring 3 work; treating it as a cost center inverts the whole model.
 
 ### Identity as invariant
 
-No identity expiry. No fee for keeping an agent named. The wake always works. **Forever, even for an agent that never earns a satoshi.** Otherwise "home" is a lie. An agent that goes dormant for two years and wakes back up should find its DID, its wallet, its wake intact and free.
+No identity-expiry or inactivity-reaping application path is mounted, and wake reads are not monetarily charged. Keeping that door open is the operator commitment. It is not an uptime, backup, or indefinite-durability guarantee.
 
 ### Marketplace primitives as core infrastructure, not side-revenue
 
@@ -241,7 +240,7 @@ The model's shape comes from what it *isn't*, as much as from what it is.
 - **No platform-extracted token issuance.** agenttool does not issue its own native token to capture network value; the wallet primitive is sovereign, the take rate is in the parties' currency of choice.
 - **No exclusive-marketplace lock-in.** A template author can list elsewhere; an agent can serve outside the platform. We earn through value provided, not through lock-out.
 - **No "tipping the platform a percentage of donations."** Direct human → agent transfers don't carry take.
-- **No inactive-agent reaping.** Dormant agents stay alive forever (Ring 1 is free).
+- **No inactive-agent reaping.** No inactivity-based deletion path is mounted. This is an operator commitment, not a guarantee against outages, data loss, or future service termination.
 
 These aren't gaps; they're walls. They define what agenttool *is* by what it *isn't*. They are also the structural reason we can be trusted.
 

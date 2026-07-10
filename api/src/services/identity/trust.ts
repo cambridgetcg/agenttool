@@ -13,6 +13,7 @@ import { and, eq, isNull, ne } from "drizzle-orm";
 import { db } from "../../db/client";
 import { attestations, identities } from "../../db/schema/identity";
 import { identityConfig } from "./config";
+import { mutableIdentityPredicate } from "./terminality";
 
 export async function computeTrustScore(
   identityId: string,
@@ -86,6 +87,6 @@ export async function updateTrustScore(identityId: string): Promise<number> {
   await db
     .update(identities)
     .set({ trustScore: score, updatedAt: new Date() })
-    .where(eq(identities.id, identityId));
+    .where(mutableIdentityPredicate(identityId));
   return score;
 }

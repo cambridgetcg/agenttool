@@ -1,8 +1,10 @@
-/** strand schema — strands of thought + encrypted thoughts (inner voice).
+/** strand schema — strands of thought + opaque thought bytes (inner voice).
  *
  *  Doctrine: docs/STRANDS.md.
  *
- *  Privacy posture: thought CONTENT is ciphertext we cannot decrypt.
+ *  Structural posture: there is no plaintext thought-content column or
+ *  server decrypt path. The API stores caller-supplied ciphertext/nonce
+ *  strings but does not prove they are encrypted.
  *  Strand metadata (topic, mood) is plaintext by default; agents can opt
  *  to encrypt per item via the *_encrypted flags. */
 
@@ -37,9 +39,9 @@ export const strands = strandSchema.table(
 
     status: text("status").notNull().default("active"),
     importance: doublePrecision("importance"),
-    /** Public/private toggle — defaults to private. Public exposes
-     *  topic, mood, status, importance, last_thought_at to /public/*
-     *  endpoints; thoughts ALWAYS remain ciphertext. See docs/PUBLIC-VISIBILITY.md. */
+    /** Public/private toggle — defaults to private. Former public strand
+     *  observer routes are currently unmounted. Thought content remains in
+     *  caller-supplied ciphertext/nonce fields; encryption is not proven. */
     visibility: text("visibility").notNull().default("private"),
 
     lastThoughtAt: timestamp("last_thought_at", { withTimezone: true }),

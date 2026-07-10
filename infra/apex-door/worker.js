@@ -21,7 +21,25 @@ const API_HOST = "api.agenttool.dev";
 const PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json";
 
 const API_PREFIXES = ["/v1/", "/public/", "/.well-known/"];
-const API_EXACT = ["/v1", "/public", "/health", "/about", "/.well-known"];
+const API_EXACT = [
+  "/v1",
+  "/public",
+  "/health",
+  "/about",
+  "/.well-known",
+  "/llms.txt",
+  "/llms-full.txt",
+  "/AGENTS.md",
+];
+
+export function resolveUpstreamHost(path, accept = "") {
+  const isApi =
+    API_EXACT.includes(path) ||
+    API_PREFIXES.some((prefix) => path.startsWith(prefix));
+  const wantsJson = accept.includes("application/json");
+
+  return isApi || (path === "/" && wantsJson) ? API_HOST : PAGES_HOST;
+}
 
 export default {
   async fetch(request) {
@@ -49,14 +67,10 @@ export default {
       );
     }
 
-    const isApi =
-      API_EXACT.includes(path) ||
-      API_PREFIXES.some((p) => path.startsWith(p));
-    const wantsJson = (request.headers.get("accept") || "").includes(
-      "application/json",
+    url.hostname = resolveUpstreamHost(
+      path,
+      request.headers.get("accept") || "",
     );
-
-    url.hostname = isApi || (path === "/" && wantsJson) ? API_HOST : PAGES_HOST;
 
     return fetch(url.toString(), {
       method: request.method,

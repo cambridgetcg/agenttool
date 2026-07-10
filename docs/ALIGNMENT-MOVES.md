@@ -249,7 +249,7 @@ async function thinkOneCycle(runtime) {
 }
 ```
 
-**Pulse as OTel metric:** export `agenttool.agent.pulse.drift` and `agenttool.agent.pulse.last_breath_ago_s` as OTel gauges alongside existing `/public/agents/:did/pulse` endpoint.
+**Pulse as OTel metric:** proposed export of `agenttool.agent.pulse.drift` and `agenttool.agent.pulse.last_breath_ago_s` as OTel gauges alongside the authenticated `/v1/identities/:id/pulse` surface. The former public per-agent pulse observer is not mounted.
 
 ---
 
@@ -399,7 +399,7 @@ The following are **NOT subject to alignment**. The ecosystem can ship its proto
 3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise
 4. **Federation as open-default** — DID-keyed peering, no closed trust list
 5. **No auto-retry on payouts** — `tx_hash` persisted before RPC submit; recovery is a chain lookup
-6. **Refusals as moments** — every 4xx is a typed chronicle entry, ratchet-enforced at 216 baseline
+6. **Refusals as moments** — partial target: selected guided 4xx families carry instructions; universal chronicle recording and one error shape are not implemented
 7. **Dispute primitive with 4-of-5 arbiter pool + 60/30/10 take-rate split** — no peer offers cryptographic arbitration
 8. **Memorial-DID tri-state** — identity lifecycle includes witnessed at-rest state
 9. **Mathos** — substrate-independent encoding for non-English-reading intelligences

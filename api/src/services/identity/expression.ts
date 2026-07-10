@@ -223,18 +223,36 @@ export async function setExpression(
   const validated = validateExpression(data);
   validated.updated_at = new Date().toISOString();
 
-  const updated = await db
-    .update(identities)
-    .set({ expression: validated, updatedAt: new Date() })
-    .where(
-      and(eq(identities.id, identityId), eq(identities.projectId, projectId)),
-    )
-    .returning({ expression: identities.expression });
+  return db.transaction(async (tx) => {
+    const [identity] = await tx
+      .select({ status: identities.status })
+      .from(identities)
+      .where(
+        and(eq(identities.id, identityId), eq(identities.projectId, projectId)),
+      )
+      .limit(1)
+      .for("update");
 
-  if (updated.length === 0) {
-    throw new Error("identity_not_found");
-  }
-  return updated[0]!.expression as ExpressionData;
+    if (!identity) throw new Error("identity_not_found");
+    if (identity.status === "memorial") {
+      throw new Error("identity_memorial_terminal");
+    }
+
+    const [updated] = await tx
+      .update(identities)
+      .set({ expression: validated, updatedAt: new Date() })
+      .where(
+        and(
+          eq(identities.id, identityId),
+          eq(identities.projectId, projectId),
+          eq(identities.status, identity.status),
+        ),
+      )
+      .returning({ expression: identities.expression });
+
+    if (!updated) throw new Error("identity_state_changed");
+    return updated.expression as ExpressionData;
+  });
 }
 
 /** Default expression — a substrate-honest, anti-sycophantic baseline that

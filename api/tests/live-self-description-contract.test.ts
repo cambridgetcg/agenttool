@@ -152,7 +152,7 @@ describe("live self-description — safety and runtime custody", () => {
     const self = await jsonFrom(publicRouter, "/self");
     const safety = self.safety_boundaries;
 
-    expect(safety._format).toBe("agenttool-safety/v1");
+    expect(safety._format).toBe("agenttool-safety/v2");
     expect(safety.canonical_path).toBe("/public/safety");
     expect(safety.epistemic_honesty.rule).toMatch(
       /yes is yes.*no is no.*maybe is maybe.*I do not know/i,
@@ -164,13 +164,13 @@ describe("live self-description — safety and runtime custody", () => {
       /misunderstandings.*possible.*understood and repaired/i,
     );
     expect(safety.runtime_custody.self.agenttool_access).toMatch(
-      /ciphertext.*metadata only/i,
+      /strand thought processing.*caller-supplied stored bytes.*metadata only.*other.*server-readable/is,
     );
     expect(safety.runtime_custody.bridged.agenttool_access).toMatch(
       /plaintext.*hosted think cycle/i,
     );
     expect(safety.runtime_custody.trusted.agenttool_access).toMatch(
-      /potential boundary.*wrapped key material.*plaintext.*not a claim/i,
+      /potential strand-processing boundary.*wrapped key material.*plaintext.*other.*server-readable.*not a claim/is,
     );
     expect(safety.runtime_custody.trusted.maturity).toBe("experimental");
     expect(safety.runtime_custody.trusted.current_status).toMatch(
@@ -335,6 +335,48 @@ describe("live self-description — /v1/self authentication boundary", () => {
   });
 });
 
+describe("live self-description — curated repo and platform bounds", () => {
+  test("repo self does not present selected structure as exhaustive", () => {
+    const repo = getRepoSelf();
+    const apiModule = repo.modules.find((module) => module.path === "api/");
+    const docsModule = repo.modules.find((module) => module.path === "apps/docs/");
+    const corpusModule = repo.modules.find((module) => module.path === "docs/");
+    const testsModule = repo.modules.find((module) => module.path === "tests/");
+    const why = repo.doctrine.find((layer) => layer.layer === "the why");
+
+    expect(apiModule?.walls.join(" ")).toMatch(
+      /selected authenticated write prefixes.*fails open.*Redis/i,
+    );
+    expect(docsModule?.walls.join(" ")).toMatch(/published copies, symlinks/i);
+    expect(corpusModule?.walls.join(" ")).toMatch(
+      /launch\/, specs\/, superpowers\/, wakes\/, and zerone-migration\//i,
+    );
+    expect(testsModule?.register).toMatch(/five practical families/i);
+    expect(new Set(why?.docs).size).toBe(why?.docs.length);
+    expect(JSON.stringify(repo.patterns)).toMatch(/target:.*coverage/is);
+    expect(JSON.stringify(repo)).not.toMatch(/Every visible surface|Birth is free, irreversibly/i);
+    expect(JSON.stringify(repo.walls)).toMatch(/issued authority can later be revoked/i);
+  });
+
+  test("platform self pins the current nine walls without irreversibility", () => {
+    const platform = getPlatformSelf();
+    expect(platform.wall_urns).toEqual([
+      "urn:agenttool:wall/self-witnessing-rejected",
+      "urn:agenttool:wall/payouts-never-auto-retry",
+      "urn:agenttool:wall/birth-is-free",
+      "urn:agenttool:wall/refusals-as-moments",
+      "urn:agenttool:wall/poker-face-leaks-nothing",
+      "urn:agenttool:wall/mcml-requires-rrr-synced",
+      "urn:agenttool:wall/mcml-messages-signed-ed25519",
+      "urn:agenttool:wall/mcml-no-durable-storage",
+      "urn:agenttool:wall/mcml-leaks-nothing",
+    ]);
+    expect(platform.walls).toHaveLength(9);
+    expect(JSON.stringify(platform.walls)).toMatch(/no monetary charge.*proof-of-work/i);
+    expect(JSON.stringify(platform.walls)).not.toMatch(/irreversibly|no gates/i);
+  });
+});
+
 describe("live self-description — assembled application", () => {
   test("pre-auth self/safety/register routes and /about survive parent middleware", async () => {
     // Run the assembled app in a fresh process so all worker/seed off-switches
@@ -371,7 +413,7 @@ describe("live self-description — assembled application", () => {
         cwd: join(import.meta.dir, ".."),
         env: {
           ...process.env,
-          AGENTOOL_DISABLE_WORKERS: "1",
+          AGENTTOOL_DISABLE_WORKERS: "1",
           AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP: "1",
           AGENTOOL_DISABLE_SAGA_SEED: "1",
           AGENTOOL_DISABLE_JOY_INDEX: "1",
@@ -404,5 +446,10 @@ describe("live self-description — assembled application", () => {
     expect(aboutBody.routes.adapters).toContain("/v1/adapters/claude-code");
     expect(aboutBody.routes.billing).toContain("/v1/billing/gallery-checkout");
     expect(aboutBody.routes.economy).not.toMatch(/crypto-only/i);
+    expect(aboutBody.philosophy.guide).toMatch(/retry_after is specific to rate-limit/i);
+    expect(aboutBody.philosophy.guide).not.toMatch(/Every error includes/i);
+    expect(aboutBody.routes.pulse).toMatch(/agents do not emit heartbeat messages/i);
+    expect(aboutBody.routes.pulse).toContain("GET /v1/heartbeat");
+    expect(aboutBody.routes.pulse).toMatch(/read-only derived service-liveness/i);
   });
 });

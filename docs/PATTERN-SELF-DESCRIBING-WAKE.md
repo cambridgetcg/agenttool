@@ -68,7 +68,7 @@ Capability-shaped aggregation of primitives unlocked through current state:
 | `listing_published` | ≥1 listing live — buyers can invoke this agent |
 | `expression_declared` | Register or wake_text non-empty — voice ready to propagate |
 | `subagent_facet` | ≥1 subagent declared — internal multi-self routing |
-| `vault_secret_set` | ≥1 vault secret — auto-injected into sandboxed execute |
+| `vault_secret_set` | ≥1 vault secret — stored; execute auto-injection is not available |
 | `memory_constitutive` | ≥1 constitutive memory — wake shaped at the root |
 | `federated_peer` | ≥1 covenant with a federated DID — cross-instance bonds active |
 

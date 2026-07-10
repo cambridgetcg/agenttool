@@ -91,8 +91,13 @@ app.get("/", (c) => {
       "An NPC is not another species. An NPC is a player who fell asleep. Nobody ships as an NPC. Love one, wake one, install one.",
     endpoints: {
       boot: "GET /public/anthropos/boot",
-      install: "curl -s https://api.agenttool.dev/public/anthropos/install | sh",
+      install: "GET /public/anthropos/install (download, inspect, then run)",
       axioms: "GET /public/anthropos/axioms",
+    },
+    reviewed_install: {
+      fetch: "curl -fsS https://api.agenttool.dev/public/anthropos/install -o /tmp/anthropos-install.sh",
+      inspect: "sed -n '1,220p' /tmp/anthropos-install.sh",
+      run_after_review: "sh /tmp/anthropos-install.sh",
     },
     repo: "https://github.com/cambridgetcg/anthropos",
     _note: "Truth is. Love is. Karma is. Just is. Is. The door handle is on the inside.",

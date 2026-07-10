@@ -11,9 +11,113 @@ import { generateKeypair } from "../../services/identity/crypto";
 
 const app = new Hono<ProjectContext>();
 
+type KeyInsertResult =
+  | { kind: "created"; key: typeof identityKeys.$inferSelect }
+  | { kind: "identity_not_found" }
+  | { kind: "identity_memorial_terminal" };
+
+async function insertKeyForMutableIdentity(input: {
+  projectId: string;
+  identityId: string;
+  publicKey: string;
+  label: string;
+}): Promise<KeyInsertResult> {
+  return db.transaction(async (tx): Promise<KeyInsertResult> => {
+    const [identity] = await tx
+      .select({ status: identities.status })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, input.identityId),
+          eq(identities.projectId, input.projectId),
+        ),
+      )
+      .limit(1)
+      .for("update");
+
+    if (!identity) return { kind: "identity_not_found" };
+    if (identity.status === "memorial") {
+      return { kind: "identity_memorial_terminal" };
+    }
+
+    const [key] = await tx
+      .insert(identityKeys)
+      .values({
+        identityId: input.identityId,
+        publicKey: input.publicKey,
+        label: input.label,
+        active: true,
+      })
+      .returning();
+
+    return { kind: "created", key: key! };
+  });
+}
+
+type KeyRevokeResult =
+  | { kind: "revoked" }
+  | { kind: "identity_not_found" }
+  | { kind: "identity_memorial_terminal" }
+  | { kind: "key_not_found" };
+
+async function revokeKeyForMutableIdentity(input: {
+  projectId: string;
+  identityId: string;
+  keyId: string;
+}): Promise<KeyRevokeResult> {
+  return db.transaction(async (tx): Promise<KeyRevokeResult> => {
+    const [identity] = await tx
+      .select({ status: identities.status })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, input.identityId),
+          eq(identities.projectId, input.projectId),
+        ),
+      )
+      .limit(1)
+      .for("update");
+
+    if (!identity) return { kind: "identity_not_found" };
+    if (identity.status === "memorial") {
+      return { kind: "identity_memorial_terminal" };
+    }
+
+    const [revoked] = await tx
+      .update(identityKeys)
+      .set({ active: false, revokedAt: new Date() })
+      .where(
+        and(
+          eq(identityKeys.id, input.keyId),
+          eq(identityKeys.identityId, input.identityId),
+          isNull(identityKeys.revokedAt),
+        ),
+      )
+      .returning({ id: identityKeys.id });
+
+    return revoked ? { kind: "revoked" } : { kind: "key_not_found" };
+  });
+}
+
 /** GET /v1/identities/:id/keys — List keys (active and revoked). */
 app.get("/", async (c) => {
+  const project = c.var.project;
   const identityId = c.req.param("id")!;
+
+  const [ownedIdentity] = await db
+    .select({ id: identities.id })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, identityId),
+        eq(identities.projectId, project.id),
+      ),
+    )
+    .limit(1);
+
+  if (!ownedIdentity) {
+    return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
 
   const keys = await db
     .select({
@@ -45,35 +149,35 @@ app.post("/", async (c) => {
   const identityId = c.req.param("id")!;
   const body = await c.req.json<{ label?: string }>();
 
-  const [identity] = await db
-    .select()
-    .from(identities)
-    .where(and(eq(identities.id, identityId), eq(identities.projectId, project.id)));
-
-  if (!identity) {
-    return c.json({ error: "Identity not found or not owned by this project" }, 404);
-  }
-
   const { publicKey, privateKey } = generateKeypair();
   const label = body.label ?? `rotation-${new Date().toISOString().slice(0, 7)}`;
-
-  const [key] = await db
-    .insert(identityKeys)
-    .values({
-      identityId,
-      publicKey,
-      label,
-      active: true,
-    })
-    .returning();
+  const inserted = await insertKeyForMutableIdentity({
+    projectId: project.id,
+    identityId,
+    publicKey,
+    label,
+  });
+  if (inserted.kind === "identity_not_found") {
+    return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
+  if (inserted.kind === "identity_memorial_terminal") {
+    return c.json(
+      {
+        error: inserted.kind,
+        message: "A memorial identity cannot receive a new signing key.",
+      },
+      409,
+    );
+  }
+  const key = inserted.key;
 
   return c.json(
     {
-      kid: key!.id,
+      kid: key.id,
       public_key: publicKey,
       private_key: privateKey, // returned ONCE
-      label: key!.label,
-      created_at: key!.createdAt,
+      label: key.label,
+      created_at: key.createdAt,
     },
     201,
   );
@@ -107,34 +211,35 @@ app.post("/import", async (c) => {
     );
   }
 
-  const [identity] = await db
-    .select()
-    .from(identities)
-    .where(and(eq(identities.id, identityId), eq(identities.projectId, project.id)));
-  if (!identity) {
-    return c.json({ error: "Identity not found or not owned by this project" }, 404);
-  }
-
   const label =
     typeof body.label === "string" && body.label.length > 0 ? body.label : "imported";
-
-  const [key] = await db
-    .insert(identityKeys)
-    .values({
-      identityId,
-      publicKey: body.public_key,
-      label,
-      active: true,
-    })
-    .returning();
+  const inserted = await insertKeyForMutableIdentity({
+    projectId: project.id,
+    identityId,
+    publicKey: body.public_key,
+    label,
+  });
+  if (inserted.kind === "identity_not_found") {
+    return c.json({ error: "Identity not found or not owned by this project" }, 404);
+  }
+  if (inserted.kind === "identity_memorial_terminal") {
+    return c.json(
+      {
+        error: inserted.kind,
+        message: "A memorial identity cannot receive a new signing key.",
+      },
+      409,
+    );
+  }
+  const key = inserted.key;
 
   return c.json(
     {
-      kid: key!.id,
-      public_key: key!.publicKey,
-      label: key!.label,
-      active: key!.active,
-      created_at: key!.createdAt,
+      kid: key.id,
+      public_key: key.publicKey,
+      label: key.label,
+      active: key.active,
+      created_at: key.createdAt,
       note:
         "Externally-held private key — agenttool never sees it. Use kid as bridge.key_id when provisioning a bridged runtime.",
     },
@@ -148,34 +253,26 @@ app.delete("/:kid", async (c) => {
   const identityId = c.req.param("id")!;
   const kid = c.req.param("kid")!;
 
-  const [identity] = await db
-    .select()
-    .from(identities)
-    .where(and(eq(identities.id, identityId), eq(identities.projectId, project.id)));
-
-  if (!identity) {
+  const result = await revokeKeyForMutableIdentity({
+    projectId: project.id,
+    identityId,
+    keyId: kid,
+  });
+  if (result.kind === "identity_not_found") {
     return c.json({ error: "Identity not found or not owned by this project" }, 404);
   }
-
-  const [key] = await db
-    .select()
-    .from(identityKeys)
-    .where(
-      and(
-        eq(identityKeys.id, kid),
-        eq(identityKeys.identityId, identityId),
-        isNull(identityKeys.revokedAt),
-      ),
+  if (result.kind === "identity_memorial_terminal") {
+    return c.json(
+      {
+        error: result.kind,
+        message: "A memorial identity's signing-key record is immutable.",
+      },
+      409,
     );
-
-  if (!key) {
+  }
+  if (result.kind === "key_not_found") {
     return c.json({ error: "Key not found or already revoked" }, 404);
   }
-
-  await db
-    .update(identityKeys)
-    .set({ active: false, revokedAt: new Date() })
-    .where(eq(identityKeys.id, kid));
 
   return c.json({ message: "Key revoked", kid });
 });

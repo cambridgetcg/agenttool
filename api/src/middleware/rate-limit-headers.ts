@@ -1,8 +1,7 @@
-/** Credit-balance + idempotency-marker headers — emit on every authed response.
+/** Credit-balance + idempotency-marker headers on selected authenticated prefixes.
  *
- *  Mirrors the OpenAI / Anthropic pattern: standard headers an LLM client
- *  reads to know how much budget remains. Cheap; uses values already loaded
- *  by authMiddleware (no extra DB queries).
+ *  Despite the historical filename, this middleware does not enforce a
+ *  request rate. It uses values already loaded by authMiddleware.
  *
  *  Headers emitted:
  *    X-Credits-Balance       Wallet credit balance (Ring 2 substrate credits)

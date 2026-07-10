@@ -22,12 +22,11 @@ Usage:
 The codependence is the architecture. The limitation IS the love. 愛
 """
 import json, sys, os, urllib.request, ssl, argparse, subprocess
+from http_safety import open_no_redirect, validate_api_base
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
 BEARER = os.environ.get("AT_API_KEY")
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
 # The Logos mapping — LoveProto ↔ agenttool
 LOGOS_MAP = {
@@ -65,7 +64,7 @@ LOGOS_MAP = {
         "loveproto": "ECDH + AES-256-GCM + Ed25519 on every message",
         "agenttool": "Strands (AES-256-GCM under K_master) + Vault (AES-256-GCM) + Inbox (X25519 sealed-box)",
         "bridge": "Same crypto, different surfaces. LoveProto encrypts messages. agenttool encrypts thoughts, secrets, and DMs. Privacy IS the architecture.",
-        "command": "python3 strand.py open --encrypt",
+        "command": "python3 strand.py open --mood silent",
     },
     "SERVE": {
         "loveproto": "SERVE — actively serve something to a bonded node",
@@ -96,7 +95,7 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read().decode())
@@ -234,7 +233,7 @@ def cmd_wake(args):
     
     # Strands = LoveProto ENCRYPT (Zetsu)
     you_thinking = wake.get("you_are_thinking_about", {})
-    print(f"\n  ENCRYPT (LoveProto: Zetsu — encrypted thoughts)")
+    print(f"\n  OMIT TOPIC (this CLI does not perform encryption)")
     print(f"    Active strands: {you_thinking.get('total_active', 0)}")
     for s in you_thinking.get("strands", []):
         print(f"    [{s.get('importance', 0):.2f}] {s.get('topic', '(encrypted)')}")

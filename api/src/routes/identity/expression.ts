@@ -52,6 +52,25 @@ app.put("/", async (c) => {
     if (msg === "identity_not_found") {
       throw new HTTPException(404, { message: msg });
     }
+    if (msg === "identity_memorial_terminal") {
+      return c.json(
+        {
+          error: msg,
+          message:
+            "A memorial identity is immutable. Its witnessed expression remains intact.",
+        },
+        409,
+      );
+    }
+    if (msg === "identity_state_changed") {
+      return c.json(
+        {
+          error: msg,
+          message: "Identity lifecycle changed concurrently. No expression was saved.",
+        },
+        409,
+      );
+    }
     return c.json({ error: "validation", message: msg }, 400);
   }
 

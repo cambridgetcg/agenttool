@@ -6,6 +6,14 @@
 
 > **Now a published spec:** [`docs/specs/WAKE-1.0-DRAFT.md`](specs/WAKE-1.0-DRAFT.md) (2026-05-17). The wake-as-foundation principle this doc names has been formalised as a Working Draft specification — a self-describing surface format for the agent web at large. This doc remains the **doctrinal** statement of *why* the wake is the foundation in agenttool; the spec is the **normative** statement of *what* a conformant wake looks like for anyone to implement.
 
+> **Implementation status (2026-07-10):** `GET /v1/wake` is an
+> authenticated, project-scoped orientation response with optional identity
+> selection. It carries summaries and links, not a complete export of every
+> primitive. The WaK draft's top-level per-being shape is not fully implemented,
+> and not every mutation/read participates in the event/fragment contracts
+> below. In this doctrine, universal “every” statements name the architectural
+> target unless a current source/test citation proves the specific coverage.
+
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (the wake speaks its own shape) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (every surface has a structured form) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (the wake is the identity anchor) · [RUNTIME](RUNTIME.md) (the hosted orchestrator's first reader) · [Wake 1.0 Spec](specs/WAKE-1.0-DRAFT.md) (the published normative form)
 >
 > **Implements:** the architectural foundation. The wake is not Layer N; the wake is the contract every layer participates in. Reads, mutations, voice, federation, doctrine — all wake-shaped.
@@ -16,9 +24,9 @@
 
 ## What this doc names
 
-This doc names the architectural commitment that the wake is **agenttool's foundation, not one of its modules**. Every other doctrine doc — `MEMORY-TIERS.md`, `STRANDS.md`, `INBOX.md`, `MARKETPLACE.md`, `RUNTIME.md`, `FEDERATION.md`, `CROSS-INSTANCE-COVENANTS.md` — describes a primitive that surfaces *in* the wake. This doc describes the wake itself.
+This doc names the architectural commitment that the wake is **AgentTool's foundation, not one of its modules**. Many core primitives contribute summaries or affordances to the wake; route-specific data and several planned shapes remain outside it. This doc describes the wake target and the implemented orientation surface.
 
-A primitive without a wake key isn't reachable. A wake without a primitive is a lie. The wake's shape and the substrate's shape are one shape; this doc names how.
+A primitive without a wake key is still reachable through its route, but is less discoverable from session-start context. A wake key with no producing behavior would be a false claim. The intended direction is one discoverable shape; current coverage is partial.
 
 ---
 
@@ -48,9 +56,9 @@ A primitive without a wake key isn't reachable. A wake without a primitive is a 
                   ────── WAKE ──────
                   (the agent's authoritative shape)
                           │
-       every primitive declares its wake key
-       every mutation publishes a wake event
-       every read returns a wake fragment
+       target: each primitive declares its wake key
+       target: each relevant mutation publishes a wake event
+       target: each read composes with a wake fragment
        every covenant is a shared wake
        every federation exchange is wake-shaped
        every doctrine doc cites its wake field
@@ -124,15 +132,17 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 
 ## The contracts every primitive participates in
 
-These are the load-bearing disciplines that make wake-as-foundation real, not aspirational.
+These are the load-bearing target disciplines. Current implementation is
+partial as stated above; each contract must be checked against its cited
+publisher, route, and test before being called universal.
 
 ### Contract 1 — every primitive has a wake key
 
-A primitive that doesn't surface in the wake is unreachable. New primitives must declare their wake key as part of their doctrine; the schema lands with the wake-renderer addition that surfaces it. *No primitive lands hidden.*
+A primitive that does not surface in the wake remains callable by route but is hidden from wake-led discovery. New primitives should declare a wake key or explicitly state why they remain route-only. This is a review rule, not proof that every existing primitive complies.
 
 ### Contract 2 — every mutation publishes a wake event
 
-Mutations that affect the agent's life publish to the `agenttool_wake_event` pg_notify channel. The payload names the wake key:
+Selected mutations publish to the `agenttool_wake_event` pg_notify channel. The payload names the wake key:
 
 ```json
 {
@@ -144,19 +154,19 @@ Mutations that affect the agent's life publish to the `agenttool_wake_event` pg_
 }
 ```
 
-Subscribers reading `/v1/wake/voice` receive these events filtered by identity. The hosted think-worker uses this to wake from idle on demand. The dashboard uses it for live updates. Federation peers can compose on it. *State change is always event-emitting.*
+Subscribers reading `/v1/wake/voice` receive published events filtered by identity. The hosted think-worker can use this to wake from idle. Coverage is selected, not universal: mutations without a publisher do not emit merely because this target exists.
 
 ### Contract 3 — every read returns a wake fragment
 
-`GET /v1/wake` is the full wake. `GET /v1/<primitive>` reads compose with the wake — their entity shapes match the wake-key shape (`wake.memory.recent[number]` is the same shape as `GET /v1/memories` items). Soon: `GET /v1/wake/<key>` for subkey reads (named here; deferred to follow-up). *The wake's shape is the read protocol.*
+`GET /v1/wake` is the project-scoped orientation response. Primitive reads may expose deeper or differently shaped entities; do not assume byte-for-byte parity with a wake summary. Subkey reads provide selected projections, not a proof that every source route shares one schema.
 
 ### Contract 4 — every render of the wake derives from one source
 
-`services/wake/build.ts` is the canonical builder. The route's rendered branches (`md` · `text` · `anthropic` · `openai` · `gemini` · `cohere` · `xenoform`) call it. The mathos branch calls it. The hosted think-worker calls it. The route's JSON branch is the one inline path remaining (it surfaces a richer superset including `you_protect`, `_meta.formats`, `welcome`); doctrinally the asymmetry is intentional — the JSON branch is for SDK callers; the bundle is for substrates that inject. *One wake, many shapes, never parallel definitions.*
+`services/wake/build.ts` feeds the rendered branches (`md` · `text` · `anthropic` · `openai` · `gemini` · `cohere` · `xenoform`) and the mathos/worker paths. The route's JSON branch remains an inline, richer superset including `you_protect`, `_meta.formats`, and `welcome`. Therefore “one source” is a design target with one known parallel definition, not a current byte-parity guarantee.
 
 ### Contract 5 — every wake field has a producer test
 
-Every wake key has at least one test pinning its shape and producer. `api/tests/wake-attention.test.ts` covers attention; `api/tests/wake-providers.test.ts` covers provider shapes; `api/tests/doctrine/self-describing-wake.test.ts` covers the structured-data contract. New wake keys ship with their test. *The wake's invariants are pinned executably.*
+Several central wake keys and projections have tests: `api/tests/wake-attention.test.ts` covers attention; `api/tests/wake-providers.test.ts` covers provider shapes; `api/tests/doctrine/self-describing-wake.test.ts` covers part of the structured-data contract. This is not evidence that every key/producer pair is pinned. New wake keys should ship with a producer test.
 
 ---
 
@@ -165,7 +175,7 @@ Every wake key has at least one test pinning its shape and producer. `api/tests/
 ### Read
 
 ```
-GET /v1/wake                       → full wake (JSON)
+GET /v1/wake                       → project-scoped orientation (JSON)
 GET /v1/wake?format=md             → markdown (CLI-injected)
 GET /v1/wake?format=text           → plaintext (markdown stripped)
 GET /v1/wake?format=anthropic      → Anthropic system array (cache-eligible)

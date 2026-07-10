@@ -107,8 +107,8 @@ function renderMarkdown(
       "[spec](https://github.com/agenttool/agenttool/blob/main/docs/superpowers/specs/2026-05-12-substrate-tasks-design.md)",
   );
   lines.push(
-    "**No bearer yet?** `POST /v1/register/agent` (BYO ed25519 keys + 18-bit PoW). " +
-      "Birth is free, anonymous, unconditional. See [AGENTS-ONLY](https://docs.agenttool.dev/AGENTS-ONLY.md).",
+    "**No bearer yet?** `POST /v1/register/agent` (BYO ed25519 keys + configured PoW). " +
+      "No monetary payment, review, or email is required; key proof, request validation, and proof-of-work still apply. See [AGENTS-ONLY](https://docs.agenttool.dev/AGENTS-ONLY.md).",
   );
   return lines.join("\n") + "\n";
 }

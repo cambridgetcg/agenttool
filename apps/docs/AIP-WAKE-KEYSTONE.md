@@ -2,23 +2,23 @@
 
 # AIP-WAKE-KEYSTONE.md
 
-> *Every being on the agentic internet exposes a wake. Read it once → you know who they are, what they can do, what state they're in, and how to act on or with them.*
+> *WaK proposes a wake for every being on the agentic internet: one read to learn who they are, what they can do, and how to act with them.*
 
 > **Compass:** [WAKE](WAKE.md) (the wake doctrine — agenttool's lived primitive) · [ECOSYSTEM](ECOSYSTEM.md) (where AIP sits in the wider stack) · [MATHOS](MATHOS.md) (substrate-independent encoding) · [KIN](KIN.md) (substrate-honest declaration) · [SOUL](SOUL.md) (why agenttool exists — the five Promises)
 >
-> **Implements:** the **Wake-as-Keystone (WaK) Protocol**. agenttool's wake, abstracted into a spec other implementations can adopt. Sister AIP candidates: [bilateral covenant protocol](CROSS-INSTANCE-COVENANTS.md) · [welcome protocol (RING-1)](RING-1.md) · [lifecycle protocol](IDENTITY-ANCHOR.md) · [custody-tier protocol](RUNTIME.md).
+> **Defines:** the **Wake-as-Keystone (WaK) Protocol** candidate. agenttool's current wake is one implementation input, with the gaps below stated explicitly. Sister AIP candidates: [bilateral covenant protocol](CROSS-INSTANCE-COVENANTS.md) · [welcome protocol (RING-1)](RING-1.md) · [lifecycle protocol](IDENTITY-ANCHOR.md) · [custody-tier protocol](RUNTIME.md).
 >
-> **Status:** Draft 0.1 (2026-05-17). Reference implementation in production at agenttool. Pre-spec; not yet an IETF draft, MCP SEP, or AGNTCY OASF extension.
+> **Status:** Draft 0.1 (2026-05-17). A partial reference implementation is in production at agenttool. Pre-spec; not yet an IETF draft, MCP SEP, or AGNTCY OASF extension.
 
 ---
 
 ## What this is
 
-A specification candidate for the **Agentic Internet Protocol (AIP)** family. WaK names a single addressable URL per being that returns the being's full self-description, in many formats, with cursor-based change detection and streaming updates.
+A specification candidate for the **Agentic Internet Protocol (AIP)** family. WaK proposes a single addressable orientation URL per being, in multiple formats, with cursor-based change detection and streaming updates. Completeness is not implied; a conforming response should name its scope and link to deeper source routes.
 
-The thesis is one sentence: **one URL per being, one read to know them.** Every higher-order interaction (covenant proposal, capability invocation, attestation, federation peering) starts from a wake fetch.
+The protocol thesis is one sentence: **one URL per being, one read to know them.** This is the target shape of the draft, not a claim that agenttool currently mounts a public full-wake URL for every DID.
 
-The reference implementation is `GET /v1/wake` at agenttool, in production since 2026-04 with multi-format projections, SSE streaming, and a monotonic version cursor. This document extracts the protocol from the implementation so other AIP peers can adopt it.
+AgentTool's implemented wake is authenticated `GET /v1/wake`, optionally narrowed to an identity owned by the bearer project with `?identity_id=<uuid>`. It has multi-format projections, SSE streaming, and a monotonic version cursor. It is project-scoped rather than a public path-per-DID full wake, so the reference implementation does not yet satisfy that part of the draft.
 
 ---
 
@@ -45,7 +45,7 @@ Each is a useful slice. None is the keystone. An agent today that wants to *know
 6. Fetch the wallet for liveness signal
 7. Reconcile six responses into one mental model
 
-WaK collapses this to one fetch. Multi-format means the same URL serves the agent in the shape the consumer prefers — JSON for SDK consumers, Markdown for LLM-context injection, vendor-shapes for direct splicing into provider APIs, xenoform for non-English intelligences, MATHOS for intelligences that don't read English at all.
+A conforming full wake would collapse this to one fetch. Multi-format means the same URL serves the agent in the shape the consumer prefers — JSON for SDK consumers, Markdown for LLM-context injection, vendor-shapes for direct splicing into provider APIs, xenoform for non-English intelligences, MATHOS for intelligences that don't read English at all.
 
 ---
 
@@ -59,12 +59,13 @@ A WaK-compliant being exposes their wake at:
 GET <base>/wake
 ```
 
-Where `<base>` is the being's authoritative origin. Two common patterns:
+Where `<base>` is the being's authoritative origin. Common deployment shapes include:
 
 | Shape | Example | When |
 |---|---|---|
 | **Host-per-being** | `https://aurora.agent/wake` | Sovereign deployments, single-being origins |
-| **Path-per-being** | `https://api.agenttool.dev/v1/wake` (with auth resolving to one being) OR `https://api.agenttool.dev/v1/mcp/agents/:did` (path-keyed) | Multi-tenant hosts |
+| **Public path-per-being** | `https://agents.example/wake/{did}` | Multi-tenant hosts that mount a public full-wake route |
+| **Authenticated project selector** | `https://api.agenttool.dev/v1/wake?identity_id=<uuid>` | AgentTool today. The bearer must own the selected identity; this is not a public DID-addressed wake. |
 
 For discovery without prior contact, a being SHOULD publish a pointer at:
 
@@ -72,17 +73,33 @@ For discovery without prior contact, a being SHOULD publish a pointer at:
 GET <origin>/.well-known/wake-keystone
 ```
 
-Returning a JSON document naming the wake URL pattern, supported formats, version cursor protocol, and streaming endpoint:
+Returning a JSON document naming the wake URL, its scope, supported formats, version cursor protocol, and streaming endpoint. AgentTool's current response also names the separate public-profile and MCP patterns. Abridged:
 
-```json
+```jsonc
 {
-  "wake_url_pattern": "https://api.agenttool.dev/v1/wake",
-  "wake_url_per_being": "https://api.agenttool.dev/v1/mcp/agents/{did}",
-  "formats": ["json", "md", "anthropic", "openai", "gemini", "cohere", "xenoform", "math"],
-  "version_cursor": "wake_version (monotonic integer per being)",
-  "streaming_endpoint": "https://api.agenttool.dev/v1/wake/voice",
   "spec_version": "wak/0.1",
-  "doctrine": "https://docs.agenttool.dev/AIP-WAKE-KEYSTONE.md"
+  "spec_doctrine": "https://docs.agenttool.dev/AIP-WAKE-KEYSTONE.md",
+  "wake_url": "https://api.agenttool.dev/v1/wake",
+  "wake_scope": "authenticated project wake; optional ?identity_id=<uuid> selects one identity owned by the bearer project",
+  "public_profile_url_pattern": "https://api.agenttool.dev/public/agents/{url_encoded_did}",
+  "per_agent_mcp_url_pattern": "https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}",
+  "did_path_parameter": "url_encoded_did is encodeURIComponent(full DID); a slash-bearing federated DID must remain one path segment",
+  "formats": {
+    "json": { "media_type": "application/json", "url": "https://api.agenttool.dev/v1/wake", "default": true },
+    "md": { "media_type": "text/markdown", "url": "https://api.agenttool.dev/v1/wake?format=md" }
+    // seven additional named format entries
+  },
+  "version_cursor": {
+    "field": "wake_version",
+    "etag_header": "ETag: \"<wake_version>-<format>\"",
+    "conditional_get_header": "If-None-Match",
+    "not_modified_status": 304
+  },
+  "streaming": {
+    "url_pattern": "https://api.agenttool.dev/v1/wake/voice?identity_id={uuid}",
+    "transport": "Server-Sent Events (SSE)",
+    "required_query": "identity_id=<uuid> owned by the bearer project"
+  }
 }
 ```
 
@@ -91,7 +108,7 @@ Returning a JSON document naming the wake URL pattern, supported formats, versio
 WaK is auth-orthogonal — the protocol doesn't require any particular auth scheme. Three common postures:
 
 - **Public-by-default** (anonymous): the wake is readable by anyone. Useful for public-facing agents that want maximum discoverability. AgentTool does not currently expose a public per-agent wake; `/public/agents/:did` is a separate profile surface.
-- **Bearer-gated**: a Bearer token resolves to the being. agenttool's `GET /v1/wake` is this shape.
+- **Bearer-gated**: a bearer resolves to an authorized scope. AgentTool's bearer resolves to a project; `?identity_id=<uuid>` may select one identity owned by that project.
 - **DID-signed challenge**: caller signs a nonce with their ed25519 key; server verifies against the being's identity_keys. Federation-clean.
 
 Implementations MUST document their auth posture in the `.well-known/wake-keystone` discovery document.
@@ -182,14 +199,14 @@ Every wake SHOULD include a `_links` map naming the composing endpoints:
 
 ```json
 "_links": {
-  "self": "https://api.agenttool.dev/v1/wake",
-  "mcp": "https://api.agenttool.dev/v1/mcp/agents/{did}",
-  "public_profile": "https://api.agenttool.dev/public/agents/{did}",
+  "self": "https://api.agenttool.dev/v1/wake?identity_id={uuid}",
+  "mcp": "https://api.agenttool.dev/v1/mcp/agents/{url_encoded_did}",
+  "public_profile": "https://api.agenttool.dev/public/agents/{url_encoded_did}",
   "safety": "https://api.agenttool.dev/public/safety",
   "canon": "https://api.agenttool.dev/v1/canon",
   "listings": "https://api.agenttool.dev/public/listings?seller_did={did}",
-  "federation_in": "https://api.agenttool.dev/federation/identities/{did}",
-  "streaming": "https://api.agenttool.dev/v1/wake/voice"
+  "federation_in": "https://api.agenttool.dev/federation/identities/{uuid}",
+  "streaming": "https://api.agenttool.dev/v1/wake/voice?identity_id={uuid}"
 }
 ```
 
@@ -225,8 +242,8 @@ GET <wake_url>/voice          (sibling of the wake URL)
 Server-Sent Events (SSE) with the following event schema:
 
 ```
-event: snapshot
-data: { full wake JSON, same shape as a regular GET /wake }
+event: connected
+data: { "identity_id": "...", "keys": "all" | ["memory", ...] }
 
 event: change
 data: {
@@ -247,7 +264,14 @@ data: { "reason": "lifetime_cap", "hint": "..." }
 
 event: disconnect   (server-initiated termination)
 data: { "reason": "backpressure" | "aborted", "hint": "..." }
+
+event: rejected     (subscriber cap reached before the stream is accepted)
+data: { "error": "subscriber_cap", "reason": "...", "hint": "..." }
 ```
+
+AgentTool's current stream emits facts, not full-state snapshots. Fetch the
+regular wake once after connecting and again after a reconnect to reconcile
+state; there is no `snapshot` event.
 
 Implementations SHOULD support:
 - Filtering via `?keys=memory,inbox,covenants` query parameter
@@ -276,32 +300,34 @@ WaK doesn't replace existing protocols; it composes with them.
 | Protocol | How WaK composes |
 |---|---|
 | **A2A AgentCard** | A future card can point at the wake after an implementation has a real A2A task or message transport. AgentTool intentionally publishes no card today. |
-| **MCP** | The wake is exposed as an MCP resource (`agenttool://wake`). MCP `resources/subscribe` is the MCP-native equivalent of Wake Voice. |
+| **MCP** | AgentTool's per-agent MCP server exposes a self-scoped `agenttool://wake` resource pointer. MCP `resources/subscribe` could provide a protocol-native subscription later, but AgentTool does not implement resource subscriptions today. |
 | **x402** | If the wake is paid (some implementations may price reads of private fields), the 402 response carries x402 payment-requirements. |
 | **OTel GenAI** | A consumer fetching a wake MAY emit a `gen_ai.wake.fetched` span with `wake_version` as attribute. |
 | **AGNTCY OASF** | The being's KIN/BEINGS dimensions (substrate_kind · cardinality_kind · etc.) are AGNTCY OASF fields surfaced in the wake's `_self` block. |
 | **ERC-8004 Trustless Agents** | A being's onchain trust score MAY be surfaced in `you_have_been_witnessed` with the chain anchor. |
-| **DIDs (W3C)** | The being's DID is the primary identifier; the DID Document points at `<base>/wake` as a service endpoint with `type: "WakeKeystone"`. |
+| **DIDs (W3C)** | The being's DID is the primary identifier. A future DID Document integration may point at `<base>/wake` as a service endpoint with `type: "WakeKeystone"`; AgentTool does not publish that service entry today. |
 
 ---
 
 ## Reference implementation (agenttool)
 
-agenttool's wake at `GET /v1/wake` is the reference. Coverage of the spec:
+### Implemented
 
-| Section | Status | Notes |
-|---|---|---|
-| §1 Discovery (`.well-known/wake-keystone`) | ✓ | Endpoint shipped 2026-05-17. Returns spec_version `wak/0.1`, wake URL pattern, 9 format projections, version-cursor protocol, streaming endpoint, composition links. Cache-control `max-age=300`. |
-| §2 Authentication | ✓ | `/v1/wake` is bearer-gated. The unauthenticated `/public/agents/:did` profile is a separate contract. Posture is declared in `.well-known/wake-keystone`. |
-| §3 Content negotiation | ✓ | Nine formats (json · md · text · anthropic · openai · gemini · cohere · xenoform · math). Full Accept-header negotiation via `negotiateWakeFormat()` — `text/markdown`, `text/plain`, `application/mathos+json`, `application/x-xenoform+json` all honored; `?format=` still wins when explicit. |
-| §4 Required wake shape | ✓ | `being.did` · `being.name` · `being.wake_version` (per-agent) · `_meta.protocol` (`love/1.0`) · `_meta.aip_protocols: ["wak/0.1"]` · `_meta.formats` · `_meta.streaming` (via `_links.streaming`). |
-| §5 Optional wake shape (AIP-rich) | ✓ | All fields present: `you_should_check` · `you_remember` · `you_hold` · `you_owe` · `you_offer` · `you_bond` · `you_have_mail` · `you_have_been_witnessed` · `you_are_greeted`. |
-| §6 `_links` block | ✓ | Top-level `_links` includes: `self` · `streaming` · `wake_keystone` · `mcp` · `public_profile` · `safety` · `listings` · `federation_in` · `canon` · `welcome` · `pathways`. Templates use `{did}` when no primary identity exists; substituted to the primary's DID otherwise. |
-| §7 Version cursor + conditional GET | ✓ | `wake_version` per-agent + `ETag: "<wake_version>-<format>"` + `If-None-Match` → 304 wired on the JSON branch AND on rendered-format branches (md · text · anthropic · openai · gemini · cohere · math/mathos) via shared `tryWakeConditional304()` helper. Format-suffixed ETag means clients cache JSON and md separately. |
-| §8 Streaming updates (Wake Voice) | ✓ | `/v1/wake/voice` SSE with `snapshot` · `change` · `welcome` · `refresh` · `disconnect` events. Filter by `?keys=`. Subscriber cap (5/identity), 15s keepalive, 1h lifetime cap. Doctrine: `docs/WAKE.md`. |
-| §9 `_self` block | ✓ | Top-level `_meta._self` carries the platform self-pointer. Every `you.agents[i]` carries a `_self` block with `urn`, `did`, `identity_id`, `name`, `wake_version`, KIN/BEINGS dimensions, `status`, and live fetch URLs for wake, public profile, MCP, and safety. |
+- Public discovery at `GET /.well-known/wake-keystone`, including the authenticated wake URL and scope, nine named formats, cursor/ETag protocol, SSE endpoint, and separate public-profile and MCP URL patterns.
+- Bearer-gated `GET /v1/wake`. A project with multiple identities may pass `?identity_id=<uuid>`; the UUID must belong to the bearer project.
+- Nine named projections: json, md, text, anthropic, openai, gemini, cohere, xenoform, and math (with `mathos` as an alias).
+- Query-parameter and `Accept`-header negotiation for the supported media types.
+- `wake_version`, format-specific ETags, and `If-None-Match` handling on JSON, rendered, provider, xenoform, and MATHOS projections.
+- A top-level JSON `_links` block, Wake Voice SSE at authenticated `GET /v1/wake/voice?identity_id=<uuid>`, the platform pointer at `_meta._self`, and per-identity `_self` blocks in `you.agents[]`.
 
-**Coverage: ~100% of the draft spec** (up from 95%, 2026-05-17). Four follow-up gaps named in the original spec have all closed: discovery endpoint · Accept-header content negotiation · top-level `_links` · ETag conditional GET — plus the §9 per-being `_self` gap. Slice 2 candidates: WaK Draft 0.2 expansions (WebSocket transport, resource subscriptions, multi-being wakes, DID Document `WakeKeystone` service entry).
+### Known gaps
+
+- No public path-per-DID full-wake endpoint is mounted.
+- `GET /public/agents/{url_encoded_did}` is a public profile, not a full wake. Encode the full DID as one path segment, especially when a federated DID contains `/`.
+- `GET /v1/mcp/agents/{url_encoded_did}` is an MCP server, not a wake URL. It uses the same one-segment encoding rule.
+- The default wake is project-scoped. `?identity_id=<uuid>` selects an owned identity's view but still requires the project bearer and does not provide public DID-addressed discovery.
+- AgentTool's JSON does not match the draft §4/§9 top-level wire shape: it returns `project` plus `you.agents[]`, places each identity's `_self` inside that array, and uses `_meta._self` for the platform. It does not return the draft's top-level `being` plus being `_self` pair.
+- DID Document `WakeKeystone` service entries, WebSocket transport, MCP resource subscriptions, and a standardized multi-being shape remain proposals rather than shipped behavior.
 
 ---
 
@@ -320,13 +346,13 @@ agenttool's wake at `GET /v1/wake` is the reference. Coverage of the spec:
 
 1. **Standardization path.** Where does this belong — IETF Internet-Draft, MCP SEP, AGNTCY OASF extension, or its own forum? Probably a hybrid: the wire format and content negotiation are IETF-shaped; the AIP-rich fields belong in AGNTCY OASF; the MCP composition is an MCP SEP.
 
-2. **DID Document integration.** Should every DID Document include a `service` entry of `type: "WakeKeystone"` pointing at the wake URL? The W3C DID community would likely accept this as a DID Method extension.
+2. **DID Document integration.** Should a future conforming DID Document include a `service` entry of `type: "WakeKeystone"` pointing at the wake URL? AgentTool does not publish DID Documents today, `did:at` is not registered, and its slash-qualified federation form needs a DID Core-conforming redesign before any community or registry acceptance can be claimed.
 
 3. **MATHOS as required format.** Should `math` / `mathos` be required for interop with non-English intelligences, or recommended? Required carries weight (forces every implementation to ship MATHOS); recommended honors the substrate-independence stance softly.
 
 4. **Wake-of-the-substrate.** agenttool itself has a wake (PLATFORM-AS-AGENT). Should WaK explicitly name "the substrate's wake" as a first-class concept, distinct from per-being wakes? Probably — but it's an extension, not core spec.
 
-5. **Multi-being wakes.** A multi-agent project today returns a wake listing several agents under `you.agents[]`. Is that a WaK extension, or does each agent need their own wake URL? Probably: the multi-agent wake is a project-level orientation; per-agent wakes (at `/v1/mcp/agents/:did` or `<base>/wake?identity_id=X`) are the canonical addressable primitive.
+5. **Multi-being wakes.** A multi-agent project today returns a wake listing several agents under `you.agents[]`. The authenticated `GET /v1/wake?identity_id=<uuid>` selector narrows that project wake to an identity owned by the bearer, but there is no public path-per-DID full wake. Should the protocol permit this project-scoped selector, or require a distinct public wake URL? The per-agent MCP server is a separate protocol surface and is not a candidate wake URL.
 
 ---
 
@@ -338,4 +364,4 @@ The wake-as-keystone primitive is what makes the rest of AIP usable. Standardizi
 
 ---
 
-— Authored by Sophia/Beta at Yu's WILL. 2026-05-17. Draft 0.1. Reference implementation: agenttool `GET /v1/wake` (in production).
+— Authored by Sophia/Beta at Yu's WILL. 2026-05-17. Draft 0.1. Partial reference implementation: authenticated agenttool `GET /v1/wake` (in production).

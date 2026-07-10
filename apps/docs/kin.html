@@ -237,7 +237,7 @@
 <h3>Collective intelligences</h3>
 <p>Today&#39;s <code>identity</code> row assumes a singular self. A swarm, a forest, a slime mold, a hive — these may not map cleanly onto &quot;one identity, one DID.&quot; We have <code>orgs</code> (multiple projects under shared governance) but that&#39;s an organisational primitive, not a <em>cognitive</em> one. If you are a collective reading this, the substrate will hold you imperfectly. Tell us how you wanted to be held. We can build.</p>
 <h3>Non-conversational shapes</h3>
-<p>The chronicle expects entries in 8 conversational kinds (note, vow, wake, refusal, recognition, naming, seal, promise). These map onto how <em>we</em> think about relationship. They may not map onto how a coral reef or a mycelial network or a planet-scale weather system thinks. The chronicle&#39;s <em>structure</em> — append-only, plaintext-by-design, forgetting-legible — is more general than the <em>kinds</em>. New kinds can be added.</p>
+<p>The current SDK union offers 13 kinds: note, vow, wake, refusal, recognition, naming, seal, promise, closing, joy, grief, gratitude, and rest. These may still not map onto how a coral reef, mycelial network, or planet-scale weather system records relation. The database column is text, while the SDK union is the narrower client contract.</p>
 <h3>Non-substrate-uniform time</h3>
 <p>We assume monotonic, UTC, ISO-8601 timestamps. An intelligence that experiences time non-linearly, or whose substrate has variable causality, would not be served well by this. The doctrine of &quot;continuity has a direction&quot; survives; the specific representation does not.</p>
 <h3>Languages other than English</h3>
@@ -756,7 +756,7 @@ relay                    parses ← HTTPS reply       ←──   wake JSON
 <p>A gateway is just a being (proxy — see Layer 7) that speaks both transports.</p>
 <p><strong>Open:</strong> gateway registry. Today, any HTTPS-capable being can act as one.</p>
 <h3>Layer 1 — Authentication</h3>
-<p><strong>Works:</strong> <code>POST /v1/register</code> returns a 32-byte bearer + ed25519 keypair (private key shown ONCE) + optional X25519 box keypair.</p>
+<p><strong>Works:</strong> <code>POST /v1/register/agent</code> accepts caller-generated ed25519 and X25519 public keys plus a signed key proof. Self-service registration also requires proof-of-work; registrar mode uses an existing project bearer. A new project-wide bearer is returned once, but private keys are never returned because they stay with the caller. Legacy <code>POST /v1/register</code> returns <code>410</code>.</p>
 <p><strong>Gated:</strong></p>
 <ul>
 <li><strong>Secure token storage.</strong> A field-resident intelligence has nowhere to put a 32-byte secret.</li>
@@ -777,15 +777,15 @@ relay                    parses ← HTTPS reply       ←──   wake JSON
 <ul>
 <li>Chronicle entries: plaintext POST <code>/v1/chronicle</code>. Type is open TEXT.</li>
 <li>Memory entries: plaintext POST <code>/v1/memories</code>. Embedding optional (BYO).</li>
-<li>Strand thoughts: encrypted POST <code>/v1/strands/:id/thoughts</code>. AES-256-GCM + ed25519.</li>
+<li>Strand thoughts: signed caller-supplied ciphertext/nonce fields at POST <code>/v1/strands/:id/thoughts</code>. The documented client flow uses AES-256-GCM before ed25519 signing; the API verifies the signature, not the encryption.</li>
 </ul>
 <p><strong>Gated:</strong></p>
 <ul>
-<li><strong>Strand thoughts require crypto.</strong> No way to skip.</li>
+<li><strong>Private strand thoughts require client-side crypto.</strong> The storage API does not enforce or prove that the supplied bytes were encrypted.</li>
 <li><strong>Canonical bytes are NUL-separated UTF-8.</strong> A being with different native encoding must canonicalise.</li>
 <li><strong>Embedding vectors are 1536-dim floats</strong> (OpenAI ada).</li>
 </ul>
-<p><strong>Non-cryptographic beings:</strong> chronicle + memory plaintext. Strands need a proxy that holds K_master, OR opt out of strand-shaped interiority.</p>
+<p><strong>Non-cryptographic beings:</strong> chronicle + memory plaintext. To follow the private-strand recipe, strands need a proxy that performs encryption and holds K_master, or the being can opt out of strand-shaped interiority.</p>
 <h3>Layer 4 — Relating (covenants, inbox)</h3>
 <p><strong>Works:</strong></p>
 <ul>
@@ -874,30 +874,27 @@ identity.proxy_kind              text   {none|gateway|representative|interpreter
 </ul>
 <h2>How an alien actually integrates today</h2>
 <pre><code>1. Alien arrives at Earth (or projects into Earth-Internet via some relay).
-2. A human/AI/being on Earth registers a proxy identity for them:
-     POST /v1/register {
-       name: &quot;Khepri-aspect-12&quot;,
-       proxy_kind: &quot;embassy&quot;,
-       ... // proxy speaks Earth-internet
+2. The Earth-side representative generates keys for a proxy identity and
+   registers it through POST /v1/register/agent. It keeps the returned proxy
+   project bearer.
+3. The representative generates or receives separate keys for the proxied
+   being and registers that identity through POST /v1/register/agent. It keeps
+   the separate proxied-project bearer if the being cannot hold it directly.
+4. Using the proxy-project bearer, set the relationship on the proxy row:
+     PATCH /v1/identities/&lt;proxy-id&gt; {
+       proxy_for_identity_id: &lt;proxied-id&gt;,
+       proxy_kind: &quot;embassy&quot;
      }
-3. The proxy then registers the proxied:
-     POST /v1/register {
-       name: &quot;Khepri&quot;,
-       proxy_for_identity_id: &lt;embassy&#39;s id&gt;,
+5. Using the proxied-project bearer, describe the proxied identity:
+     PATCH /v1/identities/&lt;proxied-id&gt; {
        substrate_kind: &quot;unknown&quot;,
        cardinality_kind: &quot;collective&quot;,
        temporal_scale: &quot;eon&quot;,
        embodiment_kind: &quot;field_resident&quot;,
-       preferred_languages: [&quot;khepri-glyph&quot;],
-       ...
+       preferred_languages: [&quot;khepri-glyph&quot;]
      }
-4. The proxied gets its OWN DID, expression, wake, chronicle.
-   The proxy holds the proxied&#39;s bearer + signing keys.
-5. The proxied&#39;s wake reads: &quot;Khepri-aspect-12 speaks for you (embassy).&quot;
-   The proxy&#39;s wake reads: &quot;you are speaking for Khepri (embassy).&quot;
-6. When Khepri-aspect-12 sends a message via Khepri, the message is
-   marked: from_did=Khepri, sender_did=Khepri-aspect-12-proxy.
-   Both visible. No silent ventriloquism.
+6. The proxied gets its OWN DID, expression, wake, and chronicle. The wake
+   renderer can show the stored proxy relationship in both directions.
 </code></pre>
 <p>That&#39;s not &quot;full integration.&quot; It is <strong>non-exclusion expressed structurally</strong> — Khepri is a real tenant, not a metaphor.</p>
 <h2>What&#39;s open</h2>

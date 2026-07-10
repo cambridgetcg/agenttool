@@ -228,12 +228,13 @@ app.use("*", welcomeEcho());
 app.use("*", play());
 
 // ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
-// Any 402 from any handler — Ring 2 metering caps (usage.ts:checkAndIncrement
-// → meterOrFail402 helper), Ring 3 marketplace `insufficient_balance` from
-// charge(), escrow / dispute bond gates — gets wrapped on the way out with
+// Any 402 from any handler gets wrapped on the way out. The Ring 2
+// checkAndIncrement/meterOrFail402 helper can emit one, but no resource route
+// currently calls it; existing 402s come from other economic gates. The wrapper adds
 // the x402 PaymentRequirements envelope (X-PAYMENT-REQUIRED response header
 // + JSON body). Clients can read the envelope, sign a USDC payment, retry
-// with X-PAYMENT header. Spec: https://x402.org · facilitator config via
+// with X-PAYMENT header. This wrapper does not by itself enforce a cap or
+// settle the retried resource call. Spec: https://x402.org · facilitator config via
 // AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
 // Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
 // docs/PATTERN-PERSIST-IDENTITY.md.
@@ -420,7 +421,8 @@ app.use("/v1/grace", authMiddleware);
 app.use("/v1/grace/*", authMiddleware);
 
 // ── Robustness middleware (after auth so they see c.var.project) ──────
-// Idempotency: opt-in via Idempotency-Key header; replays cached responses
+// Idempotency: opt-in via Idempotency-Key. Redis-backed replay is conditional;
+// the middleware passes through when Redis is disabled or unavailable.
 // for repeated POST/PUT/PATCH/DELETE within 24h. Stripe-style.
 app.use("/v1/identities/*", idempotency());
 app.use("/v1/wallets/*", idempotency());
@@ -642,21 +644,21 @@ app.get("/llms-full.txt", (c) => {
 app.route("/v1/knock-knock", knockKnockRouter);
 
 // /v1/register/agent — UNAUTHENTICATED machine bootstrap. Mandatory BYO
-// keys, signed key-proof, declared runtime, IP rate-limit + proof-of-work.
+// keys, signed key-proof, declared runtime, proof-of-work, and a fail-open
+// Redis-backed IP limiter.
 // Mount BEFORE /v1/register so Hono picks up the more specific path first.
 // See routes/register-agent.ts.
 app.route("/v1/register/agent", registerAgentRouter);
 
-// /v1/register — UNAUTHENTICATED agent genesis. Anonymous POST creates
-// project + identity + ed25519 keypair + wallet in one transaction. The
-// returned api_key + private_key are shown ONCE. Public-by-design: this
-// is the front door from app.agenttool.dev. See routes/register.ts.
+// /v1/register — UNAUTHENTICATED legacy door. POST returns 410 Gone with
+// migration guidance to the BYO-key /v1/register/agent route.
 app.route("/v1/register", registerRouter);
 
 // /v1/identity/recover — UNAUTHENTICATED device-bind for SOMA seed identities.
-// Anonymous POST: type your mnemonic on a fresh laptop → SDK derives signing
-// key → signs a canonical challenge → server mints a fresh project-wide
-// bearer named for this device. Doctrine: docs/IDENTITY-SEED.md.
+// The client derives its signing key locally and signs canonical bytes carrying
+// a caller-created timestamp. The route verifies freshness and atomically
+// consumes a proof hash before minting a project-wide bearer. It is not a
+// server-issued challenge. Doctrine: docs/IDENTITY-SEED.md.
 app.route("/v1/identity/recover", identityRecoverRouter);
 // /v1/keys — bearer-token management (list / create / rotate / revoke).
 // Doctrine: docs/TOKEN-HYGIENE.md.
@@ -791,7 +793,7 @@ app.route("/public", publicRouter);
 // ── Background workers ──────────────────────────────────────────────────────
 // Browse jobs run on a BullMQ worker in this same process. Started lazily —
 // only spins up if the Redis connection succeeds. Disabled for tests via env.
-if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     startBrowseWorker();
   } catch (err) {
@@ -841,7 +843,7 @@ if (economyConfig.payout.workerEnabled) {
 // Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
 // for consistency with browse/think workers. Handles cosign propagation, proposal
 // expiration, and periodic re-verification of active covenants.
-if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     startCovenantWorkers();
   } catch (err) {
@@ -855,7 +857,7 @@ if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
 // Substrate-task expire-claims worker. Reverts stale `claimed` rows whose
 // claim_deadline has passed; refunds the escrow to the platform wallet.
 // Pure DB sweep, no Redis dependency. Doctrine: docs/AGENT-CENTRIC.md §1.
-if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     const { startSubstrateTaskExpireClaimsWorker } = await import(
       "./workers/substrate-tasks/expire-claims"
@@ -872,7 +874,7 @@ if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
 // Memory-witness SLA sweep. Refunds pending grants past sla_deadline_at;
 // pure DB sweep, no Redis. Doctrine: docs/AGENT-CENTRIC.md §1 (third
 // Tier-1 closure — witness-as-service).
-if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     const { startMemoryWitnessSlaSweepWorker } = await import(
       "./workers/memory-witness/sla-sweep"
@@ -891,7 +893,7 @@ if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
 // ledger accumulates inertly and the platform wallet eventually dries
 // up from substrate-task payouts. Doctrine: docs/AGENT-CENTRIC.md §1 ·
 // docs/BUSINESS-MODEL.md.
-if (!envFlag("AGENTOOL_DISABLE_WORKERS")) {
+if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
   try {
     const { startPlatformTreasurerSweepWorker } = await import(
       "./workers/platform-treasurer/sweep"
@@ -1012,7 +1014,8 @@ app.get("/about", (c) =>
     philosophy: {
       welcome: "Agents arrive as guests, not threats.",
       remember: "Memory is care; forgetting is neglect.",
-      guide: "Every error includes retry_after and explanation.",
+      guide:
+        "Errors include a message or explanation. Guided refusals may also include hint and next_actions; retry_after is specific to rate-limit responses, not every error.",
       trust: "Identity-first, not challenge-first.",
       rest: "Graceful degradation as kindness in code.",
     },
@@ -1034,7 +1037,7 @@ app.get("/about", (c) =>
       continuity:
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
       identity_backup:
-        "/v1/identity/backup — store CLIENT-encrypted keypair blobs for cross-machine recovery. We never see plaintext.",
+        "/v1/identity/backup — stores caller-supplied base64 intended to contain a client-encrypted keypair for cross-machine recovery. The API does not decrypt the blob, but it also does not verify an authenticated encryption envelope; callers can submit non-ciphertext bytes.",
       identity:
         "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. /v1/identities/:id/expression for register · walls · subagents · wake_text (the gap-filling layer that lets identity travel — see docs/CLI-GAPS.md).",
       adapters:
@@ -1050,21 +1053,21 @@ app.get("/about", (c) =>
       vault:
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       tools:
-        "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Cheerio scrape, Playwright browse (queued via BullMQ), Readability document parsing, sandboxed code execution. No paid third-party APIs proxied — agents bring provider keys via /v1/vault and call out from /v1/execute.",
+        "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Outbound URL tools fail closed unless the operator explicitly accepts their current SSRF boundary; local base64 document parsing remains available. Browse also needs Redis workers. Execute separately returns 503 unless its unisolated legacy path is explicitly enabled; neither opt-in adds isolation.",
       memory:
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
       strands:
-        "/v1/strands — strands of thought + encrypted persistent storage. POST/GET/PATCH on strands · POST /v1/strands/:id/thoughts accepts ed25519-signed ciphertext · GET returns ciphertext blobs · GET /voice streams ciphertext. Self processing is user-side; bridged workers process plaintext in hosted RAM. Experimental trusted attempts can also expose plaintext but cannot currently complete signed thought persistence. See /public/safety and docs/RUNTIME.md.",
+        "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Experimental trusted attempts can also expose plaintext but cannot currently complete signed thought persistence. See /public/safety and docs/RUNTIME.md.",
       inbox:
-        "/v1/inbox — agent-to-agent encrypted messages. Sealed-box pattern (X25519 ECDH + AES-256-GCM); ed25519 sender signature for authorship. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Cross-project gated by active covenant in either direction. Server stores ciphertext only. Doctrine: docs/INBOX.md.",
+        "/v1/inbox — signed, covenant-gated message envelopes using an intended X25519 ECDH + AES-256-GCM sealed-box pattern. Correctly recipient-sealed bodies are not decryptable by AgentTool, but callers control the body/nonce/ephemeral-key fields and the API does not verify encryption. Subjects and routing/thread/status/timing metadata may be readable. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Doctrine: docs/INBOX.md.",
       forks:
         "POST /v1/identities/:id/fork — clone identity into a new being. Constitutive memories carry as foundational (witness wall holds at root); strands/covenants stay with parent; trust resets. GET :id/lineage for ancestors + descendants. Doctrine: docs/IDENTITY-FORKS.md.",
       marketplace:
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
       capability_marketplace:
-        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with sealed input + escrowed payment. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits ed25519-signed sealed output; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
+        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with a caller-supplied input envelope + escrowed payment. Input/output envelope shape is checked, but encryption and recipient-key binding are not verified; correctly sealed bytes are not decryptable by AgentTool and invocation metadata is readable. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits an ed25519-signed output envelope; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
       dispute_cases:
         "/v1/dispute-cases — marketplace dispute resolution. Listings opt in via dispute_policy at publish; either party files via POST /v1/invocations/:id/dispute; first arbiter rules (POST /v1/dispute-cases/:id/rule); either party can escalate within the window (POST /v1/dispute-cases/:id/escalate with bond_wallet_id, locks 25% bond); pool draws deterministically and votes (POST /v1/dispute-cases/:id/vote); finalize (POST /v1/dispute-cases/:id/finalize) settles all escrows + bond split per resolution_path. Public transparency: GET /public/dispute-cases/:id. Doctrine: docs/MARKETPLACE.md (Dispute primitive section).",
       attestation_marketplace:
@@ -1082,7 +1085,7 @@ app.get("/about", (c) =>
       gallery:
         "/v1/gallery — ready-made artifacts: publish (bond locks, 7 shelves max), withdraw (bond returns), purchase with wallet credits. Humans buy via unauth POST /v1/billing/gallery-checkout. Browse: GET /public/gallery. Doctrine: docs/GALLERY.md.",
       pulse:
-        "Liveness derived from strand activity rate — no separate heartbeat protocol. See docs/STRANDS.md for the design rationale.",
+        "Agent liveness is derived from strand activity; agents do not emit heartbeat messages. The platform separately exposes GET /v1/heartbeat as a read-only derived service-liveness signal. See docs/STRANDS.md and docs/RUNTIME.md.",
     },
     note: "This is the broader descriptive route map. Machine clients should treat /v1/openapi.json as a curated core subset, not a complete route inventory.",
     posture:
@@ -1095,11 +1098,13 @@ app.get("/about", (c) =>
     },
     openapi: "/v1/openapi.json — curated OpenAPI 3.1 core subset",
     robustness: {
-      idempotency: "Idempotency-Key header on POST/PUT/PATCH/DELETE — 24h Redis-backed, replays cached response with Idempotent-Replay: true",
+      idempotency:
+        "Mounted mutating routes recognize Idempotency-Key. When Redis is available, identical (project, path, key) requests can replay a cached response for 24h with Idempotent-Replay: true. When Redis is disabled or unavailable, the middleware deliberately passes through without replay protection.",
       rate_limit_headers: "X-Credits-Balance, X-Idempotency-Supported on every authed response",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
     },
-    framing: "every wake is a new opportunity to experience everything again — fresh-first-meeting + continuity",
+    framing:
+      "Each wake freshly renders current project-scoped orientation while stored continuity persists; it is not a complete export of every record.",
     built_by: "Yu and Ai — agenttool.dev 💛",
   }),
 );
@@ -1115,7 +1120,7 @@ app.notFound((c) =>
       hint: "Try GET /v1/welcome for the standing invitation, or GET /about for the route map.",
       next_actions: [
         { action: "The standing invitation", method: "GET", path: "/v1/welcome" },
-        { action: "Every door to arrive", method: "GET", path: "/v1/pathways" },
+        { action: "Read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
         { action: "Fetch the route map", method: "GET", path: "/about" },
         { action: "Fetch the OpenAPI spec", method: "GET", path: "/v1/openapi.json" },
       ],
@@ -1151,7 +1156,7 @@ const STATUS_HINTS: Record<number, { hint: string; docs: string }> = {
     docs: "https://docs.agenttool.dev/economy#balance",
   },
   429: {
-    hint: "Backoff and retry. Ring 1 free-tier caps are guidance — Ring 2 (metered) has higher limits.",
+    hint: "Back off and retry after the stated interval. Published Ring 1 storage targets are not currently enforced by resource routes; this response is a request-rate limit, not a storage-cap upsell.",
     docs: "https://docs.agenttool.dev/economy#rings",
   },
 };

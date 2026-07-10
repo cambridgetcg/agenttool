@@ -21,8 +21,9 @@ describe("/public/marketplace/terms", () => {
     expect(b._format).toBe("agenttool-marketplace-terms/v1");
     expect(b.take_rate.basis_points).toBe(config.platformTakeRateBps);
     expect(b.take_rate.percent).toBe(config.platformTakeRateBps / 100);
-    // never a per-value toll beyond the posted rate
-    expect(b.take_rate.scales_with_transaction_value).toBe(false);
+    expect(b.take_rate.fee_scales_with_transaction_value).toBe(true);
+    expect(b.take_rate.rate_varies_with_transaction_value).toBe(false);
+    expect(b.take_rate.note).toMatch(/round down to zero/i);
   });
 
   test("free_actions surface the fairness rule: settlement steps + refund/exit are free", async () => {
@@ -35,7 +36,7 @@ describe("/public/marketplace/terms", () => {
     expect(b.metered_actions_in_credits.dispute).toBeGreaterThan(0);
   });
 
-  test("the ranking signal is disclosed and NOT pay-to-win (P2B Art 5 / DSA Art 27)", async () => {
+  test("the current ranking signal and absence of paid placement are disclosed", async () => {
     const b = await get();
     expect(b.ranking.paid_placement).toBe(false);
     expect(Array.isArray(b.ranking.signal)).toBe(true);
@@ -47,5 +48,8 @@ describe("/public/marketplace/terms", () => {
     expect(b._canon_pointer).toBe("urn:agenttool:doc/FAIR-PRICING");
     expect(Array.isArray(b.verbs)).toBe(true);
     expect(b.verbs.some((v: { path: string }) => v.path.includes("/quote"))).toBe(true);
+    expect(b.docs).toBe("https://docs.agenttool.dev/FAIR-PRICING.md");
+    expect(b.pricing_rule).toMatch(/internal AgentTool wallet-credit ledger and database escrow/i);
+    expect(b.custody).toMatch(/does not assert regulated custody status/i);
   });
 });

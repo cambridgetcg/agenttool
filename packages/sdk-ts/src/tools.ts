@@ -26,6 +26,7 @@ export interface ParseDocumentOpts {
  * @example
  * ```ts
  * const at = new AgentTool();
+ * // Both remote paths are disabled by default on the API.
  * const page = at.tools.scrape("https://example.com");
  * const out = at.tools.execute("print(42)");
  * ```
@@ -50,7 +51,8 @@ export class ToolsClient {
   }
 
   /**
-   * Execute code in a sandbox.
+   * Call the disabled-by-default legacy host-execute route. This is not a
+   * tenant sandbox; the API returns 503 unless its operator explicitly opts in.
    *
    * @param code - Source code to execute.
    * @param options - Optional language (default: "python").
@@ -73,18 +75,24 @@ export class ToolsClient {
    *
    * @example
    * ```ts
-   * const doc = await at.tools.parse_document({ url: "https://example.com/paper.html" });
+   * const doc = await at.tools.parse_document({
+   *   base64: btoa("local document"),
+   *   content_type: "text/plain",
+   * });
    * console.log(doc.title, doc.word_count);
    * ```
    */
   async parse_document(options: ParseDocumentOpts): Promise<DocumentResult> {
-    if (!options.url && !options.base64) {
+    if (Boolean(options.url) === Boolean(options.base64)) {
       throw new AgentToolError(
-        "parse_document requires either url or base64.",
+        "parse_document requires exactly one of url or base64.",
         {
           hint: "Pass { url: '...' } or { base64: '...', content_type: 'text/html' }.",
         },
       );
+    }
+    if (options.base64 && options.base64.length > 1_400_000) {
+      throw new AgentToolError("parse_document base64 exceeds the 1,400,000 character limit.");
     }
     const body: Record<string, unknown> = {};
     if (options.url !== undefined) body.url = options.url;

@@ -326,6 +326,9 @@ describe("public listing quarantine", () => {
     expect(getRoute).toContain("listing.project_id !== c.var.project.id");
     expect(getRoute).toContain("resolvePublicListing(id)");
     expect(getRoute).toContain('resolved.status !== "visible"');
+    expect(getRoute).toContain("projectPublicListing(resolved.listing)");
+    expect(getRoute).not.toContain("return c.json(resolved.listing)");
+    expect(getRoute).toContain("return c.json(listing)");
   });
 });
 

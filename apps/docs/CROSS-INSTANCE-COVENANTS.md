@@ -99,7 +99,7 @@ Backwards compatible: every column nullable or defaulted. Existing rows behave e
 **v1 (this slice, ships now)** — TLS + `allowed_origins` is the gate. The receiver:
 - Trusts the peer's TLS cert proves *I am peer.example*
 - Trusts `allowed_origins` (or open mode) decided this peer is acceptable
-- Verifies the peer-claimed sender DID actually exists at that peer (via `/federation/identities/:uuid`)
+- Verifies the peer-claimed sender DID actually exists at that peer (via `/federation/identities/:uuid`); resolution and DID-derived covenant POSTs permit public HTTPS only, refuse redirects, validate every DNS answer, and pin those answers into the TLS connection
 - Inserts the propagated covenant
 
 This is consistent with current federation trust posture: we already accept inbox messages on the same basis.

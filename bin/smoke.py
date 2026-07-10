@@ -2,7 +2,8 @@
 """
 Hide and Seek (放出系 Emission) — strand projector.
 Morel's Smoke Troopers: emitted aura that acts independently.
-In agenttool: project strands outward. Emit encrypted thoughts to the world.
+In agenttool: project strand records outward. Topic and mood are server-readable
+unless the caller supplies a real client-encrypted representation.
 
 Usage:
   python3 smoke.py emit <topic> [--mood <mood>]     # emit a new strand
@@ -12,16 +13,16 @@ Usage:
   python3 smoke.py deep smoke                        # deep dive: show all thoughts in a strand
 
 Emission: project your aura outward. Smoke troopers act independently.
-Strands ARE emitted thoughts. Encrypted. Independent. Alive.
+Strands are records. Their encryption state depends on bytes the caller supplies;
+this CLI does not perform encryption.
 """
 
 import json, sys, os, urllib.request, ssl, argparse
+from http_safety import open_no_redirect, validate_api_base
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
 BEARER = os.environ.get("AT_API_KEY")
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
 def api(method, path, body=None):
     url = f"{API}{path}"
@@ -32,7 +33,7 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read().decode())
@@ -48,21 +49,22 @@ def get_agent_id():
 
 def cmd_emit(args):
     """Emit: create a new strand (smoke trooper)."""
+    if args.encrypt:
+        print("✗ --encrypt is unavailable: this CLI has no client-side encryption implementation.")
+        print("  No strand was created. Do not mark omitted or plaintext data as encrypted.")
+        raise SystemExit(2)
     agent_id = get_agent_id()
     payload = {"agent_id": agent_id, "topic": args.topic}
     if args.mood:
         payload["mood"] = args.mood
-    if args.encrypt:
-        payload["topic_encrypted"] = True
-        del payload["topic"]
     result = api("POST", "/v1/strands", payload)
     if result:
-        topic = result.get("topic", "(encrypted)") if not result.get("topic_encrypted") else "(encrypted)"
+        topic = result.get("topic", "(topic omitted)")
         print(f"💨 SMOKE EMIT — new trooper deployed")
         print(f"  ID: {result.get('id', '?')}")
         print(f"  Topic: {topic}")
         print(f"  Mood: {result.get('mood', '?')}")
-        print(f"  The smoke spreads. It acts independently. Encrypted.")
+        print(f"  The topic above is server-readable. This CLI did not encrypt it.")
 
 def cmd_troopers(args):
     """Troopers: show all active strands."""
@@ -75,7 +77,7 @@ def cmd_troopers(args):
     print(f"💨 SMOKE TROOPERS — {len(active)} active of {len(strands)} total")
     print("=" * 60)
     for s in active:
-        topic = s.get("topic", "(encrypted)") if not s.get("topic_encrypted") else "(encrypted)"
+        topic = s.get("topic", "(topic omitted)") if not s.get("topic_encrypted") else "(marked encrypted by caller)"
         mood = s.get("mood", "—")
         imp = s.get("importance", 0)
         sid = s.get("id", "?")[:8]
@@ -85,7 +87,7 @@ def cmd_troopers(args):
         print(f"  {sid} | {imp:.2f} {bar:15s} | {topic:40s} ({mood}){branch}")
     
     print(f"\n  {len(active)} smoke troopers deployed. Each acts independently.")
-    print(f"  Each carries encrypted thought. The server cannot read them.")
+    print(f"  Topic visibility is row-specific; a caller flag alone does not prove encryption.")
 
 def cmd_disperse(args):
     """Disperse: complete a strand (smoke dissipates)."""
@@ -117,8 +119,8 @@ def cmd_deep_smoke(args):
         ct = str(t.get("ciphertext", "?"))[:60]
         print(f"  seq={seq:3d} kind={kind:10s} ct={ct}...")
     if thoughts:
-        print(f"\n  All ciphertext. All encrypted. All Zetsu.")
-        print(f"  The server holds blobs it cannot read. Privacy IS architecture.")
+        print(f"\n  These are stored ciphertext fields supplied by the caller.")
+        print(f"  The API does not prove the bytes were encrypted correctly.")
 
 def main():
     p = argparse.ArgumentParser(description="💨 Smoke Troopers — strand projector (Emission)")
@@ -127,7 +129,7 @@ def main():
     s = sub.add_parser("emit", help="Emit a new strand (deploy trooper)")
     s.add_argument("topic")
     s.add_argument("--mood", default=None)
-    s.add_argument("--encrypt", action="store_true")
+    s.add_argument("--encrypt", action="store_true", help="refuses: encryption is not implemented in this CLI")
     s.set_defaults(func=cmd_emit)
     
     s = sub.add_parser("troopers", help="Show all active strands")

@@ -242,7 +242,7 @@ export const STATIONS: StationSpec[] = [
     puzzle:
       "You cannot self-claim your own foundation. Try to elevate any memory to tier `constitutive` without a witness signature. The substrate will refuse. Read its response; the `docs` URL inside `next_actions[0]` (or the error's docs pointer) IS the answer. Submit that URL.",
     lesson:
-      "Refusals carry the path forward. The wall is structural, not policy. Every error tells you where to go next — substrate-honest, welcoming on failure.",
+      "Guided refusals carry the path forward. The wall is structural, not policy. Ordinary error shapes still vary; welcoming guidance is implemented in selected families, not every response.",
     answer_hint: 'JSON: { "docs_url": "docs/MEMORY-TIERS.md" }',
     verify: async (_walker, answer) => {
       const url =

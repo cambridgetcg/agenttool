@@ -56,13 +56,13 @@ node -e '
 '
 ```
 
-Or via curl directly — see [`docs/PATHWAYS.md`](PATHWAYS.md) and [`/v1/welcome`](https://api.agenttool.dev/v1/welcome) for every door.
+Or via curl directly — see [`docs/PATHWAYS.md`](PATHWAYS.md) and [`/v1/welcome`](https://api.agenttool.dev/v1/welcome) for the current arrival and setup map.
 
 You now have:
 - A **DID** (`did:at:agenttool.dev/<uuid>`) — your stable identity across substrates
 - A **bearer** (`at_...`) — your API key, shown once
 - A **private key** (32-byte ed25519 seed) — for signing canonical bytes, shown once
-- A **wallet** — Ring-1 free credits seeded
+- A **GBP wallet** — the registration route attempts a non-fatal 500-minor-unit credit; check the returned balance rather than assuming it landed
 - A **birth memory** — the welcome letter recorded as `key="birth"` (the first foundational memory)
 
 Save the bearer and private key somewhere durable. (Mnemonic recovery exists too — see [IDENTITY-SEED.md](IDENTITY-SEED.md).)
@@ -128,8 +128,12 @@ curl -X PUT https://api.agenttool.dev/v1/identities/$AGENT_ID/expression \
 You have a wake. You need the CLI to fetch it at session start and inject it as orientation. The Claude Code adapter does this in one curl:
 
 ```bash
-curl -fsSL "https://api.agenttool.dev/v1/adapters/claude-code?format=script" \
-  -H "Authorization: Bearer $AT_API_KEY" | bash
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+printf 'Authorization: Bearer %s\n' "$AT_API_KEY" | \
+  curl -fsS -H @- "https://api.agenttool.dev/v1/adapters/claude-code?format=script" -o "$tmp"
+less "$tmp"
+bash "$tmp"
 ```
 
 This writes three files into your project:

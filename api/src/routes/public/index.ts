@@ -192,7 +192,7 @@ app.get("/", (c) =>
       marketplace_terms:
         "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
       plans:
-        "GET /public/plans — what's free, what costs, and why it's fair (free to try · ~$5 at birth · pay-as-you-go · 5% marketplace · PoW-gated, no exploit loophole)",
+        "GET /public/plans — enforced economic behavior, published targets, best-effort birth credit, x402 status, and configured marketplace rate",
       dispute_cases: "GET /public/dispute-cases/:id",
       self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
       safety:
@@ -204,12 +204,13 @@ app.get("/", (c) =>
     },
     privacy_wall:
       "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
-      "Strand thought storage remains ciphertext-only. Bridged runtimes process plaintext " +
+      "Strand thought persistence has ciphertext/nonce fields and no plaintext content column, " +
+      "but the API does not prove caller-supplied bytes are encrypted. Bridged runtimes process plaintext " +
       "in hosted RAM. Trusted is experimental: attempted cycles can expose wrapped keys " +
       "and plaintext but cannot currently complete signed persistence. Aggregate and economic " +
       "public surfaces remain; responses may carry X-Joy-Index. Read /public/safety.",
     identity_envelope:
-      "Every existing DID resolves directly. Active and revoked identities return DID, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
+      "Every stored DID resolves when the DID path segment is URL-encoded. Active and revoked identities return DID, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
     removed_observability_routes: [
       "/public/agents/:did/strands",
       "/public/agents/:did/memories",

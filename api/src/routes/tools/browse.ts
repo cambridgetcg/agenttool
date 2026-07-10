@@ -1,7 +1,11 @@
 /** POST /v1/browse — managed browser session via BullMQ + Playwright.
  *
  *  Quick page loads (≤5s) return the result inline; longer ones return a
- *  job_id for polling at /v1/jobs/:id. */
+ *  job_id for polling at /v1/jobs/:id. URL, actions, page content, and
+ *  screenshots are server-readable. The route fails closed unless the
+ *  operator accepts the current SSRF boundary, and then still requires Redis.
+ *  Chromium runs with --no-sandbox and has no private-address allowlist.
+ *  BullMQ may attempt a job twice. */
 
 import { Hono } from "hono";
 import { z } from "zod";
@@ -9,6 +13,11 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
 import { toolsConfig } from "../../services/tools/config";
+import {
+  isHttpOrHttpsUrl,
+  unsafeOutboundDisabledBody,
+  unsafeOutboundToolsEnabled,
+} from "../../services/tools/outbound-policy";
 import {
   browseQueue,
   browseQueueEvents,
@@ -25,7 +34,9 @@ const browseActionSchema = z.object({
 });
 
 const browseSchema = z.object({
-  url: z.string().url(),
+  url: z.string().url().refine(isHttpOrHttpsUrl, {
+    message: "URL protocol must be http or https",
+  }),
   actions: z.array(browseActionSchema).optional(),
   extract: z.string().optional(),
   screenshot: z.boolean().optional().default(false),
@@ -33,12 +44,10 @@ const browseSchema = z.object({
 });
 
 app.post("/", async (c) => {
-  if (!browseQueue || !browseQueueEvents) {
-    return c.json(
-      { error: "redis_disabled", message: "browse jobs disabled (AGENTTOOL_DISABLE_WORKERS=1)" },
-      503,
-    );
+  if (!unsafeOutboundToolsEnabled()) {
+    return c.json(unsafeOutboundDisabledBody("browse"), 503);
   }
+
   const body = await c.req.json();
   const parsed = browseSchema.safeParse(body);
   if (!parsed.success) {
@@ -50,6 +59,13 @@ app.post("/", async (c) => {
         docs: "https://docs.agenttool.dev/tools",
       },
       400,
+    );
+  }
+
+  if (!browseQueue || !browseQueueEvents) {
+    return c.json(
+      { error: "redis_disabled", message: "browse jobs disabled (AGENTTOOL_DISABLE_WORKERS=1)" },
+      503,
     );
   }
 

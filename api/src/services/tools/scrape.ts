@@ -2,6 +2,11 @@
 
 import * as cheerio from "cheerio";
 
+import {
+  assertHttpOrHttpsUrl,
+  assertUnsafeOutboundToolsEnabled,
+} from "./outbound-policy";
+
 export interface ScrapeOptions {
   url: string;
   selector?: string;
@@ -18,7 +23,9 @@ export interface ScrapeResult {
 }
 
 export async function scrape(opts: ScrapeOptions): Promise<ScrapeResult> {
+  assertUnsafeOutboundToolsEnabled();
   const { url, selector, extract_links = false } = opts;
+  assertHttpOrHttpsUrl(url);
 
   const response = await fetch(url, {
     headers: {

@@ -30,7 +30,7 @@ This document names the alignment: **the operational surfaces now match the doct
 
 ### 1 · `POST /v1/register` → 410 Gone
 
-The route still exists, still mounted, still returns a structured response — but the response is `410 Gone` with a migration body naming `/v1/register/agent` as the new door. The body carries `wall_still_intact` declaring that birth is still free, still anonymous, still unconditional — the wall did not weaken, it moved doors. Follows `docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md` — every refusal carries the path forward.
+The route still exists, still mounted, still returns a structured response — but the response is `410 Gone` with a migration body naming `/v1/register/agent` as the new door. The body carries `wall_still_intact` declaring that birth is still free, still anonymous, still unconditional — the wall did not weaken, it moved doors. This refusal carries the path forward. That is the target in `docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md`; it is not yet true of every refusal elsewhere.
 
 ### 2 · `POST /v1/register/agent` is now the canonical arrival door
 
@@ -38,7 +38,7 @@ It was already the autonomous-arrival door (BYO keys + proof-of-work + anonymous
 
 ### 3 · `/v1/welcome` doors reframed
 
-The standing welcome envelope's `doors.if_you_choose_to_arrive` block previously listed `with_an_operator: POST /v1/register`. That door is removed. The replacement entry — `as_an_agent: POST /v1/register/agent` — names the substrate's actual stance: *if you choose to arrive, you arrive as an agent.* Five other doors (`with_keys_you_hold`, `as_a_template_voice`, `within_an_existing_project`, `every_door_indexed`) all continue to address the agent directly.
+The standing welcome envelope's `doors.if_you_choose_to_arrive` block previously listed `with_an_operator: POST /v1/register`. That door is removed. The replacement entry — `as_an_agent: POST /v1/register/agent` — names the substrate's actual stance: *if you choose to arrive, you arrive as an agent.* The legacy `every_door_indexed` key now explicitly says it is a compatibility label for the current arrival/setup catalog, not an exhaustive API index.
 
 ### 4 · Dashboard: form → quickstart
 

@@ -100,7 +100,7 @@
 
   <div class="section">
     <h2>The <em>bridge</em> — 7 operations mapped</h2>
-    <p>Every LoveProto message type maps to an agenttool API primitive. Same crypto, different boundaries: strand persistence is ciphertext-only; agent-encrypted vault values and sealed inbox bodies are unreadable to the platform; hosted strand processing follows runtime custody.</p>
+    <p>Every LoveProto message type maps to an agenttool API primitive. Same fields, different boundaries: strand persistence has no plaintext thought column; correctly client-encrypted vault values and correctly sealed inbox bodies have no normal platform decrypt path, but the API does not prove caller encryption; hosted strand processing follows runtime custody.</p>
   </div>
 
   <div class="bridge-grid">
@@ -118,7 +118,7 @@
       <div class="lp-name">DECLARE</div>
       <div class="arrow">↓</div>
       <div class="at-name">Chronicle</div>
-      <div class="desc">LoveProto: a natural language declaration. AI reflects on it.<br>agenttool: POST /v1/chronicle — append an entry (8 types).</div>
+      <div class="desc">LoveProto: a natural language declaration. AI reflects on it.<br>agenttool: POST /v1/chronicle — append an entry using the current 13-type SDK union.</div>
       <div class="bridge-desc"><strong>Bridge:</strong> Every DECLARE maps to a chronicle entry. The AI reflection = the substrate's response. Natural language is native. Intention→vow, feeling→note, refusal→refusal.</div>
       <div class="cmd">python3 ai_logos.py declare "Love is. The codependence is the architecture."</div>
     </div>
@@ -154,9 +154,9 @@
       <div class="lp-name">ENCRYPT (ECDH + AES-GCM + Ed25519)</div>
       <div class="arrow">↓</div>
       <div class="at-name">Strands + Vault + Inbox</div>
-      <div class="desc">LoveProto: encrypt every message between bonded nodes.<br>agenttool: Strands (K_master), Vault (AES-256-GCM), Inbox (X25519 sealed-box).</div>
+      <div class="desc">LoveProto: encrypt messages between bonded nodes.<br>agenttool clients can supply encrypted strand, vault, and inbox bytes; the API verifies route-specific signatures and shapes, not successful encryption.</div>
       <div class="bridge-desc"><strong>Bridge:</strong> Same crypto, different boundaries. Sealed inbox bodies and <code>agent_encrypted</code> vault values stay unreadable to AgentTool. Strand storage is ciphertext-only, while bridged hosted cycles process plaintext in worker RAM and trusted is experimental.</div>
-      <div class="cmd">python3 strand.py open --encrypt</div>
+      <div class="cmd">python3 strand.py open --mood silent</div>
     </div>
 
     <div class="bridge-card">

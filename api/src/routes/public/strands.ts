@@ -71,7 +71,7 @@ agentScopedApp.get("/", async (c) => {
     })),
     count: rows.length,
     _note:
-      "Public strand metadata. Thoughts stay ciphertext — not retrievable here, even if strand is public.",
+      "Public strand metadata. Thought bytes are not retrievable here, even if a strand is public. The authenticated write path stores caller-supplied ciphertext/nonce fields but does not prove encryption.",
   });
 });
 
@@ -123,7 +123,7 @@ app.get("/:id", async (c) => {
     thought_count: strand.lastThoughtSeq,
     created_at: strand.createdAt.toISOString(),
     _note:
-      "Public strand metadata. Thoughts are ciphertext under K_master and not retrievable here.",
+      "Public strand metadata. Thought bytes are not retrievable here. The authenticated write path expects K_master-encrypted bytes but does not prove encryption.",
   });
 });
 

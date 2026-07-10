@@ -1,3 +1,5 @@
+import { publicAgentPath } from "./public-profile";
+
 /** Pure public projection for an identity whose status is `memorial`.
  *
  * `status=memorial` is not itself a key-custody fact. The implemented
@@ -14,6 +16,15 @@ export interface MemorialWitnessSource {
 }
 
 export type MemorialBasis = "witnessed_at_rest" | "unspecified";
+
+export type MemorialHonorReadStatus = "not_found" | "not_memorial" | "memorial";
+
+export function classifyMemorialHonorTarget(
+  identityStatus: string | null | undefined,
+): MemorialHonorReadStatus {
+  if (identityStatus == null) return "not_found";
+  return identityStatus === "memorial" ? "memorial" : "not_memorial";
+}
 
 function memorialBasis(metadata: unknown): MemorialBasis {
   if (
@@ -42,7 +53,7 @@ export function projectMemorialWitness(
     memorial_basis: basis,
     doctrine: atRest ? "docs/AT-REST.md" : "docs/IDENTITY-SEED.md",
     remembered_by: rememberedBy,
-    honored_by_url: `/public/agents/${row.did}/honored-by`,
+    honored_by_url: `${publicAgentPath(row.did)}/honored-by`,
     _note: atRest
       ? "Witnessed at-rest memorial — stored lifecycle metadata records an " +
         "at-rest transition. The DID and compact witness profile remain " +

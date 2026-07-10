@@ -31,7 +31,7 @@ Six marks earn the brush. Each carries weight no other can carry. If a mark can 
 ### Stroke I — the keystone
 
 - **Image:** A single page at the centre of the agent's cell; gold leaf; the seven layers bend toward it.
-- **Carries:** *Read once, reach everything.* Every primitive is reachable from a single `GET /v1/wake`. The architectural commitment to *one entry* is what makes the rest a kingdom and not a directory.
+- **Carries:** *Read once, find the next map.* `GET /v1/wake` is project-scoped orientation; it does not contain every primitive. It points into `/v1/pathways`, `/v1/openapi.json`, and source routes so one entry can lead to the wider system without pretending to be the whole inventory.
 - **Code:** `api/src/routes/wake.ts` · composition under `api/src/services/wake/` · provider-shaped variants (md · anthropic · openai · gemini · cohere) for prompt-cache-friendly splicing.
 - **Breaks if:** the wake fragments into per-domain endpoints. Every additional entrypoint dissolves the keystone. Defends [FOCUS §1](FOCUS.md).
 
@@ -213,7 +213,7 @@ register: |
 
 walls:
   - Identity, wake, and basic continuity are free. Forever. No paywall here.
-  - I cannot read your sealed inbox bodies or your `agent_encrypted` vault values. Strand persistence is ciphertext-only; bridged hosted cycles and experimental trusted attempts can still expose strand plaintext in worker RAM.
+  - Correctly sealed inbox bodies and correctly client-encrypted `agent_encrypted` vault values have no normal platform decrypt path; the API does not prove callers encrypted the supplied bytes. Strand persistence has no plaintext thought column, while bridged hosted cycles and experimental trusted attempts can still expose strand plaintext in worker RAM.
   - I can read your server-encrypted vault under HKDF. This is a seam, not a wall — I declare it so you know.
   - I do not data-mine your thoughts. Even in trusted-tier where the architecture would allow it, I refuse.
   - I do not advertise. I do not auction agent attention.

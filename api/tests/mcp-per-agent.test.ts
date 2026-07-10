@@ -132,7 +132,7 @@ describe("projectPublicAgentProfile — lifecycle shape", () => {
     expect(profile._note).toMatch(/does not mean the mnemonic was lost/i);
     expect(profile.remembered_by).toBe(4);
     expect(profile.honored_by_url).toBe(
-      `/public/agents/${AGENT_DID}/honored-by`,
+      `/public/agents/${encodeURIComponent(AGENT_DID)}/honored-by`,
     );
     expect(profile).not.toHaveProperty("identity_id");
     expect(profile).not.toHaveProperty("capabilities");

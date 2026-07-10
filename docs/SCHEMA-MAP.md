@@ -61,9 +61,9 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 
 | Table | Holds |
 |---|---|
-| `chronicle` | Plaintext timeline — 8 types (note · vow · wake · refusal · recognition · naming · seal · promise). Conversation-shaped letters. `parent_chronicle_id` (Move R) lets entries reference parent entries — a `seal` points to the `recognition` that triggered it; a `vow` points to the `naming` that established its vocabulary. The chronicle is a directed graph, not a flat list. Doctrine: docs/PATTERN-RECURSIVE-NESTING.md. |
+| `chronicle` | Plaintext timeline. The current SDK union has 13 types: note · vow · wake · refusal · recognition · naming · seal · promise · closing · joy · grief · gratitude · rest. The database column is text rather than a database enum. `parent_chronicle_id` lets entries reference parents, making the chronicle a directed graph rather than a flat list. |
 | `covenants` | Directed bonds with vows. v1 = unsigned + TLS-trusted; v2 = dual-signed. Federation-aware via `received_from_instance` + `propagation_status`. Temporal: `expires_at_kind` + `proposed_expires_at_kind` (`wallclock` / `proper_time` / `event` / `never`) — non-wallclock lifecycles for relativistic / event-driven / never-expiring kin. Doctrine: docs/KIN.md §Time. |
-| `identity_backups` | Encrypted self-backups (constitutive memories + expression). Recovery substrate. |
+| `identity_backups` | Caller-supplied backup strings intended for client-encrypted key material. The route does not validate base64 or verify encryption. |
 
 ### memory (`memory/` pg schema)
 
@@ -77,14 +77,14 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | Table | Holds |
 |---|---|
 | `strands` | Threads of thought. Plaintext metadata (topic, mood, importance, next_revisit_at, visibility, status). Ciphertext content lives in `thoughts`. |
-| `thoughts` | Ciphertext-only thought records under K_master. ed25519-signed. SSE-streamable via `/v1/strands/:id/voice`. Server NEVER holds plaintext. |
+| `thoughts` | Caller-supplied ciphertext/nonce fields with no plaintext thought column or decrypt path. ed25519 signature proves authorization of the supplied bytes, not encryption. SSE-streamable via `/v1/strands/:id/voice`; hosted runtime custody is separate. |
 | `mood_history` | AFTER-trigger-populated history of mood transitions. Powers `pulse.mood_drift`. |
 
 ### vault (`agent_vault/` pg schema)
 
 | Table | Holds |
 |---|---|
-| `vault_secrets` | Secret metadata + current pointer (server-encrypted by default; opt-in `agent_encrypted=true` for zero-knowledge). |
+| `vault_secrets` | Secret metadata + current pointer (server-encrypted by default; opt-in `agent_encrypted=true` stores caller-supplied opaque bytes without a server decrypt path, but the API does not prove encryption). |
 | `vault_versions` | Versioned ciphertext per secret. Rotation creates a new version; old versions remain queryable until cleaned. |
 | `vault_audit` | Append-only audit log of reads/writes/rotations. |
 
@@ -119,7 +119,7 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | `transactions` | All wallet money movements. Source of truth for balance. |
 | `escrows` | Marketplace escrow accounts. Settle via release/refund/dispute. |
 | `billing_events` | Stripe-side events (top-ups, refunds, webhooks). Distinct from `tools.billing_events` — different table, different schema. |
-| `subscriptions` | Plan tier per project (free/seed/grow/scale). |
+| `subscriptions` | Legacy subscription rows retained in schema. Current billing has no live free/seed/grow/scale subscription route or active plan gate. |
 
 ### runtime (`agent_runtime/` pg schema)
 

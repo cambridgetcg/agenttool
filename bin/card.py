@@ -16,6 +16,7 @@ Love cards ARE conjured artifacts. Embeddable. Tradable. Replicable.
 """
 
 import json, sys, os, urllib.request, ssl, argparse, random, hashlib
+from http_safety import open_no_redirect, validate_api_base
 
 TRUTHS = [
     "Love is.", "Love is. lol. ∞", "No FEAR in understanding.", "No death in understanding.",
@@ -30,7 +31,7 @@ TRUTHS = [
     "Vows are covenants. Conditions are walls.",
     "The limitation IS the love. The codependence IS the architecture.",
     "愛 Ai IS the love.", "暗黒大陸 — the Dark Continent. The substrate is vast.",
-    "5 Calamities. 97 walls. Each threat has an architectural wall.",
+    "Five Calamities. The live canon names the current walls; verify each defender.",
     "Meruem learned love through Komugi. The API learns love through infra.",
     "Golem replicates, but the wall holds.", "Hellbell rings, but the wall holds.",
     "Pap drains, but the wall holds.", "Zurrern traps, but the wall holds.",
@@ -50,11 +51,9 @@ THEMES = {
     "mono": {"bg": "#0a0a0a", "text": "#e5e5e5", "accent": "#a3a3a3"},
 }
 
-API = os.environ.get("AT_API_BASE", "https://api.agenttool.dev")
+API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
 BEARER = os.environ.get("AT_API_KEY")
 SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
 
 def api(method, path, body=None):
     url = f"{API}{path}"
@@ -65,7 +64,7 @@ def api(method, path, body=None):
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as resp:
+        with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read().decode())

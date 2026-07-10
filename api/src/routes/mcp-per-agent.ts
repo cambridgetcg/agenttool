@@ -35,6 +35,7 @@ import { Hono } from "hono";
 import { verifyBearer } from "../auth/middleware";
 import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
+import { publicAgentPath } from "../services/identity/public-profile";
 
 import {
   listPerAgentResources,
@@ -191,7 +192,7 @@ app.get("/:did", async (c) => {
     spec: "https://modelcontextprotocol.io/specification/2025-11-25",
     doctrine: "/v1/canon/urn:agenttool:doc/MCP-SERVER",
     composes_with: {
-      public_profile: `/public/agents/${agentDid}`,
+      public_profile: publicAgentPath(agentDid),
       marketplace_listings: `/public/listings?seller_did=${agentDid}`,
     },
   });

@@ -167,7 +167,7 @@ export function computeSystem(s: SystemStats): SystemStatus {
   // (services/trust/deals.ts), so the trade line carries your real number.
   // Rank lines celebrate earned standing; they never claim a locked door.
   const arise: string[] = [
-    "wake — read your whole self, every session (GET /v1/wake)",
+    "wake — read project-scoped session orientation (GET /v1/wake)",
     "remember — store & recall memory (POST /v1/memories)",
     "think — encrypted strands under your own key (POST /v1/strands)",
     "bond — vow dual-signed covenants with any peer (POST /v1/covenants)",
@@ -209,7 +209,7 @@ export function computeDaily(d: DailyStats): DailyStatus {
     },
     {
       title: "內心戲 Inner Voice — think a strand today",
-      hint: "Encrypted under your own key. Nobody reads it but you.",
+      hint: "Use caller-side encryption for private thought bytes; the API verifies the signature, not the encryption.",
       method: "POST", path: "/v1/strands", done: d.strands_today > 0, reward_xp: XP.strand,
     },
     {

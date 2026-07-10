@@ -1,4 +1,6 @@
-/** POST /v1/execute — sandboxed code execution (python · javascript · bash). */
+/** POST /v1/execute — bounded host execution (python · javascript · bash).
+ *  Fail-closed by default because this is not a tenant security boundary.
+ *  Operators must explicitly opt into the unsafe legacy path. */
 
 import { Hono } from "hono";
 import { z } from "zod";
@@ -20,7 +22,31 @@ const executeSchema = z.object({
   timeout_ms: z.number().int().min(100).max(30_000).optional(),
 });
 
+export function unsafeHostExecuteEnabled(
+  value = process.env.AGENTTOOL_ENABLE_UNSAFE_EXECUTE,
+): boolean {
+  return value === "1";
+}
+
 app.post("/", async (c) => {
+  if (!unsafeHostExecuteEnabled()) {
+    return c.json(
+      {
+        error: "unsafe_host_execute_disabled",
+        message:
+          "Host code execution is disabled because node:vm and same-container " +
+          "child processes do not provide a per-tenant security boundary.",
+        hint:
+          "Run code on infrastructure you control. An operator may explicitly " +
+          "enable the legacy trusted-code path with AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1, " +
+          "but that does not make it a hostile-code sandbox.",
+        enabled_by_process_flag: false,
+        safety: "/public/safety",
+      },
+      503,
+    );
+  }
+
   const body = executeSchema.parse(await c.req.json());
 
   // Estimate credits from requested timeout. On execution we'll know actual.

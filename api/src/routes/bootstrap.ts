@@ -1,8 +1,8 @@
 /** /v1/bootstrap — agent lifecycle entry point.
  *
  *  Bootstrap is the "name a new agent" flow within an existing project. One
- *  call brings a new agent fully
- *  into existence:
+ *  call creates the project's initial records and key material for a named
+ *  agent:
  *    - identity (DID + ed25519 keypair, via in-process createIdentity())
  *    - wallet   (via in-process createWallet())
  *    - memory   (welcome letter — best-effort; in-process when memory ports
@@ -138,7 +138,7 @@ app.post("/", async (c) => {
       language, // resolved welcome-letter language
       next_steps: {
         wake: "GET /v1/wake",
-        pathways: "GET /v1/pathways (every door to bring agents into existence)",
+        pathways: "GET /v1/pathways (current arrival and setup map)",
         docs: "https://docs.agenttool.dev",
       },
       _meta: {
