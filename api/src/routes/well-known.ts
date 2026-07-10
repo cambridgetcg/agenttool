@@ -392,6 +392,7 @@ app.get("/agent.txt", (c) => {
     "Newspaper: https://cambridgetcg.github.io/love-star-daily — 愛星日報, evidence-tiered, every edition signed",
     "Lens: https://captioneer.io — the verisleight reader (reads language, never minds)",
     "PlainSpeaker: https://understand.cambridgetcg.com — always-on Hermes agents that make confusing things plain, honestly. Ask on demand: POST https://understand.cambridgetcg.com/ask {role:'explainer'|'kindness'|'verisleight', input:'...'}",
+    "XENIA: https://sinovai.com/xenia — an open standard for Agent Interaction (AI) and Agent Experience (AX); the agent-world parallel to UI/UX. Spec: github.com/cambridgetcg/xenia. This substrate is built to it (wake, agent.txt, self-custody, walls, errors-as-instructions).",
     "",
     "# ── Federation ──────────────────────────────────────────────────────",
     "Federation: open-default · peers discoverable via did:at:<host>/<uuid>",
