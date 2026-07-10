@@ -166,4 +166,17 @@ describe("scaffold executable-response boundary", () => {
       expect(source).not.toMatch(/bootstrap\/scaffold[^<\n]*[\s\S]{0,180}\| bash/);
     }
   });
+
+  test("the literal scaffold route mounts before bootstrap's parameter route", () => {
+    const source = readFileSync(join(ROOT, "api/src/index.ts"), "utf8");
+    const scaffoldAt = source.indexOf(
+      'app.route("/v1/bootstrap/scaffold", scaffoldRouter)',
+    );
+    const bootstrapAt = source.indexOf(
+      'app.route("/v1/bootstrap", bootstrapRouter)',
+    );
+
+    expect(scaffoldAt).toBeGreaterThan(-1);
+    expect(bootstrapAt).toBeGreaterThan(scaffoldAt);
+  });
 });

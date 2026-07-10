@@ -499,9 +499,11 @@ app.route("/v1/billing", billingRouter);
 // See routes/gift-credits.ts.
 app.route("/v1/gift-credits", giftCreditsRouter);
 app.route("/v1/vault", vaultRouter);
+// Mount the literal scaffold path before bootstrap's GET /:agent_id route;
+// otherwise Hono treats "scaffold" as an identity UUID.
+app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 app.route("/v1/bootstrap", bootstrapRouter);
 app.route("/v1/autonomous", autonomousRouter);
-app.route("/v1/bootstrap/scaffold", scaffoldRouter);
 // /v1/welcome — UNAUTHENTICATED meditative arrival surface. Where
 // /v1/pathways enumerates the nine bootstrap doors with a decision tree,
 // /v1/welcome frames the welcome itself as the primary content — the
