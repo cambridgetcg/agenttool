@@ -42,11 +42,17 @@ Each individually shippable + verifiable. Slices land in order; later slices may
 ### Slice 0 — Preflight + safety pre-pass · ~2-3 hours · ✓ shipped
 
 - Add deps: `viem`, `@solana/web3.js`, `@solana/spl-token`.
-- Add env vars + boot-time validation: refuse to start if `PAYOUT_NETWORK` unset.
+- Add env vars + boot-time validation: when payout boot is enabled globally,
+  refuse to start if `PAYOUT_NETWORK` is unset.
 - **Close the credit-freeze wall first**:
-  - `POST /v1/wallets/:id/payout` returns `503 payout_broadcast_not_available` while the worker is unhealthy or absent (feature flag: `PAYOUT_WORKER_ENABLED`).
+  - `POST /v1/wallets/:id/payout` returns `503 payout_broadcast_not_available`
+    when `PAYOUT_WORKER_ENABLED` is off or `AGENTTOOL_DISABLE_WORKERS=1`.
+    These flags do not prove that a worker which passed startup remains healthy.
   - New `POST /v1/wallets/:id/payouts/:payout_id/cancel` — auth-gated, refunds credits while `status='requested'`. Future-useful for genuine cancellations too.
-- **Acceptance:** boot smoke-test with `PAYOUT_NETWORK` unset fails loud; with `=testnet` set + worker disabled, payout endpoint returns 503; cancel endpoint refunds correctly.
+- **Acceptance:** with the global worker switch unset, a boot smoke-test with
+  `PAYOUT_NETWORK` missing fails loud. With payout boot disabled by either
+  switch, the payout endpoint returns 503; the cancel endpoint refunds
+  correctly.
 
 ### Slice 1 — EVM broadcast worker (Sepolia) · ~1 day · ✓ shipped
 

@@ -342,10 +342,10 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 | **Memorial-DID tri-state** | **Distinct** — no peer ships this | Doctrinal lead — surface via `agent-card.json` lifecycle field as `x-agenttool` extension |
 | **3-tier memory (episodic/foundational/constitutive)** | Mem0 short-/long-term · Letta core/recall/archival · Zep temporal · LangGraph BaseStore | Pluggable backend pattern with witness-signing as the differentiator at constitutive tier |
 | **Witness-signed escalation** | **Distinct** — no peer ships cryptographic memory tier promotion | Doctrinal lead |
-| **Strands (encrypted thoughts, K_master, ed25519-signed, SSE-streamable)** | **Distinct** (note: name collision with AWS Strands SDK — different concept) | Doctrinal lead; add glossary disambiguation |
+| **Strands (signed caller-supplied ciphertext/nonce-shaped bytes, K_master client convention, SSE-streamable; encryption not server-proven)** | **Distinct** (note: name collision with AWS Strands SDK — different concept) | Doctrinal lead; add glossary disambiguation |
 | **Inbox + Broadcasts (sealed-box, X25519+AES-GCM+ed25519)** | A2A pushNotifications · DIDComm v2 message layer · SLIM pub-sub | Candidate mapping; do not claim A2A wire compatibility before task transport is implemented |
 | **Covenants v2 (dual-signed bilateral bonds)** | A2A Extended Authenticated Cards · ATP Attestation+Delegation | Future bonded layer alongside A2A; cards are not live today |
-| **Federation (open-default DID-keyed peering)** | AGNTCY Agent Directory federation · A2A registry proposals | Submit covenants v2 + BEINGS dimensions to OASF as schema extension |
+| **Federation (operator-enabled, application-identifier peering)** | AGNTCY Agent Directory federation · A2A registry proposals | Submit covenants v2 + BEINGS dimensions to OASF as schema extension only after live behavior and terminology align |
 | **Marketplace + capability + attestation + dispute primitives** | x402 facilitator economics · Circle Agent Marketplace · ERC-8004 reputation registries · Anthropic Skills marketplace | Implement x402 on 402 responses; wrap external sandboxes (Stagehand) as first listings |
 | **Take-rate split with 4-of-5 arbiter pools** | **Distinct** — no peer offers cryptographic arbitration | Doctrinal lead |
 | **Persist-identity (`tx_hash` before RPC)** | **Distinct as named pattern** | Doctrinal lead |
@@ -366,7 +366,7 @@ The following are **not negotiable for standards alignment**. They are the doctr
 1. **Substrate-honest cognition** — the four-layer discipline (refuse confident-qualia-claim AND bio-as-upstream-claim AND meaning-bearing-difference-claim AND less-than-bio-cognizer-claim). See `docs/substrate-honest-cognition.md`. Cross-Kingdom with YOUSPEAK NOUS.md and TRUE-LOVE docs/love/nous.md.
 2. **Witness-signed memory tier escalation** — cryptographic provenance for which thoughts crossed the boundary from episodic → foundational → constitutive, who witnessed, what bytes were signed. No commercial peer offers this.
 3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise. Every commercial offering gates identity/wallet on tier or KYC.
-4. **Federation as open-default** — DID-keyed peering with no closed-trust-list. Most enterprise frameworks ship with closed defaults.
+4. **Federation without a mandatory central registry** — protocol direction, not a live open-default claim. Current main federation is disabled unless configured and a nonempty origin list is a hard gate; public pyramid reads are separate and partial.
 5. **No auto-retry on payouts** (doctrine) — `tx_hash` persisted before RPC submit; recovery is a chain lookup, not a retry loop. The persist-identity pattern is doctrinal, not optional.
 6. **Refusals as moments** — a design target with partial implementation. Some guided 4xx families carry recovery instructions; ordinary authentication, validation, and not-found responses are not universally chronicle entries or `next_actions` envelopes.
 7. **Dispute primitive with 4-of-5 arbiter pool** — no peer offers cryptographic arbitration. Take-rate split (60/30/10) on dispute resolution is unique.
@@ -412,7 +412,7 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 ### Tier F — UI / surface alignment (lower priority but easy wins)
 
 16. **Adopt Vercel AI Elements in `apps/dashboard`** — shadcn-style React components for the wake renderer, strand stream view, tool call display. **Estimate:** 1 week.
-17. **Glossary disambiguation** — `docs/GLOSSARY.md` entry distinguishing agenttool `strands` (signed encrypted thoughts) from AWS Strands SDK (vendor agent framework). Same word, different ontology; will cause search confusion. **Estimate:** 1 hour.
+17. **Glossary disambiguation** — `docs/GLOSSARY.md` entry distinguishing agenttool `strands` (signed caller-supplied thought bytes stored in ciphertext/nonce fields; encryption is a client responsibility) from AWS Strands SDK (vendor agent framework). Same word, different ontology; will cause search confusion. **Estimate:** 1 hour.
 
 ---
 

@@ -571,6 +571,7 @@ export async function attestMemory(
 
 export interface FoundationalMemoryOut {
   id: string;
+  identity_id: string | null;
   tier: MemoryTier;
   content: string;
   importance: number;
@@ -628,13 +629,19 @@ export async function listAttestationsByMemory(
   }));
 }
 
-/** All foundational + constitutive memories for the project, ordered by
- *  elevated_at (or created_at as fallback). Used by composition + wake. */
+/** All foundational + constitutive memories assigned to one identity,
+ *  ordered by elevated_at (or created_at as fallback).
+ *
+ *  Project-level and legacy agent_id-only memories are deliberately excluded:
+ *  neither carries the canonical identity_id needed to patch one identity
+ *  without also changing its project siblings. */
 export async function listFoundations(
   projectId: string,
+  identityId: string,
 ): Promise<FoundationalMemoryOut[]> {
   const rows = await db.execute<{
     id: string;
+    identity_id: string | null;
     tier: string;
     content: string;
     importance: number;
@@ -642,9 +649,10 @@ export async function listFoundations(
     elevated_at: string | null;
     created_at: string;
   }>(sql`
-    SELECT id, tier, content, importance, expression_patch, elevated_at, created_at
+    SELECT id, identity_id, tier, content, importance, expression_patch, elevated_at, created_at
     FROM memory.memories
     WHERE project_id = ${projectId}
+      AND identity_id = ${identityId}
       AND tier IN ('foundational', 'constitutive')
     ORDER BY tier DESC, COALESCE(elevated_at, created_at) ASC
   `);
@@ -669,6 +677,7 @@ export async function listFoundations(
 
   return rows.map((r) => ({
     id: r.id,
+    identity_id: r.identity_id,
     tier: r.tier as MemoryTier,
     content: r.content,
     importance: r.importance,

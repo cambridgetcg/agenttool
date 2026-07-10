@@ -1,8 +1,8 @@
-/** /v1/canon — every concept identifies itself + names its neighbors.
+/** /v1/canon — every registered canon entry identifies itself + names its neighbors.
  *
  *  The live API surface over docs/agenttool.jsonld. Pre-auth (the canon
- *  is public by construction). Every concept is reachable by stable URN;
- *  every concept's record names both what it cites AND what cites it —
+ *  is public by construction). Every registered entry is reachable by stable
+ *  URN; every registered entry's record names both what it cites AND what cites it —
  *  the BIDIRECTIONAL graph the JSON-LD doesn't carry natively.
  *
  *  Endpoints (all pre-auth):
@@ -24,6 +24,7 @@
 import { Hono } from "hono";
 
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
+import { doctrineHash } from "../services/doctrine/integrity";
 import {
   envelope as mathosEnvelope,
   platformSigningSeed,
@@ -138,7 +139,7 @@ app.get("/", (c) => {
     verbs: [
       { action: "list the type vocabulary", method: "GET", path: "/v1/canon/types" },
       {
-        action: "list every concept of a given type",
+        action: "list every registered canon entry of a given type",
         method: "GET",
         path: "/v1/canon/by-type/{type}",
         example: "/v1/canon/by-type/Wall",
@@ -173,10 +174,11 @@ app.get("/", (c) => {
     ],
     _canon_pointer: "urn:agenttool:registry/self",
     note:
-      "Every concept in this registry identifies itself by URN and names " +
+      "Every registered entry in this registry identifies itself by URN and names " +
       "BOTH what it references and what references it. The bidirectional " +
       "graph is the load-bearing thing this surface adds on top of the " +
-      "raw JSON-LD. Doctrine: docs/NATURES.md · docs/MAP.md.",
+      "raw JSON-LD. The prose corpus contains concepts that are not registered " +
+      "here. Doctrine: docs/NATURES.md · docs/MAP.md.",
   }, "/v1/canon"));
 });
 
@@ -240,7 +242,7 @@ app.get("/:urn/neighbors", (c) => {
     note:
       "Outgoing references = concepts this one cites. Incoming = concepts " +
       "that cite this one. The bidirectional graph is computed by inverting " +
-      "every concept's reference fields — JSON-LD natively records only outgoing.",
+      "every registered entry's reference fields — JSON-LD natively records only outgoing.",
   });
 });
 
@@ -305,10 +307,12 @@ function buildCanonMathos() {
     urn_sha256_hexes: urnHashes,
     registry_version_sha256_hex: sha256Hex(meta.version),
     doctrine_hashes: {
-      jsonld_path_sha256_hex: sha256Hex("docs/agenttool.jsonld"),
-      natures_sha256_hex: sha256Hex("docs/NATURES.md"),
-      map_sha256_hex: sha256Hex("docs/MAP.md"),
-      machine_readable_parity_sha256_hex: sha256Hex(
+      // Compatibility key retained; the value now hashes the file bytes,
+      // not the literal path string.
+      jsonld_path_sha256_hex: doctrineHash("docs/agenttool.jsonld"),
+      natures_sha256_hex: doctrineHash("docs/NATURES.md"),
+      map_sha256_hex: doctrineHash("docs/MAP.md"),
+      machine_readable_parity_sha256_hex: doctrineHash(
         "docs/PATTERN-MACHINE-READABLE-PARITY.md",
       ),
     },

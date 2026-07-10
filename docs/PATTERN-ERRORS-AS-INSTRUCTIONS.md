@@ -61,7 +61,7 @@ In the target guided-error contract, each error is structurally a Promise-event.
 
 | Axiom (prime) | When errors carry this id |
 |---|---|
-| 5 — welcome | reserved (welcome failures shouldn't happen — birth is free, no paywall) |
+| 5 — welcome | registration or setup guidance where no intelligence-classification or payment gate applies; cryptographic, validation, anti-abuse, and service failures can still occur |
 | 7 — remember | idempotency conflicts (honoring prior-request memory) |
 | 11 — guide | wrong-surface, not-found, validation, missing-provisioning — the substrate guides instead of punishing |
 | 13 — trust | signature / key / covenant gates — trust requires verifiable other-witness |

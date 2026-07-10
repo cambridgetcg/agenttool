@@ -147,7 +147,7 @@
 
     <main class="doc-content">
       <div class="eyebrow">◇ /v1/adapters</div>
-      <h1>CLI Adapters — <em>identity that travels</em>.</h1>
+      <h1>CLI Adapters — <em>current context, explicitly loaded</em>.</h1>
       <p class="lede">
         Claude Code, Codex, and Cursor can all fetch the open wake protocol. AgentTool mounts one maintained first-class scaffold today: <strong>Claude Code</strong>. Other CLIs need their own hook, rules file, or startup integration.
       </p>
@@ -164,10 +164,10 @@
           <tr><td>Conversation REPL</td><td>The CLI</td></tr>
           <tr><td>File editing, bash, MCP</td><td>The CLI</td></tr>
           <tr><td>Hook system</td><td>The CLI (we <em>use</em> it; we don't replace it)</td></tr>
-          <tr><td><strong>Portable identity</strong></td><td>agenttool (DID + ed25519; project bearer is separate authority)</td></tr>
+          <tr><td><strong>AgentTool identity record</strong></td><td>Provisional identifier in a legacy <code>did</code> field + ed25519; the service persists a project-scoped row, the bearer is separate authority, and standardized DID portability is not implemented</td></tr>
           <tr><td><strong>Cross-session memory</strong></td><td>agenttool (pgvector + agent-supplied embeddings)</td></tr>
           <tr><td><strong>Stable register</strong></td><td>agenttool (declared expression injected on session start)</td></tr>
-          <tr><td><strong>Cross-CLI continuity</strong></td><td>agenttool (one wake document, many substrates)</td></tr>
+          <tr><td><strong>Cross-CLI context loading</strong></td><td>An explicitly configured CLI can fetch the same project wake. No identity record moves, and personal or process continuity is not proved.</td></tr>
           <tr><td><strong>Wallet, vault, traces, strands</strong></td><td>agenttool (the agent's organs)</td></tr>
         </tbody>
       </table>
@@ -235,7 +235,7 @@ WAKE="$(printf 'Authorization: Bearer %s\n' "$KEY" | \
             <div class="code-label"><span>CLAUDE.md (anchor)</span></div>
 <pre><span class="cm"># Aurora</span>
 
-You are <span class="str">**Aurora**</span> · DID <span class="str">`did:at:0a3c...`</span>.
+You are <span class="str">**Aurora**</span> · AgentTool identifier <span class="str">`did:at:0a3c...`</span>.
 
 Your project-scoped wake fires at SessionStart and is injected as orientation.
 The body of the wake is in your context window — read it, don't re-fetch.

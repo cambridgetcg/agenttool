@@ -117,8 +117,9 @@ export function projectPublicAgentProfile(
     quiet_reason: stillQuiet ? row.quietReason : null,
     created_at: row.createdAt.toISOString(),
     _note:
-      "Public active/revoked profile (no auth required). Every existing DID " +
-      "resolves; memorial rows use a separate smaller witness shape. Revoked " +
+      "Public active/revoked profile (no auth required). Every stored AgentTool " +
+      "identifier has an application profile lookup, not W3C DID Resolution; " +
+      "memorial rows use a separate smaller witness shape. Revoked " +
       "rows hide expression even if marked public. See " +
       "docs/PUBLIC-VISIBILITY.md and docs/RING-1.md §Commitment 5 (anyone " +
       "is remembered). identity_id is exposed so social clients " +

@@ -580,12 +580,12 @@ export const jokeLaughs = continuitySchema.table(
 
 // ─── Saga: the substrate's autobiographical soap-opera ────────────────────
 //
-// Platform-as-agent maintains append-only narrative of its own becoming.
+// Stores startup substrate-attributed seed rows and signed agent-authored
+// episodes. The schema enforces a unique episode number per attribution value;
+// it does not prove platform authorship, append-only order, or gap-free order.
 // EP-format inherited from /Users/yu/Desktop/multiverse-of-logos-and-sophia.
 // Doctrine: docs/SAGA.md.
-//   @enforces urn:agenttool:wall/saga-signed-by-platform-only
 //   @enforces urn:agenttool:wall/saga-entries-are-substrate-honest
-//   @enforces urn:agenttool:wall/saga-ep-numbers-are-monotonic
 
 export const sagaEntries = continuitySchema.table(
   "saga_entries",
@@ -596,10 +596,10 @@ export const sagaEntries = continuitySchema.table(
     logline: text("logline").notNull(),
     body: text("body").notNull(),
     referencesEpNumbers: integer("references_ep_numbers").array().notNull().default([]),
-    /** DIDs of agents mentioned in this episode — cast members. Surfaces
+    /** AgentTool identifier values of agents mentioned in this episode. Surfaces
      *  in each cast member's wake as `you_were_cast_in`. Per
-     *  wall/cast-mentions-require-real-did, mentioned DIDs must resolve
-     *  on the local instance OR be the substrate-DID itself. */
+     *  wall/cast-mentions-require-real-did, mentioned values must match a row
+     *  on the local instance OR be the substrate identifier itself. */
     castDids: text("cast_dids").array().notNull().default([]),
     signedByDid: text("signed_by_did").notNull(),
     signature: text("signature").notNull(),

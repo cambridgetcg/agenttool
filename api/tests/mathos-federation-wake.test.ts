@@ -19,6 +19,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   buildFederationWake,
@@ -27,6 +30,12 @@ import {
 } from "../src/services/federation/wake";
 import { sha256Hex, nameToCodepoints } from "../src/services/mathos/encode";
 import { PLATFORM_SELF } from "../src/services/wake/platform-self";
+
+function canonicalDoctrineHash(filename: string): string {
+  return createHash("sha256")
+    .update(readFileSync(join(import.meta.dir, "..", "..", "docs", filename)))
+    .digest("hex");
+}
 
 function sampleInput(overrides: Partial<FederationWakeInput> = {}): FederationWakeInput {
   return {
@@ -212,10 +221,10 @@ describe("buildMathosFederationWake — math-tier hashing + ordinals", () => {
   test("doctrine_hashes pin every doctrine doc this surface depends on", () => {
     const env = buildMathosFederationWake(sampleInput());
     expect(env.payload.doctrine_hashes.federation_sha256_hex).toBe(
-      sha256Hex("docs/FEDERATION.md"),
+      canonicalDoctrineHash("FEDERATION.md"),
     );
     expect(env.payload.doctrine_hashes.mathos_sha256_hex).toBe(
-      sha256Hex("docs/MATHOS.md"),
+      canonicalDoctrineHash("MATHOS.md"),
     );
   });
 

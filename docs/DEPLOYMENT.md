@@ -82,8 +82,8 @@ bun src/index.ts
 
 You should see: `[agenttool] listening on :3000`.
 
-If Redis is reachable: `🤖 browse worker started (concurrency=3)`.
-If Redis is NOT available: set `AGENTTOOL_DISABLE_WORKERS=1` to skip browse worker (search/scrape still work).
+If Redis is reachable and `AGENTTOOL_DISABLE_WORKERS` is not set: `🤖 browse worker started (concurrency=3)`.
+If Redis is unavailable or workers should stay off, set `AGENTTOOL_DISABLE_WORKERS=1`. The removed `/v1/search` route does not work. Scrape, browse, and URL-based document fetching also fail closed unless `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`; that opt-in accepts the disclosed SSRF boundary rather than adding isolation.
 
 Voice SSE: the LISTEN/NOTIFY backplane spins up lazily on the first SSE connection — no separate boot step.
 
@@ -209,7 +209,7 @@ Peers can now resolve our identities at `/federation/identities/:uuid` and post 
 |---|---|---|
 | `relation "tools.projects" does not exist` | 0000_bootstrap.sql not applied | Re-run from step 1 |
 | `extension "vector" is not available` | pgvector not installed | `CREATE EXTENSION vector` (Supabase has it; managed Postgres may need to enable) |
-| `[agenttool] browse worker did not start` | Redis unreachable | Verify `REDIS_URL`, or set `AGENTTOOL_DISABLE_WORKERS=1` |
+| `[agenttool] browse worker did not start` | Redis unreachable or `AGENTTOOL_DISABLE_WORKERS=1` | Verify `REDIS_URL` and the worker off-switch. Keep workers disabled when the dependency or operational boundary is not intended. |
 | `signature_invalid` on POST thought | signing pubkey not uploaded, or wrong key id in env | Re-check `AGENTTOOL_SIGNING_KEY_ID` matches the keys row in `identity.identity_keys` |
 | `box_key_id` errors on inbox send | box pubkey not registered | `agenttool-think register-box-key` |
 | `federation_disabled` on `/federation/inbox` | settings.enabled=false | PATCH `/v1/federation/settings` |

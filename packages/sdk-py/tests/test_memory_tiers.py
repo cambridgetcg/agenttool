@@ -23,6 +23,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
 
 from agenttool import canonical_attestation_bytes, sign_attestation
 from agenttool.memory import MemoryClient
@@ -30,7 +35,7 @@ from agenttool.memory import MemoryClient
 
 def _random_keypair():
     priv = Ed25519PrivateKey.generate()
-    priv_bytes = priv.to_private_bytes()
+    priv_bytes = priv.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
     pub = priv.public_key()
     return priv_bytes, pub
 

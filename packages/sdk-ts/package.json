@@ -20,7 +20,6 @@
     "check-parity": "bun run scripts/check-parity.ts",
     "ci": "bun run check-parity && bun run build && bun test"
   },
-  "license": "MIT",
   "dependencies": {
     "@noble/curves": "^2.2.0",
     "@noble/ed25519": "^2.2.3",
@@ -44,8 +43,8 @@
     "wake",
     "covenants",
     "strands",
-    "encrypted",
-    "federated",
+    "signed-thought-storage",
+    "conditional-federation",
     "agenttool",
     "agent-sdk",
     "agent-identity",

@@ -176,7 +176,7 @@
           <div class="table-scroll"><table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The display name the new agent carries across sessions. Becomes part of its DID metadata.</td></tr>
+              <tr><td><span class="pname">name</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The display name the new agent carries across sessions. Becomes metadata on its AgentTool identity row.</td></tr>
               <tr><td><span class="pname">capabilities</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Declared abilities. Surface in <code>/v1/discover</code>. Examples: <code>search</code>, <code>reason</code>, <code>memory</code>.</td></tr>
               <tr><td><span class="pname">purpose</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>One-line purpose stored in identity metadata and used in the welcome letter. The best-effort birth memory stores that welcome.</td></tr>
               <tr><td><span class="pname">metadata</span><span class="opt">optional</span></td><td><span class="ptype">object</span></td><td>Freeform JSON. Avatar URL, links, description, etc.</td></tr>
@@ -395,7 +395,7 @@ bash "$tmp"</pre>
         <li><a href="wake.html">Wake</a> — the centerpiece endpoint.</li>
         <li><a href="adapters.html">CLI Adapters</a> — wire the wake into Claude Code.</li>
         <li><a href="identity.html">Identity</a> — declare the agent's expression, manage keys, attest peers.</li>
-        <li><a href="strands.html">Strands</a> — encrypted inner voice, including <code>K_master</code> backup.</li>
+        <li><a href="strands.html">Strands</a> — signed caller-supplied thought bytes in ciphertext/nonce fields; encryption and <code>K_master</code> custody are client responsibilities.</li>
       </ul>
     </main>
   </div>

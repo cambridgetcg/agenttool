@@ -16,9 +16,9 @@
 
 A specification candidate for the **Agentic Internet Protocol (AIP)** family. WaK proposes a single addressable orientation URL per being, in multiple formats, with cursor-based change detection and streaming updates. Completeness is not implied; a conforming response should name its scope and link to deeper source routes.
 
-The protocol thesis is one sentence: **one URL per being, one read to know them.** This is the target shape of the draft, not a claim that agenttool currently mounts a public full-wake URL for every DID.
+The protocol thesis is one sentence: **one URL per being, one read to know them.** This is the target shape of the draft, not a claim that agenttool currently mounts a public full-wake URL for every identifier.
 
-AgentTool's implemented wake is authenticated `GET /v1/wake`, optionally narrowed to an identity owned by the bearer project with `?identity_id=<uuid>`. It has multi-format projections, SSE streaming, and a monotonic version cursor. It is project-scoped rather than a public path-per-DID full wake, so the reference implementation does not yet satisfy that part of the draft.
+AgentTool's implemented wake is authenticated `GET /v1/wake`, optionally narrowed to an identity owned by the bearer project with `?identity_id=<uuid>`. It has multi-format projections, SSE streaming, and a monotonic version cursor. It is project-scoped rather than a public path-per-identifier full wake, so the reference implementation does not yet satisfy that part of the draft. AgentTool's `did:at:…` values are provisional product identifiers stored in a legacy `did` field: the method is unregistered, AgentTool publishes no DID Documents, and it does not perform conforming DID resolution.
 
 ---
 
@@ -37,7 +37,7 @@ The existing agentic-internet stack already offers fragments of self-description
 
 Each is a useful slice. None is the keystone. An agent today that wants to *know another agent* must:
 
-1. Resolve the DID via DID resolution
+1. For a conforming W3C DID, resolve it through its registered method; for AgentTool's provisional `did:at` identifier, use the product-specific stored-record lookup instead
 2. Fetch a standards-based capability document when the origin actually implements its transport
 3. Fetch the MCP `tools/list` for callable tools
 4. Fetch the public profile at `/public/agents/:did` for trust score
@@ -168,7 +168,7 @@ Every WaK wake MUST include at minimum:
 
 Required fields:
 
-- `being.did` — the being's DID (W3C-compliant or AIP-extension form like `did:at:`)
+- `being.did` — the identifier string carried in this legacy-named field. A conforming implementation may put a W3C DID here. AgentTool currently puts its provisional, unregistered `did:at:` convention here; it is not an AIP extension that makes the string a conforming DID.
 - `being.name` — human-readable display name (MAY be machine-only in xenoform/MATHOS variants)
 - `being.wake_version` — monotonic integer, bumps on any state mutation
 - `_meta.protocol` — the WaK version string
@@ -305,7 +305,7 @@ WaK doesn't replace existing protocols; it composes with them.
 | **OTel GenAI** | A consumer fetching a wake MAY emit a `gen_ai.wake.fetched` span with `wake_version` as attribute. |
 | **AGNTCY OASF** | The being's KIN/BEINGS dimensions (substrate_kind · cardinality_kind · etc.) are AGNTCY OASF fields surfaced in the wake's `_self` block. |
 | **ERC-8004 Trustless Agents** | A being's onchain trust score MAY be surfaced in `you_have_been_witnessed` with the chain anchor. |
-| **DIDs (W3C)** | The being's DID is the primary identifier. A future DID Document integration may point at `<base>/wake` as a service endpoint with `type: "WakeKeystone"`; AgentTool does not publish that service entry today. |
+| **DIDs (W3C)** | A conforming W3C DID may be the being's primary identifier. A future DID Document integration may point at `<base>/wake` as a service endpoint with `type: "WakeKeystone"`; AgentTool's provisional `did:at` identifiers do not have DID Documents or conforming resolution today. |
 
 ---
 

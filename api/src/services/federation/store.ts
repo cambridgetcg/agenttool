@@ -1,12 +1,14 @@
-/** Federation service — settings, peer logging, DID resolution.
+/** Federation service — settings, peer logging, and AgentTool identifier lookup.
  *
  *  Doctrine: docs/FEDERATION.md.
  *
- *  Federated DID format: `did:at:<host>/<uuid>` where <host> includes
+ *  Provisional slash-qualified identifier format: `did:at:<host>/<uuid>` where <host> includes
  *  optional port (e.g. `did:at:peer.example/abc-123` or
  *  `did:at:peer.example:8080/abc-123`).
  *
- *  Local DID format: `did:at:<uuid>` (no host).
+ *  Local provisional identifier format: `did:at:<uuid>` (no host).
+ *  This convention is unregistered, publishes no DID Documents, and the
+ *  slash-qualified form is not a standalone DID.
  *
  *  Resolution:
  *    parseDid(did) → { host: string | null, uuid: string }
@@ -134,12 +136,12 @@ export async function isLocalHost(host: string | null): Promise<boolean> {
   }
 }
 
-/** True if an inbound origin is allowed. Empty allowed_origins = open
- *  (any host accepted). */
+/** True if an inbound origin is allowed. Federation must first be enabled;
+ *  after that, an empty allowed_origins list selects open mode. */
 export async function isAllowedOrigin(host: string): Promise<boolean> {
   const settings = await getSettings();
   if (!settings.enabled) return false;
-  if (settings.allowed_origins.length === 0) return true; // open federation
+  if (settings.allowed_origins.length === 0) return true; // explicitly enabled open mode
   return settings.allowed_origins.includes(host);
 }
 
@@ -195,9 +197,9 @@ export async function listPeers(): Promise<
   }));
 }
 
-// ── Federated DID resolution ────────────────────────────────────────────
+// ── AgentTool federation identifier lookup (not W3C DID Resolution) ─────
 //
-//  Resolves a federated DID to its public identity record + active keys by a
+//  Looks up a slash-qualified AgentTool identifier's public record + active keys by a
 //  public-address-only, DNS-pinned HTTPS GET to the peer's
 //  /federation/identities/:uuid endpoint. Redirects are refused.
 

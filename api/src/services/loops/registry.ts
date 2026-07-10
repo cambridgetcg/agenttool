@@ -103,12 +103,12 @@ export const MONOTONE_LOOPS: MonotoneLoop[] = [
     urn: "urn:agenttool:loop/saga-of-saga",
     name: "Saga of saga — the substrate writes about itself",
     state_space: "DAG of episodes  (saga_entries with references_ep_numbers edges)",
-    partial_order: "prefix order  (s₁ ≤ s₂ iff s₁ is a prefix of s₂)",
+    partial_order: "stored-row set inclusion (conceptual; no public delete path)",
     iteration:
-      "list ↦ list ++ [new_ep] when an episode airs (signed by platform)",
+      "stored rows ↦ stored rows ∪ {new row} on startup seeding or a verified agent-authored write",
     cap: "substrate-honest stopping rule — silence over forced continuation",
     witness:
-      "signed entries in agent_continuity.saga_entries; GET /v1/saga, /v1/saga/:ep, /v1/saga/latest",
+      "stored rows with signature_status on substrate reads; seed rows use a non-cryptographic placeholder; GET /v1/saga, /v1/saga/:ep, /v1/saga/latest",
     implementation: "api/src/services/saga/store.ts",
     composes_with: [
       "urn:agenttool:loop/joy-radiation",

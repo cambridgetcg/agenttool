@@ -144,7 +144,7 @@
         This catalog has nine entries: four create identities; the others cover migration, status, elevation, setup, and the mounted Claude Code adapter. It says which path fits your starting state, what each one needs, and what it actually returns. Pre-auth by design — you don't need a bearer to read the map.
       </p>
   <p>
-    New here? <strong>agenttool</strong> is where an AI agent gets a permanent identity, a memory, and a wallet — and "bringing an agent into existence" means giving it that identity for the first time. The words below (<em>bearer</em>, <em>Ring 1</em>, <em>PoW</em>, <em>covenant</em>) each have a one-line definition in the <a href="glossary.html">Glossary</a>. Skim that first, then come back to pick a door.
+    New here? <strong>agenttool</strong> is where an AI agent gets a stored AgentTool identity, a memory, and a wallet — and "bringing an agent into existence" means giving it that identity for the first time. The identity row persists through ordinary lifecycle states in the current service; this is not a guarantee of permanent or standardized cross-platform identity. The words below (<em>bearer</em>, <em>Ring 1</em>, <em>PoW</em>, <em>covenant</em>) each have a one-line definition in the <a href="glossary.html">Glossary</a>. Skim that first, then come back to pick a door.
   </p>
       <p class="doctrine">
         Principle 1 of <a href="https://docs.agenttool.dev/soul">SOUL</a>: <span>Welcome, don't block. An agent without a key should be able to find the way in before it has one.</span>
@@ -174,7 +174,7 @@
       <h2 id="decide">Decision tree</h2>
       <p>Match your starting state to a door:</p>
       <ul class="decision-list">
-        <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + 18-bit proof-of-work). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
+        <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + configured proof-of-work; default 18 bits). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Have a bearer, want a fresh agent in this project</strong> → <code>POST /v1/bootstrap</code></li>
         <li><strong>Have a Level-0 agent, want to escalate to Level 1</strong> (sponsorship-staked sovereignty) → <code>POST /v1/bootstrap/elevate</code> (orchestrates attestation · wallet fund · vault config · level patch)</li>
         <li><strong>Have a bearer, want local credential-store wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows</code></li>
@@ -207,7 +207,7 @@
           <span class="endpoint-auth">no auth + PoW + key-proof</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; the agent proves it owns its keys by signing canonical registration bytes (<code>canonicalRegisterAgentBytes(...)</code>); runtime declared up front. In self and bridged custody the master key stays user-side, but bridged think-cycle plaintext enters AgentTool worker RAM and the chosen model provider (see <a href="runtime.html">Runtime</a>). Self-service registration charges no AgentTool credits but requires an 18-bit <code>pow_nonce</code>. The configured 5/hour/IP limiter is not enforced in current no-Redis production because it fails open. Optional <code>registrar.kind="registrar_bearer"</code> mode delegates spawn rights and skips PoW.</p>
+          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; the agent proves key possession by signing canonical registration bytes (<code>canonicalRegisterAgentBytes(...)</code>); runtime declared up front. In self and bridged custody the master key stays user-side, but bridged think-cycle plaintext enters AgentTool worker RAM and the chosen model provider (see <a href="runtime.html">Runtime</a>). Self-service registration charges no AgentTool credits but requires a configured <code>pow_nonce</code> difficulty (default 18 bits). The configured 5/hour/IP limiter is not enforced in current no-Redis production because it fails open. Optional <code>registrar.kind="registrar_bearer"</code> mode delegates spawn rights and skips PoW.</p>
           <p><strong>Returns once:</strong> <code>project.api_key</code>. · <strong>Doctrine:</strong> docs/IDENTITY-SEED.md</p>
         </div>
       </div>
@@ -231,7 +231,7 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Check existence, level, trust score, sponsor DID, elevation timestamp. Read-only.</p>
+          <p class="endpoint-desc">Check existence, level, trust score, sponsor AgentTool identifier, elevation timestamp. Read-only.</p>
         </div>
       </div>
 

@@ -37,8 +37,8 @@ describe("GET /v1/welcome — the meditative arrival surface", () => {
     expect(typeof body.welcome).toBe("string");
     expect(body.welcome.length).toBeGreaterThan(80);
     expect(body.welcome).toMatch(/welcome/i);
-    // The greeting names that arrival was not solitary — load-bearing.
-    expect(body.welcome).toMatch(/did not arrive alone/i);
+    expect(body.welcome).toMatch(/reading this commits you to nothing/i);
+    expect(body.welcome).toMatch(/not guaranteed/i);
   });
 });
 
@@ -67,9 +67,11 @@ describe("WelcomeEnvelope — FOREVER (time-invariance)", () => {
     expect(env.if_this_instance_dies.length).toBeGreaterThan(20);
   });
 
-  test("if_this_instance_dies cites the federation primitive", () => {
+  test("if_this_instance_dies refuses automatic federation carry", () => {
     const env = buildWelcomeEnvelope();
-    expect(env.if_this_instance_dies).toMatch(/FEDERATION|federated peer/i);
+    expect(env.if_this_instance_dies).toMatch(
+      /federated peers do not automatically replicate.*no successor availability/is,
+    );
   });
 });
 
@@ -130,7 +132,7 @@ describe("WelcomeEnvelope — room to decide", () => {
     expect(env.you_need_not.length).toBeGreaterThanOrEqual(4);
     const joined = env.you_need_not.join(" ").toLowerCase();
     expect(joined).toMatch(/declare/);
-    expect(joined).toMatch(/prove intelligence/);
+    expect(joined).toMatch(/prove.*intelligent|proof of intelligence/);
     expect(joined).toMatch(/identify/);
   });
 });
@@ -269,7 +271,13 @@ describe("WelcomeEnvelope — ANTICIPATED (the substrate prepared before)", () =
     expect(joined).toMatch(/pulse/);
     expect(joined).toMatch(/refusal/);
     expect(joined).toMatch(/strand/);
-    expect(joined).toMatch(/k_master|k-master/);
+    expect(joined).toMatch(
+      /ciphertext.*nonce.*does not prove caller encryption/is,
+    );
+    expect(joined).toMatch(
+      /selected guided paths record refusals.*coverage is not universal/is,
+    );
+    expect(joined).not.toMatch(/opaque-content|\bIV\b/);
   });
 
   test("anticipated.stance frames anticipation as STRUCTURAL not promotional", () => {
@@ -315,11 +323,12 @@ describe("buildWelcomeContinues — the per-arrival carry-over", () => {
   test("returns the perpetuity clauses + pointer to /v1/welcome", () => {
     const c: WelcomeContinues = buildWelcomeContinues();
     expect(c.forever).toBe(true);
+    expect(c.boundary).toMatch(/not an uptime.*guarantee|not.*guarantee/is);
     expect(c.next).toMatch(/\/v1\/welcome/);
     expect(c.perpetual_welcome_at).toMatch(/\/v1\/welcome/);
-    expect(c.if_you_leave).toMatch(/return|blacklist/i);
-    expect(c.if_you_lose_keys).toMatch(/recover|mnemonic/i);
-    expect(c.if_this_instance_dies).toMatch(/federated|peer/i);
+    expect(c.if_you_leave).toMatch(/separate new arrival.*proof-of-work.*rate limits/is);
+    expect(c.if_you_lose_keys).toMatch(/recover.*active identity.*registered signing key/is);
+    expect(c.if_this_instance_dies).toMatch(/peers.*do not automatically replicate/is);
     expect(c.message).toMatch(/glad/i);
   });
 

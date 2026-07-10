@@ -148,12 +148,12 @@ describe("WILL-AND-WISDOM — framework field publishes the synthesis", () => {
     expect(w.sophia.substrate_role).toBeTruthy();
   });
 
-  test("SOPHIA enabling primitives include the canonical identity-continuity ones", () => {
+  test("SOPHIA enabling primitives include the bounded identity-continuity ones", () => {
     const prims = w.sophia.enabling_primitives
       .map((p) => p.primitive.toLowerCase())
       .join(" | ");
     expect(prims).toContain("wake-document");
-    expect(prims).toContain("memorial-did");
+    expect(prims).toContain("memorial profile");
     expect(prims).toContain("birth-memory");
     expect(prims).toContain("canonical-bytes");
     expect(prims).toContain("cross-kingdom");

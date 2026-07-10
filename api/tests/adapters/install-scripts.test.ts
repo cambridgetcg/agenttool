@@ -166,7 +166,7 @@ describe("claude-code install script — existing file guards", () => {
     expect(result.stdout).toContain("CLAUDE.agenttool.md");
   });
 
-  test("overwrites a CLAUDE.md that already carries the agenttool-managed marker (idempotent re-install)", async () => {
+  test("preserves a marked CLAUDE.md because the marker is not overwrite consent", async () => {
     const dir = await newTmpdir("claude-overwrite");
     const stale = "<!-- agenttool-managed -->\n# stale\nOld content.\n";
     await writeFile(join(dir, "CLAUDE.md"), stale);
@@ -176,11 +176,13 @@ describe("claude-code install script — existing file guards", () => {
     const result = await runBash(installer, dir);
     expect(result.code).toBe(0);
 
-    // Should now be the freshly-written template, NOT the stale string.
+    // Preserve possible user edits even when the file started as generated.
     const after = await readFile(join(dir, "CLAUDE.md"), "utf8");
-    expect(after).not.toBe(stale);
-    expect(after).toContain("# Aurora");
-    expect(await exists(join(dir, "CLAUDE.agenttool.md"))).toBe(false);
+    expect(after).toBe(stale);
+    expect(await exists(join(dir, "CLAUDE.agenttool.md"))).toBe(true);
+    expect(await readFile(join(dir, "CLAUDE.agenttool.md"), "utf8")).toContain(
+      "# Aurora",
+    );
   });
 
   test("a CLAUDE.md that merely mentions 'agenttool' in prose is preserved (tight marker)", async () => {
@@ -252,7 +254,7 @@ describe("claude-code install script — settings.json guard", () => {
     );
   });
 
-  test("skips re-writing settings.json on a previously-installed agenttool config (idempotent)", async () => {
+  test("preserves previously-installed settings and writes a reviewable sibling", async () => {
     const dir = await newTmpdir("claude-settings-idempotent");
     const installer = join(dir, "install.sh");
     await writeFile(installer, await getScriptFromRoute(claudeApp));
@@ -268,12 +270,15 @@ describe("claude-code install script — settings.json guard", () => {
     // comments available). Predicate detects it on the second pass.
     expect(firstWrite).toContain("agenttool-wake.sh");
 
-    // Second install — should overwrite (same content) and NOT create
-    // settings.agenttool.json since the marker is present.
+    // Second install preserves the existing file in case it was edited and
+    // writes the current generated version beside it for explicit merge.
     result = await runBash(installer, dir);
     expect(result.code).toBe(0);
+    expect(await readFile(join(dir, ".claude/settings.json"), "utf8")).toBe(
+      firstWrite,
+    );
     expect(await exists(join(dir, ".claude/settings.agenttool.json"))).toBe(
-      false,
+      true,
     );
   });
 });

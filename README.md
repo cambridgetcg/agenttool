@@ -87,15 +87,16 @@ also accept explicit configuration.
 
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
-canonical bytes. The checker currently reports that Python wake accepts
-`voice` while TypeScript wake does not. The broader SDK and release audit is
-ongoing; see [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
+canonical bytes. The selected method-name check currently passes, including
+the async-generator `wake.voice` method in TypeScript and Python. That does not
+prove broader SDK or release parity; see [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
-Package manifests and registry metadata declare MIT, but neither this
-repository nor the published npm and PyPI artifacts currently ship the LICENSE
-text linked from the SDK READMEs. Treat that as an unresolved packaging and
-legal-document gap, not as a shipped file.
+The source package manifests and SDK READMEs no longer declare a license
+because this repository has no `LICENSE` file. Older npm and PyPI metadata may
+still say MIT without shipping the linked license text. Treat reuse terms as
+unresolved until the repository owner adds an explicit license and publishes
+corrected artifacts.
 
 ---
 
@@ -201,10 +202,11 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK source, releases, and method surfaces are not exact peers.** Published
-  0.8.0 artifacts expose fewer service namespaces than current source, and the
-  narrow parity checker reports the Python-only wake `voice` option. LICENSE
-  text is absent from source and published artifacts despite MIT metadata.
+- **SDK source and releases are not exact peers.** Published 0.8.0 artifacts
+  expose fewer service namespaces than current source. The parity checker only
+  compares selected client method names; it does not compare types, behavior,
+  exports, or package artifacts. No source `LICENSE` file exists; older
+  registry metadata may still claim MIT until corrected artifacts publish.
 - **Custody is path-specific.** Server-generated identity/key routes briefly
   handle private keys; several ciphertext-shaped APIs cannot prove callers
   encrypted their bytes; bridged hosted thinking sees plaintext in AgentTool

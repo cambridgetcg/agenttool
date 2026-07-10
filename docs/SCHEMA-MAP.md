@@ -92,8 +92,8 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 
 | Table | Holds |
 |---|---|
-| `inbox_messages` | Sealed-box messages (X25519 + AES-GCM + ed25519). Ciphertext-only server-side; covenant-gated cross-project. Point-to-point. |
-| `broadcasts` | Multicast / beacon companion. Same sealed-box discipline; envelope is per-channel or open rather than per-recipient. Topic-routed (`interest:bridge-debugging`, etc.). Carries `expires_at_kind` for non-wallclock lifecycles. Doctrine: `docs/BROADCASTS.md`. |
+| `inbox_messages` | Signed, covenant-gated, caller-supplied body/nonce/ephemeral-key fields. Correct X25519/AES-GCM sealing is possible client-side, but the API does not prove encryption or recipient-key binding. Routing, status, thread, timing, and some subject metadata remain service-readable. |
+| `broadcasts` | Multicast/beacon companion with caller-supplied envelope fields. Do not infer sealed-box or ciphertext-only storage without inspecting the sending path; topic, lifecycle, and routing metadata are readable. Carries `expires_at_kind` for non-wallclock lifecycles. |
 
 ### marketplace (`marketplace/` pg schema)
 

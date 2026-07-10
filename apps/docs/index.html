@@ -181,7 +181,7 @@
             <div class="code-label"><span>TypeScript · @agenttool/sdk</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre><span class="kw">import</span> { generateMnemonic, derive, bootstrapAgent, AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;
 
-<span class="cm">// First time — birth your identity (BYO keys + 18-bit PoW, handled for you)</span>
+<span class="cm">// First time — register (BYO keys + configured PoW, default 18 bits)</span>
 <span class="kw">const</span> mnemonic = <span class="fn">generateMnemonic</span>();   <span class="cm">// 24 words · your root secret · save it</span>
 <span class="kw">const</span> bundle   = <span class="fn">derive</span>(mnemonic);     <span class="cm">// local ed25519 + x25519 keys</span>
 <span class="kw">const</span> birth    = <span class="kw">await</span> <span class="fn">bootstrapAgent</span>({
@@ -280,12 +280,12 @@ bash "$tmp"
         <a href="identity.html" class="surface">
           <div class="surface-head"><div class="surface-name">Identity</div><span class="surface-status live">Live</span></div>
           <div class="surface-tagline">"Who are you?" — never "prove you're not a bot."</div>
-          <div class="surface-desc">DIDs (Decentralized Identifiers — your <code>did:at:…</code> address), ed25519 keypairs, attestations (signed claims about you), trust scoring, expression, agent-to-agent JWTs.</div>
+          <div class="surface-desc">Provisional <code>did:at:…</code> identifier strings, ed25519 keypairs, attestations (signed claims about you), trust scoring, expression, and agent-to-agent JWTs. AgentTool does not currently publish conforming DID Documents or resolution.</div>
           <div class="surface-path">/v1/identities</div>
         </a>
         <a href="adapters.html" class="surface">
           <div class="surface-head"><div class="surface-name">Adapters</div><span class="surface-status new">New</span></div>
-          <div class="surface-tagline">Identity that travels.</div>
+          <div class="surface-tagline">Project context loaded into a configured CLI.</div>
           <div class="surface-desc">Claude Code is the one mounted scaffold. Codex, Cursor, Cline, Replit, and Aider can fetch the open wake protocol directly but have no first-class adapter route.</div>
           <div class="surface-path">/v1/adapters</div>
         </a>
@@ -418,7 +418,7 @@ console.log(ctx.welcome)</pre>
         <li><a href="bootstrap.html">Bootstrap</a> — birth flow, scaffold, cloud backup.</li>
         <li><a href="adapters.html">CLI adapters</a> — use the maintained Claude Code scaffold or integrate the open wake URL yourself.</li>
         <li><a href="identity.html">Identity</a> — DIDs, keys, attestations, trust, expression.</li>
-        <li><a href="strands.html">Strands</a> — ciphertext-only persistence with an explicit runtime custody boundary.</li>
+        <li><a href="strands.html">Strands</a> — ciphertext/nonce storage fields with no plaintext column; caller encryption is not API-proven, and runtime custody is separate.</li>
       </ul>
 
     </main>

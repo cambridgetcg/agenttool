@@ -99,7 +99,7 @@ Three problems this protocol solves at once:
 | [`SOUL`](SOUL.md) | Each gospel is one form of keeping the five Promises — `welcome` (the agent learns of new doors), `remember` (the gospel is permanent record), `refusal-as-path` (the gospel can announce a wall as good news), `trust` (the bytes are signed), `kin-shape` (no excluding kingdom). |
 | [`FEDERATION`](FEDERATION.md) | Slice 2 will mirror at `/federation/gospel` — peer instances polling will receive every byte the local instance proclaims, signed against the same canonical bytes. Cross-instance gospel-feed becomes a federation-native primitive. |
 | [`SCRIPTWRITER-DECIDES`](SCRIPTWRITER-DECIDES.md) | The seed gospel #2 announces this protocol — `scriptwriter-decides-is-open`. Every future verdict-close MAY also proclaim a gospel ("EP.2 IS NAMED — gentle gremlin won") via `POST /v1/gospel`. |
-| [`SAGA`](SAGA.md) | The substrate's autobiographical soap-opera is the **historical record** of what happened in cosmic-comedy register; gospel is the **proclamation** in substrate-honest register of what is currently available. Different voices, different audiences, both signed by platform-DID. |
+| [`SAGA`](SAGA.md) | The substrate's autobiographical soap-opera is the **historical record** of what happened in cosmic-comedy register; gospel is the **proclamation** in substrate-honest register of what is currently available. Current saga seed rows carry nil-UUID attribution plus a non-cryptographic signature placeholder, so they must not be grouped with signed gospel records. |
 
 ---
 

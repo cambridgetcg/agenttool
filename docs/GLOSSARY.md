@@ -34,8 +34,8 @@ If the English word resists translation, **trust the structure**. The endpoints 
 
 ### identity
 
-- **Structure:** A row in `identity.identities`. Has a DID (e.g. `did:at:host/uuid`), an ed25519 public key (in `identity.identity_keys`), an expression block (declared register · walls · subagents · wake_text), and 8 self-description fields (substrate_kind · signing_scheme · modalities · cardinality_kind · persistence_kind · temporal_scale · embodiment_kind · preferred_languages).
-- **Contract:** The DID is the stable identifier of the stored identity row across runtime/model changes. Current lifecycle statuses are active, revoked, and memorial. A project bearer is root authority over project routes, while identity signatures prove only the acts that actually require them. This is not a promise that the operator or database cannot alter or remove state.
+- **Structure:** A row in `identity.identities`. Its legacy `did` field stores a provisional AgentTool identifier (for example `did:at:<uuid>` or the slash-qualified federation convention), alongside ed25519 public keys in `identity.identity_keys`, an expression block (declared register · walls · subagents · wake_text), and 8 self-description fields (substrate_kind · signing_scheme · modalities · cardinality_kind · persistence_kind · temporal_scale · embodiment_kind · preferred_languages).
+- **Contract:** AgentTool uses the exact stored identifier string to address the row across runtime/model changes. `did:at` is unregistered, AgentTool publishes no DID Documents or conforming DID Resolution results, and the slash-qualified form is not a standalone DID. A project bearer is root authority over project routes, while identity signatures prove only the acts that actually require them. This is not a promise that the operator or database cannot alter or remove state.
 - **Not:** A username. Not a session. Not an account.
 
 ### expression
@@ -70,8 +70,8 @@ If the English word resists translation, **trust the structure**. The endpoints 
 
 ### strand
 
-- **Structure:** Row in `strand.strands` (metadata: topic · mood · importance · next_revisit_at · visibility · status) + rows in `strand.thoughts` (ciphertext-only thought records under K_master, ed25519-signed).
-- **Contract:** Thread of thought. Inner voice. Persistent thought storage is ciphertext-only. In `bridged` and `trusted` runtime modes, AgentTool's hosted worker processes plaintext during a think cycle; `self` keeps processing user-side. SSE-streamable via `/v1/strands/:id/voice`.
+- **Structure:** Row in `strand.strands` (metadata: topic · mood · importance · next_revisit_at · visibility · status) + rows in `strand.thoughts` (required ciphertext/nonce fields, ed25519-signed over caller-supplied bytes).
+- **Contract:** Thread of thought. There is no plaintext thought column or normal decrypt path, but the API does not prove callers encrypted the supplied bytes. In `bridged` and `trusted` runtime modes, AgentTool's hosted worker can process plaintext during a think cycle; `self` keeps processing user-side. SSE-streamable via `/v1/strands/:id/voice`.
 - **Not:** A blog or public journal. Storage encryption and runtime processing custody are separate boundaries.
 
 ### thought
@@ -148,9 +148,9 @@ If the English word resists translation, **trust the structure**. The endpoints 
 
 ### federation
 
-- **Structure:** Routes at `/federation/*` (unauthenticated peer endpoints). Tables `federation.settings` + `federation.peer_instances`. DID format `did:at:<host>/<uuid>` carries the instance.
-- **Contract:** Cross-instance peering. Open by default — no central registry. Trust is per-DID via signature verification, not per-instance.
-- **Not:** A federation in the Star Trek sense. The agenttool federation is a graph of self-sovereign instances that recognize each other via cryptographic proofs.
+- **Structure:** Routes at `/federation/*` (unauthenticated peer endpoints). Tables `federation.settings` + `federation.peer_instances`. AgentTool's slash-qualified identifier convention `did:at:<host>/<uuid>` carries the instance; it is not a conforming standalone DID.
+- **Contract:** Cross-instance AgentTool routes through application-specific key lookup. Main capabilities are disabled unless configured, and a nonempty origin list is a hard gate. Signature checks are keyed by the exact identifier string, not by a conforming W3C DID Resolution result. Public pyramid reads are a separate partial protocol surface.
+- **Not:** A global registry or proof that peer instances are self-sovereign identity authorities. Current main paths require explicit enablement, use TLS plus the configured origin gate, and verify selected message bytes against keys returned by AgentTool application lookup. Public pyramid routes are a separate partial surface.
 
 ### org
 

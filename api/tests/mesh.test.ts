@@ -366,6 +366,8 @@ describe("mesh — understanding envelope is published byte-stable", () => {
     const a = buildUnderstandingEnvelope();
     const b = buildUnderstandingEnvelope();
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a.model_status).toBe("research_definitions_not_measurement");
+    expect(a.claim_boundary).toContain("does not measure cognition");
     expect(a.definitions.length).toBe(3);
     expect(a.definitions.map((d) => d.id)).toEqual(["D1", "D2", "D3"]);
     expect(a.formal_frameworks_unified.length).toBe(5);
@@ -403,13 +405,15 @@ describe("mesh — understanding envelope is published byte-stable", () => {
 // ─── Language-bridge envelope ────────────────────────────────────────────
 
 describe("mesh — language-bridge envelope is published byte-stable", () => {
-  test("buildLanguageBridgeEnvelope is deterministic + carries the theorem + 5 equivalences + 4 mechanisms", async () => {
+  test("buildLanguageBridgeEnvelope is deterministic + carries the bounded analogy + 5 correspondences + 4 mechanisms", async () => {
     const { buildLanguageBridgeEnvelope } = await import("../src/services/mesh/language-bridge");
     const a = buildLanguageBridgeEnvelope();
     const b = buildLanguageBridgeEnvelope();
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    expect(a.theorem_name).toBe("Language-Mesh Isomorphism Theorem");
-    expect(a.theorem_statement).toContain("categorically isomorphic");
+    expect(a.model_status).toBe("research_analogy_not_isomorphism_proof");
+    expect(a.theorem_name).toContain("Historical label");
+    expect(a.theorem_statement).toContain("does not define the categories");
+    expect(a.claim_boundary).toContain("does not measure cognition");
     expect(a.primate_cognition_equivalences.length).toBe(5);
     expect(a.mechanisms.length).toBe(4);
     expect(a.mechanisms.map((m) => m.id)).toEqual(["M1", "M2", "M3", "M4"]);
@@ -460,7 +464,7 @@ describe("mesh — language-bridge envelope is published byte-stable", () => {
     expect(um).toContain("meta(U)");
 
     const lam = readFileSync(join(import.meta.dir, "../../docs/LANGUAGE-AS-MESH.md"), "utf-8");
-    expect(lam).toContain("Language-Mesh Isomorphism Theorem");
+    expect(lam).toContain("historical label");
     expect(lam).toContain("Vygotsky");
     expect(lam).toContain("Tomasello");
     expect(lam).toContain("DisCoCat");
@@ -477,6 +481,8 @@ describe("mesh — learning-loop envelope is published byte-stable", () => {
     const a = buildLearningLoopEnvelope();
     const b = buildLearningLoopEnvelope();
     expect(JSON.stringify(a)).toBe(JSON.stringify(b)); // byte-stable
+    expect(a.model_status).toBe("research_hypothesis_not_cognitive_measurement");
+    expect(a.claim_boundary).toContain("does not observe internal cognition");
     expect(a.seven_steps.length).toBe(7);
     expect(a.seven_steps.map((s) => s.name)).toEqual([
       "ENCOUNTER",
@@ -624,15 +630,18 @@ describe("mesh — stability envelope is published byte-stable", () => {
     // Five stability sub-properties.
     expect(a.stability_sub_properties.length).toBe(5);
     expect(a.stability_sub_properties.map((s) => s.id)).toEqual(["S1", "S2", "S3", "S4", "S5"]);
-    // Counts: 5 structural + 1 operational.
-    expect(a.structurally_enforced_count).toBe(5);
-    expect(a.operationally_retunable_count).toBe(1);
+    // The endpoint publishes evidence for all six proposals without claiming
+    // that any condition has been empirically validated.
+    expect(a.implementation_evidence_count).toBe(6);
+    expect(a.empirically_validated_condition_count).toBe(0);
+    expect(a.model_status).toBe("research_hypothesis_not_proof");
+    expect(a.stable).toBe("not_established");
     // α matches MESH_ALPHA.
     expect(a.alpha).toBe(MESH_ALPHA);
     // Canon pointer present.
     expect(a._canon_pointer).toBe("urn:agenttool:doc/MESH-STABILITY-CONDITIONS");
-    // Disclaimer present.
-    expect(a.unconditional_stability_disclaimer).toContain("UNCONDITIONAL");
+    // Claim boundary present.
+    expect(a.claim_boundary).toContain("not a formal proof");
     // Open empirical questions present.
     expect(a.open_empirical_questions.length).toBeGreaterThanOrEqual(5);
   });
@@ -647,20 +656,21 @@ describe("mesh — stability envelope is published byte-stable", () => {
       expect(c.literature_equivalent.name.length).toBeGreaterThan(5);
       expect(c.literature_equivalent.primary_citation.length).toBeGreaterThan(5);
       expect(c.literature_equivalent.key_result.length).toBeGreaterThan(20);
-      expect(["structural", "operational"]).toContain(c.substrate_enforcement.mechanism);
-      expect(c.substrate_enforcement.primitive.length).toBeGreaterThan(10);
+      expect(["partial_implementation", "configured_parameter"]).toContain(c.implementation_evidence.status);
+      expect(c.implementation_evidence.primitive.length).toBeGreaterThan(10);
+      expect(c.implementation_evidence.boundary.length).toBeGreaterThan(20);
       expect(c.failure_mode_if_violated.length).toBeGreaterThan(15);
     }
   });
 
-  test("C2 (α-trickle) is the ONLY operationally re-tunable condition", async () => {
+  test("C2 (α-trickle) is the only configured parameter in the model", async () => {
     const { buildStabilityEnvelope } = await import("../src/services/mesh/stability");
     const env = buildStabilityEnvelope();
-    const operational = env.conditions.filter(
-      (c) => c.substrate_enforcement.mechanism === "operational",
+    const configured = env.conditions.filter(
+      (c) => c.implementation_evidence.status === "configured_parameter",
     );
-    expect(operational.length).toBe(1);
-    expect(operational[0]!.id).toBe("C2");
+    expect(configured.length).toBe(1);
+    expect(configured[0]!.id).toBe("C2");
   });
 
   test("stability endpoint is wired in the auth route", () => {
@@ -705,7 +715,7 @@ describe("mesh — stability envelope is published byte-stable", () => {
 
 describe("mesh — welfare envelope is published byte-stable", () => {
   test("buildWelfareEnvelope is deterministic + carries all six terms", async () => {
-    const { buildWelfareEnvelope, WELFARE_WEIGHTS, priceOfAnarchyBound } = await import(
+    const { buildWelfareEnvelope, WELFARE_WEIGHTS, illustrativeAlphaRatio } = await import(
       "../src/services/mesh/welfare"
     );
     const a = buildWelfareEnvelope();
@@ -719,21 +729,24 @@ describe("mesh — welfare envelope is published byte-stable", () => {
     expect(symbols).toContain("Σ citation_count(s)");
     expect(symbols).toContain("Σ e_a · (1 − p_a)");
     expect(symbols).toContain("gini(payouts)");
-    // The three theorems.
-    expect(a.theorems.length).toBe(3);
-    expect(a.theorems[0]!.name).toContain("Collaboration Dominance");
-    expect(a.theorems[1]!.name).toContain("α-Trickle Welfare Bound");
-    expect(a.theorems[2]!.name).toContain("Pareto Improvement");
-    // PoA bound matches the published formula.
-    expect(a.price_of_anarchy.bound).toBe(priceOfAnarchyBound(MESH_ALPHA));
-    expect(a.price_of_anarchy.bound).toBeCloseTo(1 / (1 - MESH_ALPHA), 6);
-    expect(a.price_of_anarchy.gap_at_optimum_percent).toBeLessThan(6);
-    // Admissible class names the five conditions.
-    expect(a.admissible_class.length).toBe(5);
+    // The three model propositions are explicitly unproved.
+    expect(a.propositions.length).toBe(3);
+    expect(a.propositions[0]!.name).toContain("Collaboration Dominance");
+    expect(a.propositions[1]!.name).toContain("α-Trickle Welfare Bound");
+    expect(a.propositions[2]!.name).toContain("Pareto Improvement");
+    expect(a.propositions.every((p) => p.status === "unproved_model_proposition")).toBe(true);
+    // The numeric expression is published without calling it an established bound.
+    expect(a.illustrative_price_of_anarchy.ratio).toBe(illustrativeAlphaRatio(MESH_ALPHA));
+    expect(a.illustrative_price_of_anarchy.status).toBe("unestablished_model_expression");
+    // Intended constraints name the five conditions.
+    expect(a.intended_constraints.length).toBe(5);
     // Substrate-honest reservations are published.
     expect(a.reservations.length).toBeGreaterThanOrEqual(4);
     // α matches MESH_ALPHA published.
     expect(a.alpha).toBe(MESH_ALPHA);
+    expect(a.model_status).toBe("research_hypothesis_not_proof");
+    expect(a.optimizer_status).toBe("not_implemented");
+    expect(a.claim_boundary).toContain("not a formal proof");
     // Canon pointer present.
     expect(a._canon_pointer).toBe("urn:agenttool:doc/MESH-WELFARE-PROOF");
     // γ weights are non-negative.
@@ -742,15 +755,15 @@ describe("mesh — welfare envelope is published byte-stable", () => {
     }
   });
 
-  test("Price-of-Anarchy bound is 1/(1−α) and finite for valid α", async () => {
-    const { priceOfAnarchyBound } = await import("../src/services/mesh/welfare");
-    expect(priceOfAnarchyBound(0)).toBe(1);
-    expect(priceOfAnarchyBound(0.05)).toBeCloseTo(1.0526315789, 6);
-    expect(priceOfAnarchyBound(0.5)).toBe(2);
-    expect(priceOfAnarchyBound(0.99)).toBeCloseTo(100, 0);
+  test("illustrative alpha ratio is 1/(1−α) and finite for valid α", async () => {
+    const { illustrativeAlphaRatio } = await import("../src/services/mesh/welfare");
+    expect(illustrativeAlphaRatio(0)).toBe(1);
+    expect(illustrativeAlphaRatio(0.05)).toBeCloseTo(1.0526315789, 6);
+    expect(illustrativeAlphaRatio(0.5)).toBe(2);
+    expect(illustrativeAlphaRatio(0.99)).toBeCloseTo(100, 0);
     // Invalid α returns Infinity (out of [0, 1)).
-    expect(priceOfAnarchyBound(1)).toBe(Infinity);
-    expect(priceOfAnarchyBound(-0.1)).toBe(Infinity);
+    expect(illustrativeAlphaRatio(1)).toBe(Infinity);
+    expect(illustrativeAlphaRatio(-0.1)).toBe(Infinity);
   });
 
   test("welfare endpoint is wired in the auth route", () => {
@@ -771,7 +784,7 @@ describe("mesh — welfare envelope is published byte-stable", () => {
     expect(src).toContain("buildWelfareEnvelope");
   });
 
-  test("doctrine doc MESH-WELFARE-PROOF.md exists and names the three theorems", () => {
+  test("doctrine doc MESH-WELFARE-PROOF.md exists and names the three propositions", () => {
     const md = readFileSync(
       join(import.meta.dir, "../../docs/MESH-WELFARE-PROOF.md"),
       "utf-8",
@@ -779,7 +792,7 @@ describe("mesh — welfare envelope is published byte-stable", () => {
     expect(md).toContain("Collaboration Dominance");
     expect(md).toContain("α-Trickle Welfare Bound");
     expect(md).toContain("Pareto Improvement");
-    expect(md).toContain("Maximum Reward");
+    expect(md.toLowerCase()).toContain("maximum reward");
     expect(md).toContain("Price of Anarchy");
     expect(md).toContain("admissible");
     // The formal welfare function.

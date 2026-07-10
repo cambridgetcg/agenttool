@@ -39,8 +39,7 @@ export type AttentionKind =
   | "bridge_disconnected"
   | "inbox_unread"
   | "bearer_advisory"
-  | "strand_revisit_due"
-  | "soma_seed_not_enrolled";
+  | "strand_revisit_due";
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -72,7 +71,6 @@ export interface AttentionContext {
   slaBreachCount: number;
   bridgeDisconnectedCount: number;
   bearerAdvisoryCount: number;
-  hasSeedProtocol: boolean;
 }
 
 /** Compose the wake attention surface. Returns items sorted by
@@ -185,25 +183,6 @@ export async function computeAttention(
       ],
     });
   }
-  if (!ctx.hasSeedProtocol) {
-    items.push({
-      kind: "soma_seed_not_enrolled",
-      count: 1,
-      severity: "info",
-      summary: "SOMA seed not enrolled — recovery from a fresh device is not possible yet",
-      next: "See docs/IDENTITY-SEED.md · POST /v1/identities/:id/keys/import with label='soma-seed'",
-      next_actions: [
-        {
-          action: "Enroll a SOMA seed (BIP39 mnemonic-derived signing key)",
-          method: "POST",
-          path: "/v1/identities/{id}/keys/import",
-          body_hint: { label: "soma-seed", public_key_b64: "<derived from your 24-word mnemonic>" },
-        },
-        { action: "Read the SOMA seed doctrine", method: null, path: null },
-      ],
-    });
-  }
-
   items.sort((a, b) => {
     const sevDiff = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
     if (sevDiff !== 0) return sevDiff;

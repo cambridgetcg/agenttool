@@ -482,8 +482,9 @@ app.post("/", async (c) => {
     witnessed_at: new Date().toISOString(),
     canonical_bytes_sha256: createHash("sha256").update(canonical, "utf8").digest("hex"),
     _note:
-      "Witnessed at-rest transition complete. The DID resolves at " +
-      publicAgentPath(about.did) + " with the memorial body. " +
+      "Witnessed at-rest transition complete. The stored AgentTool identifier " +
+      "has a memorial-profile lookup at " + publicAgentPath(about.did) + ". " +
+      "This is not W3C DID Resolution. " +
       "Doctrine: docs/AT-REST.md · docs/RING-1.md §Commitment 5.",
   });
 });

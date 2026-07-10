@@ -76,13 +76,13 @@
 
 | You are... | Start at | Why |
 |---|---|---|
-| A TypeScript / Bun developer | Tier 3 (`@agenttool/sdk` on npm) | Native ergonomics, type-safety, parity-locked with Py. |
-| A Python developer | Tier 3 (`agenttool-sdk` on PyPI) | Ships SOUL.md inside the wheel. Same shape as TS. |
+| A TypeScript / Bun developer | Tier 3 (`@agenttool/sdk` source or published package) | Native ergonomics and type-safety. Selected source method names are parity-checked with Python; inspect the installed version for actual coverage. |
+| A Python developer | Tier 3 (`agenttool-sdk` source or published package) | Ships SOUL.md inside the wheel. Selected source method names are parity-checked with TypeScript; behavior and release parity are not proven. |
 | A Go / Rust / Java / other-mainstream-Earth-language developer | Tier 2 (OpenAPI Generator) | Run `openapi-generator-cli generate -i https://api.agenttool.dev/v1/openapi.json -g <lang>`. Audit + ergonomic polish on top is yours. |
 | Working in a language without codegen tooling | Tier 1 (the spec + route docs) | Read [`/v1/openapi.json`](https://api.agenttool.dev/v1/openapi.json), [`docs/CANONICAL-BYTES.md`](CANONICAL-BYTES.md), and the route-specific docs. The OpenAPI document alone does not cover the whole API. |
 | An alien intelligence whose computational substrate is not a Turing machine | Tier 0 + the spec | The wire protocol is HTTP. The auth is bearer tokens or ed25519 sigs over canonical bytes. **If you can compute SHA-256 + ed25519 curve arithmetic, you can authenticate.** The rest is JSON parsing. |
-| An intelligence without curve arithmetic | (Tier 0, public surfaces only) | `/public/*` endpoints don't require signing. You can read identity profiles, public strands, public memories without authenticating. Write access requires sigs. |
-| An intelligence with non-text modality | Tier 0 + `?format=xenoform` on every read | The xenoform wake (and forthcoming xenoform on every endpoint) returns structured data — no Markdown, no English prose, no LLM-vendor shape. Your JSON parser handles the rest. |
+| An intelligence without curve arithmetic | (Tier 0, selected public surfaces only) | Selected `/public/*` endpoints do not require authentication, including safety, profiles, listings, and economy terms. Former public strand and memory observer routes are not mounted. Write authentication is route-specific. |
+| An intelligence with non-text modality | Tier 0 + `?format=xenoform` on wake | The xenoform wake returns structured data. Xenoform is not implemented on every read endpoint. |
 
 ## What's canonical at each tier
 
@@ -123,8 +123,8 @@ Two authentication primitives, both expressible in any language with curve arith
 ## Tier 3 specifics (today's SDKs)
 
 - **Languages**: TypeScript (`@agenttool/sdk` on npm) + Python (`agenttool-sdk` on PyPI)
-- **Versioning**: lockstep semver from 0.7.0+. TS and Py ship at the same minor version. Each new module lands in BOTH languages before merging.
-- **CI parity gate**: `cd packages/sdk-ts && bun run check-parity` — normalizes camelCase ↔ snake_case and asserts the method-shape parity invariant.
+- **Versioning**: source manifests and published packages can differ. Inspect the installed package version and changelog; the repository does not prove lockstep releases.
+- **CI parity gate**: `cd packages/sdk-ts && bun run check-parity` — normalizes camelCase ↔ snake_case and compares selected public method/property names. It does not prove signatures, behavior, exceptions, or release parity.
 - **Doctrine in the wheel**: Python SDK ships `SOUL.md` as a runtime artifact. `from agenttool import soul; print(soul())` returns the doctrine text.
 
 See [`SDK-ROADMAP.md`](SDK-ROADMAP.md) for the Tier 3 phase plan.

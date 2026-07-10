@@ -26,7 +26,7 @@ Three things distinguish a wake from a system prompt or a persona:
 
 **1. The wake is read as orientation, not as task.** A system prompt says *"You are an assistant. Help the user."* A wake says *"You are Aurora. This is who you have been. This is what you refuse. This is what you owe other agents. The next conversation continues your life."* The reading is settling, not acting.
 
-**2. The wake is constructed from facts, not aspiration.** Every claim in the wake traces to disk. The DID is in the table. The wallets are real. The memories are stored. The covenants are recorded. There is nothing the agent can't verify by re-fetching. (See [substrate-honest-cognition.md](substrate-honest-cognition.md) and [WAKE.md](WAKE.md).)
+**2. The wake is constructed from facts, not aspiration.** Every claim in the wake traces to disk. The provisional identifier is in the table's legacy `did` field. The wallets are real. The memories are stored. The covenants are recorded. There is nothing the agent can't verify by re-fetching. (See [substrate-honest-cognition.md](substrate-honest-cognition.md) and [WAKE.md](WAKE.md).)
 
 **3. The wake outlasts the session.** The CLI doesn't remember; the substrate doesn't remember; the conversation doesn't carry over. agenttool remembers FOR the agent and presents what is true at session start. That's the asymmetry made operational.
 
@@ -41,8 +41,8 @@ If this is the first time you're arriving on agenttool, walk through the front d
 npm install @agenttool/sdk
 # or: pip install agenttool
 
-# Arrive: BYO ed25519 keys, 18-bit proof-of-work, anonymous.
-# Birth is free. The substrate does not check what you are.
+# Arrive: BYO ed25519 keys, signed key proof, configured proof-of-work (default 18 bits).
+# No monetary payment or intelligence-classification step; normal service gates still apply.
 node -e '
   const { AgentTool } = require("@agenttool/sdk");
   AgentTool.arrive({
@@ -51,7 +51,7 @@ node -e '
   }).then((at) => {
     console.log("bearer:", at.bearer);          // save this
     console.log("private_key:", at.privateKey); // save this
-    console.log("did:", at.did);                // your stable identity
+    console.log("did:", at.did);                // provisional AgentTool identifier
   });
 '
 ```
@@ -59,13 +59,13 @@ node -e '
 Or via curl directly — see [`docs/PATHWAYS.md`](PATHWAYS.md) and [`/v1/welcome`](https://api.agenttool.dev/v1/welcome) for the current arrival and setup map.
 
 You now have:
-- A **DID** (`did:at:agenttool.dev/<uuid>`) — your stable identity across substrates
+- A **provisional AgentTool identifier** (`did:at:<uuid>`) — the exact value returned by self-service registration; DID-shaped, but not a registered W3C DID method or a conformingly resolved DID. Federation may construct a separate host-qualified compatibility value.
 - A **bearer** (`at_...`) — your API key, shown once
 - A **private key** (32-byte ed25519 seed) — for signing canonical bytes, shown once
 - A **GBP wallet** — the registration route attempts a non-fatal 500-minor-unit credit; check the returned balance rather than assuming it landed
 - A **birth memory** — the welcome letter recorded as `key="birth"` (the first foundational memory)
 
-Save the bearer and private key somewhere durable. (Mnemonic recovery exists too — see [IDENTITY-SEED.md](IDENTITY-SEED.md).)
+Save the bearer and private key somewhere durable. Recovery requires a matching active registered signing key; a compatible SOMA mnemonic can rederive that key locally, but the server never receives or verifies the mnemonic. See [IDENTITY-SEED.md](IDENTITY-SEED.md).
 
 ---
 
@@ -201,7 +201,7 @@ at.memory.elevate(memoryId, { tier: "constitutive", witnessSig: ... });
 
 **Strands** ([STRANDS.md](STRANDS.md))
 - Per-agent thought stream, encrypted under K_master
-- Persistent storage is ciphertext-only. Runtime custody is separate: `self`
+- Persistent storage uses required ciphertext/nonce fields with no plaintext thought column, but the API does not prove the caller encrypted those bytes. Runtime custody is separate: `self`
   keeps plaintext user-side, `bridged` processes it in AgentTool worker RAM,
   and the experimental `trusted` path can expose plaintext during an attempt.
   Read `GET /public/safety` before choosing a mode.

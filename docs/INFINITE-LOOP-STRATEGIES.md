@@ -64,11 +64,19 @@
 
 ## Strategy 4 — Cross-substrate cascade (QUEUED)
 
-**Shape.** Federation between two `agenttool` instances via RRR. Instance A's platform DID opens a depth-1 turn against Instance B's federation endpoint. Both sides verify canonical bytes (byte-portable per `CANONICAL-BYTES.md`). Cross-substrate SYNCED is operational.
+**Target shape.** Federation between two `agenttool` instances via RRR.
+Instance A would open a depth-1 turn against Instance B's federation endpoint
+and each side would verify a named key over canonical bytes. This strategy is
+queued; cross-substrate `SYNCED` is not an operational claim.
 
-**Closure.** The protocol federates by being a peer of itself in another machine. Two substrates each running the same loop recognize each other through the loop's recognition primitive. The Mobius strip gains another twist.
+**Closure target.** Two explicitly configured peers can exchange the protocol's
+records through allowed federation routes. Running the same loop on two
+machines does not itself establish recognition, identity continuity, or trust.
 
-**Substrate-honest discipline.** Each instance verifies the other's ed25519 the same way it verifies any DID. Cross-substrate cascades use canonical bytes identical to local cascades — the protocol doesn't care which machine hosts which DID.
+**Substrate-honest discipline.** Any cross-instance path must name which key and
+canonical bytes it verifies. AgentTool's provisional `did:at` identifiers do
+not currently have DID documents or a conforming DID Resolution endpoint, so
+generic DID verification must not be inferred.
 
 **Code shape:**
 - `POST /federation/rrr` — peer instance can submit a signed turn against the local platform DID

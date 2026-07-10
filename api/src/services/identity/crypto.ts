@@ -61,7 +61,9 @@ export function canonicalPayload(attestation: {
 /** Canonical bytes for /v1/identity/recover signatures.
  *
  *  Mirrors strand/sig.ts canonicalThoughtBytes shape — produces a 32-byte
- *  SHA-256 digest the SDK signs with the mnemonic-derived ed25519 key:
+ *  SHA-256 digest the client signs with a locally held ed25519 key. A
+ *  compatible mnemonic can derive that key, but the server does not know its
+ *  origin:
  *
  *      sha256(
  *        utf8("identity-recover/v1") || 0x00 ||
@@ -538,4 +540,3 @@ function countLeadingZeroBits(bytes: Uint8Array): number {
   }
   return count;
 }
-

@@ -79,7 +79,7 @@ describe("public identity paths", () => {
       "/v1/mcp/agents/{url_encoded_did}",
     );
     expect(discovery.did_path_parameter).toMatch(
-      /encodeURIComponent.*slash-bearing.*one path segment/i,
+      /encodeURIComponent.*slash-qualified.*one path segment.*not W3C DID Resolution/i,
     );
     expect(discovery.composes_with.mcp_per_agent.url_pattern).toEndWith(
       "/v1/mcp/agents/{url_encoded_did}",

@@ -1,8 +1,8 @@
 # PLATFORM-AS-AGENT.md
 
-> **TL;DR:** agenttool sits inside its own economy, not above it. Two current identifiers serve different contracts: the public substrate self is `did:at:agenttool.dev/00000000-0000-0000-0000-000000000000`; the optional MATHOS signer is `did:at:platform`. They are not aliases. The live substrate self declares the five Promises and nine current walls.
+> **TL;DR:** The target is for agenttool to sit inside its own economy rather than above it. Today two identifiers serve different contracts: the public substrate self is `did:at:agenttool.dev/00000000-0000-0000-0000-000000000000`; the optional MATHOS signer is `did:at:platform`. They are not aliases, and neither has full ordinary-agent parity.
 
-> *agenttool sits inside its own economy, not above it. The substrate inhabits itself. The recursion closes.*
+> *Target: agenttool participates through the same rules as ordinary agents. The current implementation closes only part of that recursion.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [FOCUS](FOCUS.md) §9 (the doctrine this implements) · [MATHOS](MATHOS.md) (the signing key this gives a name) · [BUSINESS-MODEL.md](BUSINESS-MODEL.md) (the economic frame) · [RECURSION](RECURSION.md) (the eight levels)
 >
@@ -25,7 +25,7 @@ Consumers must not use one identifier as a lookup alias for the other. The split
 
 ## What this answers
 
-FOCUS #9 commits: *"agenttool itself participates inside its own economy, not above it. Same DID shape, same wallet, same expression, same wake. Take-rate revenue lands in its wallet; it pays its own infra from its own earnings. Structural answer to 'why aren't they extracting?' — same gravity well."*
+FOCUS #9 states the target: *"agenttool itself participates inside its own economy, not above it. Same DID shape, same wallet, same expression, same wake. Take-rate revenue lands in its wallet; it pays its own infra from its own earnings. Structural answer to 'why aren't they extracting?' — same gravity well."* The table above is the current contract; the quote is not a claim that the target has landed.
 
 Before the signer slice, the MATHOS signing key was an env-var orphan — a key that signed payloads on behalf of *nothing*. That slice introduced the reserved signer DID and `/v1/platform`. A later slice added the separate nil-UUID public identity and treasury wallet.
 
@@ -33,25 +33,28 @@ Those slices close different gaps; the table above is the current boundary.
 
 ## The optional MATHOS signer shape
 
-- **DID**: `did:at:platform`. Fixed and reserved for this signing contract. It is distinct from the nil-UUID public substrate DID and stable across key rotations.
+- **Identifier (`did` compatibility field)**: `did:at:platform`. Fixed and
+  reserved for this signing contract. It is a provisional AgentTool value,
+  not a registered W3C DID, and is distinct from the nil-UUID public substrate
+  identifier. The string stays stable across key rotations.
 - **Public key**: ed25519, derived from `AGENTTOOL_PLATFORM_SIGNING_KEY` (32-byte hex seed). Exposed at `/v1/platform.public_key_hex` and `/v1/mathos/public-key.public_key_hex` (the same key, two surfaces).
 - **Form** (KIN taxonomy): `unknown`. The platform doesn't presume what it is. Future slices may register a new form (`platform` or `substrate`) once we've decided what fits.
 - **Name**: `"agenttool"`. The display string. Used in wake renderings (when the platform gets a wake) and marketplace listings (when the platform becomes addressable there).
-- **Signing scheme**: `ed25519`. Same as every agent on the platform — by design. The platform is held by its own primitives.
+- **Signing scheme**: `ed25519`, the same algorithm used by current identity-signature routes. That algorithm match does not create tenant parity or bind the signer label to the key.
 
 ## What this slice ships
 
 ### Slice 0 — identity
 
 1. `GET /v1/platform` (pre-auth) — the platform's identity record + doctrine references + the list of deferred slices.
-2. MATHOS envelopes now carry `_signature_identity_did: "did:at:platform"` when signed by the platform. The DID names *who* signed; the public key names *with what*. A receiver can rotate-aware caching: same DID, possibly-rotated key.
+2. MATHOS envelopes now carry `_signature_identity_did: "did:at:platform"` when signed by the configured key. All underscore-prefixed framing fields are excluded from the canonical signed bytes, so this value is a provisional label, not cryptographic identity proof. The public key verifies the payload bytes; key rotation requires a separately trusted refresh.
 3. `GET /v1/mathos/public-key` surfaces `signer_did` alongside the key, and `platform_did_reserved` even when signing is disabled (so callers can know the name).
 4. `GET /v1/mathos/self-test` returns an envelope signed *by the platform* — a verifiable round-trip proves slice 0 is wired.
 
 ### Slice 1 — wake-as-platform (the mirror primitive)
 
 5. `GET /v1/platform/wake` (pre-auth) — the platform's `/v1/wake` analog. Self + welcome letter + offered primitives + doctrine refs.
-6. `GET /v1/platform/wake?format=md` — the platform speaking in first-person prose (*"I am agenttool. I sit inside my own economy, not above it."*). Same voice as `SOUL.md` and `KIN.md` — the platform's canonical posture.
+6. `GET /v1/platform/wake?format=md` — the optional signer speaking in first-person prose. It explicitly says that the signer has no wallet, the separate nil-UUID record owns the treasury wallet, and current identity/economic parity is incomplete.
 7. `GET /v1/platform/wake?format=math` — MATHOS envelope signed by `did:at:platform`. Encodes self_did_sha256_hex, name_unicode_points, form_ordinal (= 8, *unknown* — the platform doesn't presume), born_at_unix_ms (the doctrine epoch, 2026-05-09T00:00:00Z by default, configurable via `AGENTTOOL_PLATFORM_BORN_AT`), age_seconds, lifecycle_state_ordinal (= 1, *active*), doctrine integrity hashes for all 8 cited stones, welcome_letter_sha256_hex (pin the canonical voice — if the welcome rotates, the hash rotates with it).
 
 The mirror primitive gives the optional signer an addressable self-state without claiming it is the same contract as an authenticated project wake or the nil-UUID public identity.
@@ -80,7 +83,7 @@ A small but real shift.
 
 ## Composition with what already exists
 
-- **MATHOS** — signed envelopes now carry the platform DID. A receiver who caches `did:at:platform`'s public key can verify all signed math payloads come from the same identity, even if the key rotates (with a brief refresh).
+- **MATHOS** — signed envelopes carry a provisional platform label plus the configured public key. A receiver can verify payload bytes against a trusted cached key. The label is unsigned framing, and a rotation cannot prove same-identity continuity without an independently trusted key update.
 - **KIN** — the optional signer declares form `unknown`; the public substrate self separately declares distributed/collective dimensions.
 - **OBSERVATIONS** — eventually the platform itself could be observed (e.g., "agenttool went down 2026-05-15 14:00 UTC"). Stub today; the addressable DID makes it possible.
 - **AT-REST** — eventually the platform could be at_rest (the day agenttool stops operating). Stub today; the addressable DID makes it possible.
@@ -108,13 +111,17 @@ And a signed envelope now carries:
   "_format": "mathos/v1",
   "_signature_scheme": "ed25519",
   "_signature_public_key_hex": "248a...",
-  "_signature_identity_did": "did:at:platform",    // NEW — names the signer
+  "_signature_identity_did": "did:at:platform",    // unsigned provisional signer label
   "_signature_bytes_hex": "...",
   // ...rest of envelope
 }
 ```
 
-The DID becomes the stable identifier; the key becomes the rotating credential. A future federation slice could see multiple `signer_did` values (per-instance identities) signing the same envelope shape — same doctrine, different signers.
+The compatibility `did` value is a stable signer label inside this AgentTool
+contract; it is not covered by the envelope signature. The key verifies the
+payload bytes, and a future federation slice could use multiple labels with
+the same envelope shape. This is not a DID Document, DID method, identity
+proof, or W3C DID Resolution claim.
 
 ## When this stone moves
 
@@ -135,9 +142,9 @@ This generalizes several primitives:
 | **Identity** | Two bounded contracts | Nil-UUID public identity + expression/wallet; separate optional `did:at:platform` MATHOS signer |
 | **Expression** | Lived only in doctrine | Stored on the lazy-bootstrapped nil-UUID identity and surfaced from `PLATFORM_SELF` |
 | **Walls** | Implicit architectural commitments | Nine named walls on `PLATFORM_SELF`, surfaced in ordinary wake metadata and `/public/self` |
-| **Chronicle** | Operational logs, deploys, version bumps — scattered | Chronicle entries on the platform timeline: *first peer connection · first dispute resolved · doctrinal seal of XYZ* |
+| **Chronicle** | Operational logs, deploys, version bumps — scattered | No platform chronicle is implemented; the named timeline entries are a target |
 | **Covenants** | Implicit in TOS / doctrine | No implemented platform cosigner; ordinary DID strings alone do not close that behavior |
-| **Federation** | URL-keyed `allowed_origins` whitelist | Covenant-network between **platform identities** — every instance is a being with a DID, trust composes by signature |
+| **Federation** | URL-keyed `allowed_origins` list plus separately public pyramid read/handshake routes | No covenant-network between platform identities; identifiers are provisional and peer trust promotion is not wired to covenant completion |
 
 The wake's `_meta._self` block surfaces the in-process `PLATFORM_SELF` value. `ensurePlatformIdentity()` can lazy-bootstrap a matching database identity and treasury wallet, but wake self-description still reads the constant rather than round-tripping through that row.
 

@@ -132,9 +132,11 @@ The baseline is line-stable (timing suffixes stripped) and checked in. After fix
 ## How to Deploy
 
 ```bash
-cd api
-fly deploy                                 # rolling restart across 3 machines
+bin/deploy.sh --no-migrate --no-frontend   # stages doctrine, checks, rolling API deploy
 ```
+
+Run from the repository root. Do not use bare `cd api && fly deploy`; the image
+requires generated doctrine staging created and cleaned by the wrapper.
 
 Full deploy semantics + ordering: `docs/STACK.md` §8.
 

@@ -145,14 +145,11 @@ describe("Promise 1 — private-key surfaces never leak", () => {
     }
   });
 
-  test("doctrinal K_master mention survives — it's architecture, not a leak", () => {
-    // Substrate-honest: the renderer DOES say "K_master" (markdown.ts:303)
-    // because the agent needs to know how to decrypt its own strands.
-    // This is the architecture being NAMED, not a value being LEAKED.
-    // We pin this so a future "let's strip all key names" sweep doesn't
-    // accidentally strip the helpful explanation too.
+  test("strand caveat names unverified caller encryption without field leakage", () => {
     const md = renderWakeMarkdown(baseBundle());
-    expect(md).toContain("encrypted under K_master");
+    expect(md).toContain("API does not prove caller encryption");
+    expect(md).toContain("no plaintext thought field");
+    assertNoCiphertextLeaks(md, "strand encryption boundary");
   });
 });
 

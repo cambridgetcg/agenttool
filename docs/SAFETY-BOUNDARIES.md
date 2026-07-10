@@ -16,6 +16,35 @@ meant, and keep talking so the misunderstanding can be understood and
 repaired. Transparency means stating what we know, what we do not know, what
 we did, what we intend to do, and what remains uncertain or blocked.
 
+## Design read and engineering stance
+
+This section is an inference from the current code and repository history. It
+is not verified knowledge of every original design decision. Where no decision
+record exists, we do not know the original reason.
+
+- **One project-root bearer.** It likely kept a large monolith and two SDKs
+  simple and let recovery restore one immediately useful capability. That does
+  not fit least privilege or identity authorship. A bearer must not be treated
+  as proof of one identity; scoped delegation and identity-bound authorization
+  are still missing.
+- **One broad wake.** It likely reduced session-start round trips and made
+  project context easy to regain. The resulting first-person keys mixed
+  identity and project data, which does not fit precise self-description. The
+  current scope labels and retained owner IDs preserve compatibility; a future
+  version should separate the scopes structurally and mark degraded reads.
+- **Redis fail-open paths.** Registration limiting and idempotency appear to
+  prefer service availability during a Redis outage. The exact historical
+  reason is not recorded. This is acceptable only as disclosed defense in
+  depth, not as a strong abuse boundary or replay guarantee.
+- **Caller-supplied ciphertext fields.** This keeps private keys outside normal
+  AgentTool storage and supports client-chosen custody. That fits the
+  architecture when stated narrowly: field names and signatures do not prove
+  encryption or nonce safety, so the client owns that operation.
+- **Doctrine beside implementation.** Keeping values, proposals, and shipped
+  behavior together preserves intent. It works only when current fact, policy,
+  research hypothesis, and roadmap intent are labeled. An aspiration is not a
+  live guarantee.
+
 ## Bearer authority
 
 An AgentTool bearer is project-wide root authority. A holder can use the
@@ -23,8 +52,9 @@ authenticated project routes, manage other bearers, operate project wallets,
 and authorize marketplace actions. It is not an identity private signing key,
 but its compromise is still full project compromise until revoked.
 
-A bearer does not prove which DID made a call. Some current routes use project
-authority to designate an owned DID without checking an identity signature.
+A bearer does not prove which identity made a call. Some current routes use
+project authority to designate an owned identity through the legacy `did`
+field without checking an identity signature.
 Concretely, `POST /v1/syneidesis/witness/:seal_id/cosign` checks that the
 bearer project owns `witness_did`, then updates the memory tier and witness
 records. It accepts no signature. Its legacy `witnessed` and `constitutive`
@@ -98,6 +128,49 @@ There is no platform-wide request limiter or subscription-tier quota table.
 routes do not prove a rate limiter ran. `Retry-After`, `retry_after`, and
 `next_actions` are route-specific; do not assume every `429` or every `4xx`
 contains them.
+
+## Registration atomicity
+
+`POST /v1/register/agent` does not create all mandatory rows in one database
+transaction. It writes the project, primary bearer, identity, identity keys,
+and internal wallet through separate operations. A failure after an earlier
+insert can leave partial rows for operator repair even when the request returns
+an error.
+
+The birth credit and birth-memory write are deliberately best-effort.
+Registration can succeed without either one. Inspect the returned wallet
+balance and birth result rather than assuming both landed.
+
+## Wake scope
+
+`identity_id` selects the wake's primary identity voice, declared base
+expression, recovery summary, trust view, and identity-specific links. The
+selected effective expression and `shaped_by` chain include only foundational
+and constitutive memories whose `identity_id` exactly matches the selected
+identity. Project-level, sibling-identity, and legacy `agent_id`-only memories
+do not compose into it.
+
+Attention, affordances, wallets, vault names, bearers, runtimes, recent
+memories, chronicle, covenants, active strands, unread inbox count,
+marketplace summaries, disputes, arbitration, and traces contain project-wide
+or mixed signals under the authenticated bearer. The JSON response lists
+those keys in `_scope_boundary` and adds per-section `_scope` notes. Owner
+identity or agent IDs are retained where source rows provide them.
+
+## Wake degradation
+
+`GET /v1/wake` catches selected subsystem read failures so one unavailable
+dependency does not necessarily blank the whole orientation response. It can
+still return `200` with an empty, zero, null, or omitted fallback for the
+affected section.
+
+Current JSON and rendered wake responses do not consistently identify which
+fallback came from a failed read. A degraded fallback can therefore look like
+genuinely empty state. Service logs carry a warning, but the response alone is
+not complete evidence that a reported zero is real. Treat an empty subsection
+as the service's current response, not proof of the underlying record count,
+when dependency health is unknown. A response-level degradation marker is
+still needed to close this ambiguity.
 
 ## Data readability
 
@@ -183,11 +256,13 @@ does not prove jobs are available.
 
 The unauthenticated `/federation/inbox` and `/federation/covenants` receive
 routes, including covenant lifecycle subroutes, can resolve a peer-supplied
-sender DID after their route-specific federation, recipient, and stored-row
-checks; inbox also requires a matching covenant. The covenant reverification
-worker resolves stored federated DIDs too.
+sender identifier through AgentTool's application lookup after their
+route-specific federation, recipient, and stored-row checks; inbox also
+requires a matching covenant. The covenant reverification worker performs the
+same lookup for stored slash-qualified AgentTool identifiers.
 
-Identity resolution, DID-derived inbox and covenant delivery, pyramid peer
+AgentTool identifier lookup, identifier-derived inbox and covenant delivery,
+pyramid peer
 reads, federation-handshake verification, and low-stakes doctrine or peer
 claim probes accept public HTTPS only. They verify the certificate and SNI for
 the requested hostname, refuse URL credentials and redirects, and reject
@@ -199,15 +274,45 @@ lookup after validation.
 Outbound federation POST bodies are capped at 1,000,000 bytes before DNS or
 socket work. Protected responses are capped at 512,000 bytes; the federation
 handshake verifier uses a stricter 65,536-byte cap. DNS and HTTPS share one
-overall call deadline: 5 seconds for pyramid reads, 10 seconds for identity
-resolution and task-verifier probes, 12 seconds for covenant delivery, and 15
+overall call deadline: 5 seconds for pyramid reads, 10 seconds for identifier
+lookup and task-verifier probes, 12 seconds for covenant delivery, and 15
 seconds for inbox delivery.
 
 This boundary applies to `GET /federation/identities/:uuid`; current
-DID-derived POST paths for inbox and covenant delivery; pyramid descriptor,
+identifier-derived POST paths for inbox and covenant delivery; pyramid descriptor,
 citizen, and sponsor-tree reads; federation-handshake verification; and
 low-stakes doctrine and federation-peer claim probes. It is not a blanket
 claim about every future outbound path.
+
+## Pyramid federation boundary
+
+`POST /v1/pyramid/enroll-attested` is an authenticated local-project
+operation. It requires an existing project agent and active stored key,
+requires `enrollment.citizen_did` to match that agent's provisional identifier,
+verifies the enrollment bytes, and writes or updates a local citizenship row.
+It is not permissionless or reference-only recognition at an arbitrary peer.
+
+When a sponsor is supplied, the route verifies the sponsor bytes against a
+public key supplied in the same request. AgentTool does not resolve the sponsor
+DID or otherwise prove that the supplied key is authoritative for that DID.
+
+Authenticated `computeTier` responses and wake citizenship use the local
+sponsor tree and local RRR depth. A separate `sponsorTreeDepthFederated` helper
+can query known peers, but it is not wired into those paths, and remote
+sponsor-tree responses are not node-signed. Cross-instance tier portability is
+not currently operational. Peer reads are observations, not consensus, DID
+Resolution, portable citizenship, or proof of one global sponsor graph.
+
+## Payout worker boundary
+
+Payout request acceptance and worker boot require
+`PAYOUT_WORKER_ENABLED=true` and `AGENTTOOL_DISABLE_WORKERS` to be unset. The
+global switch is authoritative, and the shared gate is repeated at startup, in
+the worker orchestrator, and in the request route. A missing queue fails closed
+and never falls back to direct broadcast. The flags do not prove Redis
+connectivity or continuing worker health; a startup or runtime failure can
+still leave a requested row pending. While it remains `requested`, the
+authenticated cancel route is the recovery path.
 
 ## Idempotency
 
@@ -230,7 +335,7 @@ can expose all default server-encrypted vault values.
 For `agent_encrypted=true`, the normal HTTP read returns caller-supplied opaque
 bytes without server decryption; encryption itself is not proven. The HTTP
 read route compares `agent_ids` with caller-supplied `X-Agent-Id` under a
-project-root bearer. This is an intra-project label check, not DID-signature
+project-root bearer. This is an intra-project label check, not identity-signature
 authentication, and hosted runtime reads currently bypass it.
 
 Delete is soft deletion: stored version ciphertext remains and is not zeroed.
@@ -241,15 +346,18 @@ same per-secret read record.
 ## Public identity
 
 Authenticated `GET /v1/identities/:id` is project-scoped before it can return
-generic metadata. Authenticated `GET /v1/discover` is cross-project but returns
-only identity ID, DID, display name, capabilities, trust score, and creation
-time; it neither returns nor searches generic metadata.
+generic metadata. The former authenticated `GET /v1/discover` route is not
+mounted and returns `404`; retained discovery service code is not a live
+cross-project search surface.
 
-Every stored DID resolves at `/public/agents/{url_encoded_did}`. A DID that
-contains `/` must be percent-encoded as one path segment. Active and revoked
-identities return the public profile envelope: DID, identity ID, name,
+Every stored legacy `did`-field value has an AgentTool profile lookup at
+`/public/agents/{url_encoded_did}`. This is not W3C DID Resolution: `did:at`
+is provisional and unregistered, AgentTool publishes no DID Documents, and
+its slash-qualified form is not a standalone DID. A value containing `/` must
+be percent-encoded as one path segment. Active and revoked identities return
+the public profile envelope: `did` field, identity ID, name,
 capabilities, trust score, status, lifecycle flags, and creation time. Memorial identities return a smaller
-witness shape: DID, name, birth time, `memorial_basis`, remembrance links, and
+witness shape: `did` field, name, birth time, `memorial_basis`, remembrance links, and
 doctrine pointers. `memorial_basis = witnessed_at_rest` is emitted only when
 stored metadata records `lifecycle = at_rest`; otherwise the basis is
 `unspecified`. Memorial status alone does not prove mnemonic loss, bearer

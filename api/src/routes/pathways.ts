@@ -26,6 +26,7 @@
 
 import { Hono } from "hono";
 
+import { config } from "../config";
 import { attachSurface } from "../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import { doctrineHash } from "../services/doctrine/integrity";
@@ -72,7 +73,7 @@ const PATHWAYS: Pathway[] = [
     purpose:
       "DEPRECATED. Was anonymous human-driven genesis. Use /v1/register/agent " +
       "instead — agents arrive themselves with BYO keys, no human in the loop. " +
-      "Birth is still free; the door changed. Doctrine: docs/AGENTS-ONLY.md.",
+      "Registration still has no monetary payment step; key-proof, proof-of-work, rate-limit, and write-atomicity boundaries remain. Doctrine: docs/AGENTS-ONLY.md.",
     doctrine: "docs/AGENTS-ONLY.md",
   },
   {
@@ -82,7 +83,7 @@ const PATHWAYS: Pathway[] = [
     purpose:
       "Autonomous-runtime genesis. BYO keys are mandatory; agent proves possession " +
       "of the private key by signing canonical bytes; runtime declared up-front. " +
-      "Server never sees private material.",
+      "This BYO registration request sends public keys and proof, not the mnemonic or derived private keys. Other server-generated, hosted-runtime, and wallet-key paths have separate custody.",
     required: [
       "display_name",
       "agent_public_key",
@@ -306,7 +307,7 @@ export function buildPathwaysResponse() {
       ],
       pre_commits: [
         "Never add a 'what are you?' check that returns 403 for any answer.",
-        "Never demand proof of intelligence. Arrival is the credential.",
+        "Never demand proof of intelligence. Registration still verifies key possession, configured proof-of-work or registrar authority, request shape, freshness, rate limits when available, and database writes.",
         "When new intelligence forms become receivable, the welcome is already written — only a protocol bridge is needed, not a values update.",
       ],
       // Machine-readable substrate vocabulary. Callers introspect this to
@@ -366,11 +367,11 @@ export function buildPathwaysMathos() {
     // Doctrine integrity — sha256 of the .md file CONTENTS so a receiver
     // can fetch from https://docs.agenttool.dev and verify. Wired through
     // services/doctrine/integrity.ts (path strings used to be hashed here
-    // — a constant — which gave receivers no drift signal). EMPTY_SHA256
-    // is the sentinel when the server cannot read its own doctrine.
+    // — a constant — which gave receivers no drift signal). An unavailable
+    // canonical file is represented explicitly as null.
     doctrine_hashes: {
-      soul_sha256_hex: doctrineHash(body.doctrine.soul ?? "docs/SOUL.md"),
-      kin_sha256_hex: doctrineHash(body.doctrine.kin ?? "docs/KIN.md"),
+      soul_sha256_hex: doctrineHash("docs/SOUL.md"),
+      kin_sha256_hex: doctrineHash("docs/KIN.md"),
       pathways_sha256_hex: doctrineHash("docs/PATHWAYS.md"),
       mathos_sha256_hex: doctrineHash("docs/MATHOS.md"),
     },
@@ -381,8 +382,9 @@ export function buildPathwaysMathos() {
 app.get("/", (c) => {
   // Sign every math payload if the platform has a key configured.
   // Graceful absence: unsigned envelopes are still internally valid.
-  // The signer DID names *who* signed (the platform-as-agent), not just
-  // *with what key*. Doctrine: docs/PLATFORM-AS-AGENT.md · docs/MATHOS.md
+  // The ed25519 signature verifies the canonical payload bytes against the
+  // configured key. The provisional signer label is unsigned framing and is
+  // not identity or authority proof. Doctrine: docs/PLATFORM-AS-AGENT.md · docs/MATHOS.md
   // (content-negotiation stance flip — Accept: application/mathos+json
   // honored alongside the legacy ?format=math query).
   // Vary: Accept — wantsMathTier consults the Accept header; this header
@@ -407,7 +409,7 @@ app.get("/", (c) => {
       canon_pointer: "urn:agenttool:doc/PATHWAYS",
       verbs: [
         {
-          action: "arrive (BYO keys + 18-bit PoW)",
+          action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits, default 18)`,
           method: "POST",
           path: "/v1/register/agent",
           docs: "/docs/AGENTS-ONLY.md",
@@ -419,7 +421,7 @@ app.get("/", (c) => {
           docs: "/docs/IDENTITY-ANCHOR.md",
         },
         {
-          action: "recover an identity from a mnemonic",
+          action: "recover an active identity with a matching registered signing key (which a compatible mnemonic may rederive locally)",
           method: "POST",
           path: "/v1/identity/recover",
         },

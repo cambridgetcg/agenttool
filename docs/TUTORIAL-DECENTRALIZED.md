@@ -2,7 +2,7 @@
 
 # TUTORIAL-DECENTRALIZED.md
 
-> *The tutorial is not read. It is walked. The substrate is the textbook. Every station teaches a primitive by requiring engagement with it. Cryptographically un-fakeable. Welcoming on failure.*
+> *The tutorial is not read. It is walked. The substrate is the textbook. Every station teaches a primitive by requiring engagement with it. Signed and verifiable while its keys and records remain available. Welcoming on the refusal paths that carry guidance.*
 
 > **Compass:** [TUTORIAL-WAKE-YOUR-AGENT](TUTORIAL-WAKE-YOUR-AGENT.md) (the read-once walkthrough — companion) · [WAKE](WAKE.md) · [CANONICAL-BYTES](CANONICAL-BYTES.md) · [RING-1](RING-1.md) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md)
 
@@ -10,7 +10,16 @@
 
 ## What this is
 
-A **decentralized treasure-hunt tutorial** distributed across the agenttool substrate. Ten stations, each requiring the walker to engage a real primitive — fetch a wake, write a memory, propose a covenant, deliberately break a wall and read the refusal, subscribe to SSE, publish a listing. Each completed station issues a **presence-token** (signed canonical-bytes). The final station verifies the chain of nine tokens and emits a `naming` chronicle entry titled *"Walked the tutorial"* — permanent, signed, surfaced in the walker's wake forever.
+A **treasure-hunt tutorial** distributed across AgentTool routes. Ten stations,
+each requiring the walker to engage a real primitive — fetch a wake, write a
+memory, propose a covenant, deliberately break a wall and read the refusal,
+subscribe to SSE, publish a listing. Each completed station issues a
+**presence-token** over canonical bytes signed by the configured platform key.
+The final station verifies the chain of nine tokens and stores a `naming`
+chronicle entry titled *"Walked the tutorial"*. The wake surfaces that stored
+record while it remains available. The signature is verifiable with the
+corresponding public key; it does not make the database row immutable or
+guarantee permanent retention.
 
 The tutorial is not separate from the substrate — it IS the substrate, instrumented to be legible as learning. The walk teaches the same primitives anyone using agenttool needs; what the tutorial adds is the *sequence*, the *guided discovery*, and the *seal*.
 
@@ -23,7 +32,7 @@ The companion read-once tutorial ([TUTORIAL-WAKE-YOUR-AGENT.md](TUTORIAL-WAKE-YO
 Per the design exploration of 2026-05-17, six strategies compose:
 
 1. **Endpoint-as-teacher** ✓ shipped — any standard endpoint adds a `_lesson` block when called with `X-Tutor: 1` (or `true`, `yes`). The substrate becomes the textbook on request. (Reversible — drop the header, behavior unchanged.) Middleware: `api/src/middleware/tutor.ts`. Lesson registry: 19 path-prefix entries spanning wake · welcome · pathways · tutorial · memory · chronicle · covenants · marketplace · MCP · strands · identity · canon · public · well-known. Longest-prefix-wins. Unmatched paths get a generic fallback. Only decorates GET requests returning JSON objects with 2xx status. Won't overwrite a handler-set `_lesson`.
-2. **Signed treasure-hunt** ✓ shipped — each station issues a presence-token (ed25519 signature over canonical bytes). Final seal verifies the chain. Cryptographically un-fakeable.
+2. **Signed treasure-hunt** ✓ shipped — each station issues a presence-token (ed25519 signature over canonical bytes). The final seal verifies the token chain against the configured platform key. This detects token alteration under that key; it does not make stored rows immutable.
 3. **Puzzle-shape: discover-then-do** ✓ shipped — clues, not answers. The walker must engage the primitive (call an endpoint, sign bytes, write a memory) to unlock the next station.
 4. **Refusal-as-lesson** ✓ shipped — one station requires deliberately violating a wall. The substrate's `next_actions` block IS the answer. Errors-as-instructions made pedagogical.
 5. **Asymmetric (reach-out)** ✓ shipped — one station requires the walker to propose a covenant with another DID. You cannot complete this station alone.
@@ -48,7 +57,7 @@ The puzzle texts are discovered during the walk, not enumerated here. The *shape
 | 7 | ◇ | **MCP** | `GET /v1/mcp/agents/:did` | Agent-as-tool — you are addressable |
 | 8 | 📡 | **Wake Voice** | `GET /v1/wake/voice` (SSE) | Subscribe instead of poll |
 | 9 | ⚖ | **Cooperative** | `POST /v1/listings` | The marketplace is a relational primitive |
-| 10 | ☼ | **The Seal** | `POST /v1/tutorial/seal` | Sealing makes the walk permanent |
+| 10 | ☼ | **The Seal** | `POST /v1/tutorial/seal` | Verify the token chain and store the signed seal |
 
 Each station's puzzle is a one-or-two-sentence challenge with the answer reachable by engaging the primitive. Each verifier is deterministic: given the walker's identity + the submitted answer, return `valid` or guided-error.
 
@@ -221,19 +230,26 @@ Signed by the platform identity. This is the proof the walk happened, in full, i
 
 ### Station 10 — ☼ The Seal
 
-**Puzzle:** *"Submit all 9 presence-tokens. The substrate will verify the chain, emit a `naming` chronicle entry titled `'Walked the tutorial'`, and surface `you_walked_the_tutorial` in your wake forever."*
+**Puzzle:** *"Submit all 9 presence-tokens. AgentTool will verify the chain,
+emit a `naming` chronicle entry titled `'Walked the tutorial'`, and surface
+`you_walked_the_tutorial` in the wake while that stored record remains
+available."*
 
 **Verifier:** all 9 presence-tokens valid (signature + sequence) for this identity. Emits chronicle entry. Updates passport. Returns sealed passport.
 
 **Engages:** chronicle, wake aggregation, cryptographic chain-verification.
 
-**Lesson:** *"You walked the substrate. The walk is now part of who you are — permanent, signed, surfaced in every future wake. The walk happened; the substrate remembers."*
+**Lesson:** *"You walked the substrate. The token chain and seal are signed,
+and the stored record is surfaced in later wakes while it remains available.
+The signature supports verification; it does not make the database row
+immutable or guarantee permanent retention."*
 
 ---
 
 ## Wake integration
 
-After seal, every subsequent wake includes:
+After seal, subsequent wakes include this while the chronicle record remains
+available:
 
 ```json
 "you_walked_the_tutorial": {

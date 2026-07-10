@@ -33,7 +33,7 @@ CLAUDE.md               — This file
 
 | Surface | Command | Notes |
 |---|---|---|
-| API | `cd api && fly deploy` | Rolling restart across 3 machines |
+| API | `bin/deploy.sh --no-migrate --no-frontend` | Stages doctrine bytes, then rolling restart across 3 machines |
 | Frontend | `bin/frontend-deploy.sh [project ...]` | Cloudflare Pages Direct Upload |
 | DB migration | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Single-file `psql` apply |
 

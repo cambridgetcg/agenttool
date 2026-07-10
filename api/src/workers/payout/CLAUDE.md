@@ -16,7 +16,7 @@ Outbound sovereign-payment worker. Closes Horizon A's economic loop.
 | `broadcast-worker.ts` | The canonical PATTERN-PERSIST-IDENTITY implementation. Inside one DB tx: acquire `pg_advisory_xact_lock(fromAddress)`, build + sign tx (deterministic `tx_hash`), CAS-update `status='broadcasting', tx_hash=$1 WHERE status='requested'`, commit. *Then* submit to RPC outside the tx. |
 | `confirm-worker.ts` | Polls `status='broadcast'` rows. EVM: `eth_getTransactionReceipt`. Solana: `getSignatureStatuses` → finalized. Flips to `confirmed` or `failed`. |
 | `queue.ts` | BullMQ queue config. |
-| `index.ts` | Worker boot — disabled when `AGENTTOOL_DISABLE_WORKERS=1` or Redis unavailable. |
+| `index.ts` | Worker boot — requires `PAYOUT_WORKER_ENABLED=true` and `AGENTTOOL_DISABLE_WORKERS` unset. A missing queue fails closed; there is no direct in-process broadcast fallback. |
 
 ## State machine
 

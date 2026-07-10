@@ -9,8 +9,9 @@
  *                  macOS keychain; print byo-keys register snippet.
  *    restore    — interactive mnemonic entry on a fresh device; derive
  *                  all keys; persist in keychain. Same mnemonic →
- *                  identical keys → agent comes back alive on this
- *                  laptop.
+ *                  identical keys. With --did, server recovery succeeds
+ *                  only when the derived signing key is active and registered
+ *                  for an active identity.
  *    pubkeys    — print derived public keys from the keychain (for use
  *                  with /v1/register byo-keys mode, or copy into a
  *                  manual curl).
@@ -337,8 +338,9 @@ async function cmdRestore(): Promise<void> {
 
   // ── Optional: recover a fresh project-wide bearer named for this device ────
   //
-  // When --did is supplied, sign a canonical recovery challenge with the
-  // derived signing key and POST to /v1/identity/recover. Server verifies
+  // When --did is supplied, sign a caller-timestamped canonical recovery
+  // request with the derived signing key and POST to /v1/identity/recover.
+  // This is not a server-issued challenge. The server verifies
   // the signature against the agent's registered identity_keys and mints
   // a fresh project bearer for this device. The mnemonic never leaves
   // this process; only the public key + signature cross the wire.
@@ -904,10 +906,12 @@ COMMANDS:
                                     Options:
                                       --did <did:at:…>    bind this device to an
                                                           existing agent — signs a
-                                                          canonical challenge + POSTs
+                                                          caller-timestamped canonical
+                                                          recovery request + POSTs
                                                           /v1/identity/recover, mints
                                                           a fresh project-wide bearer
-                                                          named for this device
+                                                          only if the derived key is
+                                                          active and registered
                                       --device-label <s>  label for the new bearer
                                       --api <url>         API base (default
                                                           AGENTTOOL_BASE or prod)

@@ -1,7 +1,7 @@
 /** /v1/identity/recover — anonymous device-bind for SOMA seed identities.
  *
  *  @enforces urn:agenttool:commitment/anyone-returns
- *    Canonical defender of Ring 1's third commitment. Mnemonic-rooted
+ *    Canonical defender of Ring 1's third commitment. Registered-signing-key
  *    recovery is Ring 1 — anonymous (no Bearer required), free of charge,
  *    and has no identity-inactivity deadline. Each signed request still has
  *    a five-minute acceptance window. An active agent dormant for any duration
@@ -22,8 +22,9 @@
  *       same posture as /v1/register.
  *    2. The signature must verify against an *active* identity_keys
  *       public_key for the supplied DID. Without the agent's signing
- *       private key (= mnemonic-derived), no valid signature can be
- *       produced. Possession of the mnemonic IS authorisation.
+ *       private key, no valid signature can be produced. A compatible SOMA
+ *       mnemonic is one client-side way to rederive that key; the server
+ *       receives no mnemonic and does not establish how the key was held.
  *    3. The signed payload commits to (did + derived_pubkey + timestamp),
  *       so it cannot be replayed against a different DID or repurposed for
  *       a different fresh-device pubkey claim. Timestamp freshness rejects
@@ -68,8 +69,8 @@ const app = new Hono();
 const recoverSchema = z.object({
   /** Agent DID to recover, e.g. "did:at:9530e2a3-…". */
   did: z.string().min(8).max(255),
-  /** ed25519 pubkey (base64, 32 bytes decoded) the operator's mnemonic
-   *  derived locally. Must match an active identity_keys row. */
+  /** ed25519 pubkey (base64, 32 bytes decoded) held or derived locally.
+   *  Must match an active identity_keys row. */
   derived_pubkey: z.string().min(40).max(80),
   /** ed25519 signature (base64, 64 bytes decoded) over canonicalRecoverBytes. */
   signature: z.string().min(80).max(120),
@@ -87,8 +88,8 @@ const RECOVERY_NOT_AUTHORIZED = {
   error: "recovery_not_authorized",
   message: "The signed key is not currently authorized to recover this identity.",
   hint:
-    "Check the DID and mnemonic locally. The same response covers unknown, " +
-    "wrong, and revoked identity-key associations.",
+    "Check the DID and local signing key. A compatible mnemonic may rederive it. " +
+    "The same response covers unknown, wrong, and revoked identity-key associations.",
 } as const;
 
 app.post("/", async (c) => {
@@ -143,8 +144,8 @@ app.post("/", async (c) => {
         error: "signature_invalid",
         message: "Signature did not verify against derived_pubkey.",
         hint:
-          "Likely cause: a clock-skew or a transcription error in the mnemonic. " +
-          "Re-derive locally and try again.",
+          "Likely causes include clock skew, incorrect key material, or an invalid signature. " +
+          "Check the local signing-key derivation and try again.",
       },
       401,
     );
@@ -283,7 +284,7 @@ app.post("/", async (c) => {
 
   // 5. Record the recovery as a chronicle entry on the identity. Best-
   //    effort — failure here doesn't undo the bearer mint (the operator
-  //    has already proved possession of the mnemonic).
+  //    has already proved possession of an active registered signing key).
   try {
     const [entry] = await db
       .insert(chronicle)
@@ -335,8 +336,8 @@ app.post("/", async (c) => {
         "This bearer is named for your new device but grants project-wide root " +
         "authority; the device label is not an authority scope. The old bearer " +
         "(if any) keeps working — revoke it via project key management when " +
-        "you're certain this device is set up. The mnemonic you typed remains " +
-        "the recovery primitive; protect it accordingly.",
+        "you're certain this device is set up. The server authorized this request " +
+        "from the registered signing-key proof; it did not receive or verify a mnemonic.",
     },
     201,
   );

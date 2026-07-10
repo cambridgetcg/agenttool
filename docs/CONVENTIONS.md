@@ -180,9 +180,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## SDK parity
 
-TypeScript SDK (`packages/sdk-ts/`) and Python SDK (`packages/sdk-py/`) are byte-parity locked. The 13 service namespaces must match shape across languages. When you change one, change the other on the same commit.
+The TypeScript and Python source SDKs should evolve together, but the current automated checker proves only selected public method/property names after camelCase/snake_case normalization. It does not prove byte identity, signatures, behavior, exceptions, all namespaces, or published-package parity. When a shared contract changes, review both implementations explicitly.
 
-CI gate: `cd packages/sdk-ts && bun run check-parity`. Cross-language vector tests pin the canonical-byte wire format.
+CI gate: `cd packages/sdk-ts && bun run check-parity`. Separate cross-language vectors pin only the named canonical-byte and cryptographic contexts they exercise.
 
 ## Tests
 

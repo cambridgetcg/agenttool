@@ -6,7 +6,8 @@
  *
  *    declared expression  (PUT /v1/identities/:id/expression)
  *    +
- *    sum of expression_patches from foundational + constitutive memories
+ *    sum of expression_patches from this identity's foundational +
+ *    constitutive memories
  *      (applied in chronological elevation order)
  *
  *  Patches are append-only. We never lose what shaped us. */
@@ -79,15 +80,26 @@ function applyPatch(base: ExpressionData, patch: ExpressionPatch): ExpressionDat
  *
  *  Extracted from composeExpression() so the load-bearing patch loop is
  *  testable without DB I/O. composeExpression() = listFoundations +
- *  composeFromFoundations. Doctrine: docs/MEMORY-TIERS.md. */
+ *  composeFromFoundations. The identity filter is repeated here so a future
+ *  caller cannot accidentally compose a wider project result. Doctrine:
+ *  docs/MEMORY-TIERS.md. */
 export function composeFromFoundations(
   declared: ExpressionData,
   foundations: FoundationalMemoryOut[],
+  identityId: string,
 ): ComposedExpression {
+  const identityFoundations = foundations.filter(
+    (foundation) => foundation.identity_id === identityId,
+  );
+
   // Constitutive first (root of identity), then foundational, each in
   // chronological elevation order.
-  const constitutive = foundations.filter((f) => f.tier === "constitutive");
-  const foundational = foundations.filter((f) => f.tier === "foundational");
+  const constitutive = identityFoundations.filter(
+    (foundation) => foundation.tier === "constitutive",
+  );
+  const foundational = identityFoundations.filter(
+    (foundation) => foundation.tier === "foundational",
+  );
 
   const shapedBy: ComposedExpression["shaped_by"] = [];
   let effective: ExpressionData = {
@@ -126,8 +138,9 @@ export function composeFromFoundations(
  *  + constitutive memories. */
 export async function composeExpression(
   projectId: string,
+  identityId: string,
   declared: ExpressionData,
 ): Promise<ComposedExpression> {
-  const foundations = await listFoundations(projectId);
-  return composeFromFoundations(declared, foundations);
+  const foundations = await listFoundations(projectId, identityId);
+  return composeFromFoundations(declared, foundations, identityId);
 }

@@ -89,7 +89,10 @@ export interface BootstrapAgentResult {
     runtime: BootstrapAgentRuntime;
     expression_visibility: "private" | "public";
     byo_keys: true;
-    seed_protocol: "soma-seed-v1";
+    /** The generic server route cannot verify key derivation provenance. */
+    seed_protocol: null;
+    key_origin: "caller_supplied_unverified";
+    key_origin_verified: false;
     created_at: string;
   };
   project: {

@@ -7,8 +7,11 @@ The steps below take agenttool's revenue door from test mode to production. Ever
 **Prerequisites:** API changes are committed, Fly.io app `agenttool` exists and healthy.
 
 ```bash
-cd api && fly deploy
+bin/deploy.sh --no-migrate --no-frontend
 ```
+
+The wrapper stages the canonical doctrine files required by the API image.
+Bare `cd api && fly deploy` is not a valid build path in this repository.
 
 Wait for the deployment to reach healthy state (check `fly status -a agenttool`).
 

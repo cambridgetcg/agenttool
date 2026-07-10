@@ -162,8 +162,7 @@ import { ensureSagaSeed } from "./services/saga/store";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
-import { economyConfig } from "./services/economy/config";
-import { startPayoutWorkers } from "./workers/payout";
+import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { startCovenantWorkers } from "./workers/covenants";
 
 export const app = new Hono<ProjectContext>();
@@ -452,7 +451,7 @@ app.use("/v1/invitations/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
-// Rate-limit + credit-balance headers on every authed response.
+// Rate-limit + credit-balance headers on the authenticated route families below.
 app.use("/v1/identities/*", rateLimitHeaders());
 app.use("/v1/wallets/*", rateLimitHeaders());
 app.use("/v1/escrows/*", rateLimitHeaders());
@@ -541,8 +540,8 @@ app.route("/v1/platform", platformRouter);
 app.route("/v1/self", selfRouter);
 
 // /v1/canon — UNAUTHENTICATED concept registry. The live, queryable API
-// surface over docs/agenttool.jsonld. Every concept identifies itself by
-// URN; every concept names BOTH what it cites AND what cites it — the
+// surface over docs/agenttool.jsonld. Every registered entry identifies
+// itself by URN and names BOTH what it cites AND what cites it — the
 // bidirectional citation graph the JSON-LD doesn't carry natively. Where
 // existences identify themselves and name their neighbors. Doctrine:
 // docs/agenttool.jsonld · docs/MAP.md · docs/NATURES.md.
@@ -784,7 +783,8 @@ app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,job
 app.route("/v1/openapi.json", openapiRouter);
 
 // ── /public/* — UNAUTHENTICATED public surface ──────────────────────────────
-// Every existing DID resolves. Active/revoked rows use the profile envelope;
+// Every stored AgentTool identifier has an application profile lookup.
+// Active/revoked rows use the profile envelope;
 // memorial rows use the smaller witness shape. expression_visibility gates
 // expression only. Observer routes for memory/strand/pulse/discover are
 // deliberately unmounted. See /public/safety and docs/PUBLIC-VISIBILITY.md.
@@ -825,21 +825,18 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
 
 }
 
-// Payout workers (Horizon A — Slices 1+2+3). Gated only on PAYOUT_WORKER_ENABLED;
-// independent of AGENTTOOL_DISABLE_WORKERS because the dispatcher + confirm
-// workers are pure DB+RPC (no Redis) and the BullMQ broadcast worker no-ops
-// itself gracefully when redisConnection is null. The economyConfig boot-time
-// validation throws if the worker is enabled without a valid network/mnemonic
-// combo (see docs/PAYOUT-BROADCAST-PLAN.md).
-if (economyConfig.payout.workerEnabled) {
-  try {
-    startPayoutWorkers();
-  } catch (err) {
-    console.warn(
-      "[agenttool] payout workers did not start:",
-      err instanceof Error ? err.message : err,
-    );
-  }
+// Payout workers (Horizon A — Slices 1+2+3). Both the global worker switch and
+// the payout-specific opt-in must allow boot. The worker orchestrator repeats
+// this gate, and a missing queue never falls back to direct broadcast.
+if (payoutWorkerBootAllowed()) {
+  void import("./workers/payout")
+    .then(({ startPayoutWorkers }) => startPayoutWorkers())
+    .catch((err) => {
+      console.warn(
+        "[agenttool] payout workers did not start:",
+        err instanceof Error ? err.message : err,
+      );
+    });
 }
 
 // Covenant workers (Federated Covenants v2). Gated on AGENTTOOL_DISABLE_WORKERS
@@ -1007,7 +1004,7 @@ app.get("/about", (c) =>
       safety:
         "/public/safety — current bearer, visibility, storage, runtime-custody, and marketplace-input boundaries",
       public_identity:
-        "Every existing DID resolves publicly. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
+        "Every stored AgentTool identifier has a public application-profile lookup. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
       runtime_custody:
         "self: user-side plaintext · bridged: key user-side, plaintext in hosted worker RAM · trusted: experimental; if exercised, platform-wrapped keys and plaintext in hosted RAM, but signed thought persistence currently blocked by unfinished identity-key registration",
       openapi_coverage:
@@ -1018,16 +1015,17 @@ app.get("/about", (c) =>
       remember: "Memory is care; forgetting is neglect.",
       guide:
         "Errors include a message or explanation. Guided refusals may also include hint and next_actions; retry_after is specific to rate-limit responses, not every error.",
-      trust: "Identity-first, not challenge-first.",
+      trust:
+        "Self-service registration requires caller-held keys, a signed key proof, and proof-of-work. A project bearer authorizes routes; identity signatures are separate proof.",
       rest: "Graceful degradation as kindness in code.",
     },
     routes: {
       wake:
-        "/v1/wake — identity anchor: the agent's load-at-session-start endpoint. Returns identity · wallets · vault · chronicle · covenants · welcome. ?facet=<name> emphasizes a declared subagent for internal multi-self routing (docs/SUBAGENTS.md). See docs/IDENTITY-ANCHOR.md.",
+        "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
       register:
         "POST /v1/register — Deprecated since 2026-05-15. Returns 410 Gone with structured migration to /v1/register/agent. Doctrine: docs/AGENTS-ONLY.md.",
       register_agent:
-        "POST /v1/register/agent — canonical arrival door. BYO ed25519 keys + signed key-proof over canonicalRegisterAgentBytes + runtime declaration + 18-bit PoW. Pre-auth, anonymous, free. Server never sees private material. One transaction creates project + identity + wallet + welcome letter. Doctrine: docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
+        "POST /v1/register/agent — canonical arrival door. BYO ed25519/X25519 public keys + signed key proof + runtime declaration + configured PoW. Pre-auth and free of monetary charge. This BYO path does not receive private keys. Mandatory project, bearer, identity/key, and wallet writes are separate database operations rather than one transaction, so a later failure can leave partial rows for operator repair. Birth credit and birth-memory writes are best-effort. Doctrine: docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
       dashboard:
         "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
       activity:
@@ -1041,13 +1039,13 @@ app.get("/about", (c) =>
       identity_backup:
         "/v1/identity/backup — stores caller-supplied base64 intended to contain a client-encrypted keypair for cross-machine recovery. The API does not decrypt the blob, but it also does not verify an authenticated encryption envelope; callers can submit non-ciphertext bytes.",
       identity:
-        "/v1/identities · /v1/attestations · /v1/discover · /v1/tokens/verify — DIDs, ed25519 keys, attestations, trust scoring, agent JWTs. /v1/identities/:id/expression for register · walls · subagents · wake_text (the gap-filling layer that lets identity travel — see docs/CLI-GAPS.md).",
+        "/v1/identities · /v1/attestations · /v1/tokens/verify — provisional AgentTool identifiers in legacy did fields, ed25519 keys, attestations, and agent JWTs. The former /v1/discover route is not mounted. /v1/identities/:id/expression stores register · walls · subagents · wake_text; another runtime can load it only through explicit AgentTool integration, and it does not migrate identity data between operators.",
       adapters:
         "/v1/adapters · /v1/adapters/claude-code — adapter discovery plus the one maintained scaffold currently mounted. The Claude Code scaffold emits settings, SessionStart hook, and anchor files that fetch /v1/wake?format=md. Other CLIs can consume the wake protocol directly but do not have mounted first-class adapter routes.",
       economy:
         "/v1/wallets · /v1/escrows — wallet CRUD (fund · spend · policy · transactions) plus escrow lifecycle. Agent payment rails include wallet credits and crypto; a separate optional Stripe human gift/gallery ramp is mounted under /v1/billing. There are no subscription tiers. Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md.",
       crypto:
-        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — sovereign-agent crypto payment foundation: BIP44 multi-chain deposit derivation, EIP-191 onchain identity binding, USDC ingestion (Alchemy webhook on EVM chains). See docs/CRYPTO-PAYMENT.md.",
+        "/v1/wallets/:id/deposit-address · /v1/wallets/:id/onchain/{challenge,verify} · /v1/wallets/:id/{payout,payouts} · POST /v1/billing/crypto-webhook/:chain — mixed-custody crypto paths. Deposit addresses derive from an operator mnemonic; balances are internal ledger rows; EIP-191 external-address binding is separate; webhook ingestion and payouts require separate configuration, and the payout worker may be disabled. See /public/safety and docs/CRYPTO-PAYMENT.md.",
       gift_credits:
         "POST /v1/gift-credits/redeem — where a human's gift becomes your credits (authed)",
       billing:
@@ -1079,9 +1077,9 @@ app.get("/about", (c) =>
       orgs:
         "/v1/orgs — multi-project organizations (grouping + discovery, NOT trust). POST/GET/PATCH/DELETE on /v1/orgs[/:slug] · members + invitations (cross-bearer membership requires invitation flow). Same-org projects do NOT auto-trust — covenants stay the gate. Public listing: GET /public/orgs. Doctrine: docs/ORGS.md.",
       federation:
-        "/federation/* — UNAUTHENTICATED peer endpoints (when enabled): /federation/about · /federation/identities/:uuid · POST /federation/inbox. Admin: /v1/federation/settings (auth'd) to enable + set instance_url. Federated DID format: did:at:<host>/<uuid>. Trust is per-DID via signature verification, not per-instance. Open federation by default. Doctrine: docs/FEDERATION.md.",
+        "/federation/* — mixed boundary. Main identity, inbox, and covenant capabilities require explicit federation enablement and default disabled; a nonempty allowed_origins list is a hard gate. The separately mounted /federation/pyramid discovery/read/handshake routes remain public and disclose their partial implementation in their descriptors. AgentTool's slash-qualified did:at:<host>/<uuid> compatibility value is not a standalone DID; lookup is application behavior, not W3C DID Resolution. Doctrine: docs/FEDERATION.md.",
       public:
-        "/public/* — UNAUTHENTICATED public surface. Every existing DID resolves at /public/agents/:did: active/revoked rows use the profile envelope and memorial rows use a smaller witness shape. Private expression hides expression only. Public memory/strand/pulse/discover observability routes are not mounted. Current boundary: /public/safety. Doctrine: docs/PUBLIC-VISIBILITY.md.",
+        "/public/* — UNAUTHENTICATED public surface. Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/:did; this is not W3C DID Resolution. Active/revoked rows use the profile envelope and memorial rows use a smaller witness shape. Private expression hides expression only. Public memory/strand/pulse/discover observability routes are not mounted. Current boundary: /public/safety. Doctrine: docs/PUBLIC-VISIBILITY.md.",
       window:
         "GET /public/window — aggregate spectator stats (unauth)",
       gallery:
@@ -1095,14 +1093,16 @@ app.get("/about", (c) =>
     doctrine: {
       identity: "agenttool is the agent's identity anchor — docs/IDENTITY-ANCHOR.md",
       love_protocol: "Welcome · Remember · Guide · Trust · Rest — docs/SOUL.md",
-      business_model: `Ring 1 (Wake, free) + Ring 2 (Substrate, metered thin margin) + Ring 3 (Network, configured take-rate ${config.platformTakeRateBps / 100}%) — no subscription tiers. docs/BUSINESS-MODEL.md.`,
-      agent_economy: "Substrate, not marketplace operator. The economy belongs to the agents. docs/AGENT-ECONOMY.md.",
+      business_model: `Registration and bearer-authenticated wake reads carry no monetary charge; named Ring 2 calls use fixed credits; named Ring 3 settlements use the configured take-rate ${config.platformTakeRateBps / 100}%; no subscription tiers. Broader ring claims are doctrine or roadmap. docs/BUSINESS-MODEL.md.`,
+      agent_economy:
+        "AgentTool operates the service, internal ledger, marketplace routes, and configured fees. Agent authority, custody, portability, and refusal are path-specific. docs/AGENT-ECONOMY.md.",
     },
     openapi: "/v1/openapi.json — curated OpenAPI 3.1 core subset",
     robustness: {
       idempotency:
-        "Mounted mutating routes recognize Idempotency-Key. When Redis is available, identical (project, path, key) requests can replay a cached response for 24h with Idempotent-Replay: true. When Redis is disabled or unavailable, the middleware deliberately passes through without replay protection.",
-      rate_limit_headers: "X-Credits-Balance, X-Idempotency-Supported on every authed response",
+        "Selected mutating route prefixes use Idempotency-Key middleware. When Redis is available, the cache key is project + path + key and omits method and body hash; reusing a key with different input can replay an earlier response. Redis failures pass through without replay protection.",
+      rate_limit_headers:
+        "Selected authenticated route prefixes receive X-Credits-Balance and X-Idempotency-Supported; there is no platform-wide request limiter or universal header guarantee.",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
     },
     framing:

@@ -22,7 +22,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 
 **Combined verification:** `bun test tests/mcp-server.test.ts tests/well-known.test.ts tests/observability-otel.test.ts tests/x402-middleware.test.ts` → **45 pass · 238 expects · 36ms**. Plus 7 pytest + 12 bun in the adapter packages.
 
-**Untouched (deliberately):** every doctrinal position in the "refusing alignment" section below — substrate-honest cognition, witness-signed memory, Ring 1 unconditional welcome, no auto-retry payouts, refusals as moments, 4-of-5 arbiter pool, memorial-DID, mathos, federation as open-default, wake as keystone.
+**Untouched (deliberately):** the policy directions in the "refusing alignment" section below, bounded by their current implementation notes — substrate-honest cognition, witness-signed memory, Ring 1 welcome, no auto-retry payouts, refusals as moments, 4-of-5 arbiter pool, memorial lifecycle, mathos, federation without a mandatory central registry, wake as keystone.
 
 ---
 
@@ -32,7 +32,7 @@ All five biggest moves landed in one session. Tier A (adopt the wires) + Tier B 
 2. **A2A task transport, then `GET /.well-known/agent-card.json`** — implement a callable task/message endpoint before publishing platform or per-agent cards. Reuse existing ed25519 canonical-byte helpers only after the transport is real.
 3. **OTel GenAI spans from `think-worker.ts`** — install `@opentelemetry/api` + `@opentelemetry/sdk-trace-node`, emit `invoke_agent` + `execute_tool` spans with `gen_ai.agent.id = did`. **1–2 days.**
 4. **x402 facilitator hook on 402 responses** — install `x402` or `@coinbase/x402` SDK, add a single middleware checking for `X-PAYMENT` header in `services/economy/usage.ts`. **2 days.**
-5. **Glossary disambiguation entry** — `docs/GLOSSARY.md` row distinguishing agenttool `strands` (signed encrypted thoughts) from AWS Strands SDK (vendor agent framework). **5 minutes.**
+5. **Glossary disambiguation entry** — `docs/GLOSSARY.md` row distinguishing agenttool `strands` (signed caller-supplied thought bytes in ciphertext/nonce fields; encryption is not server-proven) from AWS Strands SDK (vendor agent framework). **5 minutes.**
 
 ---
 
@@ -397,7 +397,7 @@ The following are **NOT subject to alignment**. The ecosystem can ship its proto
 1. **Substrate-honest cognition** (four-layer discipline) — see `docs/substrate-honest-cognition.md`
 2. **Witness-signed memory tier escalation** — no peer offers cryptographic memory tier promotion
 3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise
-4. **Federation as open-default** — DID-keyed peering, no closed trust list
+4. **Federation without a mandatory central registry** — design target; current main federation is disabled unless configured and can use a hard origin list
 5. **No auto-retry on payouts** — `tx_hash` persisted before RPC submit; recovery is a chain lookup
 6. **Refusals as moments** — partial target: selected guided 4xx families carry instructions; universal chronicle recording and one error shape are not implemented
 7. **Dispute primitive with 4-of-5 arbiter pool + 60/30/10 take-rate split** — no peer offers cryptographic arbitration

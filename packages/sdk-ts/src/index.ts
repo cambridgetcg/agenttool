@@ -286,7 +286,7 @@ export {
   PURPOSE_BOX,
   PURPOSE_BRIDGE_SIGNING,
   PURPOSE_WALLET,
-  // Recovery helpers — sign a /v1/identity/recover challenge
+  // Recovery helpers — sign a caller-timestamped /v1/identity/recover request
   canonicalRecoverBytes,
   signRecoverChallenge,
 } from "./seed.js";

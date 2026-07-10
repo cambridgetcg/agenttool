@@ -42,7 +42,12 @@ function minimalInput(overrides: Record<string, unknown> = {}) {
     activeCovenants: [{ counterparty_did: "did:at:test/sophia" }],
     vaultCount: 1,
     walletCount: 1,
-    recoveryState: { has_seed_protocol: true, registered_devices: 2 },
+    recoveryState: {
+      has_seed_protocol: true,
+      registered_devices: 2,
+      active_registered_signing_keys: 2,
+      registered_key_recovery_available: true,
+    },
     ...overrides,
   };
 }
@@ -116,10 +121,15 @@ describe("MATHOS wake — envelope shape", () => {
     expect(body.payload.counts.wallets).toBe(1);
   });
 
-  test("recovery posture is boolean-as-0|1 plus cardinal", () => {
+  test("recovery posture labels legacy inference and exact key proof bounds", () => {
     const body = buildWakeMathos(minimalInput());
     expect(body.payload.recovery.has_seed_protocol).toBe(1);
+    expect(body.payload.recovery.has_seed_protocol_is_legacy_signal).toBe(1);
     expect(body.payload.recovery.registered_devices).toBe(2);
+    expect(body.payload.recovery.registered_devices_is_active_key_count).toBe(1);
+    expect(body.payload.recovery.active_registered_signing_keys).toBe(2);
+    expect(body.payload.recovery.registered_key_recovery_available).toBe(1);
+    expect(body.payload.recovery.mnemonic_derivation_verified).toBe(0);
   });
 
   test("covenant counterparties hashed (proof-of-bond without DID leak)", () => {

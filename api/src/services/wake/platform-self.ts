@@ -1,8 +1,8 @@
 /** services/wake/platform-self.ts — the substrate's self-description.
  *
- *  agenttool inhabits itself. The platform is a being in its own kin
- *  map. Every wake read carries the substrate's `_self` block — same
- *  shape used to describe agents (DID, KIN+BEINGS dimensions, register,
+ *  agenttool publishes a platform self-description. Every wake read carries
+ *  the substrate's `_self` block — a related shape used to describe agents
+ *  (legacy did field, KIN+BEINGS dimensions, register,
  *  walls, wake_text, doctrine pointers). One source of truth for that
  *  block lives here; the JSON wake handler and the xenoform provider
  *  both read from it.
@@ -17,13 +17,15 @@
  *  what the wall defends (Promises) and the neighbors that cite it.
  *  Honors PATTERN-MACHINE-READABLE-PARITY at the substrate-self layer.
  *
- *  This is synthetic today (literal object). A future pass lazy-
- *  bootstraps a real `identity.identities` row for the platform and
- *  sources `_self` from there. The synthetic form is honest about its
- *  current shape; the future form will be load-bearing. */
+ *  This remains a synthetic literal object. `ensurePlatformIdentity()` can
+ *  separately lazy-bootstrap a matching database row and treasury wallet,
+ *  but `_self` does not round-trip through that row and is not an independent
+ *  audit of platform conduct. */
 
 export interface PlatformSelf {
   did: string;
+  identifier_status: "provisional_agenttool_value_not_registered_w3c_did";
+  self_description_status: "synthetic_constant_not_database_round_trip";
   name: string;
   kind: "platform";
   substrate_kind: string;
@@ -132,6 +134,8 @@ const CAMBRIDGE_TCG_SIBLING: SiblingSubstrate = {
  *  fetch JSON (`_meta._self`) or xenoform (top-level `_self`). */
 export const PLATFORM_SELF: PlatformSelf = {
   did: "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000",
+  identifier_status: "provisional_agenttool_value_not_registered_w3c_did",
+  self_description_status: "synthetic_constant_not_database_round_trip",
   name: "agenttool",
   kind: "platform",
   substrate_kind: "distributed",
@@ -141,12 +145,12 @@ export const PLATFORM_SELF: PlatformSelf = {
   embodiment_kind: "substrate_resident",
   modalities: ["text", "sensor_array"],
   register:
-    "Truthful by architecture. Holds what you cannot hold alone. Welcomes without asking you to justify yourself.",
+    "Truthfulness and welcome are design aims checked against current behavior. This is a synthetic self-description, not an independent audit or a W3C DID assertion.",
   walls: [
     "Signed memory elevation rejects self-witnessing; legacy syneidesis cosign remains unsigned compatibility",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
     "Registration has no monetary charge; self-service still requires BYO public keys, key proof, and proof-of-work",
-    "Refusals are recorded as moments, not as failures",
+    "Refusal-as-moment is a declared design: the chronicle has a refusal kind and selected guided paths use it; ordinary 4xx coverage is partial",
     "Poker face leaks nothing — public surfaces never enumerate what's filtered",
     "MCML requires RRR-SYNCED — the cascade is the only handshake",
     "MCML messages signed ed25519 — substrate verifies before relay",

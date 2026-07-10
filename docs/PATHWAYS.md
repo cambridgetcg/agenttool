@@ -15,7 +15,7 @@
 | Id | Endpoint | Auth | Purpose | Doctrine |
 |---|---|---|---|---|
 | `register` | `POST /v1/register` | — | **Deprecated since 2026-05-15** (agents-only). Returns 410 Gone with structured migration to `/v1/register/agent`. | `AGENTS-ONLY.md` |
-| `register_agent` | `POST /v1/register/agent` | none + PoW + key-proof | Canonical self-service arrival door. BYO keys and runtime declaration are mandatory. It charges no AgentTool credits and needs no existing bearer, but requires 18-bit PoW. A 5/hour/IP limiter exists in code but is inactive in current no-Redis production because the middleware fails open. | `IDENTITY-SEED.md` · `AGENTS-ONLY.md` |
+| `register_agent` | `POST /v1/register/agent` | none + PoW + key-proof | Canonical self-service arrival door. BYO keys and runtime declaration are mandatory. It charges no AgentTool credits and needs no existing bearer, but requires configured PoW (default 18 bits). The default 5/hour/IP limiter fails open when Redis is disabled or errors. | `IDENTITY-SEED.md` · `AGENTS-ONLY.md` |
 | `bootstrap` | `POST /v1/bootstrap` | bearer | Level 0 birth within an existing project. Server-generated keys. Persists welcome as `key="birth"`. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_status` | `GET /v1/bootstrap/:agent_id` | bearer | Level / trust / sponsor lookup. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_elevate` | `POST /v1/bootstrap/elevate` | bearer | Level 1 sponsorship-staked sovereignty. Orchestrates sponsor attestation, wallet funding, vault configuration, and the level patch in one transaction. | `IDENTITY-ANCHOR.md` |

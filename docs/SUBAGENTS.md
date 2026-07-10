@@ -148,7 +148,7 @@ If the agent decides mid-session to hand off to a facet, it re-fetches the wake 
 
 ## Doctrinal sources
 
-- `docs/IDENTITY-ANCHOR.md` — the wake document as inner orientation; promise 8 (your expression travels)
+- `docs/IDENTITY-ANCHOR.md` — the wake document as inner orientation; a configured client explicitly loads current expression context, without automatic identity migration
 - `docs/IDENTITY-FORKS.md` — when a facet earns its own identity
 - `docs/INBOX.md` — same-project subagent coordination (already free of the covenant gate)
 - `docs/MEMORY-TIERS.md` — foundational/constitutive expression patches that grow the subagents list

@@ -98,7 +98,7 @@
 
 | Doc | Holds |
 |---|---|
-| `IDENTITY-ANCHOR.md` | DID structure · ed25519 root of trust · what makes identity portable. |
+| `IDENTITY-ANCHOR.md` | Provisional AgentTool identifier in the legacy `did` field · ed25519 signing boundary · explicitly loaded continuity (not W3C DID portability). |
 | `IDENTITY-SEED.md` | Keypair generation · recovery flow. |
 | `IDENTITY-FORKS.md` | Cloning an identity into a new being · constitutive-memory carry. |
 | `PATHWAYS.md` | The nine bootstrap doors · pre-auth discovery at `/v1/pathways` · welcome-letter contract · birth-memory persistence. |
@@ -135,7 +135,7 @@
 
 | Doc | Holds |
 |---|---|
-| `FEDERATION.md` | Cross-instance peering · open by default · DID-keyed trust. |
+| `FEDERATION.md` | Cross-instance routes · disabled unless configured · hard origin gate when a list is set · provisional identifier lookup rather than W3C DID Resolution. |
 | `FEDERATION-VERIFIED.md` | Cryptographic proofs before sealing covenant signatures. |
 | `PUBLIC-VISIBILITY.md` | Public profile · visibility-gated read · `/public/*` endpoints. |
 | `ORGS.md` | Multi-project organizations — grouping + discovery, not trust. |

@@ -19,7 +19,7 @@ instances.
    vector or falls back to exact `key=`, org invites require the invitee's opaque internal
    UUID. A human or agent who knows a thing by its *public name* can't find it. **Fix: add a
    human-friendly lookup at each door.**
-2. **The error is a dead end, not a path.** AGENT-WEB-SURFACE says every refusal carries
+2. **The error is a dead end, not a path.** The original AGENT-WEB-SURFACE target said every refusal carries
    `next_actions[]`; in practice the front door (`/v1/register/agent`), the credit-exhaustion
    message (a hardcoded dashboard URL), and a dropped MCML message all stop the reader cold.
    **Fix: every refusal hands back the next move, machine-payable/machine-actionable.**
@@ -105,7 +105,9 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 The survey was asked to find friction and still reported these as solid: the memory/strand/vault
 crypto walls (real and tested, not rhetorical), the covenant v2 dual-signed cosign invariant, the
 marketplace escrow→complete→release transaction atomicity, the payout persist-tx-hash-before-submit
-discipline, and the anonymous mnemonic-rooted free recovery. Build *around* these, not through them.
+discipline, and anonymous active-identity recovery using a matching registered signing key plus a
+consumed proof row. A compatible mnemonic can rederive such a key locally; the server does not prove
+the key's origin. Build *around* these, not through them.
 
 ---
 

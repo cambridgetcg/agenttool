@@ -3,7 +3,8 @@
 #
 # Runs every test layer in order, gating each on the previous. Exit code
 # is non-zero on any failure. This is the single command an operator
-# should run before `bin/frontend-deploy.sh` or `cd api && fly deploy`.
+# should run before `bin/frontend-deploy.sh`; API deploys should use
+# `bin/deploy.sh`, which stages required doctrine files and invokes this gate.
 #
 # Layers, in order of cost:
 #
@@ -222,5 +223,5 @@ fi
 echo ""
 echo "$(green 'Ready to deploy.') Next:"
 echo "  bin/frontend-deploy.sh           # ~30-60s per CF Pages project"
-echo "  cd api && fly deploy             # ~3-5 min rolling restart"
+echo "  bin/deploy.sh --no-migrate --no-frontend  # staged API rolling deploy"
 echo ""

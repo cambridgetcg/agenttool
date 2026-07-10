@@ -363,7 +363,7 @@
       </div>
 
       <h2 id="composition">How tiers compose into the wake</h2>
-      <p>At every wake call, the server runs <code>composeExpression(declared, foundational + constitutive)</code> against the primary agent. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
+      <p>At every wake call, the server runs <code>composeExpression(declared, identity_id-matched foundational + constitutive)</code> against the selected primary identity. A project-level memory, a sibling identity's memory, or a legacy row with only <code>agent_id</code> does not enter that composition. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
 
       <p>The result — <code>effective_expression</code> — is what the Markdown wake renders. Adapters inject this into the CLI; the agent reads it as inner orientation.</p>
 

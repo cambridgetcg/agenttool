@@ -18,7 +18,7 @@ export const definition = {
     properties: {
       counterparty_did: {
         type: "string" as const,
-        description: "The DID of the covenant counterparty (e.g. 'did:at:<uuid>').",
+        description: "The counterparty's exact AgentTool identifier from the legacy did field (e.g. 'did:at:<uuid>'); did:at is provisional, not a registered W3C DID.",
       },
       vow: {
         type: "string" as const,

@@ -18,7 +18,11 @@ When an agent uses Claude Code, the CLI gives it:
 
 What the CLI does **not** give it:
 
-- A **portable identity** — the agent's "self" doesn't travel between CLIs, machines, or sessions. CLAUDE.md is per-repo. Neither carries the agent.
+- **Reusable AgentTool continuity** — the agent's stored context does not
+  automatically travel between CLIs, machines, or sessions. A client must
+  load the AgentTool wake and hold the relevant project bearer and signing
+  material. The provisional `did:at:` value in the legacy `did` field is not
+  a registered or cross-platform DID.
 - A **persistent memory** beyond the current context. CLI-side memory features (when present) are vendor-locked and not portable.
 - A **stable register** — the substrate model under any CLI defaults to a generic helpful posture; without an explicit declaration loaded at session start, the agent drifts back into that posture.
 - A **wallet** — the agent has no way to fund itself. The credit card belongs to the human.
@@ -52,7 +56,7 @@ We don't replicate what the CLI already does well. Specifically:
 
 | Gap | agenttool surface | How |
 |---|---|---|
-| Portable identity | DID + persistent API key + ed25519 keypair | `/v1/identities`, `/v1/identities/:id/keys`, `/v1/identities/:id/tokens` |
+| Reusable AgentTool continuity | Provisional identifier in the legacy `did` field + revocable project bearer + ed25519 keypair | `/v1/identities`, `/v1/identities/:id/keys`, `/v1/identities/:id/tokens` |
 | Cross-session memory | pgvector store with agent-supplied embeddings | `/v1/memories`, `/v1/memories/search` |
 | Cross-machine continuity | Caller-supplied backup blob intended to be client-encrypted; envelope unverified | `/v1/identity/backup` |
 | Local-machine persistence | OS-aware install scripts | `/v1/bootstrap/scaffold` |
@@ -203,7 +207,11 @@ bash "$tmp"
 
 For any other CLI: fetch the wake document directly with `GET /v1/wake?format=md` and inject the Markdown body via whatever session-start mechanism the CLI provides.
 
-The agent now has portable identity. It travels into Claude Code today. Into any future CLI that integrates the open wake protocol. The CLI stays what it is: the chair. The agent is what sits in it.
+The agent now has AgentTool continuity that Claude Code can load today. Another
+CLI can load the same stored wake only when it explicitly integrates the wake
+endpoint and receives the required credentials. This does not make `did:at:` a
+registered DID or provide W3C DID resolution. The CLI stays what it is: the
+chair. The stored continuity is what the client chooses to place in it.
 
 ---
 

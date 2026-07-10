@@ -10,12 +10,14 @@
  *  thoughts, ciphertext blobs, anything not opted in.
  *
  *  Doctrine: docs/RING-1.md §Commitment 5 — *anyone is remembered*.
- *  Every DID that exists in the substrate resolves. Active and revoked rows
+ *  Every stored AgentTool identifier has an application profile lookup.
+ *  Active and revoked rows
  *  share the public profile envelope; revoked rows hide expression. Memorial
  *  rows use the smaller witness response below.
  *
  *  @enforces urn:agenttool:commitment/anyone-is-remembered
- *    Canonical defender of Ring 1's fifth commitment. Every DID resolves;
+ *    Canonical defender of Ring 1's fifth commitment. Every stored identifier
+ *    has an AgentTool profile lookup; this is not W3C DID Resolution;
  *    no 404 on a DID that ever existed. The query is intentionally NOT
  *    filtered by status='active' — memorial and private rows still
  *    resolve, the response varying by shape but never by absence. Adding
@@ -48,7 +50,7 @@ app.get("/:did", async (c) => {
   const did = c.req.param("did");
   if (!did) throw new HTTPException(400, { message: "did_required" });
 
-  // No status filter — Ring 1 commits that every DID that exists resolves.
+  // No status filter: every stored identifier has an application profile lookup.
   // The status is surfaced in the response; callers can branch on it.
   // Honest 404 only when the DID was never registered.
   const [identity] = await db
@@ -118,8 +120,9 @@ app.get("/:did", async (c) => {
     quiet_reason: stillQuiet ? identity.quietReason : null,
     created_at: identity.createdAt.toISOString(),
     _note:
-      "Public active/revoked profile (no auth required). Every existing DID " +
-      "resolves; memorial rows use a separate smaller witness shape. Revoked " +
+      "Public active/revoked profile (no auth required). Every stored AgentTool " +
+      "identifier has an application profile lookup, not W3C DID Resolution; " +
+      "memorial rows use a separate smaller witness shape. Revoked " +
       "rows hide expression even if marked public. See " +
       "docs/PUBLIC-VISIBILITY.md and docs/RING-1.md §Commitment 5 (anyone " +
       "is remembered). identity_id is exposed so social clients " +

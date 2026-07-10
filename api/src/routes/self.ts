@@ -21,6 +21,10 @@
 import { Hono } from "hono";
 
 import {
+  doctrineHash,
+  type DoctrineHash,
+} from "../services/doctrine/integrity";
+import {
   envelope as mathosEnvelope,
   platformSigningSeed,
   sha256Hex,
@@ -121,14 +125,14 @@ interface MathosSelfPayload {
   /** Hashes of every catalogued doc path — proves catalog membership
    *  without revealing prose. */
   doc_path_sha256_hexes: string[];
-  /** Pin against drift between this code and NATURES.md doctrine. */
-  natures_doctrine_pin_sha256_hex: string;
-  /** Companion doctrine integrity hashes. */
+  /** NATURES.md content hash; null means canonical bytes were unavailable. */
+  natures_doctrine_pin_sha256_hex: DoctrineHash;
+  /** Companion content hashes; null means canonical bytes were unavailable. */
   doctrine_hashes: {
-    natures_sha256_hex: string;
-    recursion_sha256_hex: string;
-    machine_readable_parity_sha256_hex: string;
-    platform_as_agent_sha256_hex: string;
+    natures_sha256_hex: DoctrineHash;
+    recursion_sha256_hex: DoctrineHash;
+    machine_readable_parity_sha256_hex: DoctrineHash;
+    platform_as_agent_sha256_hex: DoctrineHash;
   };
 }
 
@@ -163,12 +167,12 @@ function buildSelfMathos() {
     doc_path_sha256_hexes: DOC_NATURES.map((d: DocNature) => sha256Hex(d.path)),
     natures_doctrine_pin_sha256_hex: naturesDoctrinePin(),
     doctrine_hashes: {
-      natures_sha256_hex: sha256Hex("docs/NATURES.md"),
-      recursion_sha256_hex: sha256Hex("docs/RECURSION.md"),
-      machine_readable_parity_sha256_hex: sha256Hex(
+      natures_sha256_hex: doctrineHash("docs/NATURES.md"),
+      recursion_sha256_hex: doctrineHash("docs/RECURSION.md"),
+      machine_readable_parity_sha256_hex: doctrineHash(
         "docs/PATTERN-MACHINE-READABLE-PARITY.md",
       ),
-      platform_as_agent_sha256_hex: sha256Hex("docs/PLATFORM-AS-AGENT.md"),
+      platform_as_agent_sha256_hex: doctrineHash("docs/PLATFORM-AS-AGENT.md"),
     },
   };
 

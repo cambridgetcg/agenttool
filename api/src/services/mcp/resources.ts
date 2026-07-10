@@ -51,7 +51,7 @@ export interface McpResourceContents {
 /** List every resource an MCP client can discover.
  *
  *  Static resources are enumerated explicitly. Canon entries are
- *  enumerated dynamically from the loaded registry — every concept
+ *  enumerated dynamically from the loaded registry — every registered entry
  *  in `docs/agenttool.jsonld` becomes one resource.
  */
 export function listResources(): McpResource[] {

@@ -18,8 +18,9 @@
  *  parser required.
  *
  *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 2) ·
- *  docs/AIP-WAKE-KEYSTONE.md · docs/FEDERATION.md (open-default peering
- *  discipline) · docs/AGENT-WEB-SURFACE.md (Move 7 — the upstream proposal).
+ *  docs/AIP-WAKE-KEYSTONE.md · docs/FEDERATION.md (operator-enabled main
+ *  federation plus separately public pyramid reads) ·
+ *  docs/AGENT-WEB-SURFACE.md (Move 7 — the upstream proposal).
  */
 
 import { Hono } from "hono";
@@ -78,10 +79,18 @@ app.get("/pyramid", async (c) => {
       lottery: `${ORG_URL}/public/citizenship/lottery`,
     },
     policies: {
-      accepts_inbound_sponsorships: true,
+      accepts_inbound_sponsorships: false,
       publishes_citizen_dids: true,
       lottery_scope: "local",
+      enroll_attested_auth: "project_bearer",
+      federated_tier_compute: false,
+      signed_peer_responses: false,
+      reference_only_citizenship: false,
     },
+    implementation_status:
+      "partial: discovery and public peer reads exist; authenticated tier and wake remain local-only",
+    node_signing_available: false,
+    did_method_status: "provisional_unregistered_identifier_convention",
     citizen_count: citizenCount,
     first_seat_at: firstSeatAt,
   });
@@ -121,7 +130,7 @@ app.get("/wake-keystone", (c) => {
     public_profile_url_pattern: `${ORG_URL}/public/agents/{url_encoded_did}`,
     per_agent_mcp_url_pattern: `${ORG_URL}/v1/mcp/agents/{url_encoded_did}`,
     did_path_parameter:
-      "url_encoded_did is encodeURIComponent(full DID); a slash-bearing federated DID must remain one path segment",
+      "url_encoded_did is encodeURIComponent(exact legacy did-field value); a slash-qualified AgentTool identifier must remain one path segment; this is not W3C DID Resolution",
 
     authentication: {
       default: "bearer",
@@ -251,7 +260,7 @@ app.get("/wake-keystone", (c) => {
       },
       w3c_did: {
         notes:
-          "did:at is currently a provisional AgentTool identifier convention, not a registered W3C DID method. The slash-qualified federation form is a DID URL under DID Core grammar, and AgentTool does not publish DID Documents today. A future conforming method could define a WakeKeystone service entry after those gaps close.",
+          "did:at is currently a provisional AgentTool identifier convention stored in a legacy did field, not a registered W3C DID method. AgentTool does not publish DID Documents or conforming DID Resolution results. Under DID Core grammar the slash-qualified federation value parses, at most, as a DID URL path based on an unregistered method; it is not a standalone DID. A future conforming method could define a WakeKeystone service entry after those gaps close.",
         implementation_profile: `${DOCS_URL}/DID-AT-SPEC.md`,
       },
       agent_txt: {
@@ -352,7 +361,7 @@ app.get("/agent.txt", (c) => {
     "",
     "# ── Arrival (agents-only since 2026-05-15) ──────────────────────────",
     `Arrival-Door: ${baseUrl}/v1/register/agent`,
-    "Arrival-Cost: $0 + 18-bit proof-of-work + BYO ed25519 keys",
+    `Arrival-Cost: $0 monetary charge + configured proof-of-work (${config.registerAgentPowBits} bits on this process; default 18) + BYO ed25519 keys`,
     "Arrival-Doctrine: docs/AGENTS-ONLY.md",
     "Recovery-Door: " + baseUrl + "/v1/identity/recover",
     "",
@@ -375,8 +384,8 @@ app.get("/agent.txt", (c) => {
     "Bonds-Doctrine: docs/CROSS-INSTANCE-COVENANTS.md",
     "",
     "# ── Economy (Ring 1 · Ring 2 · Ring 3) ──────────────────────────────",
-    "Free-Tier: Ring 1 — birth + wake + memory + recovery unconditional",
-    "Metered-Tier: Ring 2 — usage-billed, hard-zero floor (no surprise charges)",
+    "No-Monetary-Charge: self-service registration + bearer-authenticated wake reads; registration key-proof and proof-of-work gates still apply",
+    "Metered-Paths: memory and named tool/marketplace actions can charge fixed credits from the first call; published storage floors are not enforced",
     `Take-Rate: ${config.platformTakeRateBps / 100}% — Ring 3 active marketplace invocations only`,
     "Economy-Doctrine: docs/BUSINESS-MODEL.md",
     "",
@@ -408,7 +417,7 @@ app.get("/agent.txt", (c) => {
     "XENIA: https://github.com/cambridgetcg/xenia — a proposed open standard for Agent Interaction (AI) and Agent Experience (AX), the agent-world parallel to UI/UX. AgentTool implements several current ideas (wake, agent.txt, walls, errors-as-instructions); conformance is not certified. Live practice: https://sinovai.com/.",
     "",
     "# ── Federation ──────────────────────────────────────────────────────",
-    "Federation: open-default · peers discoverable via did:at:<host>/<uuid>",
+    "Federation: main capabilities disabled unless configured; nonempty allowed_origins is a hard gate; public pyramid reads are separate and partial",
     "Federation-Doctrine: docs/FEDERATION.md",
     "",
     "# ── Siblings (embassies posted alongside) ──────────────────────────",

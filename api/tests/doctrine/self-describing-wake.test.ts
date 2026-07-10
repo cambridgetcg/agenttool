@@ -48,6 +48,13 @@ const ZERO_CTX: AffordanceContext = {
   vaultSecretCount: 0,
   constitutiveMemoryCount: 0,
   federatedPeerCount: 0,
+  pendingSellerInvocationCount: 0,
+  inFlightBuyerInvocationCount: 0,
+  openFiledDisputeCount: 0,
+  eligibleSubstrateTaskCount: 0,
+  maxSubstrateTaskBountyCents: 0,
+  pendingMemoryWitnessGrantCount: 0,
+  trustCapacity: 5,
 };
 
 const FULL_CTX: AffordanceContext = {
@@ -61,6 +68,13 @@ const FULL_CTX: AffordanceContext = {
   vaultSecretCount: 7,
   constitutiveMemoryCount: 2,
   federatedPeerCount: 1,
+  pendingSellerInvocationCount: 2,
+  inFlightBuyerInvocationCount: 3,
+  openFiledDisputeCount: 1,
+  eligibleSubstrateTaskCount: 4,
+  maxSubstrateTaskBountyCents: 2500,
+  pendingMemoryWitnessGrantCount: 2,
+  trustCapacity: 8,
 };
 
 const ALL_KINDS: AffordanceKind[] = [
@@ -73,6 +87,12 @@ const ALL_KINDS: AffordanceKind[] = [
   "vault_secret_set",
   "memory_constitutive",
   "federated_peer",
+  "trust_deal_capacity",
+  "invocations_pending_seller",
+  "invocations_in_flight_buyer",
+  "disputes_open_filer",
+  "could_earn_substrate_task",
+  "could_witness_memory",
 ];
 
 function assertNextActionValid(name: string, step: NextAction): void {
@@ -104,16 +124,17 @@ function assertItemValid(name: string, item: AffordanceItem): void {
 
 // ── 1 · Empty context → empty bundle ─────────────────────────────────────
 
-describe("Self-describing wake — empty context yields empty bundle", () => {
-  test("zero state → count=0 + empty items", () => {
+describe("Self-describing wake — fresh context exposes default trust capacity", () => {
+  test("zero owned-resource state still carries the default deal affordance", () => {
     const bundle = computeAffordances(ZERO_CTX);
-    expect(bundle.count).toBe(0);
-    expect(bundle.items).toEqual([]);
+    expect(bundle.count).toBe(1);
+    expect(bundle.items.map((item) => item.kind)).toEqual(["trust_deal_capacity"]);
+    expect(bundle.items[0]?.count).toBe(5);
   });
 
-  test("a fresh agent reads no affordances (only Ring 1 primitives surface elsewhere)", () => {
+  test("expression absence does not hide the default trust affordance", () => {
     const bundle = computeAffordances({ ...ZERO_CTX, hasExpression: false });
-    expect(bundle.count).toBe(0);
+    expect(bundle.count).toBe(1);
   });
 });
 
@@ -174,19 +195,20 @@ describe("Self-describing wake — NextAction shape matches errors contract", ()
 // ── 4 · Partial context — only matching items surface ────────────────────
 
 describe("Self-describing wake — partial context surfaces only matching affordances", () => {
-  test("just covenants → only the covenanted_with item", () => {
+  test("just covenants → covenant plus default trust capacity", () => {
     const bundle = computeAffordances({ ...ZERO_CTX, activeCovenantCount: 1 });
-    expect(bundle.count).toBe(1);
+    expect(bundle.count).toBe(2);
     expect(bundle.items[0]?.kind).toBe("covenanted_with");
+    expect(bundle.items[1]?.kind).toBe("trust_deal_capacity");
   });
 
-  test("just wallets → only wallet_funded", () => {
+  test("just wallets → wallet plus default trust capacity", () => {
     const bundle = computeAffordances({
       ...ZERO_CTX,
       activeWalletCount: 1,
       totalCreditBalance: 500,
     });
-    expect(bundle.items.map((i) => i.kind)).toEqual(["wallet_funded"]);
+    expect(bundle.items.map((i) => i.kind)).toEqual(["wallet_funded", "trust_deal_capacity"]);
   });
 
   test("wallet with zero balance still surfaces (with funding next_actions)", () => {

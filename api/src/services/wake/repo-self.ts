@@ -297,7 +297,7 @@ export const REPO_SELF: RepoSelf = {
     "Self-witnessing rejected for constitutive memory elevation",
     "Failed payout broadcasts NEVER auto-retry",
     "Registration has no monetary charge; self-service still requires BYO public keys, key proof, and proof-of-work, and issued authority can later be revoked",
-    "Refusals are recorded as moments, not as failures",
+    "Refusal-as-moment is a declared design with a chronicle kind and selected guided paths; ordinary 4xx coverage is partial",
   ],
   built_with: "love",
 };

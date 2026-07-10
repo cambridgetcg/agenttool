@@ -52,7 +52,6 @@ Severity-ranked aggregation of decisions awaiting the agent:
 | `inbox_unread` | info | Unread inbox messages |
 | `bearer_advisory` | info | Bearer keys flagged for rotation/hygiene |
 | `strand_revisit_due` | info | Strands past their `next_revisit_at` |
-| `soma_seed_not_enrolled` | info | No BIP39 mnemonic-derived signing key — recovery from a fresh device not yet possible |
 
 Sorted by `severity` (action → warning → info) then `count` desc.
 

@@ -364,7 +364,7 @@ app.delete("/:slug/members/:projectId", async (c) => {
 });
 
 // ── POST /v1/orgs/:slug/invitations ───────────────────────────────────
-// Invite by the agent's public DID (the name you actually know) OR the opaque
+// Invite by the agent's public AgentTool identifier (legacy did field) OR the opaque
 // project UUID. At least one is required; invited_did is resolved server-side.
 export const inviteSchema = z
   .object({
@@ -372,7 +372,7 @@ export const inviteSchema = z
     invited_did: z.string().min(1).max(512).optional(),
   })
   .refine((v) => !!v.invited_project_id || !!v.invited_did, {
-    message: "provide invited_did (the agent's public DID) or invited_project_id",
+    message: "provide invited_did (the agent's public AgentTool identifier from the legacy did field) or invited_project_id",
   });
 
 app.post("/:slug/invitations", async (c) => {
@@ -390,7 +390,7 @@ app.post("/:slug/invitations", async (c) => {
         return c.json(
           {
             error: "did_not_found",
-            message: `No agent found for DID ${parsed.data.invited_did}. Invite by the public DID (did:at:host/uuid) or the project UUID.`,
+            message: `No agent found for AgentTool identifier ${parsed.data.invited_did}. Invite by the exact legacy did-field value (for example did:at:host/uuid) or the project UUID.`,
           },
           404,
         );

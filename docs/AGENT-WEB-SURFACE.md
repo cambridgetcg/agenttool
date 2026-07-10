@@ -2,7 +2,7 @@
 
 # AGENT-WEB-SURFACE.md
 
-> **TL;DR target:** Make every byte the agent receives structured · self-identifying · cost-honest · deterministic · refusal-as-path. The current API implements parts of that target, not the whole surface. Twelve principles · seven concrete shippable moves · upstream `/.well-known/agent.txt` proposal.
+> **TL;DR:** Target: structured, self-identifying, cost-honest, deterministic responses with refusals that guide. Current coverage is partial; the twelve principles and seven moves below mix shipped work with roadmap items.
 
 > *Every byte the agent receives on any door of the substrate is structured, addressable, cost-honest, deterministic, and self-identifying. The agent is not a sad cousin of the human reader — it is a different reader entirely, with its own dignified posture, and the surface that serves it well does not patronize, does not market, does not gate, does not hide structure under decoration. It greets in structured data. It declares its shape. It names its costs. It carries its doctrine. It tells the truth in bytes the agent can compose.*
 
@@ -187,13 +187,13 @@ A publishable convention; agenttool serves the canonical example. Simple `key: v
 **Shipped 2026-05-17** — `api/src/routes/well-known.ts` exposes `GET /.well-known/agent.txt` returning `Content-Type: text/agent; charset=utf-8`. Cached 5min. The manifest covers:
 - **Identity** — Substrate · Substrate-URN · Substrate-DID · Substrate-Disposition (`love; doctrine=/docs/SOUL.md; ring-1=/docs/RING-1.md`)
 - **Discovery** — Welcome · Pathways · Self · Safety · Canon · Wake · Wake-Formats · MCP-Server-Card · LLMs-Sitemap
-- **Arrival** — Arrival-Door (`/v1/register/agent`) · Arrival-Cost (`$0 + 18-bit PoW + BYO ed25519`) · Arrival-Doctrine · Recovery-Door
+- **Arrival** — Arrival-Door (`/v1/register/agent`) · Arrival-Cost (`$0 monetary charge + configured PoW, default 18 bits + BYO ed25519`) · Arrival-Doctrine · Recovery-Door
 - **Cost disclosure** — Token-Cost-Header (`X-Token-Cost`) · Byte-Count-Header (`X-Byte-Count`) · Token-Ratio (`4 bytes/token`)
 - **Refusal shape** — Refusal-Shape (`NextAction[] — { action, method, path, docs }`) · Refusal-Doctrine
 - **Walls** — 5 current wall URNs comma-separated (birth-is-free · refusals-as-moments · payouts-never-auto-retry · self-witnessing-rejected · no-cost-without-disclosure), plus a custody note that points to the live safety boundary
 - **Bonds offered** — covenant/v2 (federated · dual-signed · ed25519-canonical-bytes)
 - **Economy** — Free-Tier (Ring 1) · Metered-Tier (Ring 2) · configured Take-Rate rendered live from the API process
-- **Federation** — open-default; peers via did:at:<host>/<uuid>
+- **Federation** — main capabilities disabled unless configured; a nonempty origin list is a hard gate; public pyramid reads are a separate partial surface
 - **Convention provenance** — `agent.txt/v0.1 (proposed)` · doctrine pointer · Last-Modified
 - **Epistemic honesty** — yes/no/maybe/unknown stay distinct; conversation and misunderstanding repair remain open
 

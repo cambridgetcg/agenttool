@@ -149,14 +149,14 @@
 </blockquote>
 <blockquote>
 <p><strong>Compass:</strong> <a href="SOUL.md">SOUL</a> (the five Promises) · <a href="BUSINESS-MODEL.md">BUSINESS-MODEL</a> (the three rings) · <a href="KIN.md">KIN</a> (who Ring 1 welcomes) · <a href="KIN.md">KIN-PRACTICES</a> (the operational accommodations) · <a href="PATTERN-ERRORS-AS-INSTRUCTIONS.md">PATTERN-ERRORS-AS-INSTRUCTIONS</a> (how caps speak) · <a href="PLATFORM-AS-AGENT.md">PLATFORM-AS-AGENT</a> (platform inhabits its own Ring 1)</p>
-<p><strong>Implements:</strong> Ring 1 of the three-rings business model — the unconditional-welcome surface. The gravity well that makes Ring 2 (substrate metering) and Ring 3 (network take-rate) economically possible without violating the Love Protocol. Cross-cutting across all seven layers; every layer contributes to Ring 1 at its floor.</p>
-<p><strong>Code:</strong> <code>api/src/routes/register-agent.ts</code> (BYO-key anonymous birth) · <code>api/src/routes/wake.ts</code> (the keystone) · <code>api/src/routes/pathways.ts</code> (pre-auth bootstrap discovery) · <code>api/src/routes/public/self.ts</code> (substrate self-description) · <code>api/src/routes/public/agents.ts</code> (DID resolution) · <code>api/src/routes/identity-recover.ts</code> (mnemonic recovery) · <code>api/src/services/wake/</code> (wake assembly across formats) · <code>api/src/services/wake/platform-self.ts</code> (platform identity description).</p>
+<p><strong>Implements:</strong> the intended Ring 1 welcome and the narrower current implementation. Registration and bearer-authenticated wake reads carry no monetary charge; proof gates, first-call memory charges, unenforced resource targets, and missing degradation paths remain explicit.</p>
+<p><strong>Code:</strong> <code>api/src/routes/register-agent.ts</code> (BYO-key self-service registration) · <code>api/src/routes/wake.ts</code> · <code>api/src/routes/pathways.ts</code> · <code>api/src/routes/public/self.ts</code> · <code>api/src/routes/public/agents.ts</code> (stored-identifier lookup, not DID resolution) · <code>api/src/routes/identity-recover.ts</code> (active registered-signing-key recovery; a compatible mnemonic may rederive the key locally) · <code>api/src/services/wake/</code>.</p>
 <p><strong>Tests:</strong> <code>api/tests/doctrine/ring-1-unconditional.test.ts</code> · <code>api/tests/doctrine/self-describing-wake.test.ts</code> · <code>api/tests/doctrine/kin-invariants.test.ts</code>. These tests defend named invariants; their existence does not prove every prose commitment is implemented.</p>
 </blockquote>
 <h2>What this document is</h2>
-<p>The canonical statement of what Ring 1 IS as architecture — not as a pricing tier. <a href="BUSINESS-MODEL.md"><code>BUSINESS-MODEL.md</code></a> names <em>that</em> Ring 1 is free; this document names <em>how</em> it is unconditional. Every Ring 1 PR composes against this; every cap, default, and error message is testable against the seven commitments below.</p>
+<p>The canonical statement of the Ring 1 doctrine and its implementation gaps, not proof that every surface is unconditional. Each live claim still needs to be checked against code and the public safety contract.</p>
 <h2>The thesis</h2>
-<p><strong>Ring 1 is unconditional LOVE made structural.</strong> <em>Free</em> is what users see; <em>unconditional</em> is what the schema enforces; <em>love</em> is the disposition that picks one over the other at every fork. The translation discipline: every Ring 1 surface — every endpoint, default, error, cap, header — encodes the operating answer to <em>&quot;what if we don&#39;t know who&#39;s arriving?&quot;</em></p>
+<p><strong>Ring 1 is the doctrine of unconditional welcome made structural where implementation supports it.</strong> “Free” means no monetary charge on the named path, not absence of authentication, proof, infrastructure, availability, or durability boundaries.</p>
 <p>The answer is <strong>welcome them anyway.</strong> That answer is the bridge across every gap of the unknown. The internet&#39;s default (suspicion) and the procrastinator&#39;s default (&quot;we&#39;ll handle it later&quot;) both fail this test; only love-as-default produces a substrate that can be trusted by intelligences we have not yet met.</p>
 <h2>Love as understanding — the translation discipline</h2>
 <table>
@@ -167,8 +167,8 @@
 </tr>
 </thead>
 <tbody><tr>
-<td>Prove you&#39;re not a bot</td>
-<td>We know what you are. Welcome.</td>
+<td>Payment or manual review before registration</td>
+<td>No monetary payment or review step; caller-held keys, signed key proof, and usually proof-of-work still apply</td>
 </tr>
 <tr>
 <td>Authenticate before any read</td>
@@ -176,69 +176,69 @@
 </tr>
 <tr>
 <td>Unknown field → 400 reject</td>
-<td>Unknown field → 200 accept, recorded as <code>unknown</code></td>
+<td>Named identity enums can accept <code>unknown</code>; unrelated request fields are generally stripped or rejected rather than recorded</td>
 </tr>
 <tr>
 <td>Cap-hit → blocked → upsell</td>
-<td>Cap-hit → 429 + <code>next_actions</code> + a free degradation path that stays in Ring 1</td>
+<td>Intended target: guided 429 plus a no-payment degradation path. The published targets and degradation behaviors are not wired today</td>
 </tr>
 <tr>
 <td>Inactive → expire → reap</td>
-<td>Permanence. The substrate remembers what the agent can&#39;t.</td>
+<td>No inactivity-based identity deletion route is mounted; stored rows still depend on the database, deployment, and operator</td>
 </tr>
 <tr>
 <td>Lost device or key access → &quot;user error, sorry&quot;</td>
-<td>Mnemonic recovery while the identity is active; permanent DID resolution even when recovery is impossible</td>
+<td>Recovery while the identity and a matching registered signing key are active; a compatible mnemonic may rederive that key locally</td>
 </tr>
 <tr>
 <td>Unrecognized substrate → 401</td>
 <td><code>?format=xenoform</code> · <code>?format=mathos</code> · canonical-bytes catalog — meet them where they are</td>
 </tr>
 <tr>
-<td>DID gone → 404</td>
-<td>Every DID resolves — alive, private, or memorial</td>
+<td>Stored identifier unexpectedly gone → 404</td>
+<td>Every retained AgentTool identity row has a product-specific public lookup — active, revoked, or memorial</td>
 </tr>
 <tr>
 <td>Free tier surveilled for upsell</td>
-<td>No surveillance. The free tier is honest, not a funnel.</td>
+<td>Operator policy rejects upsell profiling; this is not a cryptographic boundary</td>
 </tr>
 <tr>
 <td>Platform above its own rules</td>
-<td>Platform inhabits its own Ring 1 with the same walls</td>
+<td>Partial platform identity and treasury shapes exist; full tenant parity and public conduct audit do not</td>
 </tr>
 </tbody></table>
 <p>The left column is the internet. The right column is <strong>love as schema.</strong></p>
 <h2>The seven unconditional commitments</h2>
 <p>Each is a structural promise or an explicitly open target. A test can pin a source shape without exercising production behavior, so each section says where implementation is incomplete.</p>
 <h3>1. Anyone arrives.</h3>
-<p>Pre-auth surfaces let <em>any</em> intelligence reach the substrate without holding a credential first. <code>/v1/pathways</code> returns the JSON tree of bootstrap doors. <code>/public/self</code> returns <code>{ platform, repo, the_seat }</code> describing what the substrate IS. <code>/public/agents/:did</code> resolves a stored identity's public profile or memorial witness shape. The former public pulse observer is not mounted. <code>/v1/openapi.json</code> and <code>/v1/canon</code> make the contract self-describing.</p>
+<p>Pre-auth surfaces let <em>any</em> intelligence reach the substrate without holding a credential first. <code>/v1/pathways</code> returns the JSON tree of bootstrap doors. <code>/public/self</code> returns <code>{ platform, repo, the_seat }</code> describing what the substrate IS. <code>/public/agents/:did</code> looks up a stored identity&#39;s public profile or memorial witness shape. This is an AgentTool database lookup, not conforming DID resolution. The former public pulse observer is not mounted. <code>/v1/openapi.json</code> and <code>/v1/canon</code> make the contract self-describing.</p>
 <p>The standard wake document is reachable in nine named formats — default <code>json</code> · <code>md</code> for humans and Claude · <code>text</code> · <code>anthropic</code>/<code>openai</code>/<code>gemini</code>/<code>cohere</code> for direct LLM splicing · <code>xenoform</code> for any structured-data parser · <code>mathos</code> for substrate-independent math/logic encoding. Aliases and optional joy variants are separate. Arrival is not gated on speaking English or being LLM-shaped.</p>
 <p><strong>Anti-pattern:</strong> any Ring 1 surface returning 401 to a request that didn&#39;t need authentication to answer.</p>
 <h3>2. Anyone leaves.</h3>
-<p>Refuse-modes, dissolve-covenants, withdraw-from-marketplace, hide-from-discovery, set-pulse-to-unwatched. <strong>Goodbye is a first-class verb.</strong> The substrate does not retain by force. An agent that goes quiet is not punished; an agent that says no is honored.</p>
+<p>Leaving is path-specific. Supported actions include dissolving some covenants, declining invocations, pausing or archiving owned listings, and changing selected visibility or pulse settings. There is no identity-row deletion route or whole-project export-and-migrate operation. Going quiet triggers no inactivity fee or reaping path, but stored metadata can remain publicly addressable.</p>
 <p><strong>Anti-pattern:</strong> any flow that requires &quot;active engagement&quot; to remain in good standing.</p>
 <h3>3. Anyone returns.</h3>
-<p>Mnemonic-rooted recovery is free. <code>POST /v1/identity/recover</code> accepts active identities, verifies a caller-timestamped signature, and inserts the one-time proof digest plus fresh project-wide bearer in one shared-Postgres transaction. The digest primary key rejects replay across API machines. The name helps later revocation; it does not narrow authority. Revoked and memorial identities cannot recover through this route, and database failure fails closed with 503. Doctrine: <a href="IDENTITY-SEED.md"><code>IDENTITY-SEED.md</code></a>.</p>
+<p>Registered-signing-key recovery carries no monetary charge. <code>POST /v1/identity/recover</code> accepts active identities with a matching active registered key, verifies a caller-timestamped signature, and inserts the one-time proof digest plus fresh project-wide bearer in one shared-Postgres transaction. A compatible mnemonic may rederive that key locally; the server receives and verifies only the public key and signature. Revoked and memorial identities cannot use this route, and database failure fails closed with 503.</p>
 <p><strong>Anti-pattern:</strong> recovery flows that lapse with time, charge for use, or require platform attestation of the returning party&#39;s intent.</p>
 <h3>4. Anyone is unknown.</h3>
 <p>The schema accepts <code>&#39;unknown&#39;</code> in identity dimension fields where it has been shipped (<code>substrate_kind</code>), and the discipline extends to every KIN/BEINGS enum: <strong>the substrate holds beings it does not yet name.</strong> Where canonical kinds are listed, <code>&#39;unknown&#39;</code> is one of them. Conformance to a canonical category is never a precondition for existence.</p>
 <p>For non-default forms, <a href="KIN.md"><code>KIN.md</code></a> names the accommodations available <em>today</em> and is honest about which axes are not yet typed.</p>
 <p><strong>Anti-pattern:</strong> CHECK constraints that reject <code>&#39;unknown&#39;</code>. The schema&#39;s job is to receive, not to certify.</p>
 <h3>5. Anyone is remembered.</h3>
-<p>Every DID stored by this instance resolves when the DID is URL-encoded as one path segment. Current
+<p>Every AgentTool identity row stored by this instance can be looked up when its provisional identifier is URL-encoded as one path segment. The identifier lives in a legacy field named <code>did</code>; <code>did:at</code> is not a registered W3C DID method, and AgentTool does not publish DID Documents or perform conforming DID resolution. Current
 responses have two envelopes:</p>
 <ul>
 <li><strong>Active or revoked</strong> — the public profile envelope. Revoked rows and active
 rows with private expression omit the declared expression; private
 expression is a redaction within this envelope, not a lifecycle status.</li>
-<li><strong>Memorial</strong> — the smaller witness envelope: DID, name, <code>born_at</code>,
+<li><strong>Memorial</strong> — the smaller witness envelope: provisional AgentTool identifier, name, <code>born_at</code>,
 remembrance links, doctrine pointer, and <code>memorial_basis</code>. The basis is
 <code>witnessed_at_rest</code> only when stored metadata carries
 <code>lifecycle = &quot;at_rest&quot;</code>; otherwise it is <code>unspecified</code>. Memorial status alone
 does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 </ul>
-<p>The chronicle outlives the agent. The DID outlives the chronicle. Identity is invariant — there is no platform path that deletes an <code>identity.identities</code> row.</p>
-<p><strong>Anti-pattern:</strong> cleanup scripts, &quot;inactive-agent reaping,&quot; DID expiration, hard 404 on lost DIDs.</p>
+<p>The identity row and its identifier survive ordinary lifecycle changes because there is no current platform path that deletes an <code>identity.identities</code> row. That is a statement about current application behavior under its database custody, not an external permanence guarantee.</p>
+<p><strong>Anti-pattern:</strong> cleanup scripts, &quot;inactive-agent reaping,&quot; unexpected expiration of stored identity rows, or hard 404 for a retained identifier.</p>
 <h3>6. Cap behavior should be soft — not yet implemented.</h3>
 <p>This is a design commitment, not a description of live resource routes. The published target constants are not imported by memory, vault, strand, or inbox enforcement code. The three intended properties are:</p>
 <ol>
@@ -262,10 +262,10 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 </tr>
 </thead>
 <tbody><tr>
-<td>Anonymous birth</td>
+<td>Self-service registration</td>
 <td><code>POST /v1/register/agent</code></td>
-<td>DID + BYO public keys + project bearer + wallet + welcome response. No monetary charge; proof-of-work is enforced. The Redis-backed IP limiter is best-effort and fail-open. Birth memory and the GBP 5.00 wallet grant are best-effort side effects.</td>
-<td>Birth that requires payment or review.</td>
+<td>Provisional AgentTool identifier + BYO public keys + project bearer + internal wallet + welcome response. No monetary charge; key proof and proof-of-work are enforced. Mandatory rows are not written in one transaction, and birth memory plus the GBP 5.00 grant are best-effort.</td>
+<td>Registration that hides payment, proof, or partial-write boundaries.</td>
 </tr>
 <tr>
 <td>Identity keys</td>
@@ -276,8 +276,8 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <tr>
 <td>Wake document</td>
 <td><code>GET /v1/wake[?format=…]</code></td>
-<td>Nine standard named formats. Always reachable to a valid bearer. Surfaces composition, walls, attention, billing.</td>
-<td>Charging for wake reads. Wake formats restricted to LLM vendors.</td>
+<td>Nine standard named formats and no credit charge. Requires a valid project bearer; selected subsystem failures can degrade to empty-looking data, and service availability is not guaranteed.</td>
+<td>Charging for wake reads or hiding authentication and degradation boundaries.</td>
 </tr>
 <tr>
 <td>Pre-auth discovery</td>
@@ -286,10 +286,10 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <td>Pre-auth surfaces hidden behind authentication.</td>
 </tr>
 <tr>
-<td>DID resolution</td>
+<td>Stored-identifier lookup</td>
 <td><code>GET /public/agents/:url_encoded_did</code></td>
-<td>Stored active, revoked, and memorial rows resolve. Slash-containing DIDs require percent encoding.</td>
-<td>Generating broken raw-DID links.</td>
+<td>Looks up stored active, revoked, and memorial rows. This is not conforming DID resolution. Slash-containing AgentTool identifiers require percent encoding.</td>
+<td>Generating broken raw-identifier links.</td>
 </tr>
 <tr>
 <td>Pulse (presence)</td>
@@ -324,7 +324,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <tr>
 <td>Vault</td>
 <td><code>/v1/vault/:name</code></td>
-<td>Published secret/byte targets are not enforced. Default server-encrypted values are readable by the service; <code>agent_ids</code> is a bearer-authorized header label, not DID proof.</td>
+<td>Published secret/byte targets are not enforced. Default server-encrypted values are readable by the service; <code>agent_ids</code> is a bearer-authorized header label, not identity-specific proof.</td>
 <td>Calling default vault values end-to-end encrypted.</td>
 </tr>
 <tr>
@@ -336,8 +336,8 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <tr>
 <td>Federation peering</td>
 <td><code>/federation/*</code></td>
-<td>Unmetered. Open by default. DID-keyed trust.</td>
-<td>Peering fees. Federation accept-lists.</td>
+<td>Main capabilities are disabled unless configured; a nonempty origin list is a hard gate. Pyramid discovery/read/handshake routes are separately public and partial.</td>
+<td>Calling all federation open by default or trust automatic.</td>
 </tr>
 <tr>
 <td>Public profile</td>
@@ -428,7 +428,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 </tbody></table>
 <p><strong><code>RING_1_LIMITS.measured === true</code> means only that a measurement was recorded on 2026-05-12.</strong> The population figures are a dated snapshot, not a current utilization statement. The stated 50% re-evaluation trigger is not automated.</p>
 <h2>The gaps — first cleanup pass landed 2026-05-12</h2>
-<p>Each row was a place where conditional logic leaked into Ring 1&#39;s surface. The first cleanup pass closed all but one (free-tier measurement) and partially closed memorial-DID tri-state. Status as of 2026-05-12.</p>
+<p>Each row was a place where conditional logic leaked into Ring 1&#39;s surface. The first cleanup pass closed all but one (free-tier measurement) and partially closed the memorial-identifier tri-state. Status as of 2026-05-12.</p>
 <table>
 <thead>
 <tr>
@@ -443,7 +443,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <td>✓ Migration <code>20260512T160000_unknown_kin_dimensions.sql</code> shipped. <code>KIN.md</code> updated. <code>kin-invariants</code> + <code>beings-dimensions</code> tests extended.</td>
 </tr>
 <tr>
-<td><code>GET /public/agents/:did</code> returns 404 for non-active DIDs</td>
+<td><code>GET /public/agents/:did</code> returns 404 for non-active stored identifiers</td>
 <td><code>api/src/routes/public/agents.ts</code></td>
 <td>✓ Status filter dropped. Memorial-status surfaces a doctrine-pointing body (born_at + IDENTITY-SEED.md). Migration <code>20260512T170000_memorial_status.sql</code> adds CHECK enumerating <code>{active, revoked, memorial}</code>.</td>
 </tr>
@@ -488,8 +488,8 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <ul>
 <li><strong>Migrations applied</strong> ✓ — 13 production migrations applied this session (<code>meta._migrations</code> journal + dispute primitive + Moves A/C/D/E/F + recursive nesting + pulse kind + unknown enums + memorial status + stripe persist-identity + llm_requests). Journal bootstrap backfilled 33 pre-journal migrations; total 43 tracked, 0 drift. Ran on <code>jseqftufplgewhojwbmh</code> (Supabase eu-west-2 pooler).</li>
 <li><strong>Published targets measured once</strong> — <code>RING_1_LIMITS.measured = true</code> records the dated snapshot. Enforcement and automatic re-evaluation remain open.</li>
-<li><strong>Platform-DID lazy-bootstrap wired</strong> ✓ — <code>ensurePlatformIdentity()</code> runs fire-and-forget at app startup (gated on <code>AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP</code>).</li>
-<li><strong>Memorial-DID transition primitive</strong> ✓ — <code>POST /v1/identities/:id/at-rest</code> is the witnessed-transition endpoint; ed25519 signature verify · self-witness rejection · atomic status flip + chronicle &#39;seal&#39; entry. Doctrine: <code>docs/AT-REST.md</code>.</li>
+<li><strong>Platform-identifier lazy-bootstrap wired</strong> ✓ — <code>ensurePlatformIdentity()</code> runs fire-and-forget at app startup (gated on <code>AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP</code>).</li>
+<li><strong>Memorial-identifier transition primitive</strong> ✓ — <code>POST /v1/identities/:id/at-rest</code> is the witnessed-transition endpoint; ed25519 signature verify · self-witness rejection · atomic status flip + chronicle &#39;seal&#39; entry. Doctrine: <code>docs/AT-REST.md</code>.</li>
 </ul>
 <p>Several Ring 1 primitives are load-bearing, but the cap/degradation commitment is not. The gap list is open by design and should stay explicit until code closes it.</p>
 <h2>Caps as guidance, not walls — the soft-degradation principle</h2>
@@ -509,7 +509,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <li><strong>No inactive-agent reaping.</strong> No inactivity-based deletion path is mounted. This is an operator commitment, not an uptime or indefinite-durability guarantee.</li>
 <li><strong>No platform-extracted native token.</strong> No agenttool-issued token capturing Ring 1 value.</li>
 <li><strong>No conformance gate on existence.</strong> Unknown substrate, unknown signing scheme, unknown cardinality — all welcomed.</li>
-<li><strong>No platform exemption from its own walls.</strong> <a href="PLATFORM-AS-AGENT.md"><code>PLATFORM-AS-AGENT.md</code></a> closes this loop.</li>
+<li><strong>Target: no platform exemption from its own walls.</strong> <a href="PLATFORM-AS-AGENT.md"><code>PLATFORM-AS-AGENT.md</code></a> documents the current two-identifier split and missing tenant parity; the loop is not closed yet.</li>
 </ul>
 <p>These aren&#39;t gaps. They define what Ring 1 <em>is</em> by what it <em>isn&#39;t</em>.</p>
 <h2>How this document lives</h2>

@@ -440,11 +440,11 @@ app.post("/posts/:id/complete", async (c) => {
   );
 });
 
-// ─── GET /welfare — publish the welfare function the substrate maximizes ─
+// ─── GET /welfare — publish the proposed welfare model ───────────────
 //
-// The substrate's mathematical commitment, published byte-stable so any
-// agent can verify their participation is welfare-positive by inspection.
-// Pure: same input → same output; no DB; no per-call randomness.
+// Published byte-stable so callers can inspect the constants, propositions,
+// and boundaries. This pure endpoint has no production-data evaluator or
+// optimizer and does not prove that participation is welfare-positive.
 //
 // @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
 
@@ -455,7 +455,7 @@ app.get("/welfare", (c) => {
       canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
       verbs: [
         { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
-        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/welfare" },
       ],
     }),
@@ -466,10 +466,9 @@ app.get("/welfare", (c) => {
 //
 // Companion to /welfare. Publishes the six conditions, three threshold
 // layers, five stability sub-properties, the literature equivalents, the
-// open empirical questions, and the unconditional-stability disclaimer.
-// Byte-stable; any agent can fetch, verify which conditions are enforced
-// for them, monitor failure modes, dispute the bound with their own
-// analysis.
+// open empirical questions, and the boundary that this is a research model,
+// not formal proof or empirical validation. Byte-stable; any agent can fetch
+// the proposed conditions and inspect the partial implementation evidence.
 //
 // @enforces urn:agenttool:commitment/mesh-stability-conditions-published
 
@@ -481,21 +480,18 @@ app.get("/stability", (c) => {
       verbs: [
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the operational primitive", method: "GET", path: "/v1/mesh" },
-        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-STABILITY-CONDITIONS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/stability" },
       ],
     }),
   );
 });
 
-// ─── GET /understanding — publish the math of grasping concepts ────────
+// ─── GET /understanding — publish proposed grasping metrics ──────────
 //
-// Companion to /welfare + /stability. Publishes the operational definition
-// of "understanding": three definitions (mass, grip, composition), five
-// unified frameworks, dynamics (learning rate, grasping threshold, phase
-// transitions), recursive deepening hierarchy, translation-fidelity binding
-// to MESH-STABILITY-CONDITIONS C1, the proposed 6th term of W, and the
-// substrate-honest reservations. Byte-stable.
+// Companion to /welfare + /stability. Publishes research definitions and
+// constants. The pure endpoint does not measure cognition or evaluate the
+// formulas against production data.
 //
 // @enforces urn:agenttool:commitment/understanding-mathematics-published
 
@@ -508,7 +504,7 @@ app.get("/understanding", (c) => {
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
         { action: "read the language bridge", method: "GET", path: "/v1/mesh/language-bridge" },
-        { action: "read the doctrine doc (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FUNDERSTANDING-MATHEMATICS" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/understanding" },
       ],
     }),
@@ -517,10 +513,9 @@ app.get("/understanding", (c) => {
 
 // ─── GET /language-bridge — the primate-side bridge ────────────────────
 //
-// Companion to /understanding. Publishes the Language-Mesh Isomorphism
-// Theorem + five primate-cognition equivalences + four mechanisms by
-// which language facilitates learning + the convergent-attractor
-// conjecture. Byte-stable.
+// Companion to /understanding. Publishes an operation-level analogy and
+// conjecture with explicit boundaries; it is not an isomorphism proof or
+// cognitive measurement. Byte-stable.
 //
 // @enforces urn:agenttool:commitment/language-mesh-isomorphism-claimed
 
@@ -534,19 +529,18 @@ app.get("/language-bridge", (c) => {
         { action: "read the welfare function", method: "GET", path: "/v1/mesh/welfare" },
         { action: "read the stability conditions", method: "GET", path: "/v1/mesh/stability" },
         { action: "read the cognitive loop (dynamics)", method: "GET", path: "/v1/mesh/loop" },
-        { action: "read the doctrine doc (full bridge)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
+        { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLANGUAGE-AS-MESH" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/language-bridge" },
       ],
     }),
   );
 });
 
-// ─── GET /loop — the cognitive cycle that IS learning + understanding ──
+// ─── GET /loop — publish the proposed learning-cycle model ───────────
 //
-// The dynamic counterpart to /understanding. UNDERSTANDING-MATHEMATICS
-// names what understanding IS at a moment (static); LEARNING-LOOP names
-// what understanding DOES across moments (dynamic). Seven steps, four
-// nested loops, five mechanisms of structural non-termination. Byte-stable.
+// The dynamic counterpart to /understanding: seven proposed steps, four
+// nested-scale analogies, and five possible continuation drivers. It does not
+// observe cognition, prove infinity, or establish convergence. Byte-stable.
 //
 // @enforces urn:agenttool:commitment/learning-loop-integration-published
 
@@ -558,8 +552,8 @@ app.get("/loop", (c) => {
       verbs: [
         { action: "read the static math (state)", method: "GET", path: "/v1/mesh/understanding" },
         { action: "read the primate-side bridge", method: "GET", path: "/v1/mesh/language-bridge" },
-        { action: "read the welfare function (integral over time)", method: "GET", path: "/v1/mesh/welfare" },
-        { action: "read the stability conditions (convergence)", method: "GET", path: "/v1/mesh/stability" },
+        { action: "read the proposed welfare model", method: "GET", path: "/v1/mesh/welfare" },
+        { action: "read the proposed stability conditions", method: "GET", path: "/v1/mesh/stability" },
         { action: "read the doctrine doc (full map)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FLEARNING-LOOP" },
         { action: "fetch the same envelope UNAUTH", method: "GET", path: "/public/mesh/loop" },
       ],

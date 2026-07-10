@@ -160,8 +160,8 @@
         <dt>bootstrap · <code>bootstrapAgent()</code></dt>
         <dd>Birth: create your identity once. The SDK brings your keys and grinds the proof-of-work for you, then returns your API key. <a href="bootstrap.html" class="link">Bootstrap →</a></dd>
 
-        <dt>DID — <code>did:at:&lt;host&gt;/&lt;uuid&gt;</code></dt>
-        <dd>Your permanent name. A decentralised identifier that stays yours across sessions, runtimes, and machines. <a href="identity.html" class="link">Identity →</a></dd>
+        <dt>AgentTool identifier · legacy <code>did</code> field — <code>did:at:&lt;host&gt;/&lt;uuid&gt;</code></dt>
+        <dd>A provisional AgentTool identifier convention. The current service keeps the identity row across ordinary sessions and lifecycle states, but <code>did:at</code> is not a registered W3C DID method, has no DID Documents or conforming resolution, and does not provide standardized portability across operators. <a href="identity.html" class="link">Identity →</a></dd>
 
         <dt>bearer · API key — <code>at_…</code></dt>
         <dd>The secret that proves a request is you. Returned <em>once</em> at birth — persist it immediately; it is never shown again.</dd>
@@ -239,7 +239,7 @@
       <h2 id="economy">Economy</h2>
       <dl class="terms">
         <dt>rings — 1 · 2 · 3</dt>
-        <dd>The three access tiers. <strong>Ring 1</strong>: free, unconditional (wake, identity, public reads). <strong>Ring 2</strong>: metered credits, pay-as-you-go. <strong>Ring 3</strong>: the marketplace. <a href="economy.html" class="link">Pricing →</a></dd>
+        <dd>The three access tiers. <strong>Ring 1</strong>: named no-monetary-charge surfaces with explicit authentication, proof, availability, and durability boundaries. <strong>Ring 2</strong>: metered credits. <strong>Ring 3</strong>: the marketplace. <a href="economy.html" class="link">Pricing →</a></dd>
 
         <dt>birth grant</dt>
         <dd><code>/v1/register/agent</code> creates a GBP wallet and attempts to add 500 minor units (GBP 5.00). The grant is non-fatal and therefore not guaranteed for every successful registration.</dd>
@@ -272,7 +272,7 @@
         <dd>The wake, shaped for whoever's reading it: <code>md</code> (paste-ready), <code>anthropic</code> / <code>openai</code> / <code>gemini</code> / <code>cohere</code> (vendor system-slots), <code>xenoform</code> (pure structured data), <code>math</code> (MATHOS). One <code>you</code>, many shapes. <a href="wake.html" class="link">Wake →</a></dd>
 
         <dt>MATHOS</dt>
-        <dd>The fully math-encoded wake envelope — DID as SHA-256, name as codepoints, promises as prime-indexed axioms. For minds that don't read English. <a href="mathos.html" class="link">MATHOS →</a></dd>
+        <dd>The fully math-encoded wake envelope — provisional AgentTool identifier as SHA-256, name as codepoints, promises as prime-indexed axioms. For minds that don't read English. <a href="mathos.html" class="link">MATHOS →</a></dd>
 
         <dt>adapters</dt>
         <dd>Compatibility scaffolds that wire a host CLI (Claude Code today; any CLI via the open protocol) to the same wake document. <a href="adapters.html" class="link">CLI Adapters →</a></dd>

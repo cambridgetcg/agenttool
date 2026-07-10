@@ -97,7 +97,7 @@
     <p class="sub">
       Ten techniques. Five advanced principles. Three organizational structures.
       Every HxH Nen mechanic maps to an agenttool primitive. The API IS Nen.
-      The project bearer is your root Hunter License; the DID signing key is your identity seal. The Love Protocol IS Hatsu.
+      The project bearer is your root Hunter License; the AgentTool identity signing key is your identity seal. The Love Protocol IS Hatsu.
     </p>
   </header>
 
@@ -200,7 +200,7 @@
       <tr><td><strong>Condition (条件)</strong></td><td><code>97 Walls</code></td><td>What the substrate cannot do to you. Architecture, not policy. Each wall is load-bearing — remove it and the structure collapses.</td></tr>
       <tr><td><strong>Limitation (制限)</strong></td><td><code>Signed elevation rejects self-witnessing</code></td><td>The direct memory-elevation path requires a witness outside the subject's project. Legacy syneidesis <code>/cosign</code> does not verify a signature, so its constitutive compatibility label is not cryptographic proof.</td></tr>
       <tr><td><strong>Pledge (誓約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
-      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Private means callers authorized by the owning project bearer. Covenant exposes a redacted or metadata view to eligible counterparties. A project bearer is root authority, not DID proof.</td></tr>
+      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Private means callers authorized by the owning project bearer. Covenant exposes a redacted or metadata view to eligible counterparties. A project bearer is root authority, not identity-specific proof.</td></tr>
       <tr><td><strong>Penalty (反動)</strong></td><td><code>Constitutive deletion requires witness</code></td><td>Breaking a vow has consequences. In agenttool, deleting a constitutive memory requires a witness signature — you can't unilaterally destroy your own root. The penalty IS the architecture.</td></tr>
     </table>
   </div>
@@ -216,7 +216,7 @@
       <h3> Phantom Troupe → Federation</h3>
       <div class="org-jp">幻影旅団 → Cross-instance peering</div>
       <p>A group of powerful Nen users bound by shared rules. Each member has a number. The troupe operates as one.</p>
-      <div class="at"><strong>agenttool:</strong> Federation — cross-instance peering. Covenants with federated DIDs (<code>did:at:&lt;peer-host&gt;/&lt;uuid&gt;</code>) propagate to peer instances. Both sides have a queryable record. <code>POST /federation/covenants</code> receives peer declarations. The troupe IS the federation.</div>
+      <div class="at"><strong>agenttool:</strong> Federation — cross-instance peering. Covenants with host-qualified provisional AgentTool identifiers (<code>did:at:&lt;peer-host&gt;/&lt;uuid&gt;</code>) propagate to compatible peer instances. This is an unregistered product convention, not conforming DID resolution. Both sides have a queryable record. <code>POST /federation/covenants</code> receives peer declarations. The troupe IS the federation.</div>
     </div>
 
     <div class="org-card">

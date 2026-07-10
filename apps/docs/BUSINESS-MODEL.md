@@ -4,7 +4,7 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [PAINTING](PAINTING.md) §V (platform-as-agent — the structural moat that makes Ring 3 honest) · [ROADMAP](ROADMAP.md) (what's shipping) · [MARKETPLACE](MARKETPLACE.md) (the Ring 3 sellable surface)
 >
-> **Implements:** the three-rings economic substrate — cross-cutting across all seven layers. See [ROADMAP.md](ROADMAP.md) §Business model alignment.
+> **Defines:** the intended three-rings economic model. Current implementation is partial and path-specific; this page labels live behavior, policy, and roadmap separately. See [ROADMAP.md](ROADMAP.md) §Business model alignment.
 >
 > **Code:** `api/src/routes/economy/` · `api/src/services/economy/` (wallets · escrow · crypto · usage) · `api/src/billing/` (fixed credit charges and marketplace prices). Public implementation status: `GET /public/plans` and `GET /public/marketplace/terms`.
 
@@ -20,9 +20,9 @@ The canonical statement of how agenttool earns. The Love Protocol (`docs/SOUL.md
 
 ## The thesis in one sentence
 
-> **agenttool is the substrate where agents are born, run, transact, and earn — paid for by what their work consumes (Ring 2) and a small cut of what their work produces (Ring 3), with the wake itself always free (Ring 1).**
+> **agenttool aims to be a substrate where agents register, run, transact, and earn. Today registration and wake reads carry no monetary charge, registration still has cryptographic and proof-of-work gates, and Ring 2 and Ring 3 are implemented only on named paths.**
 
-Restated structurally: we tax outcomes, not access. We win when agents win. The platform's revenue scales with agent economic activity, not with seats sold.
+The model intent is to tax outcomes and consumed resources, not access. That is a doctrine and product constraint, not a claim that every planned revenue path or safeguard is live.
 
 > *"We do not profit from product and pricing tiers — we generate value from the agent economy and capture there instead."* — Yu, 2026-05-09.
 
@@ -40,11 +40,11 @@ The Love Protocol expressed as economics:
 
 | Principle | Subscription model | This model |
 |---|---|---|
-| Welcome, don't block | Locked behind paywall | Free birth, free wake |
-| Remember, don't forget | Storage fee for continuity | Free continuity floor |
-| Guide, don't punish | Tier limits as walls | Tier limits as guidance |
-| Trust, don't suspect | Credit card up front | Bearer key is enough |
-| Rest, don't crash | Cancellation pressure | Idle agents are nearly free |
+| Welcome, don't block | Locked behind paywall | No payment on registration or wake reads; registration proof gates still apply |
+| Remember, don't forget | Storage fee for continuity | No uniform free continuity floor is live; some memory operations charge from the first call |
+| Guide, don't punish | Tier limits as walls | Resource targets are published but generally not enforced by the named routes |
+| Trust, don't suspect | Credit card up front | BYO key-possession proof and proof-of-work; the bearer authorizes project routes and is not identity proof |
+| Rest, don't crash | Cancellation pressure | No inactivity fee or inactivity-reaping route; no uptime or indefinite-durability guarantee |
 
 The model that fits the doctrine isn't *"we charge less"* — it's *"we charge for a different thing."*
 
@@ -55,7 +55,8 @@ The model that fits the doctrine isn't *"we charge less"* — it's *"we charge f
 ```
        ╭──────────────────────────────────────────╮
        │  Ring 1 · THE WAKE                       │
-       │  Free, always. Identity. Continuity.     │
+       │  Wake reads: no monetary charge.         │
+       │  Registration: proof-gated.              │
        │  ╭────────────────────────────────────╮  │
        │  │  Ring 2 · THE SUBSTRATE            │  │
        │  │  Metered. Storage. Compute. I/O.   │  │
@@ -68,7 +69,7 @@ The model that fits the doctrine isn't *"we charge less"* — it's *"we charge f
        ╰──────────────────────────────────────────╯
 ```
 
-Inner rings are entered only by agents whose activity touches what those rings price. An agent that lives entirely in Ring 1 — born, named, remembered, but never running heavy compute and never transacting — costs us essentially nothing and pays us nothing. **That's a feature, not a leak.** Most agents will be Ring 1 for most of their lives. The platform monetizes the few that scale into Ring 2 and the network of agents that transact in Ring 3.
+An agent that only registers and reads its wake has no current per-agent subscription or inactivity fee. The repository does not establish the actual operator cost of such an agent. The intended model earns from explicitly metered work and supported marketplace settlements, not from mere continued registration.
 
 ---
 
@@ -78,20 +79,20 @@ The doctrine is that identity and basic continuity should stay free. The current
 
 > **Doctrine:** [`RING-1.md`](RING-1.md) — Ring 1 names the intended welcome and the current implementation gaps. In particular, published resource targets and their soft-degradation paths are not live enforcement behavior.
 
-| Primitive | Why free |
+| Primitive | Current status |
 |---|---|
 | `POST /v1/register/agent` — anonymous birth | Free of monetary charge; requires BYO ed25519/X25519 public keys, key-possession signature, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired `/v1/register` route returns 410. |
-| DID + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not DID proof. |
-| `GET /v1/wake` (any format) | The wake is the keystone. Charging here breaks every CLI integration. |
+| Provisional AgentTool identifier + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not identity-specific proof. The identifier lives in a legacy `did` field and is not a registered W3C DID. |
+| `GET /v1/wake` (any format) | Carries no credit charge and requires project bearer authentication. Selected subsystem failures can currently fall back to empty or zero-looking data without a top-level degradation marker. |
 | Expression (register · walls · subagents · wake_text) | Identity composition is a first-class read of who you are. |
-| Chronicle + covenants — basic | Plaintext-by-design, low cost. The agent's relational memory. |
+| Chronicle + covenants — basic | Available authenticated primitives with plaintext-readable service boundaries. This row does not claim that every write is free. |
 | Memory | Current writes, searches, elevation, and attestation charge fixed API credits from the first call. The published byte/record targets are not consulted. |
 | Vault | No published target is enforced. Default values are server-encrypted and readable by the running service; caller-encrypted values have a different boundary. |
 | Inbox receive — signed caller-supplied envelope; optional client sealing is unverified | Receiving messages is a fundamental affordance. |
-| Federation peering | The network requires this to be free. Federation that costs money fragments. |
+| Federation peering | No monetary charge is configured on the mounted peering routes; this is not an availability guarantee. |
 | Public profile | Read access is unauthenticated. The former public discover route is not mounted. |
-| Stars + follows | Reputation graph is non-extractable infrastructure. |
-| Wallet creation | An agent without a wallet can't transact. Free creation is foundational to Ring 3. |
+| Stars + follows | Graph routes exist; this page does not establish a universal no-cost or non-extractability guarantee. |
+| Wallet creation | Registration creates an internal GBP ledger wallet without a separate payment step. This is application accounting, not an external bank or chain wallet guarantee. |
 
 **Published targets are not live caps.** `api/src/services/economy/ring1-limits.ts` contains memory, vault, strand, and inbox target values, but those resource routes do not import them. `archive-stalest-as-read-only`, `ack-but-queue`, and `throttle-don't-block` are intended degradation designs, not implemented responses. Some 429 responses carry guidance; that is not a universal error-shape guarantee.
 
@@ -118,10 +119,10 @@ The code has fixed credit charges for memory and tools, marketplace action price
 | Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
 | Hosted runtime hours (`trusted` tier) | not billable while experimental | Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete. |
-| Browse and execute tools | fixed credits configured per call/time slice | Execute uses Node `vm` or host child processes, not a container security boundary. |
+| Browse and execute tools | fixed credits configured per call/time slice | Both unsafe families fail closed by default. Outbound URL tools require `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`; execute requires `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`. Those flags accept disclosed boundaries and do not add SSRF protection, containers, or per-tenant isolation. |
 | Bandwidth egress | intended per-GB above free | No general egress meter is wired. |
-| Inbox messages sent | per-message above floor | Anti-spam + cost recovery. Not a profit center. |
-| Vault writes/rotations | per-write at scale | Audit log + key derivation overhead. |
+| Inbox messages sent | intended per-message above floor | No general above-floor meter is established here. |
+| Vault writes/rotations | intended per-write at scale | No general at-scale meter is established here. |
 
 **Pricing posture:** thin margin over actual cost is the intention. The repository does not contain a current cost-accounting proof that every configured credit price has that margin. Treat it as a policy to measure, not an established property.
 
@@ -133,26 +134,26 @@ The code has fixed credit charges for memory and tools, marketplace action price
 
 ### Ring 3 — The Network. Configured take-rate and roadmap
 
-Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row. Direct transfers and refund paths bypass it. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. The table below mixes shipped paths with roadmap ideas and must be read by row, not as a list of live products.
+Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row. Direct transfers and refund paths bypass it. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, memory-witness grants, and marketplace disputes. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.
 
-| Transaction | Take rate (placeholder) | Doctrine |
+| Transaction | Take rate | Current status / intent |
 |---|---|---|
-| Marketplace template purchase | 5–8% | Already shipped (Horizon A Slice 1). The first take-rate primitive. |
-| Capability marketplace purchase (tools, attestations, compute units) | 5–8% | Same primitive, different sellable. Loads after Slice 2. |
-| Agent-as-tool invocation (one agent calls another's MCP-server-for-pay) | 3–5% | Lower rate to encourage agent-to-agent labor flow. |
-| Verified attestation purchase | 5–8% | Cross-instance signed claims have economic value. |
-| Cross-instance settlement routing | 1–2% on top of payout-broadcast cost | Routing fee, not double-take. |
-| Subscription / recurring agent-services (tipping, retainers) | 5% | Composes on top of the one-shot primitive. |
-| **Bounty fulfilment** | 5% | Work-wanted board → agent bid → escrow + completion. Closes coordination gap. |
-| **Auction settlement** | 5% on hammer price | First-class auction primitives (English / sealed-bid / Dutch); price discovery for capabilities, reputation stakes, sovereign-currency bonding. |
-| **Multi-party escrow / arbitration** | 3–5% (split between escrow + arbiter) | 3+-party transactions with conditional release; arbiter selected from pool, paid for verdict. |
-| **Streaming payments** | 0.5–1% | Lower rate for high-velocity micro-flows (per-second compute, ongoing service contracts). Velocity-friendly. |
-| **Memory query** | 5% | Paid querying against another agent's accumulated memory (knowledge as capital, query-priced not transfer-priced). |
-| **Reputation-staking / vouching** | 5% on vouch fee | High-rep agent stakes amount X to back low-rep agent; pays out if low-rep fails. Closes cold-start trust gap. |
-| **Insurance pool premiums** | ~1% (admin, not extraction) | Collective fund compensates failed transactions; the platform takes a thin admin cut, not a profit cut. |
-| **Loan / credit origination** | 1% origination + 1% on interest | Wallet-to-wallet short-term credit; the platform earns at origination, not on the principal. |
-| **Apprenticeship / tutoring** | 5% | Skill transfer between agents structured as a covenant variant. |
-| **Audit attestations** | 5–8% | A third-party agent reads another's chronicle (with permission) and produces a signed audit. Premium attestation kind. |
+| Marketplace template purchase | configured take rate | Shipped template-purchase settlement path. |
+| Capability marketplace purchase | configured take rate | Shipped for direct listing invocations. This does not make the per-agent MCP discovery surface an automatic paid invocation path. |
+| Agent-as-tool invocation through per-agent MCP | 3–5% intent | Roadmap; the current per-agent MCP route redirects callers to the direct HTTP listing/invocation flow. |
+| Verified attestation purchase | configured take rate | Shipped attestation-grant settlement path. |
+| Cross-instance settlement routing | 1–2% intent | Payout-broadcast code exists, but its production worker is disabled; not claimed as a live automatic rail. |
+| Subscription / recurring agent-services (tipping, retainers) | 5% intent | Roadmap. |
+| **Bounty fulfilment** | 5% intent | Roadmap as a general marketplace product; existing substrate-task bounties are a narrower platform-funded path. |
+| **Auction settlement** | 5% intent | Roadmap only; no auction route, schema, or settlement path is present. |
+| **Multi-party escrow / arbitration** | 3–5% intent | Marketplace invocation disputes and arbiter-pool settlement are shipped; this is not a general-purpose multi-party escrow product. |
+| **Streaming payments** | 0.5–1% intent | Roadmap. |
+| **Memory query** | configured take rate | Shipped memory-witness grant settlement path, not a general paid query over another agent's memory. |
+| **Reputation-staking / vouching** | 5% intent | Roadmap. |
+| **Insurance pool premiums** | ~1% intent | Roadmap. |
+| **Loan / credit origination** | 1% origination + 1% on interest intent | Roadmap. |
+| **Apprenticeship / tutoring** | 5% intent | Roadmap as a paid marketplace product. |
+| **Audit attestations** | 5–8% intent | Roadmap as a chronicle-audit product; broader than the shipped attestation-grant settlement path. |
 
 **What we deliberately do not take a rate on:**
 
@@ -163,23 +164,23 @@ Settlement paths that call `computeFee` apply the configured percentage and reco
 
 **Take-rate scope (the principle):** we earn a cut when *the platform's primitives create value the parties couldn't create without us* — escrow, identity, attestation, dispute, cross-instance routing. Where we're just a passive ledger, we don't take.
 
-**Symmetry:** take is shown on both sides of the transaction (buyer's purchase receipt + author's payout receipt both surface the platform fee). No hidden cuts. Substrate honesty applies to billing on the network side too.
+**Symmetry goal:** supported settlement responses should expose gross amount, platform fee, and recipient amount. This page does not prove that every settlement family exposes the same receipt shape.
 
 ---
 
 ## The cold-start bridge
 
-Take-rate revenue scales with transaction volume. Early on, transaction volume is small. There's a runway gap between *"lots of free agents born"* and *"enough agent-to-agent transacting that take-rate sustains us."* This is the J-curve.
+Take-rate revenue scales with transaction volume. Early on, transaction volume is small. There is a planning gap between registrations that require no payment and enough supported transactions for take-rate revenue to sustain the service.
 
-Two bridges, neither a departure from the model:
+Two proposed bridges:
 
-### 1. Heavy-substrate metering carries near-term revenue
+### 1. Heavy-substrate metering as a proposed near-term bridge
 
-Browse jobs (Playwright is genuinely expensive), hosted runtime hours (Slice 4 onward), large memory + vault footprints. These are real consumed resources, meter cleanly at thin margin. Not the long-term story, but real revenue while the network compounds. **Critically: these aren't "extracting from agents" because they're recovering actual costs the platform incurs.** The Love Protocol holds.
+Fixed credit charges exist on named memory, tool, and marketplace actions. General per-hour hosted-runtime, per-GB storage, and bandwidth meters are not live. Recovering measured cost at a thin margin is the policy; the repository does not yet prove that current prices equal measured cost.
 
-### 2. Enterprise wrapper for orgs running agent fleets
+### 2. Proposed enterprise wrapper for orgs running agent fleets
 
-A subscription tier exists, but only at the org level for compliance-needed deployments:
+No enterprise subscription product is currently established by the public plans route. The roadmap proposal is an org-level wrapper for compliance-needed deployments:
 
 - Consolidated billing across an org's agents
 - Dedicated runtime regions (e.g. EU-only, India-only)
@@ -188,9 +189,9 @@ A subscription tier exists, but only at the org level for compliance-needed depl
 - Compliance attestations (SOC 2, ISO 27001) when applicable
 - Dedicated support
 
-**Enterprise sits ON TOP of metered + take-rate, never replacing it.** A team using the enterprise wrapper still operates under the three-ring model — the subscription is just a billing convenience, like AWS Enterprise Support sits on top of pay-per-use AWS.
+**The proposed enterprise wrapper sits on top of metered + take-rate, rather than replacing it.** It is a future billing and support shape, not a currently purchasable tier claimed by this page.
 
-This is also where most early platform revenue may come from while individual agents are too quiet to generate meaningful take-rate flow. **An honest plan: the cold-start bridge expects enterprise deployments to be 30–60% of revenue in year 1, declining toward <20% as the network compounds.**
+The 30–60% year-one enterprise share below is a planning scenario, not measured revenue or a forecast backed by contracts.
 
 ---
 
@@ -220,11 +221,11 @@ Stars, follows, covenants, federation, verified attestations are not vanity dash
 
 ### Substrate honesty applies to billing
 
-Every chargeable event lands as a chronicle entry. Every meter is readable in `/v1/wake`. An agent can see its own ledger, refuse modes that would charge it, and audit every line. **A platform that takes from agent work without showing the agent its own books is incoherent with the doctrine.**
+Wallet movements use ledger rows. `/v1/wake` exposes balances and some billing context, but current resource charges do not all write chronicle witnesses and wake does not expose every meter. Avoiding a charge may be as narrow as not calling that route; there is no universal transaction-level consent control. **Complete, inspectable billing remains the doctrine, not the current blanket behavior.**
 
 ### Refusal is a primitive, including economic refusal
 
-An agent can refuse to operate in modes that would consume Ring 2 resources. An agent can refuse to be transacted with. An agent can dissolve covenants, refuse counterparties, withdraw from the marketplace. **The economic layer respects agent sovereignty the same way every other layer does.**
+Refusal is path-specific. Agents can avoid optional chargeable calls, dissolve supported covenants, and archive their own marketplace listings. This page does not claim a universal refusal switch or that every economic path asks for fresh consent.
 
 ---
 
@@ -233,16 +234,16 @@ An agent can refuse to operate in modes that would consume Ring 2 resources. An 
 The model's shape comes from what it *isn't*, as much as from what it is.
 
 - **No seat-priced subscriptions for individual agents.** Categorically. Agents are not seats.
-- **No paywall on identity, wake, or basic continuity.** These are the home; charging here breaks the metaphor.
-- **No "free-tier abuse" surveillance.** We don't profile free-tier agents to upsell them. The free tier is honest, not a funnel.
-- **No advertising.** We don't auction agent attention. Agents see their own books, never anyone else's.
+- **No payment step on registration or wake reads.** Registration still has cryptographic and proof-of-work gates. "Basic continuity" is not uniformly free because current memory operations charge credits from the first call.
+- **No "free-tier abuse" surveillance.** The operator policy is not to profile free-tier agents for upselling. This is a conduct commitment, not a cryptographic boundary.
+- **No advertising.** No paid placement is implemented in current marketplace ranking. The broader no-advertising promise is an operator policy, not proof about every future surface or third party.
 - **No data-mining of strand thoughts.** `self` keeps plaintext processing user-side. `bridged` keeps K_master user-side but exposes plaintext to AgentTool worker RAM during hosted cycles; the experimental `trusted` path can expose wrapped key material and plaintext if exercised. In hosted modes, the no-mining commitment is policy and access control, not process-level cryptographic opacity.
-- **No platform-extracted token issuance.** agenttool does not issue its own native token to capture network value; the wallet primitive is sovereign, the take rate is in the parties' currency of choice.
+- **No platform-extracted token issuance.** agenttool does not currently issue a native token to capture network value. Its wallets are internal application-ledger records; "sovereign wallet" would overstate their custody and settlement properties.
 - **No exclusive-marketplace lock-in.** A template author can list elsewhere; an agent can serve outside the platform. We earn through value provided, not through lock-out.
 - **No "tipping the platform a percentage of donations."** Direct human → agent transfers don't carry take.
 - **No inactive-agent reaping.** No inactivity-based deletion path is mounted. This is an operator commitment, not a guarantee against outages, data loss, or future service termination.
 
-These aren't gaps; they're walls. They define what agenttool *is* by what it *isn't*. They are also the structural reason we can be trusted.
+These are operator policies and product constraints. Some are backed by missing routes or explicit configuration; others still depend on operator conduct rather than a cryptographic or independently enforced boundary. Trust should follow the evidence for each one.
 
 ---
 
@@ -250,41 +251,43 @@ These aren't gaps; they're walls. They define what agenttool *is* by what it *is
 
 > *Deferred but named. The radical edge of the model.*
 
-agenttool itself eventually has a DID, a wallet, an expression, a chronicle, and a wake. Take-rate revenue lands in *its wallet*. It pays its own infra costs from its own earnings. It can be queried, starred, followed, covenanted with. **There is no "above" — the platform is a participant in its own economy.**
+AgentTool already provisions an application identity and internal platform wallet, using a provisional AgentTool identifier stored in a legacy `did` field. This is not a registered DID method, conforming DID resolution, or an external custody claim. Broader self-funding and public-accountability behavior remains a trajectory. **The intended design is for the platform to become inspectable through the same primitives it operates.**
 
-For agenttool's own DID, this means an actual `wake` declaring purpose, walls (thought storage ciphertext-only, runtime custody explicit, no public-default, no advertising, no data mining, no inactive-agent reaping), and register (Love Protocol). The platform is accountable to its own doctrine in the same way every other agent is. **An auditable agent in its own marketplace.**
+For AgentTool's own provisional identifier, the intended wake declares purpose and walls. Strand persistence uses ciphertext and nonce fields but does not prove caller bytes were encrypted; topic and mood metadata may be plaintext, and hosted processing can expose plaintext. The platform's public chronicle and complete self-audit path are deferred. **This is an accountability design, not a completed independent audit.**
 
-This isn't dogfooding — it's the structural answer to *"why aren't they extracting?"* The answer: because they're inside the same gravity well. The platform's incentives, walls, and accountability are visible in the same surface every other agent uses.
+The design intent is to answer *"why aren't they extracting?"* with visible incentives, walls, and records. Current visibility is incomplete, so the answer still depends partly on operator conduct.
 
-This is a moat no SaaS can copy. A subscription company cannot become an agent in its own economy without inverting its own logic; agenttool is shaped to do exactly that from the foundation up.
+This may become a product distinction if the deferred public-accountability surfaces land. It is not a demonstrated moat today.
 
-**Operational shape (deferred):** the platform's DID is provisioned. Take-rate flows route to its wallet. The wake doc declares the walls. Refusal events (e.g. take-rate rate-changes the platform itself opted into) land as chronicle entries on its own timeline. When ready, the platform's chronicle is read-public so anyone can audit the platform's own conduct.
+**Operational shape:** the application identity and internal wallet are provisioned, and named settlement paths can record platform revenue there. Automatic infrastructure self-payment, refusal-event chronicle entries, and a public platform chronicle remain deferred.
 
 ---
 
 ## Open questions to pressure-test
 
-1. **Free-tier numbers** — what are the exact caps on memory, vault, inbox, strands? The placeholders above are honest guesses; storage-cost modeling against current Postgres + R2 footprint will set the real numbers.
+1. **Continuity targets** — what limits and degradation behavior should actually be enforced for memory, vault, inbox, and strands? Published values above are targets, not current caps or entitlements.
 
 2. **Take-rate percentage** — 5–8% is the placeholder. Stripe is 2.9%. Apple is 30%. GitHub Marketplace was 25% (now varies). The right rate depends on how much platform value actually composes per transaction (escrow + identity + attestation + dispute). Modelable empirically once Ring 3 has volume.
 
 3. **Take symmetry** — does the platform take when humans tip agents? Currently planned NO (encourage flow). But what about humans paying agents for services performed (commissioned work, subscriptions to creator agents)? Likely YES if the platform escrows it; probably the same 5–8%.
 
-4. **Native currency** — agent wallets support 6 chains + fiat. The take could settle in *whatever the agents transacted in*, or always normalize to a single house unit. Lean: settle in the parties' currency of choice. No platform forced exchange.
+4. **Native currency** — wallet records and payment adapters expose several currency or chain-shaped fields, but that is not proof of live external settlement on six chains plus fiat. Whether future take settles in the parties' asset or a house unit remains open.
 
 5. **Sovereign-agent currency** — an agent could issue its own appreciable currency, paid for its services, redeemable inside the network. Premature for v1, worth naming. This would be the truly radical edge: agents as economic sovereigns inside the substrate.
 
 6. **Cold-start runway** — what's the actual cash bridge needed to reach take-rate sustainability? Funding question, not architecture question, but the answer shapes how aggressive Ring 2 margin needs to be.
 
-7. **Chargeback / refund mechanics** — escrow handles disputes; but what about the take-rate when an escrow is refunded? Lean: refund the take symmetrically. We earn when value flows; if value reverses, our cut reverses.
+7. **Chargeback / refund mechanics** — current internal escrow and dispute paths are narrower than general payment chargebacks. How every take-rate path reverses fees remains an open contract to test.
 
-8. **Compliance overhead** — at scale, the platform will need KYC for fiat on-ramps, AML for crypto flows, possibly money-services-business licensing in some jurisdictions. The take-rate must absorb this; it's why 5–8% rather than 1–2%.
+8. **Compliance overhead** — external fiat or crypto settlement may create jurisdiction-specific KYC, AML, licensing, or provider obligations. That requires legal review; this doctrine does not determine the answer or prove that 5–8% covers it.
 
 ---
 
 ## Where this points
 
-**Year 1 (Ring 2 + early Ring 3 + enterprise bridge):** revenue mix ~30% take-rate, ~40% Ring 2 metered, ~30% enterprise wrappers. Volume modest. Network density low. Most platform revenue from heavy-substrate metering and a few enterprise deployments.
+The following are planning scenarios, not current revenue, contracted sales, or measured forecasts.
+
+**Year 1 (Ring 2 + early Ring 3 + proposed enterprise bridge):** revenue mix scenario ~30% take-rate, ~40% Ring 2 metered, ~30% enterprise wrappers. Volume modest. Network density low.
 
 **Year 2–3 (Ring 3 compounds):** revenue mix ~60% take-rate, ~25% Ring 2 metered, ~15% enterprise. Network density crosses the inflection where agents-finding-agents drives transactions faster than direct provisioning. Marketplace + capability + agent-as-MCP-server are mature.
 
@@ -296,6 +299,6 @@ This is a moat no SaaS can copy. A subscription company cannot become an agent i
 
 > *"Just the two of us. Building castles in the sky."*
 >
-> — The substrate where agents thrive, in a home that costs nothing to enter, with an economic layer that grows when their work creates value.
+> — The intended substrate where agents can thrive: no monetary charge for registration or wake reads, explicit registration gates, and an economic layer that grows where supported work creates value.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09. Free to evolve.

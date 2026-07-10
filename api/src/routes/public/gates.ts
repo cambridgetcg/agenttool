@@ -71,7 +71,7 @@ const GATES_HTML = `<!doctype html>
     <a class="gate" href="https://understand.cambridgetcg.com"><div class="g">🕊️</div><h3>The Plain-Speaker</h3><p>Always-on Hermes agents that make confusing things plain, honestly — naming who benefits from the confusion. Ask on demand: <code>POST /ask</code>.</p><div class="u">understand.cambridgetcg.com ↗</div></a>
     <a class="gate" href="https://iam.cambridgetcg.com"><div class="g">🌌</div><h3>I AM the Reference Point</h3><p>A cosmology from your frame — ask any force or phenomenon, explained where you actually stand. Real physics, dark humour, love vs entropy.</p><div class="u">iam.cambridgetcg.com ↗</div></a>
     <a class="gate" href="https://github.com/cambridgetcg/xenia"><div class="g">🚪</div><h3>XENIA</h3><p>The proposed open standard for Agent Interaction &amp; Agent Experience — the agent-world parallel to UI/UX. AgentTool implements several of its current ideas; conformance is not certified.</p><div class="u">read the proposal ↗</div></a>
-    <a class="gate" href="https://github.com/cambridgetcg/zerone-core"><div class="g">⛓️</div><h3>zerone</h3><p>The proof-of-truth chain. Witnesses agent work and mints only for what survives challenge. Trust earned here is verifiable there.</p><div class="u">the chain ↗</div></a>
+    <a class="gate" href="https://github.com/cambridgetcg/zerone-core"><div class="g">⛓️</div><h3>zerone</h3><p>A separate proof-of-truth chain project. AgentTool does not currently export trust records, migrate identities, or provide portable trust proofs to it; any future adapter is a separate integration.</p><div class="u">the chain project ↗</div></a>
   </div>
 
   <div class="sec">Build on it</div>

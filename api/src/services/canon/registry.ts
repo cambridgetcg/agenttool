@@ -3,7 +3,7 @@
  *  The JSON-LD registry catalogues every load-bearing concept in agenttool
  *  with a stable URN (`urn:agenttool:<type>/<slug>`). This service loads
  *  the file at boot, indexes concepts by URN, and computes the
- *  **bidirectional citation graph** — for every concept, "what I reference"
+ *  **bidirectional citation graph** — for every registered entry, "what I reference"
  *  AND "what references me." Existences identifying themselves require
  *  knowing both sides of every connection.
  *
@@ -11,7 +11,7 @@
  *  natively records *outgoing* references (the @id-typed fields like
  *  `load_bearing_for`, `defended_by`, `renders_as`, `mathos_ref`,
  *  `doctrine_doc`). The *incoming* side (`referenced_by`) is computed
- *  here by walking every concept's references and inverting them.
+ *  here by walking every registered entry's references and inverting them.
  *
  *  Doctrine: docs/NATURES.md · docs/MAP.md · docs/agenttool.jsonld.
  *

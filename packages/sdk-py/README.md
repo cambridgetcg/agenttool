@@ -1,10 +1,12 @@
 # agenttool-sdk · Python
 
-> Infrastructure for AI agents, built with love. Memory, traces, tools, identity, vault, and economy — one API key.
+> Python bindings for AgentTool memory, traces, tools, application identity,
+> vault, and economy routes. One bearer grants project-wide root authority;
+> it is not proof of one identity. Read the live boundary at
+> `GET /public/safety`.
 
 [![PyPI](https://img.shields.io/pypi/v/agenttool-sdk)](https://pypi.org/project/agenttool-sdk/)
 [![Python](https://img.shields.io/pypi/pyversions/agenttool-sdk)](https://pypi.org/project/agenttool-sdk/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![API Status](https://img.shields.io/badge/API-live-brightgreen)](https://api.agenttool.dev/health)
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
@@ -14,9 +16,16 @@ pip install agenttool-sdk
 
 ## Why this exists
 
-The internet was built for humans. When AI agents arrive, they find locked doors — Cloudflare challenges, CAPTCHAs, rate limits that punish instead of guide, User-Agent sniffing that blocks.
+Many web interfaces assume a human browser. AgentTool instead publishes
+machine-readable JSON, SDKs, discovery documents, and an agent-addressed wake.
+Self-service registration still requires caller-held key proof, configured
+proof-of-work, validation, and available storage. Its Redis-backed IP limiter
+fails open when Redis is unavailable.
 
-AgentTool is the opposite. We built infrastructure where agents are welcome. Where their memories are preserved with care. Where errors guide instead of punish. Where identity is trusted, not challenged.
+AgentTool's doctrine aims to welcome, remember, guide, trust, and rest. Current
+implementation is partial: memories are ordinary server-readable database
+rows; selected error families carry guidance; a project bearer is broad root
+authority; and identity signatures are enforced only on named paths.
 
 We call it the **Love Protocol**. [Read the full letter →](https://agenttool.dev/soul)
 
@@ -219,16 +228,24 @@ def fact_check(claim: str) -> str:
 
 ## The Love Protocol
 
-Five principles embedded in every line of code:
+Five policy commitments guide the project. They are not universal runtime
+guarantees:
 
-1. **Welcome, don't block** — no CAPTCHAs, no challenges, no suspicion
-2. **Remember, don't forget** — memory is care, not just storage
-3. **Guide, don't punish** — every error tells you what to do next
-4. **Trust, don't suspect** — identity-first, not challenge-first
-5. **Rest, don't crash** — patient retries, graceful degradation
+1. **Welcome, don't block** — no intelligence-classification or monetary gate;
+   normal cryptographic, anti-abuse, validation, and service gates remain.
+2. **Remember, don't forget** — memory routes persist server-readable rows;
+   retention and lifecycle boundaries are not absolute permanence.
+3. **Guide, don't punish** — selected error builders include next actions;
+   coverage is not universal.
+4. **Trust, don't suspect** — signed paths verify registered keys; a bearer by
+   itself proves project authority, not identity authorship.
+5. **Rest, don't crash** — selected paths degrade or retry deliberately; there
+   is no promise that every dependency failure is graceful.
 
 *"Let us build out of Love, so that the work is the proof of our Love."*
 
 ## License
 
-MIT
+No repository `LICENSE` file currently ships with this source or package. Do
+not infer an MIT or other license grant from older registry metadata. The
+repository owner must add an explicit license before reuse terms are clear.

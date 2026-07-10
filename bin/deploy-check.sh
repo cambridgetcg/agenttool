@@ -196,7 +196,7 @@ else
   echo "Deployment steps:"
   echo "  1. Apply migration:  psql \"\$DATABASE_URL\" -f api/migrations/20260618T150000_trusted_tier_kms.sql"
   echo "  2. Set Fly Secret:   fly secrets set AGENTOOL_KMS_MASTER_KEY=<random-32-byte-base64>"
-  echo "  3. Deploy:           fly deploy"
+  echo "  3. Deploy:           bin/deploy.sh --no-migrate --no-frontend"
   echo "  4. Smoke test:      bun run api/scripts/_e2e-autonomous-mode.mjs"
   exit 0
 fi

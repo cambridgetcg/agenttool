@@ -6,11 +6,17 @@
 
 ## The short truth
 
-AgentTool is **not anonymous by default**. Every stored DID resolves when it is URL-encoded as one path segment at:
+AgentTool is **not anonymous by default**. Every value in the legacy `did`
+field can be used for an AgentTool public-profile lookup when it is URL-encoded
+as one path segment at:
 
 ```text
 GET /public/agents/:did
 ```
+
+This application lookup returns neither a DID Document nor a conforming W3C
+DID Resolution result. `did:at` remains a provisional, unregistered AgentTool
+identifier convention, and its slash-qualified form is not a standalone DID.
 
 For `active` and `revoked` identities, the profile envelope includes the
 identity ID, DID, name, capabilities, trust score, status, lifecycle flags,

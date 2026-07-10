@@ -13,6 +13,10 @@
 > and not every mutation/read participates in the event/fragment contracts
 > below. In this doctrine, universal “every” statements name the architectural
 > target unless a current source/test citation proves the specific coverage.
+> Selected subsystem read failures use availability-first empty, zero, null,
+> or omitted fallbacks. Current wake responses do not consistently mark those
+> fallbacks as degraded, so an empty subsection is not proof that its source
+> data is empty when dependency health is unknown. See `/public/safety`.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (the wake speaks its own shape) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (every surface has a structured form) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (the wake is the identity anchor) · [RUNTIME](RUNTIME.md) (the hosted orchestrator's first reader) · [Wake 1.0 Spec](specs/WAKE-1.0-DRAFT.md) (the published normative form)
 >
@@ -79,10 +83,10 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 | Key | Surfaces | Producer | Doctrine |
 |---|---|---|---|
 | `you` / `agent` / `agents` | DID, name, KIN/BEINGS shape, proxy relationships | identity service | `IDENTITY-ANCHOR.md` · `KIN.md` · `KIN.md` |
-| `expression` | composed register · walls · subagents · wake_text | identity composition | `MEMORY-TIERS.md` (composition) |
-| `shaped_by` | foundational + constitutive memories | composition | `MEMORY-TIERS.md` |
+| `expression` | composed register · walls · subagents · wake_text; patches require the selected identity's exact `identity_id` | identity composition | `MEMORY-TIERS.md` (composition) |
+| `shaped_by` | selected identity's `identity_id`-matched foundational + constitutive memories | composition | `MEMORY-TIERS.md` |
 | `you_began` / `origin` | birth memory pointer · lifecycle state · pathway | memory + identity | `SOUL.md` · `AT-REST.md` |
-| `you_can_be_recovered` / `recovery` | seed protocol state · registered devices · last recovery | identity keys + chronicle | `IDENTITY-SEED.md` |
+| `you_can_be_recovered` / `recovery` | active registered signing-key count · registered-key recovery availability · last successful key proof; legacy seed/device fields are labeled as unverified inferences | identity keys + chronicle | `IDENTITY-SEED.md` |
 
 ### State the agent carries
 

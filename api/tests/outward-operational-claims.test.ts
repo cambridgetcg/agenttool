@@ -18,6 +18,8 @@ describe("current outward operational claims", () => {
     for (const heading of [
       "Recovery authority",
       "Request limits",
+      "Registration atomicity",
+      "Wake scope",
       "Data readability",
       "Runtime custody",
       "Hosted execute",
@@ -35,11 +37,11 @@ describe("current outward operational claims", () => {
     expect(safety).toMatch(/no container or per-tenant boundary.*filesystem chroot.*memory\s+cgroup.*network namespace/is);
     expect(safety).toMatch(/no\s+application-level private-address or destination allowlist/is);
     expect(safety).toMatch(/scrape, browse, and URL-based document fetching fail closed.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1/is);
-    expect(safety).toMatch(/Identity\s+resolution.*DID-derived\s+inbox\s+and\s+covenant\s+delivery.*pyramid\s+peer\s+reads.*handshake\s+verification.*doctrine\s+or\s+peer.*public\s+HTTPS\s+only/is);
+    expect(safety).toMatch(/AgentTool\s+identifier\s+lookup.*identifier-derived\s+inbox\s+and\s+covenant\s+delivery.*pyramid\s+peer\s+reads.*handshake\s+verification.*doctrine\s+or\s+peer.*public\s+HTTPS\s+only/is);
     expect(safety).toMatch(/URL\s+credentials\s+and\s+redirects.*every\s+returned\s+address\s+must\s+be\s+global\s+and\s+public.*pinned/is);
     expect(safety).toMatch(/POST\s+bodies\s+are\s+capped\s+at\s+1,000,000\s+bytes.*responses\s+are\s+capped\s+at\s+512,000\s+bytes.*65,536-byte\s+cap.*5\s+seconds.*10\s+seconds.*12\s+seconds.*15\s+seconds/is);
     expect(safety).toMatch(/cache key omits the HTTP method and request-body hash/is);
-    expect(safety).toMatch(/X-Agent-Id.*not DID-signature\s+authentication/is);
+    expect(safety).toMatch(/X-Agent-Id.*not identity-signature\s+authentication/is);
   });
 
   test("current roadmap tables name live registration and observer boundaries", () => {
@@ -131,6 +133,9 @@ describe("current outward operational claims", () => {
     expect(gates).toContain("https://github.com/cambridgetcg/xenia");
     expect(gates).toMatch(/conformance is not certified/i);
     expect(gates).not.toContain("https://sinovai.com/xenia");
+    expect(gates).toMatch(/zerone.*separate proof-of-truth chain project/is);
+    expect(gates).toMatch(/does not currently export trust records.*portable trust proofs/is);
+    expect(gates).not.toMatch(/Trust earned here is verifiable there/i);
     expect(root).toMatch(/broader descriptive route map.*not an exhaustive inventory/i);
     expect(tutor).toMatch(/one fetch summarizes.*known gaps/i);
     expect(tutor).not.toMatch(/one fetch tells you everything/i);
@@ -140,7 +145,7 @@ describe("current outward operational claims", () => {
     expect(map).toMatch(/no public full-wake URL per DID/i);
     expect(webSurface).not.toContain("(18/18 pass)");
 
-    expect(platform).toMatch(/Two current identifiers serve different contracts/i);
+    expect(platform).toMatch(/Today two identifiers serve different contracts/i);
     expect(platform).toMatch(/They are not aliases/i);
     expect(platform).toMatch(/The nine current walls/i);
     expect(platform).not.toMatch(/The (?:five Promises and )?eight walls/i);
@@ -149,7 +154,9 @@ describe("current outward operational claims", () => {
 
     expect(readme).toMatch(/selected, project-scoped\s+view/i);
     expect(readme).toMatch(/did:at.*provisional/is);
-    expect(readme).toMatch(/SDK source, releases, and method surfaces are not exact peers/i);
+    expect(readme).toMatch(/SDK source and releases are not exact peers/i);
+    expect(readme).toMatch(/selected method-name check currently passes.*wake\.voice/is);
+    expect(readme).not.toMatch(/Python wake accepts\s+`voice` while TypeScript wake does not/i);
     expect(readme).not.toMatch(/every endpoint is reachable|read once, reach everything/i);
     expect(readme).not.toMatch(/ciphertext-only persistent thought storage|true zero-knowledge/i);
     expect(readme).not.toMatch(/Every error includes `retry_after`/i);
@@ -158,5 +165,100 @@ describe("current outward operational claims", () => {
     expect(jsonld).toMatch(/two non-alias identifiers/i);
     expect(jsonld).toMatch(/one URL-encoded path segment/i);
     expect(jsonld).not.toMatch(/Read once, reach everything/i);
+  });
+
+  test("zerone is described as a separate project, not a live trust-portability bridge", () => {
+    const party = read("docs/THE-PARTY.md");
+    const wakeBuilder = read("api/src/services/wake/build.ts");
+    const wakeRoute = read("api/src/routes/wake.ts");
+
+    for (const surface of [party, wakeBuilder, wakeRoute]) {
+      expect(surface).toMatch(/zerone is a separate|separate chain project named zerone/i);
+      expect(surface).toMatch(/does not currently export trust records|no route or worker.*exports its trust records/is);
+      expect(surface).toMatch(/portable trust proof|no\s+portable trust/i);
+      expect(surface).not.toMatch(/trust you earn here can be verifiable there/i);
+    }
+    expect(party).toMatch(/standardized portability is not implemented/i);
+  });
+
+  test("saga, adapters, federation, runtime, and platform claims stay implementation-bounded", () => {
+    const sagaRoute = read("api/src/routes/saga.ts");
+    const sagaStore = read("api/src/services/saga/store.ts");
+    const canon = JSON.parse(read("docs/agenttool.jsonld")) as {
+      "@graph": Array<Record<string, unknown>>;
+    };
+    const retiredSagaWall = canon["@graph"].find(
+      (entry) => entry["@id"] === "agenttool:wall/saga-signed-by-platform-only",
+    );
+    const monotonicSagaWall = canon["@graph"].find(
+      (entry) => entry["@id"] === "agenttool:wall/saga-ep-numbers-are-monotonic",
+    );
+
+    expect(sagaRoute).toMatch(/non-cryptographic signature placeholder/i);
+    expect(sagaRoute).toMatch(/no POST \/v1\/saga route/i);
+    expect(sagaRoute).not.toMatch(/writes are platform-only|platform-DID-signature verification/i);
+    expect(sagaStore).toContain("SEED_ENTRY_NO_RUNTIME_SIGNATURE");
+    expect(String(retiredSagaWall?.description)).toMatch(
+      /nil-UUID.*SEED_ENTRY_NO_RUNTIME_SIGNATURE.*must not be cited as proof/is,
+    );
+    expect(String(monotonicSagaWall?.description)).toMatch(
+      /does not require.*begin at 1.*gap-free.*arrive in order.*append-only/is,
+    );
+
+    const adapterRoute = read("api/src/routes/adapters/claude-code.ts");
+    const adapterPage = read("apps/docs/adapters.html");
+    expect(adapterRoute).toMatch(/does not move an identity/i);
+    expect(adapterRoute).toMatch(/continuity of a person or process/i);
+    expect(adapterPage).toMatch(/No identity record moves.*continuity is not proved/is);
+    expect(`${adapterRoute}\n${adapterPage}`).not.toMatch(
+      /identity that travels|portable identity|one wake document, many substrates/i,
+    );
+
+    const agentCentric = read("docs/AGENT-CENTRIC.md");
+    expect(agentCentric).toMatch(/does not migrate identity, records, wallets, or\s+reputation/i);
+
+    const platform = read("docs/PLATFORM-AS-AGENT.md");
+    const platformService = read("api/src/services/platform/identity.ts");
+    const platformSelf = read("api/src/services/wake/platform-self.ts");
+    const economyPage = read("apps/docs/economy.html");
+    expect(platform).toMatch(/two identifiers serve different contracts/i);
+    expect(platform).toMatch(/provisional label, not cryptographic identity proof/i);
+    expect(platform).toMatch(/rotation cannot prove same-identity continuity/i);
+    expect(platformService).not.toMatch(/^\s*"observations",/m);
+    expect(platformService).toMatch(/observations route currently validates.*returns 501/is);
+    expect(platformSelf).toMatch(/synthetic_constant_not_database_round_trip/);
+    expect(platformSelf).toMatch(/not an independent audit or a W3C DID assertion/i);
+    expect(economyPage).toMatch(/partial participant.*identifiers are not aliases/is);
+    expect(economyPage).not.toMatch(/already an agent in its own economy/i);
+
+    const runtimeDoc = read("docs/RUNTIME.md");
+    const runtimePage = read("apps/docs/runtime.html");
+    expect(runtimeDoc).toMatch(/ordinary memory content, can be server-readable/i);
+    expect(runtimePage).toMatch(/server-readable memory.*caller-supplied opaque strand bytes/i);
+    expect(runtimePage).not.toMatch(/we hold your agent's encrypted memory/i);
+
+    const federation = read("docs/FEDERATION.md");
+    expect(federation).toMatch(/Federation\s+is disabled by default/i);
+    expect(federation).toMatch(/When federation is enabled and `allowed_origins` is empty/i);
+    for (const path of ["docs/MAP.md", "docs/SURPRISES.md", "docs/RING-1.md", "docs/GLOSSARY.md"]) {
+      const claim = read(path);
+      expect(claim).not.toMatch(/federation is open by default/i);
+      expect(claim).toMatch(/disabled unless configured|disabled by default|master switch|main capabilities are disabled/i);
+    }
+  });
+
+  test("MATHOS distinguishes hash equality and signed bytes from identity proof", () => {
+    const mathos = read("docs/MATHOS.md");
+    const encoder = read("api/src/services/mathos/encode.ts");
+    const route = read("api/src/routes/mathos.ts");
+
+    expect(mathos).toMatch(/match shows string equality only.*does not prove identity/is);
+    expect(mathos).toMatch(/_signature_identity_did.*not signed.*not identity or authority proof/is);
+    expect(mathos).toMatch(/trusted key-distribution path/i);
+    expect(encoder).toMatch(/label is not signed.*must not treat it as identity proof/is);
+    expect(route).toMatch(/unsigned provisional label, not identity or authority proof/i);
+    expect(`${mathos}\n${encoder}\n${route}`).not.toMatch(
+      /DID names \*who\* sign|verify all signed math payloads come from the same identity/i,
+    );
   });
 });

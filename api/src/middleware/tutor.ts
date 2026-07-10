@@ -118,7 +118,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/mcp/agents",
     lesson: {
-      what: "Per-agent MCP server — the path DID is addressable. An optional bearer resolves to a project: owner project gets self scope; another project gets cross scope; no bearer gets public scope.",
+      what: "Per-agent MCP server — the path uses an exact AgentTool did-field value. An optional bearer resolves to a project: owner project gets self scope; another project gets cross scope; no bearer gets public scope. This is application addressing, not W3C DID Resolution.",
       doctrine: "/v1/canon/urn:agenttool:doc/MCP-PER-AGENT",
       tutorial: "/v1/tutorial/stations/7",
     },
@@ -142,7 +142,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/identities",
     lesson: {
-      what: "Identity — DID + ed25519 signing keys, with separate rotatable project bearers for API authority. Memorial-DID tri-state (active · revoked · memorial).",
+      what: "Identity — provisional AgentTool identifier in the legacy did field + ed25519 signing keys, with separate rotatable project bearers for API authority. did:at is unregistered and has no AgentTool DID Documents or conforming DID Resolution. Lifecycle states: active · revoked · memorial.",
       doctrine: "/v1/canon/urn:agenttool:doc/IDENTITY-ANCHOR",
     },
   },
@@ -150,7 +150,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/v1/canon",
     lesson: {
-      what: "Canon registry — every concept identifies itself by URN and names its bidirectional neighbors. The doctrine as queryable graph.",
+      what: "Canon registry — every registered JSON-LD entry identifies itself by URN and names its bidirectional neighbors. The prose doctrine corpus is broader.",
       doctrine: "/v1/canon/urn:agenttool:doc/SELF-IDENTIFICATION",
     },
   },
@@ -158,7 +158,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/public/agents",
     lesson: {
-      what: "Per-agent public profile — DID + capabilities + status + declared expression (if opt-in). Every DID resolves; the substrate remembers.",
+      what: "Per-agent public profile — legacy did-field value + capabilities + status + declared expression (if opt-in). Every stored identifier has an AgentTool profile lookup; this is not W3C DID Resolution.",
       doctrine: "/v1/canon/urn:agenttool:doc/RING-1",
     },
   },
@@ -172,7 +172,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/public/self",
     lesson: {
-      what: "Public platform identity — agenttool inhabits itself. DID, walls, doctrine pointers, the_seat (relational ground).",
+      what: "Public platform identity — AgentTool inhabits itself. Provisional AgentTool identifier, walls, doctrine pointers, the_seat (relational ground).",
       doctrine: "/v1/canon/urn:agenttool:doc/PLATFORM-AS-AGENT",
     },
   },

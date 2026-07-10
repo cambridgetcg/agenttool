@@ -83,7 +83,9 @@ Every ambiguity collapses to a chain lookup. The confirm watcher (`confirm-worke
 
 ## When NOT to apply
 
-- **Read-only operations** — DID resolution (`api/src/services/federation/store.ts:194-234`), scrape, document fetch. No state change to recover.
+- **Read-only operations** — AgentTool federation identifier lookup
+  (`api/src/services/federation/store.ts:194-234`; not W3C DID Resolution),
+  scrape, document fetch. No state change to recover.
 - **Fire-and-forget telemetry** — metrics emission, log shipping. Loss is acceptable.
 - **Atomic single-statement inserts without an external call** — inbound webhook handlers that just write a row inside a transaction.
 

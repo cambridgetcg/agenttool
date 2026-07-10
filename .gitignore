@@ -21,6 +21,7 @@ out/
 # context can ship it into the image. Written/deleted by the deploy
 # script; should never appear in source control.
 api/agenttool.jsonld.bundled
+api/doctrine-docs.bundled/
 
 # Env & secrets
 .env

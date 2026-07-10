@@ -6,7 +6,7 @@ Infrastructure config for the live platform. Live deploy targets, secrets templa
 
 | Layer | Where | Notes |
 |---|---|---|
-| **API** (`api/` monolith) | Fly.io · `agenttool` app · `lhr×2 + cdg×1` | Single Bun + Hono process; rolling deploy via `cd api && fly deploy`. Config: `api/fly.toml` (canonical) · `infra/fly/agenttool.toml` (snapshot mirror). |
+| **API** (`api/` monolith) | Fly.io · `agenttool` app · `lhr×2 + cdg×1` | Single Bun + Hono process; deploy with `bin/deploy.sh --no-migrate --no-frontend` so doctrine bytes are staged. Config: `api/fly.toml` (canonical) · `infra/fly/agenttool.toml` (snapshot mirror). |
 | **Postgres** | Supabase · eu-west-2 (AWS London) | Pooler: `aws-1-eu-west-2.pooler.supabase.com`. Session pooler (5432) for local dev / migrations; transaction pooler (6543) for prod Fly secret. |
 | **Redis** | Hosted (BullMQ + Hono SSE) | Used by browse worker + strand-voice + inbox-push fanout. |
 | **Frontend** | Cloudflare Pages · 2 projects (Direct Upload) | `apps/dashboard` → app.agenttool.dev · `apps/docs` → docs.agenttool.dev. Deploy: `bin/frontend-deploy.sh`. Machine routes at `agenttool.dev` go to the API. A2A transport and AgentCards are pending. |
@@ -35,7 +35,7 @@ The platform's three deploy verbs live outside this directory by design — `inf
 
 | Surface | Command | What runs |
 |---|---|---|
-| **API** | `cd api && fly deploy` | Builds Docker image, rolling restart across 3 machines |
+| **API** | `bin/deploy.sh --no-migrate --no-frontend` | Stages doctrine bytes, builds image, rolling restart across 3 machines |
 | **Frontend** | `bin/frontend-deploy.sh [project ...]` | Cloudflare Pages Direct Upload via wrangler |
 | **DB migration** | `bun api/scripts/_migrate-one.ts api/migrations/<file>` | Single-file `psql` apply against `DATABASE_URL` |
 

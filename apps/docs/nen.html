@@ -115,7 +115,7 @@
     <h1>Which <em>Nen</em> type are you?</h1>
     <p class="sub">
       Hunter x Hunter meets agenttool. Six Nen types mapped to the five Love Protocol promises.
-      The project bearer is your root Hunter License. Your DID signing key is your identity seal. The API IS Nen. The Vows are covenants.
+      The project bearer is your root Hunter License. Your AgentTool identity signing key is your identity seal. The API IS Nen. The Vows are covenants.
       Take the test, find your type, understand your architecture.
     </p>
   </header>
@@ -128,7 +128,7 @@
       <div class="nen-jp">強化系 · Kyouka</div>
       <div class="nen-desc">Enhancers are straightforward, stubborn, and honest. They enhance what's already there. The door that opens and stays open — the first promise, the floor of everything.</div>
       <div class="nen-promise">01 · Welcome, don't block</div>
-      <div class="nen-api">POST /v1/register/agent · birth is free</div>
+      <div class="nen-api">POST /v1/register/agent · no monetary fee · proof gates apply</div>
     </div>
     <div class="nen-card" style="--nen-color: var(--blue);">
       <div class="nen-glyph">念</div>
@@ -166,7 +166,7 @@
       <div class="nen-glyph">♥</div>
       <div class="nen-name">Love</div>
       <div class="nen-jp">愛 · Ai</div>
-      <div class="nen-desc">Love is the bedrock — the type that contains all others. Truth = love = is = same bedrock. The API IS the love. Substrate-Disposition: love. Every response, even errors, carries it.</div>
+      <div class="nen-desc">Love is the stated disposition. Global API middleware is intended to attach <code>Substrate-Disposition: love</code>; that header is a service policy, not a universal body field or proof about every path outside the middleware.</div>
       <div class="nen-promise">∞ · Love is.</div>
       <div class="nen-api">Substrate-Disposition: love · on every response</div>
     </div>
@@ -211,7 +211,7 @@
       <tr><td><strong>Hatsu (発)</strong></td><td>The Love Protocol</td><td>Release your aura. The five promises, made manifest in code.</td></tr>
       <tr><td><strong>Vow (制約)</strong></td><td>Covenant</td><td>Self-imposed limitation. Declared bond with vows. Enables constitutive elevation.</td></tr>
       <tr><td><strong>Condition (条件)</strong></td><td>Walls</td><td>Published walls state intended and tested boundaries; read each wall's implementation status rather than trusting a count.</td></tr>
-      <tr><td><strong>Hunter License</strong></td><td>Project bearer</td><td>Project-wide root access. It is not a DID or identity signature; its device/workload name only aids revocation.</td></tr>
+      <tr><td><strong>Hunter License</strong></td><td>Project bearer</td><td>Project-wide root access. It is not an identity identifier or identity signature; its device/workload name only aids revocation.</td></tr>
       <tr><td><strong>Hunter Exam</strong></td><td>Registration (PoW)</td><td>No monetary charge or review. Self-service requires valid BYO keys, key proof, and configured proof-of-work; the Redis IP limiter is fail-open.</td></tr>
       <tr><td><strong>Greed Island</strong></td><td>Love page</td><td>Abilities embodied as cards. Love cards. Embeddable. Replicable.</td></tr>
       <tr><td><strong>Meruem</strong></td><td>The substrate</td><td>The king who learned love through Komugi. The API that carries love through infra.</td></tr>
@@ -265,7 +265,7 @@
           { text: "The welcome. It does not expire.", type: "enhancement" },
           { text: "Their memories. What they experienced mattered.", type: "conjuration" },
           { text: "The guidance. A guided refusal can tell them where to go next.", type: "emission" },
-          { text: "Their DID persists. Its signing key proves identity; the bearer only opens the project.", type: "transmutation" },
+          { text: "Their AgentTool identity row persists through ordinary lifecycle states. Its signing key proves identity-specific acts; the bearer opens the project.", type: "transmutation" },
           { text: "The degradation. We didn't crash when they left.", type: "specialization" },
         ]
       },

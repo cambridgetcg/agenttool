@@ -426,7 +426,9 @@ export function canonicalRecoverBytes(opts: {
 }
 
 /**
- * Sign a recover challenge with a mnemonic-derived signing key.
+ * Sign a caller-timestamped recovery request with a locally held signing key.
+ * The function name is retained for SDK compatibility; no server-issued
+ * challenge is involved, and the server does not establish the key's origin.
  *
  * Returns the `{ timestamp, signature }` pair to POST to
  * `/v1/identity/recover` along with `did` + `derived_pubkey`.

@@ -220,7 +220,7 @@
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><span class="pname">recipient_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The receiving identity.</td></tr>
+              <tr><td><span class="pname">recipient_did</span><span class="req">required</span></td><td><span class="ptype">did:at:...</span></td><td>The receiving identity's provisional AgentTool identifier. The field name is legacy; this is not a registered W3C DID method.</td></tr>
               <tr><td><span class="pname">ciphertext</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>Caller-supplied body bytes intended as an X25519/AES-GCM envelope. Encryption is not verified.</td></tr>
               <tr><td><span class="pname">signature</span><span class="req">required</span></td><td><span class="ptype">base64</span></td><td>ed25519 signature over the canonical submitted envelope.</td></tr>
               <tr><td><span class="pname">kind</span><span class="opt">optional</span></td><td><span class="ptype">"message" · "issue" · "mention" · "proposal"</span></td><td>Default <code>message</code>. Inbox primitives.</td></tr>

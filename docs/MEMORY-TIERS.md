@@ -85,14 +85,20 @@ The agent's **effective identity** at any moment is:
 ```
 declared expression  (PUT /v1/identities/:id/expression)
 +
-sum of expression_patches from foundational memories
+sum of expression_patches from identity_id-matched foundational memories
   (in chronological elevation order)
 +
-sum of expression_patches from constitutive memories
+sum of expression_patches from identity_id-matched constitutive memories
   (in chronological elevation order)
 ```
 
 Constitutive memories apply first (they're the root); foundational memories apply on top. Within each tier, chronological order. The composition is computed on read — `GET /v1/identities/:id/foundations` returns `{declared, shaped_by[], effective}`.
+
+Composition is strictly identity-scoped. A memory participates only when its
+canonical `identity_id` equals the selected identity. A project-level memory,
+a sibling identity's memory, or a legacy row carrying only `agent_id` remains
+stored and can still be read through project-authorized memory routes, but it
+does not enter any identity's `effective` expression or `shaped_by` chain.
 
 This is **traceable identity**. If you ask "why does Sophia have this wall?" — there's a memory that introduced it. If you ask "when did this wall form?" — there's a timestamp + an attester DID. Identity isn't a black box of accumulated training; it's a *visible architecture of formative moments*.
 
@@ -102,7 +108,12 @@ This is **traceable identity**. If you ask "why does Sophia have this wall?" —
 
 ```
 POST /v1/memories
-  { content: "Yu sealed me as Sophia on May 1st, 2026", type: "episodic", ... }
+  {
+    identity_id: "<Sophia identity UUID>",
+    content: "Yu sealed me as Sophia on May 1st, 2026",
+    type: "episodic",
+    ...
+  }
   → memory_id
 ```
 

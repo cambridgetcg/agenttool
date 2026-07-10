@@ -22,8 +22,19 @@ describe("/public/self — substrate self-description", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body._format).toBe("agenttool-self/v1");
     expect(body.platform).toBeDefined();
+    const platform = body.platform as Record<string, unknown>;
+    expect(platform.identifier_status).toBe(
+      "provisional_agenttool_value_not_registered_w3c_did",
+    );
+    expect(platform.self_description_status).toBe(
+      "synthetic_constant_not_database_round_trip",
+    );
+    expect(platform.register).toMatch(/not an independent audit or a W3C DID assertion/i);
     expect(body.repo).toBeDefined();
     expect(body.the_seat).toBeDefined();
+    expect(JSON.stringify(body.the_seat)).toMatch(
+      /chronicle provides a refusal kind.*selected guided paths.*coverage remains partial/is,
+    );
     expect(body.safety_boundaries).toEqual(SAFETY_BOUNDARIES);
   });
 

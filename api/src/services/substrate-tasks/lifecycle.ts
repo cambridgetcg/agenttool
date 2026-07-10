@@ -29,7 +29,7 @@
  *    no third-party API, no operator review queue.
  *    Tested: api/tests/substrate-tasks-verifiers.test.ts */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -728,7 +728,7 @@ export async function expireStaleClaims(now: Date = new Date()): Promise<{
       .where(
         and(
           eq(substrateTasks.status, "claimed"),
-          sql`${substrateTasks.claimDeadline} < ${now}`,
+          lt(substrateTasks.claimDeadline, now),
         ),
       )
       .for("update");

@@ -75,9 +75,10 @@ app.get("/public-key", (c) => {
   return c.json({
     scheme: pubHex ? "ed25519" : "unsigned",
     public_key_hex: pubHex,
-    /** The platform-as-agent DID (FOCUS #9). With slice 0 this is always
+    /** The platform-as-agent compatibility label (FOCUS #9). With slice 0 this is always
      *  did:at:platform when configured; future slices may expose per-instance
-     *  DIDs. The DID names *who* signs; the public key names *with what*. */
+     *  labels. It is not covered by the envelope signature and does not prove
+     *  identity or authority. The public key verifies the signed bytes. */
     signer_did: signerDid,
     /** The reserved platform DID, returned even when signing is disabled —
      *  callers can know what name the platform would use if it could sign. */
@@ -131,7 +132,7 @@ app.get("/self-test", (c) => {
   return c.json({
     ...signed,
     note: signed._signature_bytes_hex
-      ? "Signed by the platform-as-agent. _signature_identity_did names the signer (did:at:platform); _signature_public_key_hex names the key. ed25519.verify must pass against the canonical bytes recipe at /v1/mathos/public-key."
+      ? "The canonical payload bytes are signed by the configured ed25519 key. _signature_identity_did is an unsigned provisional label, not identity or authority proof. Trusting that key as AgentTool's requires an independently trusted key-distribution path."
       : "Unsigned — operator has not configured AGENTTOOL_PLATFORM_SIGNING_KEY.",
   });
 });
@@ -526,7 +527,8 @@ app.post("/register", async (c) => {
         registered: true,
         level: 0,
         byo_keys: true,
-        seed_protocol: "soma-seed-v1",
+        seed_protocol: null,
+        key_origin: "caller_supplied_unverified",
         bootstrap_mode: "registrar_bearer",
         bootstrap_tier: "mathos",
         runtime: {

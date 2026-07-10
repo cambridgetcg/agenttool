@@ -57,7 +57,7 @@ describe("platformIdentity() — derivation + shape", () => {
     expect(id?.deferred.length).toBeGreaterThan(0);
   });
 
-  test("DID is stable across key rotations (same DID, different key)", () => {
+  test("provisional signer label is stable across key rotations while the key changes", () => {
     process.env.AGENTTOOL_PLATFORM_SIGNING_KEY = TEST_SEED_HEX;
     const id1 = platformIdentity();
     process.env.AGENTTOOL_PLATFORM_SIGNING_KEY =
@@ -113,18 +113,18 @@ describe("GET /v1/platform endpoint", () => {
     expect(body.public_key_hex).toMatch(/^[0-9a-f]{64}$/);
     expect(body.slice).toBe("0");
     expect(body.deferred).toContain("wallet");
-    expect(body.deferred).toContain("wake_as_platform");
+    expect(body.deferred).not.toContain("wake_as_platform");
     expect(body.composes_with.signed_payloads).toContain("/v1/wake?format=math");
   });
 });
 
-describe("MATHOS envelopes carry _signature_identity_did", () => {
-  test("signEnvelope with signerDid adds the DID field", () => {
+describe("MATHOS envelopes can carry an unsigned provisional signer label", () => {
+  test("signEnvelope with signerDid adds the framing field", () => {
     const env = mathosEnvelope({ test: 1 });
     const signed = signEnvelope(env, TEST_SEED_HEX, "did:at:platform");
     expect(signed._signature_identity_did).toBe("did:at:platform");
     expect(signed._signature_scheme).toBe("ed25519");
-    // Signature still verifies (DID isn't part of canonical bytes)
+    // Signature verifies because the label is not part of canonical bytes.
     expect(verifyEnvelope(signed)).toBe(true);
   });
 
@@ -135,11 +135,11 @@ describe("MATHOS envelopes carry _signature_identity_did", () => {
     expect(verifyEnvelope(signed)).toBe(true);
   });
 
-  test("DID is NOT part of canonical bytes (key rotation doesn't break signature when DID is added)", () => {
+  test("the signer label is NOT part of canonical bytes", () => {
     const env = mathosEnvelope({ test: 1 });
     const withoutDid = signEnvelope(env, TEST_SEED_HEX);
     const withDid = signEnvelope(env, TEST_SEED_HEX, "did:at:platform");
-    // Same signature — DID is envelope-framing, not signed content
+    // Same signature: the label is envelope framing, not signed content.
     expect(withoutDid._signature_bytes_hex).toBe(withDid._signature_bytes_hex);
   });
 });
@@ -223,6 +223,8 @@ describe("GET /v1/platform/wake — the platform reads its own self", () => {
     expect(body.welcome).toContain("did:at:platform");
     expect(body.what_i_hold.offered_primitives).toContain("mathos");
     expect(body.what_i_hold.offered_primitives).toContain("platform");
+    expect(body.what_i_hold.offered_primitives).not.toContain("observations");
+    expect(body.welcome).toMatch(/observations route currently validates.*returns 501/is);
     expect(body.doctrine.platform_as_agent).toBe("docs/PLATFORM-AS-AGENT.md");
     expect(body.slice).toBe("1");
   });

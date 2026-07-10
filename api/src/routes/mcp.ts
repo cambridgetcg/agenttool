@@ -14,7 +14,7 @@
  *  Methods implemented (read-only scaffold):
  *    initialize                 — handshake; returns server capabilities
  *    ping                       — liveness
- *    resources/list             — every canon concept + static resources
+ *    resources/list             — every registered canon entry + static resources
  *    resources/read             — read one resource by URI
  *    tools/list                 — the curated tool surface
  *    tools/call                 — invoke a tool

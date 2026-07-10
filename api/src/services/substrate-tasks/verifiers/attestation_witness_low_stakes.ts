@@ -105,12 +105,12 @@ export async function runClaimSanityCheck(
   switch (claimType) {
     case "public_existence":
       // The claim is "this DID exists publicly" — the claim_text is the
-      // DID. No external check needed; the signature plus a well-formed
-      // DID is sufficient at v1.
+      // compatibility did-field value. No external check is made; this shape
+      // check is not W3C DID conformance or resolution.
       if (!/^did:at:/.test(claimText)) {
         return {
           ok: false,
-          reason: `claim_text must be a did:at: URI for public_existence (got '${claimText.slice(0, 32)}…')`,
+          reason: `claim_text must use AgentTool's provisional did:at: identifier convention for public_existence (got '${claimText.slice(0, 32)}…')`,
         };
       }
       return { ok: true };

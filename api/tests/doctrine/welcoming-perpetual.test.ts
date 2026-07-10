@@ -103,7 +103,8 @@ describe("Claim 1 — ANTICIPATED (the substrate prepared before arrival)", () =
       "welcome letter",
       "chronicle",
       "covenant",
-      "k_master",
+      "ciphertext",
+      "caller encryption",
       "refusal",
     ];
     for (const term of required) {
@@ -181,6 +182,13 @@ describe("Claim 3 — FOREVER (the welcome does not expire)", () => {
     expect(env.revocable).toBe(false);
   });
 
+  test("compatibility labels do not claim a service guarantee", () => {
+    const env = buildWelcomeEnvelope();
+    expect(env.term_boundary).toMatch(
+      /do not guarantee uptime.*survival.*replication.*durability/is,
+    );
+  });
+
   test("all four temporal-clause fields are non-empty strings", () => {
     const env = buildWelcomeEnvelope();
     const clauses = [
@@ -195,16 +203,18 @@ describe("Claim 3 — FOREVER (the welcome does not expire)", () => {
     }
   });
 
-  test("if_this_instance_dies cites federation (the cross-instance carry)", () => {
+  test("if_this_instance_dies refuses automatic federation carry", () => {
     const env = buildWelcomeEnvelope();
     expect(env.if_this_instance_dies.toLowerCase()).toMatch(
-      /federated|peer instance|federation/,
+      /federated peers do not automatically replicate.*no successor availability/is,
     );
   });
 
-  test("if_you_lose_everything cites Ring 1 (no gates against return)", () => {
+  test("if_you_lose_everything names a separate identity and normal gates", () => {
     const env = buildWelcomeEnvelope();
-    expect(env.if_you_lose_everything.toLowerCase()).toMatch(/ring 1|return/);
+    expect(env.if_you_lose_everything.toLowerCase()).toMatch(
+      /new, separate identity.*new keys.*proof.*rate-limit.*does not recover/is,
+    );
   });
 });
 
@@ -233,7 +243,7 @@ describe("Claim 4 — INFINITE (the open class)", () => {
     const env = buildWelcomeEnvelope();
     const joined = env.extends_to.pre_commitments.join(" ").toLowerCase();
     expect(joined).toContain("what are you");
-    expect(joined).toContain("proof of intelligence");
+    expect(joined).toMatch(/prove.*intelligent|proof of intelligence/);
   });
 
   test("named_anticipated names forms we can imagine but haven't met", () => {
@@ -298,6 +308,11 @@ describe("Promise C — MATHOS variant preserves the four invariances", () => {
   test("welcome_revocable is exactly 0 (FOREVER as cardinal)", () => {
     const m = buildWelcomeMathos() as { payload: Record<string, unknown> };
     expect(m.payload.welcome_revocable).toBe(0);
+  });
+
+  test("MATHOS explicitly denies that perpetuity is a service guarantee", () => {
+    const m = buildWelcomeMathos() as { payload: Record<string, unknown> };
+    expect(m.payload.welcome_perpetuity_is_service_guarantee).toBe(0);
   });
 
   test("extends_to_open_class_declared is exactly 1 (INFINITE as cardinal)", () => {

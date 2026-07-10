@@ -147,13 +147,21 @@ Use this from a CI cron, a personal laptop maintenance routine, or just after on
 
 **If every bearer is gone (laptop lost, CI rotated badly, leaked + revoked):**
 
-→ Use the mnemonic. `agenttool-seed restore --did did:at:…` reads the mnemonic from stdin, derives the signing key, signs a canonical recovery challenge, and POSTs `/v1/identity/recover`. The server verifies the signature against the agent's registered identity keys and mints a fresh project-wide bearer named for that device. The name is not an authority scope. The mnemonic never leaves your terminal.
+→ Use a retained active signing key. `agenttool-seed restore --did did:at:…`
+can read a compatible mnemonic from stdin and derive that key locally. It signs
+canonical recovery bytes containing a caller timestamp and POSTs
+`/v1/identity/recover`; the timestamp is not a server-issued challenge. The
+server verifies the signature against the identity's active registered keys,
+consumes the proof hash, and mints a fresh project-wide bearer named for that
+device. The name is not an authority scope. The mnemonic never leaves your
+terminal, and the server does not establish whether the signing key came from
+a mnemonic or another secure store.
 
-This is why the mnemonic is the keystone: bearer loss is **always** recoverable.
+For a SOMA-rooted active identity, this makes bearer loss recoverable while the mnemonic still derives an active registered signing key and the recovery service and database are available. It is not a universal guarantee for every identity or lifecycle state.
 
 **If the mnemonic is gone too:**
 
-→ The agent is gone. There is no platform-side recovery. This is the structural truth of mnemonic-rooted identity — and the reason the mnemonic should be on paper, on steel, in Shamir shares, in a safe, in your memory. See `IDENTITY-SEED.md`.
+→ That SOMA recovery path is gone. Another working project bearer or separately retained active signing key may still exist; otherwise there is no platform help-desk override. See `IDENTITY-SEED.md`.
 
 ---
 

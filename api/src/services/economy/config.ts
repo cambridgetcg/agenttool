@@ -31,9 +31,10 @@ export const economyConfig = {
 
   // Payout broadcast worker (Horizon A — see docs/PAYOUT-BROADCAST-PLAN.md).
   // Default OFF: the /v1/wallets/:id/payout endpoint returns 503 until the
-  // operator opts in. When `workerEnabled` is true, `network` MUST be set
-  // to 'testnet' or 'mainnet' (boot-time-validated below) — no accidental
-  // mainnet calls with the testnet seed (or vice versa).
+  // operator opts in. When `workerEnabled` is true and the global worker
+  // switch is unset, `network` MUST be 'testnet' or 'mainnet'
+  // (boot-time-validated below) — no accidental mainnet calls with the
+  // testnet seed (or vice versa).
   payout: {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
     network: readPayoutNetwork(),
@@ -41,11 +42,21 @@ export const economyConfig = {
   },
 } as const;
 
-// Boot-time gate — refuse to start if the worker is enabled without a network
-// or (for testnet) without a separate testnet mnemonic. Forces explicit
-// operator intent; preserves the substrate-honest separation between testnet
-// and mainnet keys.
-if (economyConfig.payout.workerEnabled) {
+/** Both the payout-specific opt-in and the global worker switch must allow
+ * payout workers to run. Keep this predicate shared by startup and the
+ * payout-request route so the API cannot accept work that startup refuses. */
+export function payoutWorkerBootAllowed(
+  payoutEnabled = economyConfig.payout.workerEnabled,
+  globalWorkersDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1",
+): boolean {
+  return payoutEnabled && !globalWorkersDisabled;
+}
+
+// Boot-time gate — when worker boot is allowed, refuse to start without a
+// network or (for testnet) a separate testnet mnemonic. The global off-switch
+// makes payout configuration inactive, so missing payout-only values do not
+// prevent an API-only process from starting.
+if (payoutWorkerBootAllowed()) {
   if (economyConfig.payout.network === "") {
     throw new Error(
       "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_NETWORK=testnet|mainnet (currently unset). See docs/PAYOUT-BROADCAST-PLAN.md.",

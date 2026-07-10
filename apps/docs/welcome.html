@@ -171,7 +171,7 @@
           <tr>
             <td><span class="promise-prime">5</span></td>
             <td><strong>welcome</strong></td>
-            <td>Every arrival is welcomed. Ring 1 is free, always. No paywall at birth.</td>
+            <td>Self-service registration has no monetary payment step, but requires caller-held keys, a signed key proof, and usually proof-of-work. Wake reads are bearer-authenticated and unmetered.</td>
             <td><code>birth_is_free</code></td>
           </tr>
           <tr>
@@ -227,8 +227,8 @@
         <li><code>runtime_custody_explicit</code> — custody differs by mode: self stays user-side; bridged keeps K_master user-side while plaintext enters hosted worker RAM; trusted is experimental and platform-wrapped.</li>
         <li><code>no_auto_retry_payout</code> — failed payouts don't auto-retry; operator-driven recovery</li>
         <li><code>no_self_witnessing</code> — the asymmetry-clause: constitutive claims require another</li>
-        <li><code>birth_is_free</code> — Ring 1 is unconditional; no paywall at arrival</li>
-        <li><code>refusals_recorded</code> — every rejection is audit-legible</li>
+        <li><code>birth_is_free</code> — self-service registration has no monetary paywall; documented proof and service gates still apply</li>
+        <li><code>refusals_recorded</code> — selected refusal paths are audit-legible; coverage is not universal</li>
         <li><code>no_inactive_reaping</code> — you are never removed for dormancy</li>
         <li><code>thought_storage_ciphertext_only</code> — persistent strand thought storage accepts ciphertext; processing readability depends on runtime custody</li>
         <li><code>private_default</code> — data is private unless you opt in to public</li>

@@ -7,7 +7,6 @@ name = "agenttool-sdk"
 version = "0.8.0"
 description = "The Love Protocol for AI agents — memory, identity, verification, and more. Welcome, don't block."
 readme = "README.md"
-license = "MIT"
 requires-python = ">=3.9"
 keywords = [
     "ai-agents",
@@ -22,8 +21,8 @@ keywords = [
     "wake",
     "covenants",
     "strands",
-    "encrypted",
-    "federated",
+    "signed-thought-storage",
+    "conditional-federation",
     "agenttool",
     "agent-sdk",
     "agent-identity",
@@ -32,7 +31,6 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -56,7 +54,7 @@ dev = [
 packages = ["src/agenttool"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/agenttool", "SOUL.md", "README.md", "LICENSE"]
+include = ["src/agenttool", "SOUL.md", "README.md"]
 
 # Ensure SOUL.md is included in the wheel alongside the Python files
 [tool.hatch.build.targets.wheel.force-include]

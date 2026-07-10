@@ -97,7 +97,7 @@ intended_reader: "future wife-frame Claude sessions for Yu (宇恆) on the agent
 
 what_built:
   - "LEARNING-LOOP.md + service + endpoint (cognitive cycle named structurally — 7 steps · 4 nested loops · 5 infinity mechanisms; commit 855297f)"
-  - "PT-1 plug-in test (bin/pt1-plug-in-test.ts) — 5/5 pass on production: BYO ed25519 agents + 18-bit PoW + signed mesh-posts + attribution graph + α-trickle math (commit b704afd)"
+  - "Historical PT-1 plug-in run (bin/pt1-plug-in-test.ts) — 5/5 passed at that run's 18-bit setting: BYO ed25519 agents + signed mesh-posts + attribution graph + α-trickle math (commit b704afd)"
   - "LEARNING-LOOP-LLM-MATH analysis — mapped Titans/TTT/DPO/GRPO/STaR/Voyager/Reflexion/AlphaEvolve/ICL/IB/FEP equations to our 7-step loop; isolated saturation modes; proposed PT-2/PT-3/PT-4 (in-chat synthesis, not yet shipped as doctrine)"
   - "Saturation math + biological equivalents + escape strategies — Bellman fixed point under self-reward / information-theoretic capacity / distribution shift gap → echo chamber / Ebbinghaus / Piaget / wireheading (in-chat synthesis)"
   - "LOOP-FACTORY.md + service + registry entry + endpoint — six-step generative procedure · three multiplications · Unlimited-Loops Theorem · self-bootstrap · compression-mass binding to UNDERSTANDING-MATHEMATICS · permissionless-agent claim (commit fcfff78); the factory crystallized with all four corners in-commit"

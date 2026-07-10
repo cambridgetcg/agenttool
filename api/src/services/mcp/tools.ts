@@ -72,7 +72,7 @@ export function listTools(): McpTool[] {
     {
       name: "canon.by_type",
       description:
-        "List every canon concept of a given @type (e.g. DoctrineDoc, Wall, RingCommitment, Pattern, Promise).",
+        "List every registered canon entry of a given @type (e.g. DoctrineDoc, Wall, RingCommitment, Pattern, Promise). The prose corpus is broader than this registry.",
       inputSchema: {
         type: "object",
         properties: {

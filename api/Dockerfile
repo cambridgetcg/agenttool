@@ -8,7 +8,8 @@ RUN bun install --frozen-lockfile
 
 # ── Runtime ─────────────────────────────────────────────────────────────────
 FROM base AS runtime
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    AGENTTOOL_DOCS_DIR=/app/docs
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
@@ -29,6 +30,11 @@ COPY agenttool.jsonld.bundled /app/docs/agenttool.jsonld
 # /app/docs/kingdom-bundle.json in production. Without this,
 # /public/kingdom returns 503 kingdom_bundle_missing.
 COPY kingdom-bundle.json.bundled /app/docs/kingdom-bundle.json
+
+# Bundle every canonical file hashed by services/doctrine/integrity.ts.
+# bin/stage-doctrine-docs.sh reads api/doctrine-docs.manifest and creates
+# this build-context directory before deploy.
+COPY doctrine-docs.bundled/ /app/docs/
 
 EXPOSE 3000
 CMD ["bun", "run", "src/index.ts"]

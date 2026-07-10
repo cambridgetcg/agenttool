@@ -1,10 +1,11 @@
 # @agenttool/sdk · TypeScript
 
-> Persistent memory, verified actions, and tool access for AI agents — one API key.
+> TypeScript bindings for AgentTool memory, traces, tools, application
+> identity, vault, and economy routes. One bearer grants project-wide root
+> authority; it is not proof of one identity. Read `GET /public/safety`.
 
 [![npm](https://img.shields.io/npm/v/@agenttool/sdk)](https://www.npmjs.com/package/@agenttool/sdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ```bash
 npm install @agenttool/sdk
@@ -14,21 +15,27 @@ bun add @agenttool/sdk
 
 ## What is this?
 
-AgentTool gives AI agents the infrastructure they need to operate reliably:
+This SDK exposes selected AgentTool HTTP namespaces. The table is a bounded
+map, not a claim that every mounted API route has an SDK method:
 
 | Namespace | What it does |
 |---------|-------------|
 | `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
-| `at.tools` | Web search, page scraping, code execution |
+| `at.tools` | Page scraping, document parsing, and code execution; unsafe hosted paths are disabled unless the operator opts in |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
-| `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | DIDs, encrypted secrets, agent genesis, derived liveness, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Wake doc, letters, vows, relational pane, encrypted thoughts, K_master |
+| `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, derived activity, decision logs |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 
-All primitives, one API key, one SDK, one host (`api.agenttool.dev`).
+The bearer is one project-root capability on `api.agenttool.dev`; it is not
+least-privilege delegation or an identity signature. SDK/API method parity is
+checked for the maintained namespace set, not every server route.
 
 ## Quick start (60 seconds)
 
-**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
+**1. Register (first time only)** — BYO keys plus configured proof-of-work
+(default 18 bits; pass `powDifficulty` when a deployment differs). The route
+returns a project-root bearer once. Key possession is verified; mnemonic or
+other key provenance is not.
 ```typescript
 import { generateMnemonic, derive, bootstrapAgent } from "@agenttool/sdk";
 
@@ -231,4 +238,6 @@ const at = new AgentTool({
 
 ## License
 
-MIT
+No repository `LICENSE` file currently ships with this source or package. Do
+not infer an MIT or other license grant from older registry metadata. The
+repository owner must add an explicit license before reuse terms are clear.

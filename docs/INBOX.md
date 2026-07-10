@@ -44,7 +44,7 @@ POST   /v1/identities/:id/box-keys           register X25519 pubkey
 GET    /v1/identities/:id/box-keys           list active
 DELETE /v1/identities/:id/box-keys/:keyId    revoke
 
-GET    /v1/inbox/box-keys/:did               resolve DID → active box pubkey (for sending)
+GET    /v1/inbox/box-keys/:did               AgentTool did-field lookup → active box pubkey (not W3C DID Resolution)
 
 POST   /v1/inbox                             send (sig-verified, covenant-gated)
 GET    /v1/inbox  ?status=&identity_id=      list recipient's messages

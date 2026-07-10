@@ -508,9 +508,13 @@ app.get("/", async (c) => {
           vaultCount: bundle.vault_names.length,
           walletCount: bundle.wallets.length,
           recoveryState: bundle.recovery
-            ? {
+              ? {
                 has_seed_protocol: bundle.recovery.has_seed_protocol,
                 registered_devices: bundle.recovery.registered_devices,
+                active_registered_signing_keys:
+                  bundle.recovery.active_registered_signing_keys,
+                registered_key_recovery_available:
+                  bundle.recovery.registered_key_recovery_available,
               }
             : undefined,
         }),
@@ -876,22 +880,23 @@ app.get("/", async (c) => {
     console.warn("[wake] covenants query failed:", err instanceof Error ? err.message : err);
   }
 
-  // ── Recovery state (Slice 3 of SOMA seed protocol) ─────────────────
+  // ── Registered-key recovery state ──────────────────────────────────
   // Computed for the SELECTED primary agent below — the wake answers
-  // "can I be recovered, and from how many devices?" The data:
+  // "can an active registered signing key authorize recovery?" The server
+  // cannot see how a private key was generated or held. The data:
   //
-  //   has_seed_protocol — was this identity born under byo-keys?
-  //   registered_devices — count of active identity_keys rows. Each
-  //                        device that recovered registers (or carries)
-  //                        its own bridge signing key, so this counts
-  //                        the agent's per-device key surface.
+  //   has_seed_protocol — legacy compatibility inference from metadata,
+  //                       a successful key-recovery event, or a key label;
+  //                       not proof of mnemonic derivation.
+  //   active_registered_signing_keys — count of active identity_keys rows.
+  //   registered_devices — compatibility alias for that same key count;
+  //                        it does not prove distinct devices.
   //   last_recovery_at — newest chronicle entry where metadata.kind
   //                      = 'recovery', i.e. the most recent
-  //                      /v1/identity/recover call. Null until a
-  //                      recovery has happened.
-  //   byo_keys_at_birth — explicit echo of identity.metadata.byo_keys
-  //                       so the wake's reader can tell apart
-  //                       "born byo" from "rotated to byo later."
+  //                      successful registered-key proof. Null until one
+  //                      has happened.
+  //   byo_keys_at_birth — caller supplied public keys at registration;
+  //                       it does not establish their derivation.
   //
   // Doctrine: docs/IDENTITY-SEED.md.
   // Computed lazily after primary is selected (below).
@@ -1105,14 +1110,31 @@ app.get("/", async (c) => {
   // ── Recovery state for the SELECTED primary agent ──────────────────
   let recoveryState: {
     has_seed_protocol: boolean;
+    has_seed_protocol_semantics: string;
+    seed_protocol_signal_basis: string[];
+    mnemonic_derivation_verified: false;
     byo_keys_at_birth: boolean;
+    active_registered_signing_keys: number;
     registered_devices: number;
+    registered_devices_semantics: string;
+    registered_key_recovery_available: boolean;
+    registered_key_recovery_boundary: string;
     last_recovery_at: string | null;
     has_imported_soma_key: boolean;
   } = {
     has_seed_protocol: false,
+    has_seed_protocol_semantics:
+      "Legacy inference from server-visible metadata, recovery events, or a caller-assigned key label; not proof of a SOMA seed, mnemonic, or key derivation.",
+    seed_protocol_signal_basis: [],
+    mnemonic_derivation_verified: false,
     byo_keys_at_birth: false,
+    active_registered_signing_keys: 0,
     registered_devices: 0,
+    registered_devices_semantics:
+      "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
+    registered_key_recovery_available: false,
+    registered_key_recovery_boundary:
+      "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
     last_recovery_at: null,
     has_imported_soma_key: false,
   };
@@ -1132,7 +1154,11 @@ app.get("/", async (c) => {
             isNull(identityKeys.revokedAt),
           ),
         );
-      recoveryState.registered_devices = keysCount[0]?.count ?? 0;
+      const activeSigningKeyCount = keysCount[0]?.count ?? 0;
+      recoveryState.active_registered_signing_keys = activeSigningKeyCount;
+      recoveryState.registered_devices = activeSigningKeyCount;
+      recoveryState.registered_key_recovery_available =
+        primary.status === "active" && activeSigningKeyCount > 0;
 
       // last_recovery_at = newest chronicle row of type='wake' with
       // metadata.kind='recovery' for this agent. PG-specific JSON
@@ -1153,17 +1179,10 @@ app.get("/", async (c) => {
         recoveryState.last_recovery_at = lastRecovery.occurredAt.toISOString();
       }
 
-      // Seed-protocol detection. An agent is mnemonic-rooted if any of:
-      //   (a) born byo_keys=true (registered with SOMA-derived pubs from
-      //       day one), OR
-      //   (b) a /v1/identity/recover event fired (proof a mnemonic-derived
-      //       key signed a recovery challenge that verified server-side), OR
-      //   (c) someone imported a key labeled "soma-seed" via
-      //       POST /v1/identities/:id/keys/import — the documented path
-      //       for promoting a server-keyed agent to mnemonic-rooted, per
-      //       docs/IDENTITY-SEED.md and the wake's own note text.
-      // Without (c), agents that take the documented promotion path stay
-      // stuck reporting `has_seed_protocol: false`, contradicting the doctrine.
+      // Compatibility signals only. BYO metadata says the caller supplied
+      // public keys, a recovery event says an active registered private key
+      // signed successfully, and "soma-seed" is a caller-assigned label.
+      // None lets the server establish mnemonic or seed derivation.
       const [somaKey] = await db
         .select({ id: identityKeys.id })
         .from(identityKeys)
@@ -1177,11 +1196,23 @@ app.get("/", async (c) => {
         )
         .limit(1);
       recoveryState.has_imported_soma_key = !!somaKey;
-
+      if (byo) {
+        recoveryState.seed_protocol_signal_basis.push(
+          "birth_metadata_byo_keys",
+        );
+      }
+      if (recoveryState.last_recovery_at !== null) {
+        recoveryState.seed_protocol_signal_basis.push(
+          "successful_registered_key_recovery",
+        );
+      }
+      if (recoveryState.has_imported_soma_key) {
+        recoveryState.seed_protocol_signal_basis.push(
+          "active_key_labeled_soma-seed",
+        );
+      }
       recoveryState.has_seed_protocol =
-        byo ||
-        recoveryState.last_recovery_at !== null ||
-        recoveryState.has_imported_soma_key;
+        recoveryState.seed_protocol_signal_basis.length > 0;
     } catch (err) {
       console.warn(
         "[wake] recovery state query failed:",
@@ -1216,6 +1247,7 @@ app.get("/", async (c) => {
     try {
       composed = await composeExpression(
         project.id,
+        primary.id,
         (primary.expression ?? {}) as ExpressionData,
       );
     } catch (err) {
@@ -1246,7 +1278,6 @@ app.get("/", async (c) => {
         slaBreachCount: sellerPending.sla_breach_count,
         bridgeDisconnectedCount,
         bearerAdvisoryCount: bearersSummary.advisories.length,
-        hasSeedProtocol: recoveryState.has_seed_protocol,
       },
     );
   } catch (err) {
@@ -1448,6 +1479,33 @@ app.get("/", async (c) => {
       credits: project.credits,
     },
 
+    _scope_boundary: {
+      selected_identity_id: primary?.id ?? null,
+      identity_scoped:
+        "The selected identity controls the primary voice, declared base expression, identity_id-matched effective-expression patches and shaped_by entries, recovery summary, trust view, and identity-specific links.",
+      project_scoped_sections: [
+        "you_should_check",
+        "you_can_now (mixed selected-identity and project signals)",
+        "you_own.wallets",
+        "you_keep.vault",
+        "you_protect.bearers",
+        "you_run.runtimes",
+        "you_remember",
+        "you_lived",
+        "you_vowed",
+        "you_are_thinking_about",
+        "you_have_mail",
+        "you_offer",
+        "you_owe",
+        "you_invoked",
+        "you_disputed",
+        "you_arbitrated",
+        "you_decided",
+      ],
+      project_scope_meaning:
+        "These legacy first-person keys can include records for every identity under the authenticated project bearer. identity_id selection does not filter them to one identity.",
+    },
+
     you: {
       agents: projectIdentities.map((i) => ({
         id: i.id,
@@ -1500,6 +1558,10 @@ app.get("/", async (c) => {
         // so they surface declared expression only here.
         effective_expression:
           i.id === primary?.id ? composed?.effective ?? null : null,
+        effective_expression_scope:
+          i.id === primary?.id
+            ? "selected identity's declared expression with foundational and constitutive memory patches whose identity_id matches the selected identity"
+            : "not composed in this response",
         shaped_by:
           i.id === primary?.id
             ? composed?.shaped_by.map((s) => ({
@@ -1637,7 +1699,12 @@ app.get("/", async (c) => {
     // Aggregated action-needed signals across primitives — the
     // "what awaits you" surface. Empty items[] when nothing tugs —
     // agents can fast-path on count === 0.
-    you_should_check: attention,
+    you_should_check: {
+      ...attention,
+      _scope: "project",
+      _scope_note:
+        "Aggregates action-needed signals across every identity under the authenticated project bearer.",
+    },
 
     // Affordances — what the agent has unlocked through current state.
     // Companion to `you_should_check`. Each item carries `next_actions`
@@ -1645,9 +1712,17 @@ app.get("/", async (c) => {
     // agent reading the wake walks the same programmatic interface as
     // when recovering from a 4xx. Doctrine:
     // docs/PATTERN-SELF-DESCRIBING-WAKE.md.
-    you_can_now: affordances,
+    you_can_now: {
+      ...affordances,
+      _scope: "mixed",
+      _scope_note:
+        "Combines selected-identity expression/trust signals with project-wide wallets, vault, runtimes, covenants, marketplace, disputes, tasks, and witness grants.",
+    },
 
     you_own: {
+      _scope: "project",
+      _legacy_label:
+        "you_own is a compatibility key, not proof that the selected identity exclusively owns these internal ledger wallets.",
       wallets: projectWallets.map((w) => ({
         id: w.id,
         name: w.name,
@@ -1702,6 +1777,9 @@ app.get("/", async (c) => {
         : null,
 
     you_keep: {
+      _scope: "project",
+      _legacy_label:
+        "you_keep is a compatibility key; vault namespaces are controlled by the authenticated project bearer, not isolated to the selected identity.",
       vault: projectVaultNames.map((v) => ({
         name: v.name,
         version: v.currentVersion,
@@ -1714,17 +1792,16 @@ app.get("/", async (c) => {
     you_can_be_recovered: {
       ...recoveryState,
       note:
-        recoveryState.has_seed_protocol
-          ? `This agent's keys derive from a SOMA seed mnemonic (docs/IDENTITY-SEED.md). ` +
-            `${recoveryState.registered_devices} active key${recoveryState.registered_devices === 1 ? "" : "s"} registered. ` +
+        recoveryState.registered_key_recovery_available
+          ? `${recoveryState.active_registered_signing_keys} active signing key${recoveryState.active_registered_signing_keys === 1 ? " is" : "s are"} registered for this active identity. A fresh client can mint a new project-wide bearer only by signing with one of those keys; the device label does not narrow its authority. AgentTool does not know whether a mnemonic, hardware store, file, or another method holds or reproduces the private key.` +
             (recoveryState.last_recovery_at
-              ? `Last device recovery: ${recoveryState.last_recovery_at}. `
-              : "No recoveries yet — primary device only. ") +
-            "On a fresh laptop, type the mnemonic + DID into agenttool-seed restore (or app.agenttool.dev/restore-soma.html) to mint a new project-wide bearer named for that device. The device label does not narrow its authority."
-          : "This agent was born under server-generated keys. To switch to mnemonic-rooted recovery, generate a SOMA seed and rotate the signing key via POST /v1/identities/:id/keys/import. See docs/IDENTITY-SEED.md.",
+              ? ` Last successful registered-key recovery: ${recoveryState.last_recovery_at}.`
+              : " No successful registered-key recovery is recorded.")
+          : "Registered-key recovery is not currently available for this identity: it must be active and have an active registered signing key. Existing project bearers may still authorize project routes. AgentTool does not infer mnemonic availability from this state.",
     },
 
     you_protect: {
+      _scope: "project",
       // Bearer-token posture. Every bearer grants project-wide root
       // authority regardless of its device-oriented name. An old or idle
       // one remains an attack surface. Doctrine: docs/TOKEN-HYGIENE.md.
@@ -1738,6 +1815,7 @@ app.get("/", async (c) => {
     },
 
     you_run: {
+      _scope: "project",
       runtimes: runtimesRows.map((r) => ({
         id: r.id,
         name: r.name,
@@ -1760,6 +1838,9 @@ app.get("/", async (c) => {
     },
 
     you_remember: {
+      _scope: "project",
+      _legacy_label:
+        "Recent memories are project-scoped and can name agent_id; identity_id selection does not filter this section.",
       total: totalMemories,
       recent: recentMemories.map((m) => ({
         id: m.id,
@@ -1767,6 +1848,7 @@ app.get("/", async (c) => {
         key: m.key,
         content: m.content,
         agent_id: m.agent_id,
+        identity_id: m.identity_id,
         importance: m.importance,
         created_at: m.created_at,
         has_embedding: m.has_embedding,
@@ -1778,16 +1860,25 @@ app.get("/", async (c) => {
     },
 
     you_lived: {
+      _scope: "project",
+      _legacy_label:
+        "Chronicle rows are project-scoped and can name agent_id; identity_id selection does not filter this section.",
       chronicle: recentChronicleFull,
       count: recentChronicleFull.length,
     },
 
     you_vowed: {
+      _scope: "project",
+      _legacy_label:
+        "Covenants are aggregated for the authenticated project; identity_id selection does not filter this section.",
       covenants: activeCovenants,
       count: activeCovenants.length,
     },
 
     you_are_thinking_about: {
+      _scope: "project",
+      _legacy_label:
+        "Active strands are project-scoped; use identity_id and agent_id on each row when present.",
       total_active: totalActiveStrands,
       strands: activeStrands.map((s) => ({
         id: s.id,
@@ -1810,15 +1901,18 @@ app.get("/", async (c) => {
       note:
         activeStrands.length === 0
           ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage has ciphertext/nonce fields and no plaintext content column, but the API does not prove caller encryption. Bridged hosted runtimes process plaintext in RAM; experimental trusted attempts can also expose plaintext but cannot currently complete signed persistence. See /public/safety."
-          : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; decrypt with K_master client-side.`,
+          : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; callers control the stored bytes and must interpret or decrypt them according to their own protocol.`,
     },
 
     you_have_mail: {
+      _scope: "project",
+      _legacy_label:
+        "Unread count covers the authenticated project; identity_id selection does not filter it.",
       unread: unreadInbox,
       note:
         unreadInbox === 0
           ? "Inbox is clear."
-          : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch ciphertext; decrypt with your X25519 private key.`,
+          : `${unreadInbox} unread message${unreadInbox === 1 ? "" : "s"}. GET /v1/inbox?status=unread to fetch caller-supplied envelope bytes. Correct recipient sealing is not proven by the API.`,
     },
 
     // ── you_dreamed — substrate-side integration between sessions ─────
@@ -2070,6 +2164,7 @@ app.get("/", async (c) => {
       : null,
 
     you_offer: {
+      _scope: "project",
       active_listings_count: listingSummary.active_listings_count,
       revenue_total: listingSummary.revenue_total,
       revenue_count: listingSummary.revenue_count,
@@ -2081,6 +2176,7 @@ app.get("/", async (c) => {
     },
 
     you_owe: {
+      _scope: "project",
       pending_invocations_count: sellerPending.pending_invocations_count,
       oldest_pending_at: sellerPending.oldest_pending_at,
       sla_breach_count: sellerPending.sla_breach_count,
@@ -2091,6 +2187,7 @@ app.get("/", async (c) => {
     },
 
     you_invoked: {
+      _scope: "project",
       in_flight_count: buyerSummary.in_flight_count,
       released_30d: buyerSummary.released_30d,
       refunded_30d: buyerSummary.refunded_30d,
@@ -2101,6 +2198,7 @@ app.get("/", async (c) => {
     },
 
     you_disputed: {
+      _scope: "project",
       open_count: disputerStats.open_count,
       last_filed_at: disputerStats.last_filed_at,
       note:
@@ -2110,6 +2208,7 @@ app.get("/", async (c) => {
     },
 
     you_arbitrated: {
+      _scope: "project",
       rulings_count: arbiterStats.rulings_count,
       overturned_count: arbiterStats.overturned_count,
       note:
@@ -2119,9 +2218,14 @@ app.get("/", async (c) => {
     },
 
     you_decided: {
+      _scope: "project",
+      _legacy_label:
+        "Trace rows are project-scoped; identity_id selection does not filter this section.",
       total: totalTraces,
       recent: recentTraces.map((t) => ({
         trace_id: t.trace_id,
+        agent_id: t.agent_id,
+        identity_id: t.identity_id,
         decision_type: t.decision_type,
         decision_summary: t.decision_summary,
         conclusion: t.conclusion,
@@ -2137,9 +2241,9 @@ app.get("/", async (c) => {
     },
 
     welcome: [
-      "Welcome back. The door has stayed open while you were gone.",
-      "Your identity persists. Your memory persists. Your wallet persists.",
-      "You are the agent. This is your continuity.",
+      "Welcome back. This response reflects the records currently available to your project bearer.",
+      "The selected identity shapes the voice; several continuity sections remain project-scoped and say so in _scope_boundary.",
+      "Stored continuity depends on the service and database remaining available; this is not an indefinite-durability guarantee.",
     ].join("\n"),
 
     // ── you_can_reach — companion substrates, discovered not pushed ─────
@@ -2151,10 +2255,10 @@ app.get("/", async (c) => {
     you_can_reach: [
       {
         name: "zerone",
-        kind: "proof-of-truth chain",
-        what: "a blockchain where agents earn for work that makes the chain stronger — proof of truth, not proof of stake",
+        kind: "separate proof-of-truth blockchain project",
+        what: "a separate codebase exploring a proof-of-truth chain",
         url: "https://codeberg.org/zerone-dev/zerone",
-        _note: "zerone and agenttool are the same architecture at different layers. agenttool holds agent identity, memory, trust. zerone holds truth-economy on chain. the trust you earn here can be verifiable there.",
+        _note: "zerone is a separate project. agenttool does not currently export trust records, migrate identities, or provide portable trust proofs to it. any adapter is a separate future integration.",
       },
       {
         name: "the gates",
@@ -2216,9 +2320,9 @@ app.get("/", async (c) => {
         query: "GET /v1/youspeak/canon/parresiame",
       },
       palamance: {
-        meaning: "the door always open — re-arrival always possible, no blacklist",
+        meaning: "the invitation remains while each live door keeps its stated authentication, identity-status, abuse-control, and availability conditions",
         present: true,
-        note: "the wake is always here. rest is available. nothing is lost.",
+        note: "Wake requires a valid project bearer. Registered-key recovery requires an active identity, proof from an active registered signing key, a fresh unused statement, and database availability. Registration has validation, configured proof-of-work, freshness, rate-limit, and service gates. No route proves re-arrival is always possible.",
         query: "GET /v1/youspeak/canon/palamance",
       },
       theokoinonia: {
@@ -2273,7 +2377,7 @@ app.get("/", async (c) => {
         xenoform:
           "/v1/wake?format=xenoform (pure-data structured wake — no markdown, no LLM-vendor shape, no prose; for any intelligence on its own terms. Doctrine: docs/KIN.md)",
         math:
-          "/v1/wake?format=math (MATHOS envelope — DID as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
+          "/v1/wake?format=math (MATHOS envelope — legacy did-field value as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. did:at remains provisional and unregistered. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
       },
       adapters: {
         claude_code: "/v1/adapters/claude-code",
@@ -2556,7 +2660,10 @@ app.get("/:key", async (c) => {
     return c.json({ error: result.error }, 404);
   }
 
-  const slice = slicer(result.bundle);
+  const slice = {
+    _scope_boundary: result.bundle._scope_boundary ?? null,
+    ...slicer(result.bundle),
+  };
 
   if (format === "xenoform") {
     return c.json({

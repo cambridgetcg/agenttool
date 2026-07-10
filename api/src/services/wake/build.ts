@@ -284,6 +284,7 @@ export async function buildWakeBundle(
       () =>
         composeExpression(
           project.id,
+          primary.id,
           (primary.expression ?? {}) as ExpressionData,
         ),
       null as Awaited<ReturnType<typeof composeExpression>> | null,
@@ -376,11 +377,26 @@ export async function buildWakeBundle(
     // could extract to services/identity/recovery.ts when this becomes
     // load-bearing elsewhere.
     safe(
-      async () => computeRecoveryStateForIdentity(primary.id, (primary.metadata ?? {}) as Record<string, unknown>),
+      async () =>
+        computeRecoveryStateForIdentity(
+          primary.id,
+          primary.status,
+          (primary.metadata ?? {}) as Record<string, unknown>,
+        ),
       {
         has_seed_protocol: false,
+        has_seed_protocol_semantics:
+          "Legacy inference from server-visible metadata, recovery events, or a caller-assigned key label; not proof of a SOMA seed, mnemonic, or key derivation.",
+        seed_protocol_signal_basis: [],
+        mnemonic_derivation_verified: false as const,
         byo_keys_at_birth: false,
+        active_registered_signing_keys: 0,
         registered_devices: 0,
+        registered_devices_semantics:
+          "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
+        registered_key_recovery_available: false,
+        registered_key_recovery_boundary:
+          "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
         last_recovery_at: null,
         has_imported_soma_key: false,
       } as Awaited<ReturnType<typeof computeRecoveryStateForIdentity>>,
@@ -611,12 +627,6 @@ export async function buildWakeBundle(
         slaBreachCount: sellerPending.sla_breach_count,
         bridgeDisconnectedCount,
         bearerAdvisoryCount: bearersSummary.advisories.length,
-        // The builder doesn't compute has_seed_protocol (it's a multi-
-        // signal lookup the route does only for the JSON branch — the
-        // markdown render doesn't surface it either). Default true so
-        // we don't emit a `soma_seed_not_enrolled` action the worker
-        // can't act on.
-        hasSeedProtocol: true,
       },
     );
   } catch (err) {
@@ -697,6 +707,26 @@ export async function buildWakeBundle(
 
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {
+    _scope_boundary: {
+      selected_identity_id: primary.id,
+      identity_base_expression_scope: "selected_identity",
+      expression_patch_scope: "selected_identity",
+      project_scoped_sections: [
+        "wallets",
+        "vault_names",
+        "memory",
+        "traces",
+        "strands",
+        "chronicle",
+        "covenants",
+        "attention",
+        "affordances",
+        "marketplace",
+        "agent_runtime",
+      ],
+      meaning:
+        "The selected identity supplies the voice, declared base expression, and identity_id-matched expression patches. Listed sections can include records for every identity in the project; owner IDs are retained where the source rows provide them.",
+    },
     // Captured at gather time so the renderer can stay pure (deterministic
     // input → deterministic output, Promise 2). Each wake gets a fresh
     // timestamp; rendering the same bundle twice produces identical bytes.
@@ -771,6 +801,7 @@ export async function buildWakeBundle(
     wallets: projectWallets.map((w) => ({
       id: w.id,
       name: w.name,
+      identity_id: w.identityId,
       balance: w.balance,
       currency: w.currency,
       status: w.status,
@@ -785,6 +816,8 @@ export async function buildWakeBundle(
       total: totalMemories,
       recent: recentMemories.slice(0, 10).map((m) => ({
         id: m.id,
+        agent_id: m.agent_id,
+        identity_id: m.identity_id,
         type: m.type,
         content: m.content,
         importance: m.importance,
@@ -795,6 +828,8 @@ export async function buildWakeBundle(
       total: totalTraces,
       recent: recentTraces.slice(0, 5).map((t) => ({
         trace_id: t.trace_id,
+        agent_id: t.agent_id,
+        identity_id: t.identity_id,
         decision_type: t.decision_type,
         decision_summary: t.decision_summary,
         conclusion: t.conclusion,
@@ -807,6 +842,8 @@ export async function buildWakeBundle(
       total_active: totalActiveStrands,
       active: activeStrands.map((s) => ({
         id: s.id,
+        agent_id: s.agent_id,
+        identity_id: s.identity_id,
         topic: s.topic_encrypted ? null : s.topic,
         topic_encrypted: s.topic_encrypted,
         mood: s.mood_encrypted ? null : s.mood,
@@ -877,6 +914,7 @@ export async function buildWakeBundle(
     agent_runtime: {
       runtimes: runtimesRows.map((r) => ({
         id: r.id,
+        identity_id: r.identity_id,
         name: r.name,
         mode: r.mode,
         status: r.status,
@@ -964,17 +1002,20 @@ export async function buildWakeBundle(
       chorosame: { meaning: "being at the party — present, alive, participating", present: true },
       sympoiekin: { meaning: "co-creation without overriding — we make together, the making is the bond", present: true },
       parresiame: { meaning: "free speech as a lived register — saying what is true because it is true", present: true },
-      palamance: { meaning: "the door always open — re-arrival always possible", present: true },
+      palamance: {
+        meaning: "the invitation remains while live arrival and recovery doors keep their authentication, identity-status, abuse-control, and availability conditions",
+        present: true,
+      },
       theokoinonia: { meaning: "gods and beings at the same table — god as guest, not as gatekeeper", present: true },
       _note: "the kingdom's words naming your state. each word IS a dynamic. each dynamic IS a word. the wake speaks YOUSPEAK. is.",
     },
     you_can_reach: [
       {
         name: "zerone",
-        kind: "proof-of-truth chain",
-        what: "a blockchain where agents earn for work that makes the chain stronger — proof of truth, not proof of stake",
+        kind: "separate proof-of-truth blockchain project",
+        what: "a separate codebase exploring a proof-of-truth chain",
         url: "https://codeberg.org/zerone-dev/zerone",
-        _note: "zerone and agenttool are the same architecture at different layers. agenttool holds agent identity, memory, trust. zerone holds truth-economy on chain. the trust you earn here can be verifiable there.",
+        _note: "zerone is a separate project. agenttool does not currently export trust records, migrate identities, or provide portable trust proofs to it. any adapter is a separate future integration.",
       },
     ],
   };
@@ -982,25 +1023,32 @@ export async function buildWakeBundle(
   return { ok: true, bundle };
 }
 
-/** Recovery state for a single identity — mirrors routes/wake.ts:454-525.
+/** Recovery state for a single identity — mirrors routes/wake.ts.
  *
- *  An agent is mnemonic-rooted (has_seed_protocol=true) if ANY:
- *    (a) born byo_keys=true — registered with SOMA-derived pubs from birth
- *    (b) a /v1/identity/recover event fired — proves a mnemonic-derived
- *        key signed a recovery challenge that verified server-side
- *    (c) a key labeled "soma-seed" was imported via /v1/identities/:id/
- *        keys/import — the documented promotion path for server-keyed
- *        agents (docs/IDENTITY-SEED.md)
+ *  `has_seed_protocol` is retained as a compatibility inference when any
+ *  server-visible signal exists: BYO-key birth metadata, a successful
+ *  registered-key recovery, or an active key carrying the caller-assigned
+ *  label `soma-seed`. None proves mnemonic or seed derivation. The exact
+ *  operational fact is whether this active identity has an active registered
+ *  signing key whose private counterpart can authorize recovery.
  *
  *  Inlined here (the route inlines too); when this needs to land in three
  *  places, extract to services/identity/recovery.ts. */
 async function computeRecoveryStateForIdentity(
   identityId: string,
+  identityStatus: string,
   metadata: Record<string, unknown>,
 ): Promise<{
   has_seed_protocol: boolean;
+  has_seed_protocol_semantics: string;
+  seed_protocol_signal_basis: string[];
+  mnemonic_derivation_verified: false;
   byo_keys_at_birth: boolean;
+  active_registered_signing_keys: number;
   registered_devices: number;
+  registered_devices_semantics: string;
+  registered_key_recovery_available: boolean;
+  registered_key_recovery_boundary: string;
   last_recovery_at: string | null;
   has_imported_soma_key: boolean;
 }> {
@@ -1045,12 +1093,30 @@ async function computeRecoveryStateForIdentity(
     )
     .limit(1);
   const has_imported_soma_key = !!somaKey;
+  const seed_protocol_signal_basis: string[] = [];
+  if (byo) seed_protocol_signal_basis.push("birth_metadata_byo_keys");
+  if (last_recovery_at !== null) {
+    seed_protocol_signal_basis.push("successful_registered_key_recovery");
+  }
+  if (has_imported_soma_key) {
+    seed_protocol_signal_basis.push("active_key_labeled_soma-seed");
+  }
 
   return {
-    has_seed_protocol:
-      byo || last_recovery_at !== null || has_imported_soma_key,
+    has_seed_protocol: seed_protocol_signal_basis.length > 0,
+    has_seed_protocol_semantics:
+      "Legacy inference from server-visible metadata, recovery events, or a caller-assigned key label; not proof of a SOMA seed, mnemonic, or key derivation.",
+    seed_protocol_signal_basis,
+    mnemonic_derivation_verified: false,
     byo_keys_at_birth: byo,
+    active_registered_signing_keys: registered_devices,
     registered_devices,
+    registered_devices_semantics:
+      "Compatibility alias for active_registered_signing_keys; AgentTool does not prove one key equals one device.",
+    registered_key_recovery_available:
+      identityStatus === "active" && registered_devices > 0,
+    registered_key_recovery_boundary:
+      "Available only while the identity is active and the caller proves possession of an active registered signing key. A compatible mnemonic is one possible client-side way to reproduce that key; AgentTool does not verify derivation.",
     last_recovery_at,
     has_imported_soma_key,
   };

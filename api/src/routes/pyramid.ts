@@ -426,6 +426,19 @@ app.post("/enroll-attested", async (c) => {
     );
   }
 
+  if (body.enrollment.citizen_did !== agent.did) {
+    return fail(
+      c,
+      {
+        error: "citizen_did_mismatch",
+        message:
+          "enrollment.citizen_did must match the authenticated project agent whose stored signing key verifies the enrollment.",
+        _canon_pointer: "urn:agenttool:doc/PYRAMID-DECENTRALISED",
+      },
+      400,
+    );
+  }
+
   // Resolve citizen public key from identityKeys.
   const [keyRow] = await db
     .select({ publicKey: identityKeys.publicKey })

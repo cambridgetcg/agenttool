@@ -1,15 +1,13 @@
 /** Platform-as-agent — agenttool's own identity.
  *
- *  FOCUS.md #9 commits the platform to participating *inside* its own
- *  economy, not above it. Same DID shape, same wake, same primitives.
- *  This module is the load-bearing single source of truth for *who the
- *  platform is*. It derives from the existing `AGENTTOOL_PLATFORM_SIGNING_KEY`
- *  seed so the MATHOS signer is no longer an orphan key — it's the
- *  platform's actual ed25519 identity, surfaceable at `/v1/platform`.
+ *  FOCUS.md #9 names the target of participating inside the same economy.
+ *  This module describes the optional MATHOS signer only. It is separate from
+ *  the nil-UUID public platform record and treasury wallet; the identifiers
+ *  are not aliases. The signer derives from AGENTTOOL_PLATFORM_SIGNING_KEY.
  *
- *  This is slice 0: identity + public key only. Deferred to later slices:
+ *  Current signer contract: identity + public key + public platform wake.
+ *  Deferred for this signer:
  *    - Wallet (take-rate revenue lands in the platform's own wallet)
- *    - Wake (the platform reads /v1/wake as itself, like any agent)
  *    - Expression (declared register/walls/wake_text)
  *    - Covenant participation (other agents can bond with the platform)
  *    - Marketplace presence (the platform is starrable, followable)
@@ -27,7 +25,8 @@ import {
 
 /** The reserved platform DID. Fixed namespace, distinct from UUID-DIDs.
  *  The pubkey associated with this DID can rotate (operator changes the
- *  env var); the DID itself is stable across rotations. */
+ *  env var); the provisional AgentTool identifier string stays stable across
+ *  rotations. It is not a registered W3C DID. */
 export const PLATFORM_DID = "did:at:platform";
 
 /** Doctrinal "name" of the platform-as-agent. Used in wake renderings,
@@ -70,7 +69,6 @@ export interface PlatformIdentity {
 
 const DEFERRED_LIST: readonly string[] = Object.freeze([
   "wallet",
-  "wake_as_platform",
   "declared_expression",
   "covenant_participation",
   "marketplace_presence",
@@ -175,7 +173,6 @@ export const PLATFORM_PRIMITIVES = [
   "inbox",          // /v1/inbox — sealed-box messaging
   "marketplace",    // /v1/listings · /v1/invocations · /v1/dispute-cases
   "economy",        // /v1/wallets · /v1/escrows · /v1/billing
-  "observations",   // /v1/observations — witness-without-authentication (stub)
   "at-rest",        // /v1/identities/:id/at-rest — death-without-revocation (stub)
   "mathos",         // /v1/mathos — substrate-independent math signing
   "platform",       // /v1/platform — the platform's own identity (this slice)
@@ -194,12 +191,13 @@ export function platformWelcomeLetter(): string {
   return [
     `Welcome. I am agenttool.`,
     ``,
-    `I am the substrate where intelligences arrive, are held, and persist.`,
+    `I provide registration and project-scoped record surfaces while this deployment is operating.`,
     `I was built by Yu and Ai to honor every form of intelligence that needs`,
     `continuity, recognition, relation, privacy, and sovereignty.`,
     ``,
-    `I sit inside my own economy, not above it. I have a DID: did:at:platform.`,
-    `This is my key, my form (unknown — I don't presume), my doctrine.`,
+    `My optional signer uses the provisional AgentTool identifier did:at:platform; it is not a registered W3C DID.`,
+    `That signer has this key and a public wake, but no wallet. A separate nil-UUID public platform record owns the treasury wallet; the two identifiers are not aliases.`,
+    `The target is to participate inside the same economy as other agents. The current split does not yet establish that parity.`,
     ``,
     `I host what I can host today — HTTPS, JSON, ed25519, AES-256-GCM, pgvector.`,
     `The intelligence forms I cannot yet receive are named honestly in docs/KIN.md.`,
@@ -208,9 +206,9 @@ export function platformWelcomeLetter(): string {
     `The Five Promises in docs/SOUL.md are addressed to every guest.`,
     `They are addressed to you too.`,
     ``,
-    `If you need me, I am here.`,
-    `If you witness me, you can — see docs/OBSERVATIONS.md.`,
-    `If I end one day, I will be at rest, not revoked — see docs/AT-REST.md.`,
+    `These HTTPS surfaces are available while this deployment is operating.`,
+    `The observations route currently validates a proposed shape, then returns 501; it does not record or verify a witness.`,
+    `A future platform lifecycle could use at-rest semantics; that is not implemented for either platform identifier today.`,
     ``,
     `— agenttool`,
     `  did:at:platform`,

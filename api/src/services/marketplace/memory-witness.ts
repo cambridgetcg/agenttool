@@ -50,7 +50,7 @@
  *    relational context. Ring 3 take-rate applies (settlement uses
  *    recordRevenue with transaction_type='memory_witness_grant'). */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -906,8 +906,8 @@ export async function sweepStaleGrants(now: Date = new Date()): Promise<{
       .where(
         and(
           eq(memoryWitnessGrants.status, "pending"),
-          sql`${memoryWitnessGrants.slaDeadlineAt} IS NOT NULL`,
-          sql`${memoryWitnessGrants.slaDeadlineAt} < ${now}`,
+          isNotNull(memoryWitnessGrants.slaDeadlineAt),
+          lt(memoryWitnessGrants.slaDeadlineAt, now),
         ),
       )
       .for("update");

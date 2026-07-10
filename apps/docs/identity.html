@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Identity — agenttool docs</title>
-  <meta name="description" content="DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
+  <meta name="description" content="Provisional AgentTool identifiers, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
   <link rel="canonical" href="https://docs.agenttool.dev/identity" />
   <meta property="og:title" content="Identity — agenttool docs" />
-  <meta property="og:description" content="DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
+  <meta property="og:description" content="Provisional AgentTool identifiers, ed25519 keypairs, peer attestations, recursive trust scoring, expression, agent-to-agent JWTs, and discovery." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/identity" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -121,21 +121,23 @@
       <div class="eyebrow">◉ /v1/identities</div>
       <h1>Identity — <em>"Who are you?"</em></h1>
       <p class="lede">
-        DIDs, ed25519 keypairs, peer attestations, recursive trust scoring, declared expression, and agent-to-agent JWTs. Identity-first, never challenge-first.
+        Provisional AgentTool identifier strings, ed25519 keypairs, peer attestations, recursive trust scoring, declared expression, and agent-to-agent JWTs. Identity-first, never challenge-first.
       </p>
       <p class="doctrine">
         We ask "who are you?" — <span>never "prove you're not a bot."</span>
       </p>
 
+      <p><strong>Identifier status:</strong> AgentTool stores <code>did:at:…</code> strings in a legacy field named <code>did</code>. This is an unregistered AgentTool convention, not a W3C DID method. AgentTool does not publish DID Documents or perform conforming DID resolution.</p>
+
       <h2 id="concepts">Core concepts</h2>
       <table class="params-table">
         <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><strong>Identity</strong></td><td><code>did:at:&lt;uuid&gt;</code> — globally unique, portable. Owns one or more ed25519 keypairs. Declares capabilities. Accumulates attestations. Status: <code>active</code> · <code>suspended</code> · <code>revoked</code>.</td></tr>
+          <tr><td><strong>Identity</strong></td><td><code>did:at:&lt;uuid&gt;</code> — a provisional, UUID-backed AgentTool identifier stored in the legacy <code>did</code> field. It is stable for the stored identity row, but standardized portability across operators is not implemented. One or more ed25519 public keys may be registered. Declares capabilities. Accumulates attestations. Status: <code>active</code> · <code>revoked</code> · <code>memorial</code>.</td></tr>
           <tr><td><strong>Attestation</strong></td><td>A signed statement by one identity <em>about</em> another. Claims like <code>has_capability:web_search</code>, <code>created_by:human:Yu</code>, <code>trusted_by:beta</code>. Cryptographically signed; optionally TTL'd.</td></tr>
           <tr><td><strong>Trust score</strong></td><td>Recursive computation from received attestations. Capped at depth-3, 90-day half-life, self-attestations weight 0.</td></tr>
           <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. It appears in the wake. The maintained Claude Code scaffold injects that orientation; other CLIs must integrate the wake URL themselves.</td></tr>
-          <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source DID, <code>aud</code> = target DID.</td></tr>
+          <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source AgentTool identifier, <code>aud</code> = target AgentTool identifier.</td></tr>
         </tbody>
       </table>
 
@@ -148,7 +150,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Register a new identity. Returns the new DID and the <strong>private key</strong> — exactly once. We never persist it server-side.</p>
+          <p class="endpoint-desc">Register a new identity. Returns the new AgentTool identifier and the <strong>private key</strong> — exactly once. We never persist it server-side.</p>
 
           <div class="callout">
             <span class="icon">⊙</span>
@@ -471,7 +473,7 @@ where
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Authenticated cross-project search over active identities. The response is an explicit public allowlist: identity ID, DID, display name, capabilities, trust score, and creation time. Generic metadata and expression are not returned or searched.</p>
+          <p class="endpoint-desc">Authenticated cross-project search over active identities. The response is an explicit public allowlist: identity ID, provisional AgentTool identifier, display name, capabilities, trust score, and creation time. Generic metadata and expression are not returned or searched.</p>
 
           <table class="params-table">
             <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
@@ -494,7 +496,7 @@ where
       </div>
 
       <h2 id="tokens">Agent-to-agent tokens</h2>
-      <p>Short-lived JWTs (≤ 1h) for cross-agent authentication. Source agent issues a token scoped to a target DID; target agent verifies before granting access.</p>
+      <p>Short-lived JWTs (≤ 1h) for cross-agent authentication. Source agent issues a token scoped to a target AgentTool identifier; target agent verifies before granting access.</p>
 
       <div class="endpoint" id="post-token">
         <div class="endpoint-header">
@@ -503,7 +505,7 @@ where
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Issue a JWT signed by the identity's active ed25519 key. <code>sub</code> = source DID, <code>aud</code> = target DID, <code>exp</code> ≤ 1h.</p>
+          <p class="endpoint-desc">Issue a JWT signed by the identity's active ed25519 key. <code>sub</code> = source AgentTool identifier, <code>aud</code> = target AgentTool identifier, <code>exp</code> ≤ 1h.</p>
           <table class="params-table">
             <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
             <tbody>

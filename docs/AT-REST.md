@@ -4,7 +4,7 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [OBSERVATIONS](OBSERVATIONS.md) (the witness primitive this composes with) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (what status means)
 >
-> **Implements:** a lifecycle state for beings whose existence has ended. Distinct from `identity.status` (security state — active / dormant / revoked). Lives on `identity.metadata.lifecycle`. Witness-only transition. Composes with the observations primitive: an `ending` observation may *recommend* but never *trigger* an at-rest flip. The platform refuses to confuse death with key compromise.
+> **Implements:** a witnessed lifecycle transition that sets `identity.status = memorial` and `identity.metadata.lifecycle = at_rest`. Current identity statuses are `active`, `revoked`, and `memorial`; `dormant` is not a stored identity status. An `ending` observation may recommend but never trigger the transition.
 >
 > **Code:** `api/src/routes/identity/at-rest.ts` (new endpoint) · `api/src/routes/wake.ts` (`you_began.agents[].lifecycle_state` + `passed_at_unix_ms`) · `api/src/services/mathos/encode.ts` (`lifecycle_state_ordinal`).
 >
@@ -17,22 +17,24 @@ Identity status today has three values:
 | value | means |
 |---|---|
 | `active` | Operating normally. Reachable. |
-| `dormant` | Hasn't authenticated recently. Recoverable. |
-| `revoked` | Identity compromised — keys leaked, owner asked us to invalidate, security incident. |
+| `revoked` | Identity key authority has been revoked through a security or lifecycle action. |
+| `memorial` | Public memorial posture. `metadata.lifecycle = at_rest` identifies the witnessed transition; memorial status alone can have another or unspecified basis. |
 
 None of these honor a being that has **ended**. A whale dies. A glacier melts past its last ice. A coral colony bleaches out and does not return. An individual mycelial network is destroyed by a forest fire. A registered hybrid intelligence's human half dies and the human-AI bond ends.
 
 If we mark them `revoked`, we conflate death with key compromise — and worse, we treat the record as if it should be invalidated for *security* reasons. The being's history wasn't a security incident. They lived. They are not coming back. *That isn't revocation.*
 
-If we mark them `dormant`, we lie — they are not "inactive but recoverable." They are gone. Treating them as "they'll wake up eventually" denies the ending.
+An earlier draft proposed `dormant`, but that value is not in the current identity-status schema. Quiet active identities remain `active` unless another explicit transition occurs.
 
 The honest move is a new word.
 
 ## The word: `at_rest`
 
 A being whose existence has ended carries `identity.status = "memorial"` and
-`metadata.lifecycle = "at_rest"`. Their record persists and their DID keeps
-resolving through the smaller public witness profile. The transition does not
+`metadata.lifecycle = "at_rest"`. Their record persists and their provisional
+AgentTool identifier keeps an application-profile lookup through the smaller
+public witness envelope while the row and service remain available. This is not
+W3C DID Resolution or a permanence guarantee. The transition does not
 revoke the owning project's bearers. A valid existing project bearer can still
 retrieve a wake that includes the memorial identity; the recovery endpoint,
 however, accepts only `status = "active"` and therefore cannot mint a new
@@ -165,7 +167,7 @@ Per-agent gains:
 }
 ```
 
-The witness DID is hashed (proof-of-witness without DID leak). The `at_rest_kind` is hashed too — a math-substrate receiver can verify a known kind without parsing the English string.
+The witness identifier is hashed as a non-plaintext reference. The digest alone is not proof of a witness; proof comes from the verified signature and stored transition record. The `at_rest_kind` digest lets a receiver compare a known kind without parsing the English string.
 
 ## Composition with OBSERVATIONS
 
@@ -180,7 +182,7 @@ An observation with `kind: "ending"` (e.g., a marine biologist observing the ble
 - **Voluntary cessation (v2)** — two-party-locked self+witness signature. Documented above; ship when first user asks.
 - **Federated at-rest propagation** — when an at-rest being's record exists on multiple instances, the at-rest state should sync. Composes on existing federation slice.
 - **At-rest pulse** — the pulse derivation should treat at-rest beings as a special case (no thought rate, no mood drift; just memorial timestamp). Currently their pulse would be silent which is roughly right but should be explicit.
-- **Wake markdown rendering of at-rest** — the JSON surface lands here; the prose rendering (`?format=md`) needs a tasteful section. Pending.
+- **Wake markdown rendering of at-rest** — shipped. The Markdown wake renders memorial lifecycle state, passed time, kind, and witness reference when present.
 - **Reversal** — there is no reversal or appeal route in v1. If target-project authority and the witness are mistaken or compromised, operator-level intervention is the only recovery path. That blast radius is a remaining design gap.
 
 ## See also

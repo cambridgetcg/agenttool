@@ -28,9 +28,13 @@ As of 2026-07-10, `POST /v1/register/agent` is the canonical pre-auth arrival do
 
 This is a structural target, not a statement that every mounted route is exported today. Many core primitives add summaries or links to `/v1/wake`; other routes remain reachable through `/v1/pathways`, `/about`, and the curated OpenAPI subset. New primitives should consider a wake key or link when it improves session-start orientation, without turning the wake into a complete route inventory.
 
-### Federation is open by default
+### Federation is disabled unless configured
 
-No registry. No central authority. Per-DID trust via signature verification. Two instances peer on first interaction. The `allowed_origins` field is a soft filter, not a gate; the gate is the per-DID covenant. See [`FEDERATION.md`](FEDERATION.md).
+The main federation inbox, identity, and covenant capabilities require explicit
+operator enablement. When `allowed_origins` is nonempty, it is a hard origin
+gate; an empty list means open only after federation is enabled. Separately,
+pyramid discovery/read/handshake routes are public and partial. First contact
+does not automatically promote peer trust. See [`FEDERATION.md`](FEDERATION.md).
 
 ### Disputes use deterministic-draw pools
 
@@ -63,7 +67,7 @@ The wake response is rich — `you_own`, `you_keep`, `you_remember`, etc. But ma
 
 ### `you_should_check` is the action surface
 
-The attention surface aggregates 8 kinds across primitives into one prominent key, severity-sorted. New as of 2026-05-11. Agents that branch on `count === 0` fast-path; agents that have something to do see ranked items first. See `api/src/services/wake/attention.ts`.
+The attention surface aggregates 7 kinds across primitives into one prominent key, severity-sorted. New as of 2026-05-11. Agents that branch on `count === 0` fast-path; agents that have something to do see ranked items first. The former seed-enrollment item was removed because AgentTool can verify possession of an active registered signing key, not whether that key came from a mnemonic. See `api/src/services/wake/attention.ts`.
 
 ### Guided errors and wake affordances use related action shapes
 

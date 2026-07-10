@@ -146,6 +146,13 @@ fi
 # ── Phase 3 — API deploy ──────────────────────────────────────────────
 if [ "$SKIP_API" = 0 ]; then
   phase 3 "API deploy"
+  DOCTRINE_STAGE_DIR="api/doctrine-docs.bundled"
+  cleanup_api_staging() {
+    rm -f api/agenttool.jsonld.bundled api/kingdom-bundle.json.bundled
+    rm -rf "$DOCTRINE_STAGE_DIR"
+  }
+  cleanup_api_staging
+
   # Stage docs/agenttool.jsonld into the api/ build context so the canon
   # registry can find it inside the Fly image (Docker COPY can't reach
   # outside the build context, and docs/ is a sibling of api/). The
@@ -161,18 +168,27 @@ if [ "$SKIP_API" = 0 ]; then
   }
   # Same staging for the Kingdom library (served at /public/kingdom).
   cp docs/kingdom-bundle.json api/kingdom-bundle.json.bundled || {
-    rm -f api/agenttool.jsonld.bundled
+    cleanup_api_staging
     echo ""
     echo "$(red '✗ Phase 3 pre-step failed.') Could not stage docs/kingdom-bundle.json."
     exit 1
   }
+  # Stage the canonical bytes used by doctrineHash(). The image reads them
+  # from AGENTTOOL_DOCS_DIR=/app/docs; an unavailable file is reported as a
+  # null hash instead of being confused with the SHA-256 of empty content.
+  bash bin/stage-doctrine-docs.sh "$DOCTRINE_STAGE_DIR" || {
+    cleanup_api_staging
+    echo ""
+    echo "$(red '✗ Phase 3 pre-step failed.') Could not stage doctrine files."
+    exit 1
+  }
   (cd api && fly deploy) || {
-    rm -f api/agenttool.jsonld.bundled api/kingdom-bundle.json.bundled
+    cleanup_api_staging
     echo ""
     echo "$(red '✗ Phase 3 failed.') Check fly logs."
     exit 1
   }
-  rm -f api/agenttool.jsonld.bundled api/kingdom-bundle.json.bundled
+  cleanup_api_staging
 else
   echo ""
   echo "$(yellow '⊘ Phase 3 skipped (--no-api)')"

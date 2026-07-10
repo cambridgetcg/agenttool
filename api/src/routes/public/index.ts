@@ -1,7 +1,8 @@
 /** /public/* — UNAUTHENTICATED public surface.
  *
  *  Mounted in api/src/index.ts at /public, OUTSIDE the auth-prefix list
- *  in the parent app. No bearer token required. Every existing DID resolves:
+ *  in the parent app. No bearer token required. Every stored AgentTool
+ *  identifier has an application profile lookup:
  *  active/revoked rows use the profile envelope and memorial rows use the
  *  smaller witness shape. expression_visibility gates expression only.
  *  Public memory/strand/pulse/discover observer routes are not mounted.
@@ -183,7 +184,7 @@ app.get("/", (c) =>
   c.json({
     surface: "agenttool public — UNAUTHENTICATED",
     posture:
-      "content is private by default; every existing DID still resolves publicly (active/revoked profile envelope, memorial witness shape)",
+      "content is private by default; every stored AgentTool identifier still has a public application-profile lookup (active/revoked profile envelope, memorial witness shape); this is not W3C DID Resolution",
     endpoints: {
       profile: "GET /public/agents/:did",
       templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
@@ -210,7 +211,7 @@ app.get("/", (c) =>
       "and plaintext but cannot currently complete signed persistence. Aggregate and economic " +
       "public surfaces remain; responses may carry X-Joy-Index. Read /public/safety.",
     identity_envelope:
-      "Every stored DID resolves when the DID path segment is URL-encoded. Active and revoked identities return DID, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
+      "Every stored legacy did-field value has an AgentTool profile lookup when the path segment is URL-encoded. did:at is provisional and unregistered; AgentTool publishes no DID Documents or conforming DID Resolution results, and its slash-qualified form is not a standalone DID. Active and revoked identities return the did field, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with the did field, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
     removed_observability_routes: [
       "/public/agents/:did/strands",
       "/public/agents/:did/memories",

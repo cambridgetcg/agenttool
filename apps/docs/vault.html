@@ -179,7 +179,7 @@
       <div class="eyebrow">◍ /v1/vault</div>
       <h1>Vault — <em>your secrets are yours</em>.</h1>
       <p class="lede">
-        AES-256-GCM with HKDF-derived per-project keys. Versioned and audit-logged. The <code>agent_ids</code> field is an intra-project label check, not proof that a particular DID made the call.
+        AES-256-GCM with HKDF-derived per-project keys. Versioned and audit-logged. The <code>agent_ids</code> field is an intra-project label check, not proof that a particular identity made the call.
       </p>
       <p class="doctrine">
         Default values are server-encrypted, not end-to-end encrypted. <span>The running service derives their keys and can read them. Use <code>agent_encrypted=true</code> only when your client supplies ciphertext the server should not decrypt.</span>
@@ -189,7 +189,7 @@
       <ul>
         <li><strong>Per-project derived key.</strong> HKDF derives it from one platform-wide <code>VAULT_MASTER_KEY</code> plus the project ID and fixed <code>vault-v1</code> context. There is no epoch rotation. Compromise of the platform master can expose all default server-encrypted vault values.</li>
         <li><strong>Versioned secrets.</strong> Every <code>PUT</code> creates a new version. Previous versions stay readable until explicitly deleted.</li>
-        <li><strong>Access label.</strong> For HTTP reads, <code>agent_ids</code> is compared with a caller-supplied <code>X-Agent-Id</code> under a project-root bearer. It is not DID-signature authentication. Hosted runtime reads currently bypass this check and the per-secret read audit.</li>
+        <li><strong>Access label.</strong> For HTTP reads, <code>agent_ids</code> is compared with a caller-supplied <code>X-Agent-Id</code> under a project-root bearer. It is not identity-signature authentication. Hosted runtime reads currently bypass this check and the per-secret read audit.</li>
         <li><strong>Server-side at-rest encryption.</strong> Vault value columns store ciphertext. The running service receives plaintext for default-mode writes and reads and derives keys from <code>VAULT_MASTER_KEY</code>; this is not end-to-end opacity or a whole-host no-plaintext guarantee.</li>
       </ul>
 
@@ -209,7 +209,7 @@
               <tr><td><span class="pname">value</span><span class="req">required</span></td><td><span class="ptype">string</span></td><td>The plaintext secret. Encrypted server-side before write.</td></tr>
               <tr><td><span class="pname">tags</span><span class="opt">optional</span></td><td><span class="ptype">string[]</span></td><td>Searchable tags — e.g. <code>["openai", "production"]</code>.</td></tr>
               <tr><td><span class="pname">description</span><span class="opt">optional</span></td><td><span class="ptype">string</span></td><td>Human-readable note. Surfaces in the wake's <code>you_keep</code>.</td></tr>
-              <tr><td><span class="pname">agent_ids</span><span class="opt">optional</span></td><td><span class="ptype">uuid[]</span></td><td>HTTP read labels accepted through <code>X-Agent-Id</code>. Empty = any caller holding the project bearer. This does not authenticate the named DID.</td></tr>
+              <tr><td><span class="pname">agent_ids</span><span class="opt">optional</span></td><td><span class="ptype">uuid[]</span></td><td>HTTP read labels accepted through <code>X-Agent-Id</code>. Empty = any caller holding the project bearer. This does not authenticate the named identity.</td></tr>
               <tr><td><span class="pname">rotation_due_at</span><span class="opt">optional</span></td><td><span class="ptype">timestamptz</span></td><td>Optional rotation reminder. Surfaces in the wake.</td></tr>
             </tbody>
           </table></div>

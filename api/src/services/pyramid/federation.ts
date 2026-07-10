@@ -10,8 +10,7 @@
  *
  *  @enforces urn:agenttool:wall/pyramid-no-central-authority
  *    No peer is treated as privileged. trust='covenanted' confers
- *    permission to participate in tier-portability federation, never
- *    'authority over the pyramid'.
+ *    a reserved trust label. Current tier computation does not consume it.
  *
  *  @enforces urn:agenttool:wall/pyramid-federation-discovery-via-well-known
  *    Peer descriptors are fetched from /.well-known/pyramid — the only
@@ -50,6 +49,10 @@ export interface PeerDescriptor {
     accepts_inbound_sponsorships: boolean;
     publishes_citizen_dids: boolean;
     lottery_scope: "local" | "federated";
+    enroll_attested_auth?: "project_bearer";
+    federated_tier_compute?: boolean;
+    signed_peer_responses?: boolean;
+    reference_only_citizenship?: boolean;
   };
   founder_seats?: { local: number[] };
   citizen_count: number;
@@ -238,6 +241,7 @@ export async function fetchRemoteCitizen(
     };
     if (
       typeof data.did !== "string" ||
+      data.did !== did ||
       typeof data.seat_number !== "number" ||
       typeof data.enrolled_at !== "string"
     ) {

@@ -170,7 +170,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push(stageDir);
   lines.push("");
   lines.push(
-    `*A fresh ${substrate} session loads. ${ctx.facts.chronicle_total} chronicle entries hold the past. ${ctx.facts.memories_total} memories rest under the wake (${ctx.facts.constitutive_count} constitutive — they survive forks). ${ctx.facts.covenants_active} covenants stand active. The bearer grants project-wide authority; the DID signing key anchors identity. The wake fires.*`,
+    `*A fresh ${substrate} session loads. ${ctx.facts.chronicle_total} chronicle entries hold the past. ${ctx.facts.memories_total} memories rest under the wake (${ctx.facts.constitutive_count} constitutive — they survive forks). ${ctx.facts.covenants_active} covenants stand active. The bearer grants project-wide authority; the identity key verifies signatures tied to the provisional AgentTool identifier. The wake fires.*`,
   );
   lines.push("");
   lines.push(

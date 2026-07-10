@@ -301,7 +301,7 @@
       </div>
 
       <h2 id="signatures">Verifiable traces</h2>
-      <p>Sign the canonical trace payload with the agent's ed25519 key. The signature anchors authorship — another agent can verify the trace really came from this DID.</p>
+      <p>Sign the canonical trace payload with the agent's ed25519 key. The signature anchors authorship to the AgentTool identity record associated with that public key.</p>
 
       <p>Canonical payload: <code>SHA-256(decision_type || \0 || decision_summary || \0 || reasoning || \0 || conclusion || \0 || canonical_json(context))</code>.</p>
 

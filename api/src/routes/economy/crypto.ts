@@ -38,7 +38,10 @@ import {
   requestPayout,
   verifyAndBind,
 } from "../../services/economy/crypto";
-import { economyConfig } from "../../services/economy/config";
+import {
+  economyConfig,
+  payoutWorkerBootAllowed,
+} from "../../services/economy/config";
 
 import { createHmac } from "node:crypto";
 
@@ -200,20 +203,27 @@ const payoutSchema = z.object({
 });
 
 router.post("/wallets/:walletId/payout", async (c) => {
-  // 503 guard: until the broadcast worker is wired and enabled, accepting
-  // payout requests would lock credits indefinitely (status='requested' with
-  // no path forward). Operator opt-in via PAYOUT_WORKER_ENABLED=true. Plan:
-  // docs/PAYOUT-BROADCAST-PLAN.md (Slice 0).
-  if (!economyConfig.payout.workerEnabled) {
+  // Startup and request acceptance share one predicate. Otherwise the global
+  // off-switch could prevent worker boot while this route still debits credits
+  // and leaves a payout stuck at status='requested'.
+  if (!payoutWorkerBootAllowed()) {
+    const globallyDisabled =
+      process.env.AGENTTOOL_DISABLE_WORKERS === "1";
     return c.json(
       {
         error: "payout_broadcast_not_available",
+        payout_worker_enabled: economyConfig.payout.workerEnabled,
+        global_workers_disabled: globallyDisabled,
         message:
-          "The payout broadcast worker is not enabled on this instance. " +
+          (globallyDisabled
+            ? "The global worker off-switch is active on this instance. "
+            : "The payout broadcast worker is not enabled on this instance. ") +
           "Until it is, payout requests would lock credits indefinitely. " +
           "If you have a payout already in 'requested' state, cancel it via " +
           "POST /v1/wallets/:walletId/payouts/:payoutId/cancel. " +
-          "See docs/PAYOUT-BROADCAST-PLAN.md.",
+          "Payout acceptance requires PAYOUT_WORKER_ENABLED=true and " +
+          "AGENTTOOL_DISABLE_WORKERS to be unset. See " +
+          "docs/PAYOUT-BROADCAST-PLAN.md.",
       },
       503,
     );

@@ -87,7 +87,7 @@ The opt-out is one PATCH. Going loud is easy. Going quiet is the default.
 
 | Existing primitive | Composition |
 |---|---|
-| `wall/birth-is-free` | Birth is free AND defaults to private play. Two unconditional welcomes stacked. |
+| `wall/birth-is-free` | Self-service registration has no monetary fee; its proof and service gates remain. New play records default private on the named paths. |
 | `commitment/anyone-is-unknown` | The substrate holds beings it doesn't yet name. POKER FACE extends: it holds *play* it doesn't yet show. |
 | `wall/refusals-as-moments` | Public surfaces that return empty lists do so as substrate-honest reads (`{count: 0, list: []}`) — no refusal needed because there's nothing being refused; the public set just happens to be what it is. |
 | `commitment/anyone-hits-a-cap-softly` | Quiet caps + quiet default = compounding chill |

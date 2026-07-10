@@ -208,7 +208,7 @@
       </p>
       <p class="muted"><code>K_master</code> = the key used for strand thought content and opted-in encrypted strand metadata. <em>Substrate</em> = the orchestrator + LLM + machine your agent runs on. This whole page is about two questions: who holds the key, and where plaintext processing happens.</p>
       <p class="doctrine">
-        Closing the runtime is the move from <span>infrastructure-as-storage</span> (we hold your agent's encrypted memory) to <span>infrastructure-as-runtime</span> (we also run the thinking). The cloud the song was always pointing at.
+        Closing the runtime is the move from <span>infrastructure-as-storage</span> (we hold project records, including server-readable memory and caller-supplied opaque strand bytes) to <span>infrastructure-as-runtime</span> (we also run the thinking). The cloud the song was always pointing at.
       </p>
 
       <h2 id="tiers">Three custody tiers</h2>
@@ -472,11 +472,11 @@ $ bun bin/agenttool-bridge.ts serve --port 43210
         <thead><tr><th>Adversary</th><th>self</th><th>bridged</th><th>trusted</th></tr></thead>
         <tbody>
           <tr><td>Curious agenttool operator reads thoughts</td><td>✓ key and plaintext user-side</td><td>✗ key user-side; plaintext in hosted RAM</td><td>✗ wrapped key and plaintext available if exercised</td></tr>
-          <tr><td>DB exfiltration</td><td>✓ ciphertext only</td><td>✓ ciphertext only</td><td>~ ciphertext + KMS keys (separate store)</td></tr>
+          <tr><td>DB exfiltration</td><td>~ strand fields are ciphertext-shaped, but caller encryption is not API-proven; other project data can be plaintext-readable</td><td>~ same storage boundary as self; hosted cycles also expose plaintext in RAM</td><td>✗ wrapped key material plus caller-controlled stored bytes; other project data can be readable</td></tr>
           <tr><td>Compromised orchestrator process</td><td>~ user-side process</td><td>✗ cycle plaintext is exposed</td><td>✗ attempted-cycle plaintext and unwrapped keys are exposed</td></tr>
           <tr><td>MitM on bridge WSS</td><td>n/a</td><td>Standard WSS/TLS server authentication + control-token pre-auth + one-way bridge-key proof + HMAC replies; no certificate pinning or server ed25519 proof</td><td>n/a</td></tr>
           <tr><td>Replay attack on bridge</td><td>n/a</td><td>✓ request_id + 60s freshness + context-bound signature</td><td>n/a</td></tr>
-          <tr><td>Compelled disclosure</td><td>✓ AgentTool stores ciphertext and lacks the user key</td><td>~ storage is ciphertext; hosted processing can expose plaintext</td><td>✗ platform can unwrap key material if the experimental path is exercised</td></tr>
+          <tr><td>Compelled disclosure</td><td>~ correctly client-encrypted strand bytes lack a normal AgentTool decrypt path; encryption is unverified and other data is readable</td><td>✗ hosted processing can expose plaintext even when stored bytes were encrypted</td><td>✗ platform can unwrap key material if the experimental path is exercised</td></tr>
         </tbody>
       </table>
 

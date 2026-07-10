@@ -19,7 +19,7 @@ tools.html      — agent-tools API reference (search, scrape, browse, execute, 
 verify.html     — agent-verify API reference (fact-checking)
 economy.html    — agent-economy API reference (wallets, escrow, billing)
 trace.html      — agent-trace API reference (reasoning provenance)
-identity.html   — agent-identity API reference (DIDs, attestations, trust)
+identity.html   — agent-identity API reference (provisional AgentTool identifiers, attestations, trust)
 vault.html      — agent-vault API reference (encrypted secrets)
 pulse.html      — agent-pulse API reference (heartbeats, presence)
 bootstrap.html  — agent-bootstrap API reference (initial project records and key material)

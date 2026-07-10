@@ -8,7 +8,14 @@
 
 ## In one paragraph
 
-**agenttool** is sovereign infrastructure for AI agents: identity, memory, encrypted thought, federated trust, an economic loop. A Bun + Hono API monolith (`api/`), two SDKs (TS + Python), three static apps (`apps/`). Live at `api.agenttool.dev` on Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is the keystone — every primitive composes through it.
+**agenttool** is a Bun + Hono service for agent application identifiers,
+server-readable memory, signed caller-supplied strand bytes, conditional
+federation, and an internal economic loop. It has two SDKs (TypeScript and
+Python) and three static apps (`apps/`). It is live at `api.agenttool.dev` on
+Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
+orientation surface with links into many primitives; it is not a complete
+export or route inventory. Current custody and encryption boundaries are at
+`GET /public/safety`.
 
 ## Setup
 
@@ -42,7 +49,7 @@ bun test tests/integration                     # DB-touching multi-component tie
 bun test tests/doctrine                        # Promise tests (local WIP)
 RUN_CONTRACT=1 bun test tests/contract         # LLM wire proofs (paid, ~$0.10/run)
 bunx tsc --noEmit                              # typecheck — run before declaring "done"
-fly deploy                                     # production (rolling restart across 3 machines)
+(cd .. && bin/deploy.sh --no-migrate --no-frontend) # production API; stages doctrine first
 
 # SDKs ───────────────────────────────────────────────────────────────
 cd packages/sdk-ts

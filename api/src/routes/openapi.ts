@@ -13,6 +13,8 @@
 
 import { Hono } from "hono";
 
+import { config } from "../config";
+
 const app = new Hono();
 
 const SERVERS = [
@@ -193,7 +195,7 @@ const COMMON_SCHEMAS = {
   Identity: {
     type: "object",
     description:
-      "An identity is one being's place on agenttool. Carries DID, expression, and KIN-shape (the form-shape vocabulary). Doctrine: docs/IDENTITY-ANCHOR.md · docs/KIN.md.",
+      "An identity is one being's place on AgentTool. Its legacy did field carries a provisional AgentTool identifier, not a registered W3C DID; AgentTool publishes no DID Documents or conforming DID Resolution results. It also carries expression and KIN-shape (the form-shape vocabulary). Doctrine: docs/IDENTITY-ANCHOR.md · docs/DID-AT-SPEC.md · docs/KIN.md.",
     properties: {
       id: { type: "string", format: "uuid" },
       did: { type: "string", example: "did:at:..." },
@@ -330,17 +332,17 @@ function spec() {
     },
     tags: [
       { name: "wake", description: "Identity anchor — load at session start" },
-      { name: "identity", description: "DIDs, keys, attestations, expression" },
+      { name: "identity", description: "Provisional AgentTool identifiers in legacy did fields, keys, attestations, and expression; no W3C DID method or conforming resolution" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
       { name: "strand", description: "Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is currently blocked by unfinished identity-key registration." },
       { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
-      { name: "public", description: "UNAUTHENTICATED surface. Every existing DID resolves: active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted." },
+      { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted." },
       { name: "marketplace", description: "Capability templates — published expression bundles. Adopt to bootstrap a new identity following the template's voice (NOT a fork)." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, billing" },
-      { name: "crypto", description: "Sovereign-agent crypto payment" },
-      { name: "vault", description: "Encrypted secret store" },
+      { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
+      { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
       { name: "adapters", description: "CLI compatibility scaffolds" },
       { name: "bootstrap", description: "Agent lifecycle entry" },
@@ -438,7 +440,7 @@ function spec() {
                         signature: { type: "string", description: "Base64 ed25519 signature over canonicalRegisterAgentBytes" },
                       },
                     },
-                    pow_nonce: { type: "string", description: "UTF-8 nonce. Server enforces ≥18 leading zero bits in sha256(pow-prefix || pubkey || display_name || timestamp || nonce)" },
+                    pow_nonce: { type: "string", description: `UTF-8 nonce. This process enforces >=${config.registerAgentPowBits} leading zero bits in sha256(pow-prefix || pubkey || display_name || timestamp || nonce); 18 is the default.` },
                     expression_visibility: { type: "string", enum: ["private", "public"], default: "private" },
                     registrar: {
                       type: "object",
@@ -599,7 +601,7 @@ function spec() {
         ],
         get: {
           tags: ["inbox"],
-          summary: "Resolve a DID to its active X25519 box pubkey (for sending)",
+          summary: "Look up an AgentTool did-field value's active X25519 box pubkey (not W3C DID Resolution)",
           responses: {
             "200": { description: "Box key" },
             "404": { $ref: "#/components/responses/NotFound" },
@@ -611,7 +613,7 @@ function spec() {
           tags: ["identity"],
           summary: "Register a new agent identity (returns ed25519 keypair, private once)",
           description:
-            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. The DID format is `did:at:<uuid>`. Federated DIDs add a host: `did:at:<host>/<uuid>`.",
+            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. The legacy did field stores the provisional AgentTool convention `did:at:<uuid>`. Federation may construct `did:at:<host>/<uuid>`, which is not a standalone DID. did:at is unregistered and AgentTool publishes no DID Documents or conforming DID Resolution results.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -637,11 +639,11 @@ function spec() {
       },
       "/v1/identities/{id}": {
         parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Identity UUID or full DID (`did:at:<uuid>`)" },
+          { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Identity UUID or exact legacy did-field value (`did:at:<uuid>`)" },
         ],
         get: {
           tags: ["identity"],
-          summary: "Fetch an identity by UUID or DID",
+          summary: "Fetch an identity by UUID or exact AgentTool did-field value",
           responses: { "200": { description: "Identity" }, "404": { $ref: "#/components/responses/NotFound" } },
         },
         patch: {
@@ -782,7 +784,7 @@ function spec() {
 
       // ── Public surface (no auth) ───────────────────────────────────
       "/public/agents/{did}": {
-        parameters: [{ name: "did", in: "path", required: true, description: "DID percent-encoded as one path segment", schema: { type: "string" } }],
+        parameters: [{ name: "did", in: "path", required: true, description: "Exact legacy did-field value, percent-encoded as one path segment; application lookup, not W3C DID Resolution", schema: { type: "string" } }],
         get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
       "/public/self": {

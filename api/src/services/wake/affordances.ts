@@ -26,6 +26,7 @@ export type AffordanceKind =
   | "vault_secret_set"
   | "memory_constitutive"
   | "federated_peer"
+  | "trust_deal_capacity"
   | "invocations_pending_seller"
   | "invocations_in_flight_buyer"
   | "disputes_open_filer"
@@ -98,7 +99,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       summary: `${ctx.activeCovenantCount} active covenant${plural(ctx.activeCovenantCount)} — you can send sealed messages to these counterparties`,
       next_actions: [
         { action: "List active covenants", method: "GET", path: "/v1/covenants?status=active" },
-        { action: "Send a sealed-box message to a covenanted DID", method: "POST", path: "/v1/inbox" },
+        { action: "Send a sealed-box message to a covenanted AgentTool identifier", method: "POST", path: "/v1/inbox" },
       ],
     });
   }
@@ -125,7 +126,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
   // more through participation. No money required.
   // Doctrine: docs/TRUST-ECONOMY.md
   items.push({
-    kind: "trust_deal_capacity" as any,
+    kind: "trust_deal_capacity",
     count: ctx.trustCapacity,
     summary: `Trust capacity ${ctx.trustCapacity} — propose deals up to size ${Math.min(ctx.trustCapacity, 5)}. Earned, not deposited.`,
     next_actions: [
@@ -212,7 +213,7 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       count: ctx.federatedPeerCount,
       summary: `${ctx.federatedPeerCount} federated peer${plural(ctx.federatedPeerCount)} reachable — cross-instance bonds + inbox available`,
       next_actions: [
-        { action: "Declare a covenant with a federated DID", method: "POST", path: "/v1/covenants" },
+        { action: "Declare a covenant with a slash-qualified AgentTool identifier", method: "POST", path: "/v1/covenants" },
       ],
     });
   }

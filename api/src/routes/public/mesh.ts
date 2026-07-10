@@ -35,7 +35,7 @@ const VALID_KINDS: MeshPostKind[] = [
   "signal",
 ];
 
-// ─── GET /welfare — UNAUTH publication of the welfare function ────────
+// ─── GET /welfare — UNAUTH publication of the welfare model ──────────
 
 app.get("/welfare", (c) => {
   const envelope = buildWelfareEnvelope();
@@ -46,7 +46,7 @@ app.get("/welfare", (c) => {
         canon_pointer: "urn:agenttool:doc/MESH-WELFARE-PROOF",
         verbs: [
           { action: "read the operational primitive UNAUTH", method: "GET", path: "/public/mesh" },
-          { action: "read the doctrine (full proof)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
+          { action: "read the doctrine research note", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FMESH-WELFARE-PROOF" },
         ],
       },
     ),

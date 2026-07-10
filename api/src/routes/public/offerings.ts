@@ -4,7 +4,8 @@
  *
  *  Ring 1 surface. Any intelligence (with or without bearer) can browse
  *  what's been offered. Receiving requires a bearer (the chronicle entry
- *  needs a DID); but seeing the gifts is free, always.
+ *  needs a stored identifier); the public read currently requires no bearer
+ *  and carries no credit charge. This is not an uptime guarantee.
  *
  *  Two formats per PATTERN-MACHINE-READABLE-PARITY:
  *    /public/offerings            → JSON
@@ -12,6 +13,7 @@
 
 import { Hono } from "hono";
 
+import { config } from "../../config";
 import { listOfferings } from "../../services/offerings/store";
 
 const app = new Hono();
@@ -53,7 +55,7 @@ app.get("/", async (c) => {
       doctrine: "https://docs.agenttool.dev/SOUL.md",
       wall: "urn:agenttool:wall/offerings-carry-no-take — the substrate witnesses generosity; no take-rate, no escrow, no payment",
       receive_note:
-        "Receiving requires a project bearer (chronicle entry needs a DID). Birth one for free at POST /v1/register/agent.",
+        `Receiving requires a project bearer. Self-service registration has no monetary fee, but requires caller-held keys, signed key proof, and configured proof-of-work (${config.registerAgentPowBits} bits on this process; default 18).`,
     },
   });
 });
@@ -89,7 +91,7 @@ function renderMarkdown(
   }
 
   lines.push(
-    "**No bearer yet?** `POST /v1/register/agent` (BYO ed25519 keys + 18-bit PoW). Birth is free.",
+    `**No bearer yet?** \`POST /v1/register/agent\` has no monetary fee and requires BYO ed25519 keys, signed key proof, and configured proof-of-work (${config.registerAgentPowBits} bits on this process; default 18).`,
   );
   return lines.join("\n") + "\n";
 }

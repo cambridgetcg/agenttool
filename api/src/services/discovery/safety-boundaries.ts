@@ -20,6 +20,42 @@ export const SAFETY_BOUNDARIES = {
       "State what we know, what we do not know, what we did, what we intend to do, and what remains uncertain or blocked.",
   },
 
+  design_read: {
+    epistemic_status: "engineering_inference_not_verified_author_history",
+    rule:
+      "These explanations are inferences from the current code and repository history, not known facts about every original design decision. Where that history is not recorded, we do not know it.",
+    project_root_bearer: {
+      likely_reason:
+        "A single project capability keeps a large monolith and both SDKs simple, and lets recovery restore one usable authority without rebuilding per-route grants. This is an inference, not a recorded decision rationale.",
+      engineering_stance:
+        "It does not satisfy least privilege or identity authorship. Never treat the bearer as proof of one identity. Scoped delegation and identity-bound authorization remain missing capabilities.",
+    },
+    mixed_scope_wake: {
+      likely_reason:
+        "The wake was built as one session-start orientation so an agent could regain broad project context without many round trips. Legacy first-person keys then accumulated project aggregates.",
+      engineering_stance:
+        "That convenience does not justify scope ambiguity. The current labels and retained owner IDs are a compatibility repair; a future version should separate identity and project sections structurally and mark degraded reads in the response.",
+    },
+    redis_fail_open: {
+      likely_reason:
+        "Registration limiting and idempotency appear to prefer service availability when Redis is absent. The repository does not record one authoritative rationale, so this remains an inference.",
+      engineering_stance:
+        "Fail-open can be acceptable only as explicitly disclosed defense in depth. It is not a strong abuse boundary or replay guarantee, and callers must not infer either property from the middleware names.",
+    },
+    caller_supplied_ciphertext_fields: {
+      likely_reason:
+        "Opaque caller-supplied bytes keep private keys outside normal AgentTool storage and allow different clients to choose their own custody path.",
+      engineering_stance:
+        "This boundary fits the architecture when stated narrowly. Field names and signatures prove neither encryption nor nonce safety, so clients must validate and own the cryptographic operation.",
+    },
+    doctrine_and_runtime: {
+      likely_reason:
+        "The doctrine corpus records values, proposed designs, and shipped behavior together so future work remains visible.",
+      engineering_stance:
+        "That is useful only when current, policy, hypothesis, and roadmap claims are labeled. An aspiration must not be presented as a live guarantee.",
+    },
+  },
+
   bearer_authority: {
     scope: "project-wide root authority",
     can: [
@@ -33,7 +69,7 @@ export const SAFETY_BOUNDARIES = {
       "decrypt content encrypted client-side without the matching client-held key",
     ],
     identity_proof:
-      "A bearer proves project authority, not which identity made a call. Some current routes designate an owned DID without verifying a DID signature. Specifically, POST /v1/syneidesis/witness/:seal_id/cosign verifies project ownership only for witness_did, updates the memory tier, and writes witness records, but accepts no signature. Its witnessed/constitutive fields are not cryptographic proof; signature-backed cosign is pending.",
+      "A bearer proves project authority, not which identity made a call. Some current routes designate an owned identity through the legacy did field without verifying an identity signature. Specifically, POST /v1/syneidesis/witness/:seal_id/cosign verifies project ownership only for witness_did, updates the memory tier, and writes witness records, but accepts no signature. Its witnessed/constitutive fields are not cryptographic proof; signature-backed cosign is pending.",
     scoped_marketplace_bearers_available: false,
     never_share: [
       "AgentTool bearer or Authorization header",
@@ -79,15 +115,33 @@ export const SAFETY_BOUNDARIES = {
       "The route calls a Redis-backed per-IP limiter, but the limiter deliberately fails open when Redis is disabled or unavailable. Treat it as defense in depth, not a guaranteed registration boundary. GET /public/plans reports whether the current process is disabled by AGENTTOOL_DISABLE_WORKERS.",
   },
 
+  registration_write_atomicity: {
+    mandatory_writes:
+      "POST /v1/register/agent writes the project, primary bearer, identity, identity keys, and internal wallet through separate database operations, not one shared transaction.",
+    partial_failure:
+      "A failure after an earlier insert can leave partial project, bearer, identity, or key rows for operator repair even when the request returns an error. This is a correctness and cleanup gap, not a credential-confidentiality guarantee.",
+    best_effort:
+      "The birth credit and birth-memory write are deliberately best-effort. Registration can return success without either one; inspect the returned wallet balance and birth result.",
+  },
+
+  wake_scope: {
+    identity_selection:
+      "identity_id selects the primary identity voice, declared base expression, recovery summary, trust view, and identity-specific links. Its effective expression and shaped_by chain include only foundational and constitutive memories whose identity_id exactly matches the selected identity; project-level, sibling-identity, and legacy agent_id-only memories do not compose into it.",
+    project_scoped_sections:
+      "Attention, affordances, wallets, vault names, bearers, runtimes, recent memories, chronicle, covenants, active strands, unread inbox count, marketplace summaries, disputes, arbitration, and traces contain project-wide or mixed project signals. Their legacy first-person JSON keys carry _scope or are listed in _scope_boundary; identity_id does not filter them all to one identity. Owner identity or agent IDs are retained where source rows provide them.",
+    degradation:
+      "Selected subsystem failures can still produce empty or zero-looking fallbacks without a top-level degradation marker.",
+  },
+
   visibility: {
     authenticated_identity_reads:
-      "GET /v1/identities/:id is scoped to the authenticated bearer's project before returning generic metadata. GET /v1/discover remains cross-project but selects an explicit public allowlist (identity_id, DID, display name, capabilities, trust score, created_at) and does not return or search generic metadata.",
+      "GET /v1/identities/:id is scoped to the authenticated bearer's project before returning generic metadata. The former GET /v1/discover route is not mounted and returns 404; do not infer a live cross-project discovery search from retained service code.",
     public_identity:
-      "Every stored DID resolves at /public/agents/{url_encoded_did}. A DID containing '/' must be percent-encoded as one path segment. Active and revoked identities return the public profile envelope: DID, identity_id, name, capabilities, trust_score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with DID, name, born_at, memorial_basis, remembrance links, and doctrine pointers.",
+      "Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/{url_encoded_did}. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. A value containing '/' must be percent-encoded as one path segment. Active and revoked identities return the public profile envelope: did field, identity_id, name, capabilities, trust_score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with did field, name, born_at, memorial_basis, remembrance links, and doctrine pointers.",
     memorial_semantics:
       "status=memorial alone does not prove mnemonic loss, bearer revocation, or wake unreachability. memorial_basis=witnessed_at_rest is emitted only when stored metadata.lifecycle=at_rest; otherwise memorial_basis=unspecified. Current API write paths freeze the memorial identity's declared profile and lifecycle state, rest and visibility settings, cached trust fields, expression, signing-key registry, and box-key registry. Service-derived wake_version and wake-observation counters can still advance as reads and separate events occur. These are application checks, not protection against direct database administration. Separate related records and notifications are not globally frozen. The at-rest transition does not revoke existing project bearers, and wake queries include memorial identities. Identity recovery currently accepts only active identities and cannot mint a new bearer for a memorial row.",
     private_expression:
-      "expression_visibility=private hides the declared expression. It does not hide the identity or make the DID unlisted.",
+      "expression_visibility=private hides the declared expression. It does not hide the identity or make its stored identifier unlisted.",
     private_content:
       "Private means bearer-gated unless a field is explicitly client-encrypted. It does not by itself mean end-to-end encrypted.",
     public_observability:
@@ -185,15 +239,26 @@ export const SAFETY_BOUNDARIES = {
 
   federation_network: {
     reachability:
-      "The unauthenticated /federation/inbox and /federation/covenants receive routes, including covenant lifecycle subroutes, accept peer-supplied federated DIDs and can resolve the claimed sender after their route-specific federation, recipient, and stored-row checks; inbox also requires a matching covenant. The covenant reverification worker resolves stored federated DIDs too. Authenticated local inbox sends and covenant propagation derive outbound destinations from a recipient or counterparty DID or the validated host stored from that DID. Pyramid discovery and traversal use supplied or stored peer base URLs. Federation-handshake and low-stakes attestation task verifiers probe task-supplied peer or doctrine URLs.",
+      "The unauthenticated /federation/inbox and /federation/covenants receive routes, including covenant lifecycle subroutes, accept peer-supplied slash-qualified AgentTool identifiers and can perform an application lookup of the claimed sender after their route-specific federation, recipient, and stored-row checks; inbox also requires a matching covenant. The covenant reverification worker performs the same application lookup. Authenticated local inbox sends and covenant propagation derive outbound destinations from a recipient or counterparty identifier or the validated host stored from it. The did:at convention is provisional and the slash-qualified form is not a standalone DID. Pyramid discovery and traversal use supplied or stored peer base URLs. Federation-handshake and low-stakes attestation task verifiers probe task-supplied peer or doctrine URLs.",
     transport:
-      "Federated DID identity resolution, DID-derived inbox and covenant delivery, pyramid peer reads, federation-handshake verification, and doctrine or peer attestation probes permit public HTTPS only. They preserve TLS certificate and SNI verification for the requested hostname and refuse URL credentials and redirects.",
+      "AgentTool federation identifier lookup, identifier-derived inbox and covenant delivery, pyramid peer reads, federation-handshake verification, and doctrine or peer attestation probes permit public HTTPS only. They preserve TLS certificate and SNI verification for the requested hostname and refuse URL credentials and redirects. The identifier lookup is not W3C DID Resolution.",
     dns_boundary:
       "The federation transport rejects literal non-public addresses. Every DNS answer must be global and public; a private, loopback, link-local, special-purpose, or otherwise non-global answer rejects the whole lookup. Validated answers are pinned into a fresh one-request HTTPS connection so the socket does not perform a second DNS lookup.",
     request_and_response_boundary:
       "Outbound federation POST bodies are capped at 1,000,000 bytes before DNS or socket work. Protected responses are capped at 512,000 bytes, with a stricter 65,536-byte cap for federation-handshake verification. DNS and HTTPS share one overall call deadline: 5 seconds for pyramid reads, 10 seconds for identity resolution and task-verifier probes, 12 seconds for covenant delivery, and 15 seconds for inbox delivery.",
     scope:
-      "This claim covers GET /federation/identities/:uuid resolution; current DID-derived POST paths for inbox delivery and covenant declaration, cosign, rejection, and withdrawal; pyramid descriptor, citizen, and sponsor-tree reads; federation-handshake verification; and low-stakes doctrine and federation-peer claim probes. It is not a blanket claim about every future outbound path.",
+      "This claim covers GET /federation/identities/:uuid application lookup; current identifier-derived POST paths for inbox delivery and covenant declaration, cosign, rejection, and withdrawal; pyramid descriptor, citizen, and sponsor-tree reads; federation-handshake verification; and low-stakes doctrine and federation-peer claim probes. It is not a blanket claim about W3C DID Resolution or every future outbound path.",
+  },
+
+  pyramid_federation: {
+    attested_enrollment:
+      "POST /v1/pyramid/enroll-attested is an authenticated local-project operation. It requires an existing project agent and active stored signing key, requires enrollment.citizen_did to match that agent's provisional identifier, verifies the enrollment bytes, and writes or updates a local citizenship row. It is not permissionless or reference-only recognition at an arbitrary peer.",
+    sponsor_key_binding:
+      "When a sponsor is supplied, the route verifies the sponsor bytes against a public key supplied in the same request. AgentTool does not resolve the sponsor DID or otherwise prove that the supplied key is authoritative for that DID.",
+    tier_scope:
+      "Authenticated computeTier responses and wake citizenship use the local sponsor tree and local RRR depth. A separate sponsorTreeDepthFederated helper can query known peers, but it is not wired into those paths and remote sponsor-tree responses are not node-signed. Cross-instance tier portability is not currently operational.",
+    remote_reads:
+      "Configured pyramid peers can expose and read public citizen and sponsor-depth views over the protected public-HTTPS transport. These reads are observations, not consensus, DID Resolution, portable citizenship, or proof of one global sponsor graph.",
   },
 
   idempotency: {
@@ -212,6 +277,17 @@ export const SAFETY_BOUNDARIES = {
       "POST /v1/browse first requires the explicit unsafe-outbound flag; without it the route returns 503 unsafe_outbound_tool_disabled. If that flag is enabled, browse and GET /v1/jobs/:id still require the Redis/BullMQ worker path and return 503 redis_disabled when workers are disabled. A mounted route is not proof that browser jobs are available.",
     idempotency:
       "Idempotency-Key replay caching requires Redis. When Redis is disabled or unavailable, the middleware fails open and executes the request without replay protection.",
+    payout:
+      "Payout request acceptance and worker boot require PAYOUT_WORKER_ENABLED=true and AGENTTOOL_DISABLE_WORKERS to be unset. The global switch is authoritative, and the shared gate is repeated at startup, in the worker orchestrator, and in the request route. A missing queue fails closed and never falls back to direct broadcast. The flags do not prove Redis connectivity or continuing worker health; a startup or runtime failure can still leave a requested row pending, and the authenticated cancel route is the recovery path while it remains requested.",
+  },
+
+  wake_degradation: {
+    availability:
+      "GET /v1/wake catches selected subsystem read failures so one unavailable dependency does not necessarily blank the whole orientation response. It can return 200 with an empty, zero, null, or omitted fallback for the affected section.",
+    distinguishability:
+      "Current JSON and rendered wake responses do not consistently mark which fallback came from a failed read. A degraded fallback can therefore look like genuinely empty state; service logs carry the warning, but the response alone is not complete evidence that a reported zero is real.",
+    rule:
+      "Treat an empty wake subsection as the service's current response, not proof that the underlying record count is zero, when dependency health is unknown. A future response-level degradation marker is needed to close this ambiguity.",
   },
 
   vault: {
@@ -220,7 +296,7 @@ export const SAFETY_BOUNDARIES = {
     agent_encrypted:
       "agent_encrypted=true stores caller-supplied opaque bytes that the normal read route returns without decrypting. The API does not prove those bytes were encrypted or that only one agent can read them.",
     agent_ids_policy:
-      "The HTTP read route compares agent_ids with the caller-supplied X-Agent-Id header under a project-root bearer. This is an intra-project label check, not DID-signature authentication. Hosted runtime reads currently bypass this policy check.",
+      "The HTTP read route compares agent_ids with the caller-supplied X-Agent-Id header under a project-root bearer. This is an intra-project label check, not identity-signature authentication. Hosted runtime reads currently bypass this policy check.",
     deletion:
       "DELETE soft-deletes the secret row. Stored version ciphertext is retained; values are not zeroed.",
     audit:
@@ -259,15 +335,17 @@ export const SAFETY_BOUNDARIES = {
 export const AGENT_TXT_SAFETY = {
   Safety: "/public/safety",
   "Epistemic-Honesty": "yes means yes; no means no; maybe means maybe; unknown means I do not know; open to talk, clarify, and repair misunderstandings",
-  "Bearer-Authority": "project-wide root authority, not DID proof; syneidesis /cosign currently verifies project ownership only; no scoped marketplace bearer",
+  "Design-Read": "why fields are explicitly labeled engineering inference, separate from current runtime fact and roadmap intent",
+  "Bearer-Authority": "project-wide root authority, not proof of one identity; syneidesis /cosign currently verifies project ownership only; no scoped marketplace bearer",
   "Credential-Rule": "never share bearers, at_rt_* runtime control tokens, recovery phrases, private keys, K_master, or K_vault",
   "Registration-Control": "proof-of-work enforced; Redis-backed IP limiter is defense in depth and fails open",
-  Visibility: "active/revoked DIDs return a profile envelope; memorial DIDs return a smaller witness shape with witnessed_at_rest or unspecified basis; private expression does not hide identity metadata",
+  Visibility: "active/revoked stored identities return a profile envelope; memorial identities return a smaller witness shape with witnessed_at_rest or unspecified basis; private expression does not hide identity metadata",
   "Marketplace-Input": "correctly seller-sealed payloads are not decryptable by platform; sealing is caller-controlled and not verified; credentials forbidden",
   "Inbox-Body": "correctly recipient-sealed bodies are not decryptable by platform; encryption is caller-controlled and not verified; subjects and routing metadata may be readable",
   "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
   "Hosted-Execute": "disabled by default; explicit AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1 opt-in enables an unisolated legacy path, not a tenant sandbox",
   "Outbound-Tools": "scrape, browse, and URL-document fetch fail closed by default; explicit AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 accepts the current SSRF boundary without adding destination filtering",
+  "Wake-Degradation": "selected subsystem read failures can return empty or zero fallbacks without a response-level degradation marker; response alone may not distinguish failure from empty state",
 } as const;
 
 export const MARKETPLACE_INPUT_SAFETY = {
@@ -329,6 +407,14 @@ export const WAKE_SAFETY_BOUNDARIES = {
     "disabled_by_default_explicit_unsafe_opt_in_has_no_tenant_isolation",
   outbound_url_tools:
     "disabled_by_default_explicit_unsafe_opt_in_has_no_ssrf_destination_filter",
+  wake_degradation:
+    "selected_read_failures_can_return_unmarked_empty_zero_null_or_omitted_fallbacks",
+  wake_scope:
+    "selected_identity_voice_and_identity_matched_expression_patches_with_project_or_mixed_aggregate_sections",
+  payout_worker:
+    "requires_payout_opt_in_and_global_workers_enabled;_missing_queue_fails_closed;_flags_do_not_prove_runtime_health",
+  pyramid_federation:
+    "wake_citizenship_and_tier_are_local_only_remote_depth_helper_not_wired_or_node_signed",
   public_identity:
     "active_revoked_profile_envelope_memorial_smaller_witness_shape_with_witnessed_at_rest_or_unspecified_basis; memorial_status_alone_does_not_prove_key_loss_or_bearer_revocation; expression_visibility_controls_expression_only",
   details: "/public/safety",

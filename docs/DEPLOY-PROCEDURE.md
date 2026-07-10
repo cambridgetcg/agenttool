@@ -36,7 +36,7 @@ A routine-deploy runbook for an established install. Use this when:
    Phase 2 — Pre-flight     test gate (typecheck · units · parity · smoke · contract)
         │
         ▼
-   Phase 3 — API            cd api && fly deploy
+   Phase 3 — API            bin/deploy.sh stages docs, then invokes Fly internally
         │
         ▼
    Phase 4 — Frontends      bin/frontend-deploy.sh

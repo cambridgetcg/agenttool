@@ -155,7 +155,7 @@
       <div class="arrow">↓</div>
       <div class="at-name">Strands + Vault + Inbox</div>
       <div class="desc">LoveProto: encrypt messages between bonded nodes.<br>agenttool clients can supply encrypted strand, vault, and inbox bytes; the API verifies route-specific signatures and shapes, not successful encryption.</div>
-      <div class="bridge-desc"><strong>Bridge:</strong> Same crypto, different boundaries. Sealed inbox bodies and <code>agent_encrypted</code> vault values stay unreadable to AgentTool. Strand storage is ciphertext-only, while bridged hosted cycles process plaintext in worker RAM and trusted is experimental.</div>
+      <div class="bridge-desc"><strong>Bridge:</strong> Same field shapes, different boundaries. Correctly client-sealed inbox bodies and correctly encrypted <code>agent_encrypted</code> vault values lack a normal AgentTool decrypt path, but the API does not prove encryption. Strand storage has ciphertext/nonce fields; bridged hosted cycles process plaintext in worker RAM and trusted is experimental.</div>
       <div class="cmd">python3 strand.py open --mood silent</div>
     </div>
 

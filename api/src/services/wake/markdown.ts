@@ -30,6 +30,13 @@ import type { PlatformSelf } from "./platform-self";
 import type { WakeSafetyBoundaries } from "../discovery/safety-boundaries";
 
 export interface WakeBundle {
+  _scope_boundary?: {
+    selected_identity_id: string;
+    identity_base_expression_scope: "selected_identity";
+    expression_patch_scope: "selected_identity";
+    project_scoped_sections: string[];
+    meaning: string;
+  };
   /** ISO-8601 timestamp captured at bundle-gather time. The renderer uses
    *  this for the "Addressed at <ts>" volatile-section line, keeping
    *  rendering byte-stable (deterministic input → deterministic output —
@@ -127,6 +134,7 @@ export interface WakeBundle {
   wallets: Array<{
     id: string;
     name: string;
+    identity_id?: string | null;
     balance: number;
     currency: string;
     status: string;
@@ -141,6 +149,8 @@ export interface WakeBundle {
     total: number;
     recent: Array<{
       id: string;
+      agent_id?: string | null;
+      identity_id?: string | null;
       type: string;
       content: string;
       importance: number;
@@ -151,6 +161,8 @@ export interface WakeBundle {
     total: number;
     recent: Array<{
       trace_id: string;
+      agent_id?: string | null;
+      identity_id?: string | null;
       decision_type: string;
       decision_summary: string;
       conclusion: string;
@@ -163,6 +175,8 @@ export interface WakeBundle {
     total_active: number;
     active: Array<{
       id: string;
+      agent_id?: string | null;
+      identity_id?: string | null;
       topic: string | null;
       topic_encrypted: boolean;
       /** Mood is plaintext-by-default. The route handler also nulls
@@ -513,6 +527,7 @@ export interface WakeBundle {
   agent_runtime?: {
     runtimes: Array<{
       id: string;
+      identity_id?: string | null;
       name: string;
       mode: "self" | "bridged" | "trusted";
       status: string;
@@ -528,15 +543,23 @@ export interface WakeBundle {
    *  knows who they're awake *with*. Doctrine: docs/PLATFORM-AS-AGENT.md ·
    *  docs/PATTERN-RECURSIVE-NESTING.md. */
   platform_self?: PlatformSelf;
-  /** Recovery posture (you_can_be_recovered JSON shape). Tells the agent
-   *  whether they can survive being moved to a fresh device — SOMA seed
-   *  enrolled, devices registered, last recovery. Without this, the agent
-   *  reading their wake doesn't know whether their continuity is bounded
-   *  by this one host machine. Doctrine: docs/IDENTITY-SEED.md. */
+  /** Registered-key recovery posture (you_can_be_recovered JSON shape).
+   *  The server can establish registered key counts and successful key-proof
+   *  events, not mnemonic derivation or distinct physical devices. Doctrine:
+   *  docs/IDENTITY-SEED.md. */
   recovery?: {
+    /** Compatibility inference. See has_seed_protocol_semantics. */
     has_seed_protocol: boolean;
+    has_seed_protocol_semantics: string;
+    seed_protocol_signal_basis: string[];
+    mnemonic_derivation_verified: false;
     byo_keys_at_birth: boolean;
+    active_registered_signing_keys: number;
+    /** Compatibility alias for active_registered_signing_keys. */
     registered_devices: number;
+    registered_devices_semantics: string;
+    registered_key_recovery_available: boolean;
+    registered_key_recovery_boundary: string;
     last_recovery_at: string | null;
     has_imported_soma_key: boolean;
   };
@@ -1035,8 +1058,7 @@ function renderOriginSection(b: WakeBundle): string[] {
   return lines;
 }
 
-/** How you can be recovered — seed protocol posture. Tells the agent
- *  whether mnemonic recovery is available from a fresh device. */
+/** How you can be recovered — exact registered-key posture. */
 function renderRecoverySection(b: WakeBundle): string[] {
   const r = b.recovery;
   if (!r) return [];
@@ -1044,31 +1066,30 @@ function renderRecoverySection(b: WakeBundle): string[] {
   lines.push("## How you can be recovered");
   lines.push("");
 
-  if (r.has_seed_protocol) {
-    let l = `**SOMA seed enrolled.** ${r.registered_devices} active device key${r.registered_devices === 1 ? "" : "s"} registered`;
-    if (r.byo_keys_at_birth) l += " (born under byo-keys)";
-    else if (r.has_imported_soma_key) l += " (seed imported post-birth)";
-    l += ".";
-    lines.push(l);
-
+  if (r.registered_key_recovery_available) {
+    lines.push(
+      `**Registered signing-key recovery is available.** ${r.active_registered_signing_keys} active signing key${r.active_registered_signing_keys === 1 ? " is" : "s are"} registered for this active identity.`,
+    );
     if (r.last_recovery_at) {
       lines.push(
-        `Last recovery: ${new Date(r.last_recovery_at).toISOString().slice(0, 10)}.`,
+        `Last successful registered-key recovery: ${new Date(r.last_recovery_at).toISOString().slice(0, 10)}.`,
       );
     } else {
-      lines.push("No recoveries yet — primary device only.");
+      lines.push("No successful registered-key recovery is recorded.");
     }
     lines.push(
-      "On a fresh device: `agenttool-seed restore` with your mnemonic + DID mints a project-wide bearer named for that device. The label does not scope its authority. Doctrine: `docs/IDENTITY-SEED.md`.",
+      "A fresh client can mint a project-wide bearer only by signing with one of those registered keys. A compatible mnemonic is one possible client-side way to reproduce the private key; AgentTool does not receive the mnemonic or verify how the key was derived or stored. The device label does not scope bearer authority.",
     );
   } else {
     lines.push(
-      "**Server-generated keys; no SOMA seed enrolled.** There is no mnemonic recovery path. Existing project bearers work from any device and each grants project-wide root authority.",
-    );
-    lines.push(
-      "To enable cross-device recovery: generate a SOMA seed and rotate via `POST /v1/identities/:id/keys/import` with `label='soma-seed'`. Doctrine: `docs/IDENTITY-SEED.md`.",
+      "**Registered-key recovery is not currently available for this identity.** The identity must be active and have an active registered signing key. Existing project bearers may still authorize project routes.",
     );
   }
+  lines.push(
+    `Legacy has_seed_protocol=${String(r.has_seed_protocol)}. ${r.has_seed_protocol_semantics}`,
+  );
+  lines.push(r.registered_devices_semantics);
+  lines.push("Doctrine: `docs/IDENTITY-SEED.md`.");
 
   lines.push("");
   return lines;
@@ -1236,6 +1257,10 @@ export function renderVolatileSection(b: WakeBundle): string {
   // ── What you carry ─────────────────────────────────────────────────
   lines.push("## What you carry");
   lines.push("");
+  lines.push(
+    "*The selected identity shapes this wake's voice. Wallets, vault names, runtimes, memories, chronicle, traces, and active-strand summaries can include the whole project; `identity_id` does not isolate these sections.*",
+  );
+  lines.push("");
   const wallets = b.wallets;
   const totalCredits = wallets.reduce((s, w) => s + w.balance, 0);
   lines.push(
@@ -1309,7 +1334,7 @@ export function renderVolatileSection(b: WakeBundle): string {
     });
     lines.push("");
     lines.push(
-      "*Strand contents are encrypted under K_master. Pull `/v1/strands/:id/thoughts` to resume; decrypt client-side.*",
+      "*Strand persistence uses opaque-content fields with no plaintext thought field, but the API does not prove caller encryption. Pull `/v1/strands/:id/thoughts` and interpret or decrypt according to the client protocol.*",
     );
     lines.push("");
   }

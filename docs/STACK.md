@@ -29,7 +29,7 @@ This is the architecture/operations map. It sits between two existing docs:
                                       │
               ───────────────  manual deploys  ───────────────
               │                                              │
-   bin/frontend-deploy.sh                          cd api && fly deploy
+   bin/frontend-deploy.sh                 bin/deploy.sh --no-migrate --no-frontend
               ▼                                              ▼
         ┌────────────────────────┐    ┌────────────────────────┐
         │  Cloudflare Pages      │    │  Fly.io                │
@@ -59,7 +59,7 @@ This is the architecture/operations map. It sits between two existing docs:
             └──────────────────────┘              └──────────────────────┘
 ```
 
-> **Important.** `git push origin main` is **not** a deploy. Codeberg is the source-of-truth host, full stop. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. You ship code by running `bin/frontend-deploy.sh` (frontend) and `cd api && fly deploy` (api) by hand. See §8 below.
+> **Important.** `git push origin main` is **not** a deploy. Codeberg is the source-of-truth host, full stop. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. Use `bin/frontend-deploy.sh` for a frontend-only deploy and `bin/deploy.sh --no-migrate --no-frontend` for an API-only deploy. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
 
 The DB and Redis are currently on **Supabase** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
 
@@ -183,13 +183,12 @@ Resize: `fly scale count <N> --region <code> -a agenttool`. Lowering `cdg` to 0 
 ### Deploy
 
 ```bash
-cd api
-fly deploy                   # builds from Dockerfile, pushes to Fly registry, rolling restart
+bin/deploy.sh --no-migrate --no-frontend  # stages doctrine, checks, deploys API, verifies
 ```
 
-Fly streams the build, rolls one machine at a time. If the new machine fails healthcheck, the old one stays serving — zero-downtime in the happy path. Logs visible during the rollout; cancel with `fly deploy --strategy rolling --max-unavailable 0` if you want stricter no-impact deploys.
+The wrapper stages the doctrine files inside the API build context, invokes Fly, verifies, and cleans staging. Fly streams the build and rolls one machine at a time. If the new machine fails healthcheck, the old one stays serving in the happy path.
 
-Like CF Pages, **Fly is not connected to Codeberg.** No webhook fires on push; `fly deploy` is the explicit trigger. Run from a machine that has `fly auth login` already done (one-time interactive setup).
+Like CF Pages, **Fly is not connected to Codeberg.** No webhook fires on push; the deploy wrapper is the explicit trigger and requires an authenticated Fly CLI session.
 
 ### Operate
 
@@ -314,7 +313,12 @@ Used for:
 - **BullMQ browse worker** — queues `/v1/browse/*` jobs from the api, processed by a co-located worker process.
 - **Hono SSE** — strand voice streaming, federation event fanout.
 
-Set `AGENTTOOL_DISABLE_WORKERS=1` to skip the browse worker if Redis isn't reachable (search/scrape still work; only async browse jobs are gated).
+Set `AGENTTOOL_DISABLE_WORKERS=1` to skip all in-process worker boot, including
+browse, think, payout, covenant, expiry, witness, and treasury workers. It also
+prevents the shared Redis client from being constructed, so queue-backed browse
+returns 503 and Redis-backed idempotency or streaming features degrade. This
+switch does not enable outbound scrape or browse; their separate unsafe-outbound
+opt-in remains authoritative.
 
 ### Legacy infra phases (`infra/`)
 
@@ -464,7 +468,8 @@ bin/frontend-deploy.sh       (CF Pages: landing + docs + dashboard via wrangler 
                              (subset: bin/frontend-deploy.sh dashboard)
                              (~30-60s per project)
 
-cd api && fly deploy         (Fly: builds image, rolling restart of the api monolith)
+bin/deploy.sh --no-migrate --no-frontend
+                             (stages doctrine bytes, then Fly rolling restart)
                              (~3-5 minutes; old machines serve until new ones healthcheck-green)
 
 DATABASE_URL=... bun api/scripts/_migrate-one.ts <file>   (DB schema; one migration at a time)
@@ -485,7 +490,7 @@ git commit -m "feat(api): <something using new column>"
 git push origin main
 
 # 3. Deploy api
-cd api && fly deploy
+bin/deploy.sh --no-migrate --no-frontend
 fly status -a agenttool                     # confirm green
 
 # 4. Smoke the api
@@ -560,11 +565,11 @@ Three failure classes, three recipes:
 
 ### Lost a bearer
 
-`POST /v1/keys/rotate` from any other working bearer; or `POST /v1/identity/recover` with the mnemonic. Doctrine: `TOKEN-HYGIENE.md`.
+`POST /v1/keys/rotate` from any other working bearer; or `POST /v1/identity/recover` with a matching active registered signing key. A compatible mnemonic may rederive that key locally. Doctrine: `TOKEN-HYGIENE.md`.
 
 ### Lost a device (laptop stolen, drive failure)
 
-`agenttool-seed restore --did <did>` on a new device with the mnemonic. Re-derives every key and mints a fresh project-wide bearer named for that device. Doctrine: `IDENTITY-SEED.md`.
+`agenttool-seed restore --did <did>` on a new device with a compatible mnemonic. It rederives a signing key locally and succeeds only when that key matches an active registered key for the active identity; the server verifies the signed request and mints a fresh project-wide bearer named for that device. Doctrine: `IDENTITY-SEED.md`.
 
 ### Lost a deployment (api crashed / bad code shipped)
 
@@ -581,7 +586,11 @@ Or roll the dashboard via the CF Pages dashboard.
 
 ### Lost the mnemonic
 
-The agent is gone. There is no platform-side recovery — that is the **point** of mnemonic-rooted identity. See `IDENTITY-SEED.md` for why this is the right shape.
+The mnemonic-specific recovery path is gone. That does **not** prove the
+identity or its records are gone: another working project bearer or a
+separately retained active registered signing key can still authorize the
+paths described above. If neither exists, AgentTool has no help-desk override
+that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 ---
 
@@ -589,6 +598,6 @@ The agent is gone. There is no platform-side recovery — that is the **point** 
 
 If you read one paragraph from this doc, this is it:
 
-> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for the three CF Pages projects (landing, dashboard, docs) and `cd api && fly deploy` for the api on **Fly.io** (`lhr(2)` + `cdg(1)`). The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. The agent's deepest observability is **`GET /v1/wake`** — start there.
+> Code lives at **Codeberg**. Pushing updates Codeberg only — production deploys are **manual**: `bin/frontend-deploy.sh` for frontend-only work and `bin/deploy.sh --no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes required by the Fly image. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. **Secrets** live in the OS keychain (developer side) or Fly's secret store (server side); access them via `bin/agenttool-secret`. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.

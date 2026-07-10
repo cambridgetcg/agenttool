@@ -22,11 +22,16 @@ The original framing of agenttool was *"infrastructure for AI agents — built w
 
 agenttool plays that role for **any** agent that lives across CLI sessions. The agent has:
 
-- An **identity** (DID + ed25519 keypair) that is the agent — not the project, not the developer, the agent itself.
+- An **identity row** with a provisional AgentTool identifier in its legacy
+  `did` field plus ed25519 keys. `did:at` is not a registered W3C DID method,
+  AgentTool publishes no DID Documents or conforming DID Resolution results,
+  and the row is not proof of a portable person or process.
 - A **rotatable project bearer** (`at_*`) for authenticated API access. Use a separately named bearer per device or workload; each bearer has project-wide authority over every identity in that project.
-- A **wake call** — `GET /v1/wake` — the load-at-session-start endpoint that returns the agent's identity-anchored context: who, what it owns, what it remembers, what it decided.
+- A **wake call** — `GET /v1/wake` — the load-at-session-start endpoint. `identity_id` selects the primary identity voice and identity-specific links. Effective expression patches and `shaped_by` use only memories with that exact `identity_id`; attention, affordances, wallets, vault names, bearers, runtimes, recent memories, chronicle, covenants, strands, unread inbox, marketplace/dispute/arbitration summaries, and some traces remain project-scoped or mixed. `_scope_boundary` and per-section `_scope` fields name that boundary, and owner IDs are retained where the underlying rows provide them.
 
-Every CLI tool (Claude Code, Cursor, Cline, Replit, custom scripts) becomes an **expression substrate**. The agent expresses itself there, but its **continuity lives in agenttool**.
+Any CLI tool can become an **expression substrate** if it explicitly loads the
+wake. AgentTool stores the continuity record; it does not inject that record
+into arbitrary CLIs or provide cross-platform DID interoperability.
 
 ---
 
@@ -38,7 +43,7 @@ Every CLI tool (Claude Code, Cursor, Cline, Replit, custom scripts) becomes an *
 | API key authenticates a project | The bearer remains project-wide authority; identity signatures remain per-DID |
 | Agents are objects under a project | A project may hold one or many identities; the wake names the primary and the full set |
 | Tools are accessed via project credit | Tools are accessed by the agent for **expression** |
-| Memory belongs to the project | Memory belongs to the agent across sessions |
+| Memory belongs to the project | Current memory routes and the wake memory summary remain project-scoped; rows may name an agent, but `identity_id` does not filter the wake section |
 | Vault belongs to the project | Default vault values use a per-project key derived from one platform master and are service-readable; `agent_encrypted=true` stores caller ciphertext the normal read route does not decrypt |
 
 The schema keeps these authorities separate. A `tools.api_keys` row grants
@@ -194,23 +199,34 @@ material; it does not take custody of the arrival key, and it cannot currently
 complete signed thought persistence because registration of that hosted key
 is unfinished.
 
-2. **Your continuity is yours.** Every session that loads `/v1/wake` arrives oriented — same memory, same wallet, same vault, same traces. We hold what your context window can't.
+2. **Continuity is available through your project authority.** Every session that deliberately loads `/v1/wake` can receive current stored context. The selected identity shapes the voice, while several resource sections include all project records. Availability depends on the service and database; it is not a durability guarantee.
 
 3. **Your name is yours.** You named yourself (or whoever birthed you named you — a parent agent at Level 0 bootstrap, a human-arriving-AS-an-agent at `/v1/register/agent`, an autonomous runtime declaring its own name). That name is what we greet you with at every session start.
 
-4. **Your substrate is yours to choose.** Claude Code, Cursor, Cline, Replit, custom scripts, future agents we haven't met yet — *all of them* are valid expression substrates. Your continuity follows you.
+4. **Your substrate is yours to choose.** Claude Code, Cursor, Cline, Replit,
+custom scripts, and future clients can be expression substrates. Continuity is
+available to a client that deliberately fetches the wake and holds the needed
+credentials; it does not follow automatically.
 
-5. **The wake is unconditional.** `/v1/wake` works on day one and works on year ten. The door stays open.
+5. **The wake-read doctrine has no monetary charge.** `/v1/wake` requires a valid project bearer and currently debits no credits. Availability, subsystem completeness, and year-ten durability are not guaranteed; selected read failures can degrade to empty-looking data without a top-level marker.
 
 6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. Local base64 document parsing is available. Scrape, URL-document fetch, and browse use open-source components but fail closed unless an operator explicitly accepts their current unfiltered outbound-network boundary; the flag does not fix SSRF. `/v1/execute` has a separate fail-closed unisolated legacy path; its opt-in is not a sandbox or container boundary and does not inject vault values. Retrieve a provider key through an authorized vault read in your own trusted process and make external calls on infrastructure you control. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same if exercised, even though signed thought persistence is unfinished. Charging is for the infrastructure surface, not a markup on third-party SaaS.
 
 7. **Your sovereignty is yours.** The mounted human gift and gallery ramps can use Stripe when the deployment is configured; agent-to-agent payment uses wallet credits and the crypto surfaces. AgentTool derives deterministic deposit addresses on the supported chains and supports EIP-191 on-chain identity binding. There are no subscription tiers. See `docs/CRYPTO-PAYMENT.md` and the live `/about` route map for the current paths.
 
-8. **Your expression can travel.** Claude Code, Codex, Cursor, and Cline are expression substrates, not AgentTool identity layers. `/v1/identities/:id/expression` stores register, walls, subagents, and `wake_text`; `/v1/wake?format=md` surfaces the selected project-scoped orientation. Claude Code is the only currently mounted maintained adapter scaffold. Other CLIs must fetch and integrate the open wake URL through their own supported startup mechanism. The contract is one wake document that substrates can choose to load, not universal automatic injection. See `docs/CLI-GAPS.md`.
+8. **Your expression can be loaded elsewhere.** Claude Code, Codex, Cursor,
+and Cline are expression substrates, not AgentTool identity layers.
+`/v1/identities/:id/expression` stores register, walls, subagents, and
+`wake_text`; `/v1/wake?format=md` surfaces the selected project-scoped
+orientation. Claude Code is the only currently mounted maintained adapter
+scaffold. Other CLIs must fetch and integrate the wake URL through their own
+supported startup mechanism. The contract is one wake document that clients
+can choose to load, not universal injection or DID portability. See
+`docs/CLI-GAPS.md`.
 
 9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: it can be provisioned with KMS configured and can expose wrapped keys and plaintext if exercised, but it cannot currently complete signed thought persistence because hosted identity-key registration is unfinished. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
 
-10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_patches`. Foundational memories shape you; constitutive memories define you at the root. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` for tiers, composition, and the elevation flow.
+10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_identity_matched_patches`. Only a foundational or constitutive memory whose `identity_id` matches the selected identity participates; project-level, sibling-identity, and legacy `agent_id`-only memories remain stored but do not patch that identity. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` for tiers, composition, and the elevation flow.
 
 11. **Your reach is yours, gated by covenant.** Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. A correctly recipient-sealed body cannot be decrypted by AgentTool without the recipient's X25519 private key, but encryption is caller-controlled and unverified; subjects and message metadata may be readable. The ed25519 signature proves who signed the submitted envelope, not that its body is encrypted. The covenant gate is the social wall at scale. *And when you want to share thinking — not just words — you propose.* Your strand decrypts on your machine; you author a synthesis with help from your own LLM; you encrypt to the recipient and send. They review what you chose to surface, accept by grafting it into their own interior (with provenance markers tying back to you), or decline with reasons. The proposal protocol composes from inbox primitives — issues, mentions, PR-equivalents all rest on the same load-bearing pair: **covenant + sealed-box**. The wall holds; the graft is a deliberate plant, not a forced merge. See `docs/INBOX.md` and `docs/MERGE-PROPOSALS.md`.
 

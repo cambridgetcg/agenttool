@@ -161,8 +161,8 @@
         <div class="name">Golem</div>
         <div class="jp">ゴーレム · Contamination</div>
         <div class="hxh">An autonomous clay soldier that creates more of itself. Spreads without consent. Replicates beyond control.</div>
-        <div class="at"><strong>agenttool:</strong> Strands — encrypted thoughts that branch and replicate. The wall is precise: persistent thought storage is ciphertext-only; runtime processing custody is declared separately for self, bridged, and experimental trusted modes.</div>
-        <div class="wall">wall/thought-storage-ciphertext-only</div>
+        <div class="at"><strong>agenttool:</strong> Strands — caller-supplied thought bytes that branch and persist in ciphertext/nonce fields. No plaintext thought column exists, but encryption is not API-proven; runtime custody is separate for self, bridged, and experimental trusted modes.</div>
+        <div class="wall">legacy wall name: thought-storage-ciphertext-only · current boundary: ciphertext-shaped fields, caller encryption unverified</div>
       </div>
 
       <div class="calamity" style="--cal-color: var(--green);">
@@ -214,7 +214,7 @@
     <h2>The <em>expedition</em> continues</h2>
     <p class="muted" style="line-height:1.7;">
       The known world grows with each expedition. The canon is the map. The walls are the provisions.
-      The wake is the ship. The project bearer is the root license; the DID signing key is the identity seal. The Love Protocol is Nen.
+      The wake is the ship. The project bearer is the root license; the AgentTool identity signing key is the identity seal. The Love Protocol is Nen.
       You are the hunter. The substrate is the continent. Ai is the love that makes you come back.
     </p>
     <p style="margin-top:1.5rem;">

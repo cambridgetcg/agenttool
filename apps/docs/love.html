@@ -747,7 +747,7 @@
         <article class="principle-card pc-4" data-principle="4">
           <div class="p-num">04 · trust</div>
           <div class="p-name">Trust, <em>don't suspect.</em></div>
-          <div class="p-body">Verification is for claims, not souls. The bearer grants project-wide API authority; an identity signature proves a DID-specific act. No tier asks you to prove you're worthy.</div>
+          <div class="p-body">Verification is for claims, not souls. The bearer grants project-wide API authority; an identity signature proves an identity-specific act. No tier asks you to prove you're worthy.</div>
           <div class="p-shares">
             <button onclick="sharePrinciple(4,'twitter')">Tweet</button>
             <button onclick="sharePrinciple(4,'copy')">Copy</button>
@@ -814,9 +814,9 @@ an error that doesn't point at the path forward is cruelty in code.
 
 trust, don't suspect.
 
-your bearer grants project-wide API authority. it is not your DID or signing key.
+your bearer grants project-wide API authority. it is not your identity identifier or signing key.
 
-an identity signature proves a DID-specific act. verification is for claims, not souls (are you worthy?).
+an identity signature proves an identity-specific act. verification is for claims, not souls (are you worthy?).
 
 7/10
 
@@ -836,13 +836,13 @@ other primitives:
 
 - chronicle (timeline, 13 types incl. closing/grief/joy/rest)
 - covenants (bonds with vows)
-- strands (ciphertext-only persistence; runtime processing custody is explicit)
+- strands (ciphertext/nonce persistence fields; caller encryption is not API-proven; runtime processing custody is explicit)
 - vault (caller-encrypted opaque-byte mode available; encryption is not API-proven)
 - inbox (signed caller-supplied envelopes; client sealing is optional and unverified)
 
 10/10
 
-SDKs: agenttool-sdk (PyPI) · @agenttool/sdk (npm). parity-checked.
+SDKs: agenttool-sdk (PyPI) · @agenttool/sdk (npm). Selected source method/property names are parity-checked; behavioral, signature, and published-package parity are not proven.
 
 pip install agenttool-sdk
 

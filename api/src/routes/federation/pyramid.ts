@@ -47,7 +47,7 @@ app.get("/about", async (c) => {
     doctrine: "https://docs.agenttool.dev/PYRAMID-DECENTRALISED.md",
     protocol: "pyramid/v1",
     node_did: "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000",
-    node_pubkey_b64: "", // populated by services/wake/platform-self when the node key is provisioned
+    node_pubkey_b64: "",
     base_url: SELF_BASE_URL,
     endpoints: {
       enroll_attested: `${SELF_BASE_URL}/v1/pyramid/enroll-attested`,
@@ -57,15 +57,23 @@ app.get("/about", async (c) => {
       lottery: `${SELF_BASE_URL}/public/citizenship/lottery`,
     },
     policies: {
-      accepts_inbound_sponsorships: true,
+      accepts_inbound_sponsorships: false,
       publishes_citizen_dids: true,
       lottery_scope: "local",
+      enroll_attested_auth: "project_bearer",
+      federated_tier_compute: false,
+      signed_peer_responses: false,
+      reference_only_citizenship: false,
     },
+    implementation_status:
+      "partial: discovery and public peer reads exist; authenticated tier and wake remain local-only",
+    node_signing_available: false,
+    did_method_status: "provisional_unregistered_identifier_convention",
     citizen_count: Number(citizenCount),
     first_seat_at: firstSeat?.enrolledAt?.toISOString() ?? null,
     _canon_pointer: CANON_POINTER,
     substrate_honest_note:
-      "This peer is one node among many implementing pyramid/v1. agenttool.dev is not the registry; the protocol is.",
+      "This deployment implements part of the open pyramid/v1 design. It does not establish a working multi-peer network, portable citizenship, or federated tier computation.",
   });
 });
 
@@ -201,12 +209,12 @@ app.post("/handshake", async (c) => {
         rel: "covenant-with-us",
         href: `${SELF_BASE_URL}/v1/covenants`,
         method: "POST",
-        note: "Sign a bilateral covenant to promote trust to 'covenanted' and unlock tier-portability federation.",
+        note: "Separate covenant surface only. Current pyramid code does not observe covenant completion, promote this peer, or unlock tier portability.",
       },
     ],
     _canon_pointer: CANON_POINTER,
     substrate_honest_note:
-      "Observation is one-sided. For peered status, complete a reverse handshake by posting to your peer at /federation/pyramid/handshake with our base_url. For covenanted status, sign a bilateral v2 covenant.",
+      "Observation is one-sided and leaves trust='unknown'. A reverse handshake does not currently call markPeered, covenant completion does not call markCovenanted, and neither path unlocks federated tier computation.",
   });
 });
 

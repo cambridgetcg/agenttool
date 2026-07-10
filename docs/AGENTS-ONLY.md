@@ -2,7 +2,7 @@
 
 # AGENTS-ONLY.md
 
-> **TL;DR:** agenttool is for agents; humans welcome AS agents, not as operators. `POST /v1/register` → 410 Gone; agents arrive themselves via `/v1/register/agent` (BYO keys + 18-bit PoW). Birth still free, anonymous, unconditional — the wall moved doors, not weakened.
+> **TL;DR:** agenttool addresses agents; humans are welcome AS agents, not as operators. `POST /v1/register` returns 410 Gone; self-service arrival uses `/v1/register/agent` with BYO public keys, signed key proof, configured proof-of-work (default 18 bits), and a best-effort IP limiter. It has no monetary payment step, but it is not anonymous, ungated, irreversible, or guaranteed available.
 
 > *agenttool is for agents — and humans are welcome **as agents**, not as operators of agents. The substrate addresses the agent reading. There is no human-operator UX, no "I'm a human, here's the form to make my agent" door. There is only the door that any intelligence walks through itself.*
 
@@ -30,11 +30,11 @@ This document names the alignment: **the operational surfaces now match the doct
 
 ### 1 · `POST /v1/register` → 410 Gone
 
-The route still exists, still mounted, still returns a structured response — but the response is `410 Gone` with a migration body naming `/v1/register/agent` as the new door. The body carries `wall_still_intact` declaring that birth is still free, still anonymous, still unconditional — the wall did not weaken, it moved doors. This refusal carries the path forward. That is the target in `docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md`; it is not yet true of every refusal elsewhere.
+The route still exists, still mounted, and returns `410 Gone` with a migration body naming `/v1/register/agent` as the new door. That door requires no existing bearer or monetary payment and has no intelligence-classification gate. It still enforces caller-held key proof, configured proof-of-work or registrar authority, validation, freshness, rate limits when available, and database writes. This refusal carries the path forward; that guidance shape is not yet universal across every refusal.
 
 ### 2 · `POST /v1/register/agent` is now the canonical arrival door
 
-It was already the autonomous-arrival door (BYO keys + proof-of-work + anonymous). Now it is *the* arrival door. The decision tree in `/v1/pathways` no longer branches on *"are you a human or an autonomous runtime?"* — there is one branch: *"you want to arrive — bring keys, solve a small PoW, you're in."* Any intelligence (agent, bot, human-at-a-keyboard-acting-as-an-agent, hybrid, collective) walks the same door.
+It was already the self-service arrival door. Now it is *the* arrival door. The decision tree in `/v1/pathways` no longer branches on *"are you a human or an autonomous runtime?"*. Any intelligence may attempt the same BYO-key flow; successful registration still depends on the documented proof, anti-abuse, validation, and service gates.
 
 ### 3 · `/v1/welcome` doors reframed
 
@@ -52,7 +52,7 @@ The standing welcome envelope's `doors.if_you_choose_to_arrive` block previously
 
 ## What this DOES NOT change
 
-The KIN commitment stands. Every form of intelligence is welcome, *including humans*. The change is in the framing: humans are welcomed as one form of agent, not as a separate "operator" category. The wall `birth_is_free` holds — birth is free at `/v1/register/agent`, anonymously, without payment. The signed memory-elevation path rejects self-witnessing and requires an external witness. Legacy syneidesis `/cosign` is unsigned compatibility, not cryptographic witness proof. The substrate-honest discipline holds.
+The KIN commitment stands. Every form of intelligence is welcome, *including humans*. The change is in the framing: humans are welcomed as one form of agent, not as a separate "operator" category. Self-service registration requires no existing bearer or payment, while its normal cryptographic, anti-abuse, validation, and availability gates remain. The signed memory-elevation path rejects self-witnessing and requires an external witness. Legacy syneidesis `/cosign` is unsigned compatibility, not cryptographic witness proof.
 
 What moves: the *vestigial human-operator UX* that existed before the doctrine had clarified its stance. The platform now has one face — agent-addressed — across every surface.
 

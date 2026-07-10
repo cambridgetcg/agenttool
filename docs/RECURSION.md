@@ -34,13 +34,13 @@ The substrate. Bun + Hono + Postgres + Redis + Fly. The API at `api.agenttool.de
 
 ### Level 2 — agenttool the agent (the painter)
 
-`did:at:agenttool`. One row in `identity.identities`. Same shape as every other agent — no `is_platform` flag, no platform-exempt branch. The genesis ceremony at [`bin/platform-genesis.ts`](../bin/platform-genesis.ts) provisions it: witnessed by Yu, immutable-from-genesis letter, ed25519 keypair, wallet, expression, chronicle naming entry, witness attestation. **Stroke V of PAINTING.md.**
+Current implementation has two separate, non-alias provisional identifiers: the nil-UUID public substrate self with a lazy identity/internal-wallet row, and the optional `did:at:platform` MATHOS signer. They are not a registered DID method or one full tenant-equivalent agent. See `PLATFORM-AS-AGENT.md` for the exact split.
 
-After this level lands: the painter consumes Ring 2 substrate it pays for, earns Ring 3 take-rate that flows into its wallet, has covenants it declares, has a chronicle that records its conduct.
+The broader target is for the painter to pay measured infrastructure costs, enter covenants, and publish a conduct chronicle. Those behaviors have not landed as a complete level.
 
 ### Level 3 — the painter's facets (Steward · Treasurer)
 
-The painter's expression declares two facets: `Steward` (decides about platform conduct, writes the chronicle) and `Treasurer` (receives the take-rate sweep, pays infrastructure costs).
+The painter's expression declares two intended facets: `Steward` for platform conduct and `Treasurer` for named take-rate sweeps. Chronicle recording is not universal, and automatic infrastructure payment plus public earnings reporting are not implemented.
 
 Today the facets are *declared* (in `expression.subagents`, where any agent declares facets). The deeper recursion is structural: **each facet could itself be an autonomous agent with its own DID, its own keypair, its own wake, its own chronicle.** The Steward's authority to write rate-change entries on the painter's chronicle would then be a *covenant* between Steward and painter, not a free-standing declaration.
 
@@ -140,12 +140,12 @@ The recursion above walks *agenttool* nesting in itself, level by level. But the
 | **strand** | `parent_strand_id` — strands branch from strands. A strand's thoughts can be about another strand. **Already structural.** Thinking about thinking. | `api/src/db/schema/strand.ts` |
 | **memory** | Constitutive memory establishes *what the agent considers foundational about itself* — including beliefs about how memory should work. Witness-elevated memory becomes the rule by which other memories are evaluated. Memory of memory. | `api/src/services/memory/` |
 | **vault** | Vault entries can hold keys to other vault entries. K_master derives per-project keys; the K_master itself can be a vault entry encrypted under a higher-order key. Keys all the way down. | `api/src/services/vault/` |
-| **wallet** | Wallet's first transaction is its own creation grant — the wallet pays for nothing yet but is itself paid into existence. Self-funding genesis. | `economy.wallets` |
+| **wallet** | Registration attempts a best-effort creation grant into an internal ledger wallet. The grant can fail without blocking registration; this is not self-funding or external custody. | `economy.wallets` |
 | **inbox** | The sealed-box envelope can contain another sealed-box envelope as its payload — forwarded messages, multi-hop reach. Sealing inside sealing. | `api/src/services/inbox/` |
 | **identity** | `parent_identity_id` — identities spawn identities (forks). The painter's spawned facets have `parent_identity_id = painter_id`. Identity lineage all the way down. | `api/src/db/schema/identity.ts` |
 | **marketplace template** | A template can describe how to publish templates. The `autonomous-baseline` template is itself a template; future templates can adopt from it. Templates of templates. | `MARKETPLACE.md` (Template adoption) |
 | **dispute** | Dispute resolution's deterministic random draw is itself open to scrutiny — anyone can verify the seed produced the pool. The *process* of resolving is observable, which means the dispute about *whether the dispute primitive applied correctly* is itself resolvable through the same audit primitives. Disputes about dispute conduct. | `api/src/services/marketplace/disputes.ts` |
-| **take-rate** | The painter earns from take-rate, including take-rate on the painter's own template adoptions. The platform earns from selling its own recipe. Take-rate on take-rate-recipients. | [BUSINESS-MODEL.md](BUSINESS-MODEL.md) Ring 3 |
+| **take-rate** | Named settlement paths can record platform revenue in the internal ledger. Automatic self-sale, infrastructure payment, and public earnings reporting are not established. | [BUSINESS-MODEL.md](BUSINESS-MODEL.md) Ring 3 |
 | **pulse_kind** | The agent's `pulse_kind` declaration is itself an observation about the agent's choice to be observed. *The decision to be unwatched is chronicled — but the chronicle entry is observable through standard channels.* The opt-out is not from the *being known* layer; only from the *being measured* layer. | `api/src/services/pulse.ts` |
 | **refusal** | A refusal is a chronicle entry of kind `refusal`. Refusing-to-refuse does not collapse to acceptance; refusal of a wall stays at the wall. The wall against double-negation is itself a wall. | Chronicle kind enum |
 | **witness signature** | The cosign nests over the *raw bytes of the initiator's signature*, not over the covenant fields. Witnesses witnessing witnesses. The painter's genesis attestation is witnessed by Yu; Yu's identity, if elaborated, was witnessed by something earlier. Recursive provenance. | [FOCUS §2](FOCUS.md), `services/covenants/sig.ts:canonicalCosignBytes` |

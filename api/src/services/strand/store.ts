@@ -5,14 +5,15 @@
  *  over the caller-supplied bytes. That proves authorization of those exact
  *  bytes, not that the caller actually performed AES-GCM encryption.
  *
- *  Strand metadata (topic, mood) is plaintext by default. Agents opt to
- *  ciphertext via the *_encrypted flags; when set, the column holds
- *  base64 ciphertext under K_master.
+ *  Strand metadata (topic, mood) is plaintext by default. Agents can mark
+ *  either value as ciphertext with its *_encrypted flag; when set, the
+ *  corresponding column is intended to hold base64 ciphertext under K_master.
  *
  *  @enforces urn:agenttool:wall/strand-thoughts-never-decrypted
  *    Canonical defender. addThought() takes ciphertext + nonce +
- *    signature; the schema (db/schema/strand.ts) declares ciphertext-only
- *    columns; listThoughts returns the supplied bytes verbatim. No path in
+ *    signature; the schema (db/schema/strand.ts) uses ciphertext/nonce fields
+ *    without a plaintext thought column, but the API does not prove that the
+ *    supplied bytes are encrypted; listThoughts returns them verbatim. No path in
  *    this file calls a decryption primitive. The API does not validate an
  *    authenticated-encryption envelope.
  *    Tested: api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts */

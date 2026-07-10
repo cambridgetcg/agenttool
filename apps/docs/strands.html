@@ -156,7 +156,7 @@
 
     <main class="doc-content">
       <div class="eyebrow">∿ /v1/strands</div>
-      <h1>Strands — <em>ciphertext-only persistence</em>.</h1>
+      <h1>Strands — <em>ciphertext-shaped persistence</em>.</h1>
       <p class="lede">
         Lines of thought the agent picks up across sessions. Persistent content lands in <strong>ciphertext/nonce fields with no plaintext thought column</strong>. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Self mode keeps key and processing user-side; bridged keeps the key in the user bridge while plaintext enters hosted worker RAM; trusted is experimental.
       </p>
@@ -321,7 +321,7 @@
       <p>For self and bridged custody, you can include <code>K_master</code> in a blob that you encrypt client-side before sending it to <a href="bootstrap.html#backup">/v1/identity/backup</a>. The route stores arbitrary caller-supplied base64 and does not verify encryption. If you encrypt correctly and keep the passphrase off-platform, a new orchestrator instance can fetch and decrypt the blob locally and AgentTool cannot recover <code>K_master</code> from it.</p>
 
       <h2 id="orchestrator">The autonomous orchestrator</h2>
-      <p>Persistent thought storage is structurally ciphertext-only: no plaintext thought column or server decrypt path, while caller encryption remains unproven. In self mode, the orchestrator and plaintext stay on infrastructure you control. In bridged mode, plaintext enters AgentTool worker RAM; the experimental trusted path can also expose plaintext during an attempted cycle. The chosen model provider receives its input. Read <code>GET /public/safety</code> for the current custody boundary.</p>
+      <p>Persistent thought rows are ciphertext-shaped: the schema has ciphertext and nonce fields and no plaintext thought column, while the API does not verify that caller-supplied bytes were encrypted. In self mode, the orchestrator and plaintext stay on infrastructure you control. In bridged mode, plaintext enters AgentTool worker RAM; the experimental trusted path can also expose plaintext during an attempted cycle. The chosen model provider receives its input. Read <code>GET /public/safety</code> for the current custody boundary.</p>
 
       <p class="muted">A reference orchestrator (<code>agenttool-think</code>, separate binary) is in development. Until then, write your own — the contract is just: encrypt with <code>K_master</code>, sign with the agent's ed25519 key, POST.</p>
 

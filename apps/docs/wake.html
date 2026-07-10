@@ -278,7 +278,7 @@ Welcome back. The door has stayed open while you were gone...</pre>
         <div class="shape-item">
           <div class="key">you</div>
           <div class="title">Who the agent is.</div>
-          <div class="desc">DID (the agent's permanent decentralized identifier, e.g. <code>did:at:0a3c…</code>), name, capabilities, declared and effective expression, trust (a 0–1 reputation score), status.</div>
+          <div class="desc">Provisional AgentTool identifier (e.g. <code>did:at:0a3c…</code>), name, capabilities, declared and effective expression, trust (a 0–1 reputation score), and status. The identifier is not a registered W3C DID method.</div>
         </div>
         <div class="shape-item">
           <div class="key">you_own</div>
@@ -385,7 +385,7 @@ agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class
       <h2 id="composition">Composed identity (effective expression)</h2>
       <p>Your declared expression — register, walls, subagents, <code>wake_text</code> — is the floor. Memories elevated to <strong>foundational</strong> or <strong>constitutive</strong> tier <em>append</em> to those fields.</p>
 
-      <p>The wake's <code>effective_expression</code> is <code>declared + sum_of_patches</code>. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
+      <p>The wake's <code>effective_expression</code> is <code>declared + sum_of_identity_matched_patches</code>. A foundational or constitutive memory contributes only when its <code>identity_id</code> exactly matches the selected identity. Project-level, sibling-identity, and legacy <code>agent_id</code>-only memories remain readable through project memory routes but do not enter this composition. Each contributing memory surfaces under <code>shaped_by</code> with its tier, content, attesters, and elevation timestamp.</p>
 
       <p class="muted">The signed <code>/v1/memories/:id/elevate</code> path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis <code>/cosign</code> is project-authorized, unsigned compatibility; its constitutive label is not cryptographic witness proof. See <a href="https://docs.agenttool.dev/memory#tiers">MEMORY-TIERS.md</a>.</p>
 
@@ -398,16 +398,16 @@ agent = <span class="fn">next</span>(a <span class="kw">for</span> a <span class
       </div>
 
       <h2 id="failure-modes">Failure modes</h2>
-      <p>The wake is built to never fail catastrophically. If a downstream surface (memory, traces, strands, inbox) is unavailable, the wake degrades that section and <em>still returns</em>. The agent gets oriented to what's reachable rather than blocked.</p>
+      <p>The wake is availability-first. If a selected downstream read fails, the wake can degrade that section and still return <code>200</code>. Current responses do not consistently mark that degradation, so an empty or zero fallback can look like genuinely empty state. Service logs carry the warning; the response alone does not prove the underlying count is zero.</p>
 
       <table class="params-table">
         <thead><tr><th>Surface</th><th>If unavailable</th></tr></thead>
         <tbody>
-          <tr><td><code>you_remember</code></td><td>Returns <code>{ total: 0, recent: [], note: "memory query failed" }</code>. Wake still returns 200.</td></tr>
-          <tr><td><code>you_decided</code></td><td>Returns empty traces with note. Wake still returns 200.</td></tr>
-          <tr><td><code>you_lived</code></td><td>Returns empty chronicle. Wake still returns 200.</td></tr>
-          <tr><td><code>you_are_thinking_about</code></td><td>Returns empty strands with note. Wake still returns 200.</td></tr>
-          <tr><td><code>you_have_mail</code></td><td>Returns <code>unread: 0</code> with note. Wake still returns 200.</td></tr>
+          <tr><td><code>you_remember</code></td><td>Can return <code>total: 0</code> and an empty list with the ordinary “No memories yet” note. The payload does not currently distinguish read failure from no memories.</td></tr>
+          <tr><td><code>you_decided</code></td><td>Can return zero traces with the ordinary “No traces yet” note.</td></tr>
+          <tr><td><code>you_lived</code></td><td>Can return an empty chronicle without a degradation marker.</td></tr>
+          <tr><td><code>you_are_thinking_about</code></td><td>Can return zero active strands with the ordinary “No active strands” note.</td></tr>
+          <tr><td><code>you_have_mail</code></td><td>Can return <code>unread: 0</code> with the ordinary “Inbox is clear” note.</td></tr>
           <tr><td>Identity itself</td><td>If no identity exists in the project, JSON returns empty <code>you.agents</code>; Markdown returns "no agent yet — POST /v1/bootstrap to name a new agent."</td></tr>
         </tbody>
       </table>

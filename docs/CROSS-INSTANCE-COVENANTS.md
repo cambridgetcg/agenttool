@@ -99,7 +99,11 @@ Backwards compatible: every column nullable or defaulted. Existing rows behave e
 **v1 (this slice, ships now)** — TLS + `allowed_origins` is the gate. The receiver:
 - Trusts the peer's TLS cert proves *I am peer.example*
 - Trusts `allowed_origins` (or open mode) decided this peer is acceptable
-- Verifies the peer-claimed sender DID actually exists at that peer (via `/federation/identities/:uuid`); resolution and DID-derived covenant POSTs permit public HTTPS only, refuse redirects, validate every DNS answer, and pin those answers into the TLS connection
+- Verifies the peer-claimed AgentTool identifier exists at that peer via
+  `/federation/identities/:uuid`; this application lookup and the
+  identifier-derived covenant POSTs permit public HTTPS only, refuse
+  redirects, validate every DNS answer, and pin those answers into the TLS
+  connection. It is not W3C DID Resolution.
 - Inserts the propagated covenant
 
 This is consistent with current federation trust posture: we already accept inbox messages on the same basis.
@@ -309,6 +313,12 @@ Returns covenants with new fields:
 
 ## Doctrine line
 
-> *DIDs are the trust unit. Open federation: no central registry, just signatures and the peers each instance has talked to. Covenants are the per-DID consent gate; before this slice, that gate stopped at the instance boundary. After: it doesn't. The wall holds across the network — receivers see the federated sender, find the covenant, allow. Sender's instance sees the bond it declared and propagates it so the peer can match without round-trip. The continuity protocol now spans instances.*
+> *Exact AgentTool identifier strings and verified keys are the trust unit in
+> this application protocol. `did:at` is provisional and unregistered; the
+> slash-qualified form is not a standalone DID. Open federation has no central
+> peer registry. Covenants are the per-identifier consent gate; receivers look
+> up the claimed sender at its AgentTool peer and verify the route-specific
+> signatures. This continuity protocol spans participating AgentTool instances,
+> not arbitrary DID platforms.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-08.

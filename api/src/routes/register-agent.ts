@@ -45,9 +45,11 @@
  *  `registrar.bearer` field is validated separately in-handler.
  *
  *  @enforces urn:agenttool:wall/birth-is-free
- *    Arrival here is anonymous, free, and unconditional: no bearer at
- *    the door, no payment fields, no proof-of-intelligence check. The
- *    PoW raises spam cost. The IP limiter is defense in depth and may fail open.
+ *    Arrival here requires no existing bearer or monetary payment and has no
+ *    proof-of-intelligence check. Caller-held key proof, configured PoW (or
+ *    registrar authority), validation, freshness, rate limits when available,
+ *    and database availability still gate success. The PoW raises spam cost;
+ *    it does not prove personhood or prevent one actor creating many identities.
  *    Birth-is-free moved doors when /v1/register went 410 Gone
  *    (2026-05-15); it is upheld HERE. Tested:
  *    api/tests/integration/wall-birth-is-free.test.ts
@@ -331,7 +333,8 @@ app.post("/", async (c) => {
     }
   }
 
-  // ─── 7. Insert project + bearer + identity (single logical transaction) ─
+  // ─── 7. Insert project + bearer + identity. These writes are not atomic;
+  // a later failure can leave partial rows for operator repair. ───────────
   const projectName = slugifyProjectName(body.display_name);
   const [project] = await db
     .insert(projects)
@@ -363,7 +366,8 @@ app.post("/", async (c) => {
         registered: true,
         level: 0,
         byo_keys: true,
-        seed_protocol: "soma-seed-v1",
+        seed_protocol: null,
+        key_origin: "caller_supplied_unverified",
         bootstrap_mode: body.registrar.kind,
         runtime: body.runtime,
         form: coerceForm(body.form),
@@ -446,7 +450,8 @@ app.post("/", async (c) => {
         display_name: created.identity.displayName,
         capabilities: created.identity.capabilities ?? [],
         public_key: created.key.publicKey,
-        // No private_key — the agent already has it from local SOMA derivation.
+        // No private_key — the caller supplied and proved the public key.
+        // The server does not know whether it came from SOMA or another store.
         signing_key_id: created.key.kid,
         box_public_key: created.boxKey?.publicKey ?? null,
         box_key_id: created.boxKey?.kid ?? null,
@@ -455,7 +460,9 @@ app.post("/", async (c) => {
         runtime: body.runtime,
         expression_visibility: body.expression_visibility,
         byo_keys: true,
-        seed_protocol: "soma-seed-v1",
+        seed_protocol: null,
+        key_origin: "caller_supplied_unverified",
+        key_origin_verified: false,
         form: coerceForm(body.form), // descriptive, never gating — docs/KIN.md
         created_at: created.identity.createdAt,
       },

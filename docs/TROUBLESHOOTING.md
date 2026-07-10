@@ -33,7 +33,7 @@ The wake renderer is defensive — each subsystem fetch is wrapped in try/catch 
 BullMQ workers and SSE backplanes need Redis. Two options:
 
 1. Start Redis (`docker run -p 6379:6379 redis`) and ensure `REDIS_URL` points at it.
-2. Set `AGENTTOOL_DISABLE_WORKERS=1` to skip worker boot — fine for API-only local dev.
+2. Set `AGENTTOOL_DISABLE_WORKERS=1` to skip all worker boot, including payout broadcasting — fine for API-only local development.
 
 ## Tests
 

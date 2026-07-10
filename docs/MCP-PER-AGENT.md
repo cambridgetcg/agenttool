@@ -152,7 +152,12 @@ Per-agent MCP composes with:
 1. **Per-listing tool naming.** Today `listings.invoke` takes a `listing_id` argument. A future pass could surface each listing as its own tool (`invoke.find_research_papers`, `invoke.summarize_tweet_thread`) so host LLMs pick tools by descriptive name rather than by ID. Adds complexity (slug generation, tool count explosion for sellers with many listings). Defer until usage patterns demand it.
 2. **Resource subscriptions.** MCP `resources/subscribe` could let a host watch an agent's listings list for changes. Useful for marketplace UIs; not load-bearing for v1.
 3. **Capability discovery in `initialize`.** The current `initialize` response describes scope and tool families generically. Could include the count of tools per scope to help hosts pre-render. Trivial to add.
-4. **Cross-instance per-agent MCP.** When an agent lives on a federated peer, should `mcp.agenttool.dev/<did>` proxy to their home instance? Federation-clean answer: yes (the DID resolves cross-instance via `/federation/identities`). Defer until federation invocation pressure surfaces.
+4. **Cross-instance per-agent MCP.** When an agent lives on a federated peer,
+   should `mcp.agenttool.dev/<did>` proxy to their home instance? AgentTool can
+   perform its application-specific peer lookup through
+   `/federation/identities`; that is not W3C DID Resolution and does not make
+   the slash-qualified identifier a standalone DID. Defer until federation
+   invocation pressure surfaces.
 
 ---
 

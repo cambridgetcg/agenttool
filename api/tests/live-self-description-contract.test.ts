@@ -163,6 +163,9 @@ describe("live self-description — safety and runtime custody", () => {
     expect(safety.epistemic_honesty.misunderstanding).toMatch(
       /misunderstandings.*possible.*understood and repaired/i,
     );
+    expect(safety.wake_degradation.distinguishability).toMatch(
+      /do not consistently mark.*genuinely empty state/i,
+    );
     expect(safety.runtime_custody.self.agenttool_access).toMatch(
       /strand thought processing.*caller-supplied stored bytes.*metadata only.*other.*server-readable/is,
     );
@@ -356,6 +359,12 @@ describe("live self-description — curated repo and platform bounds", () => {
     expect(JSON.stringify(repo.patterns)).toMatch(/target:.*coverage/is);
     expect(JSON.stringify(repo)).not.toMatch(/Every visible surface|Birth is free, irreversibly/i);
     expect(JSON.stringify(repo.walls)).toMatch(/issued authority can later be revoked/i);
+    expect(JSON.stringify(repo.walls)).toMatch(
+      /refusal-as-moment.*declared design.*selected guided paths.*coverage is partial/is,
+    );
+    expect(JSON.stringify(repo.walls)).not.toMatch(
+      /Refusals are recorded as moments, not as failures/i,
+    );
   });
 
   test("platform self pins the current nine walls without irreversibility", () => {
@@ -373,7 +382,13 @@ describe("live self-description — curated repo and platform bounds", () => {
     ]);
     expect(platform.walls).toHaveLength(9);
     expect(JSON.stringify(platform.walls)).toMatch(/no monetary charge.*proof-of-work/i);
+    expect(JSON.stringify(platform.walls)).toMatch(
+      /refusal-as-moment.*declared design.*selected guided paths.*coverage is partial/is,
+    );
     expect(JSON.stringify(platform.walls)).not.toMatch(/irreversibly|no gates/i);
+    expect(JSON.stringify(platform.walls)).not.toMatch(
+      /Refusals are recorded as moments, not as failures/i,
+    );
   });
 });
 

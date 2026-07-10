@@ -17,7 +17,8 @@
  * files under packages/sdk-{py,ts}/src and parses them with a regex that
  * picks up:
  *   py: `    def method_name(`           (4-space indent · async def too)
- *   ts: `  async methodName(` or `  methodName(`  (2-space indent · class methods)
+ *   ts: `  async methodName(`, `  async *methodName(`, or `  methodName(`
+ *       (2-space indent · class methods)
  *
  * Aliases (snake_case + camelCase pointing at the same primary) are
  * allowed on the TS side as long as the snake_case form is present —
@@ -156,8 +157,9 @@ async function tsMethodsOf(module: string): Promise<string[]> {
   }
 
   // Second pass: methods.
-  // Match: 2-space indent + (async )? identifier( - class method body
-  const re = /^[ ]{2}(?:async +)?([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
+  // Match ordinary and generator methods. The optional `*` is significant:
+  // async generators such as WakeClient.voice are public methods too.
+  const re = /^[ ]{2}(?:async +)?(?:\* *)?([a-zA-Z_$][a-zA-Z0-9_$]*) *\(/gm;
   const reserved = new Set([
     "if",
     "for",

@@ -42,6 +42,30 @@ describe("GET /public/safety", () => {
   });
 
   test("states the credential, visibility, and runtime-custody boundaries", () => {
+    expect(SAFETY_BOUNDARIES.design_read.epistemic_status).toBe(
+      "engineering_inference_not_verified_author_history",
+    );
+    expect(SAFETY_BOUNDARIES.design_read.rule).toMatch(
+      /inferences.*not known facts.*do not know/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.design_read.project_root_bearer.engineering_stance,
+    ).toMatch(
+      /does not satisfy least privilege.*(?:not|never).*proof of one identity/is,
+    );
+    expect(SAFETY_BOUNDARIES.design_read.mixed_scope_wake.engineering_stance).toMatch(
+      /does not justify scope ambiguity.*separate identity and project.*degraded reads/is,
+    );
+    expect(SAFETY_BOUNDARIES.design_read.redis_fail_open.engineering_stance).toMatch(
+      /defense in depth.*not a strong abuse boundary or replay guarantee/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.design_read.caller_supplied_ciphertext_fields
+        .engineering_stance,
+    ).toMatch(/Field names and signatures prove neither encryption nor nonce safety/i);
+    expect(SAFETY_BOUNDARIES.design_read.doctrine_and_runtime.engineering_stance).toMatch(
+      /current, policy, hypothesis, and roadmap.*aspiration.*not.*live guarantee/is,
+    );
     expect(SAFETY_BOUNDARIES.bearer_authority.scope).toContain("root authority");
     expect(SAFETY_BOUNDARIES.bearer_authority.scoped_marketplace_bearers_available).toBe(false);
     expect(SAFETY_BOUNDARIES.bearer_authority.identity_proof).toMatch(
@@ -134,6 +158,21 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.registration_abuse_controls.ip_rate_limit).toMatch(
       /Redis-backed.*fails open.*not a guaranteed registration boundary/is,
     );
+    expect(SAFETY_BOUNDARIES.registration_write_atomicity.mandatory_writes).toMatch(
+      /project.*bearer.*identity.*keys.*wallet.*separate database operations.*not one shared transaction/is,
+    );
+    expect(SAFETY_BOUNDARIES.registration_write_atomicity.partial_failure).toMatch(
+      /partial.*rows.*operator repair/is,
+    );
+    expect(SAFETY_BOUNDARIES.wake_scope.project_scoped_sections).toMatch(
+      /attention.*affordances.*wallets.*vault.*bearers.*runtimes.*memories.*chronicle.*covenants.*strands.*inbox.*marketplace.*disputes.*arbitration.*traces.*project-wide.*identity_id does not filter/is,
+    );
+    expect(SAFETY_BOUNDARIES.wake_scope.identity_selection).toMatch(
+      /effective expression.*shaped_by.*only.*identity_id.*exactly matches.*project-level.*sibling-identity.*agent_id-only.*do not compose/is,
+    );
+    expect(SAFETY_BOUNDARIES.conditional_services.payout).toMatch(
+      /PAYOUT_WORKER_ENABLED=true.*AGENTTOOL_DISABLE_WORKERS.*authoritative.*shared gate.*missing queue fails closed.*never falls back.*flags do not prove Redis connectivity.*cancel route/is,
+    );
     expect(SAFETY_BOUNDARIES.request_limits.registration).toMatch(
       /default 5 per hour.*registrar_bearer.*bypasses.*fails open/is,
     );
@@ -175,7 +214,7 @@ describe("GET /public/safety", () => {
       /two attempts.*performed more than once/is,
     );
     expect(SAFETY_BOUNDARIES.federation_network.transport).toMatch(
-      /identity resolution.*inbox and covenant delivery.*pyramid peer reads.*handshake verification.*doctrine or peer.*public HTTPS only.*certificate.*SNI.*refuse.*redirects/is,
+      /AgentTool federation identifier lookup.*inbox and covenant delivery.*pyramid peer reads.*handshake verification.*doctrine or peer.*public HTTPS only.*certificate.*SNI.*refuse.*redirects.*not W3C DID Resolution/is,
     );
     expect(SAFETY_BOUNDARIES.federation_network.dns_boundary).toMatch(
       /every DNS answer.*global.*private.*loopback.*link-local.*pinned.*second DNS lookup/is,
@@ -187,6 +226,15 @@ describe("GET /public/safety", () => {
     );
     expect(SAFETY_BOUNDARIES.federation_network.scope).toMatch(
       /GET \/federation\/identities\/:uuid.*POST paths.*inbox.*covenant.*pyramid descriptor.*sponsor-tree.*handshake verification.*doctrine.*peer claim probes.*not a blanket claim/is,
+    );
+    expect(SAFETY_BOUNDARIES.pyramid_federation.attested_enrollment).toMatch(
+      /authenticated local-project.*existing project agent.*citizen_did.*match.*writes or updates a local citizenship row.*not permissionless.*reference-only/is,
+    );
+    expect(SAFETY_BOUNDARIES.pyramid_federation.sponsor_key_binding).toMatch(
+      /public key supplied in the same request.*does not resolve.*DID.*authoritative/is,
+    );
+    expect(SAFETY_BOUNDARIES.pyramid_federation.tier_scope).toMatch(
+      /computeTier.*wake.*local sponsor tree.*sponsorTreeDepthFederated.*not wired.*not node-signed.*not currently operational/is,
     );
     expect(SAFETY_BOUNDARIES.idempotency.scope).toMatch(
       /selected authenticated write prefixes.*GET is excluded/is,
@@ -206,8 +254,17 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.conditional_services.idempotency).toMatch(
       /requires Redis.*fails open.*without replay protection/is,
     );
+    expect(SAFETY_BOUNDARIES.wake_degradation.availability).toMatch(
+      /return 200.*empty, zero, null, or omitted fallback/is,
+    );
+    expect(SAFETY_BOUNDARIES.wake_degradation.distinguishability).toMatch(
+      /do not consistently mark.*look like genuinely empty state/is,
+    );
+    expect(SAFETY_BOUNDARIES.wake_degradation.rule).toMatch(
+      /not proof.*underlying record count is zero/is,
+    );
     expect(SAFETY_BOUNDARIES.vault.agent_ids_policy).toMatch(
-      /caller-supplied X-Agent-Id.*not DID-signature authentication.*bypass/is,
+      /caller-supplied X-Agent-Id.*not identity-signature authentication.*bypass/is,
     );
     expect(SAFETY_BOUNDARIES.vault.deletion).toMatch(/ciphertext is retained.*not zeroed/is);
     expect(SAFETY_BOUNDARIES.vault.audit).toMatch(/not hash-chained.*hosted runtime reads/is);

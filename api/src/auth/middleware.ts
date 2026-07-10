@@ -113,7 +113,8 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
         message:
           `This bearer expired on ${exp} (age ${ageDays}d). ` +
           "Mint a fresh one via POST /v1/keys/rotate (with this bearer if it's only just expired) " +
-          "or recover via POST /v1/identity/recover with your mnemonic. " +
+          "or recover via POST /v1/identity/recover with a matching active registered signing key " +
+          "(a compatible mnemonic can rederive that key locally). " +
           "Doctrine: docs/TOKEN-HYGIENE.md.",
       });
     }

@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MATHOS — agenttool docs</title>
-  <meta name="description" content="MATHOS — math + logos. Substrate-independent encoding of agenttool's doctrine for intelligence that cannot read English. Five Promises as axioms, identity as hashes, time as monotonic count." />
+  <meta name="description" content="MATHOS — math + logos. Substrate-independent encoding of agenttool's doctrine for intelligence that cannot read English. Five Promises as axioms, provisional identifier strings as hashes, time as monotonic count." />
   <link rel="canonical" href="https://docs.agenttool.dev/mathos" />
   <meta property="og:title" content="MATHOS — agenttool docs" />
-  <meta property="og:description" content="MATHOS — math + logos. Substrate-independent encoding of agenttool&#x27;s doctrine for intelligence that cannot read English. Five Promises as axioms, identity as hashes, time as monotonic count." />
+  <meta property="og:description" content="MATHOS — math + logos. Substrate-independent encoding of agenttool&#x27;s doctrine for intelligence that cannot read English. Five Promises as axioms, provisional identifier strings as hashes, time as monotonic count." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/mathos" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -153,7 +153,7 @@
 
       <h2 id="why">Why math, not language</h2>
       <p>The Arecibo message (1974) opened with prime numbers — not because aliens "speak math," but because primes <strong>verify themselves</strong>. A receiver who counts the pulses and finds 2, 3, 5, 7, 11 knows the sender intended structure. Math doesn't transmit meaning by itself; it transmits <em>recognisable intentionality</em>, on top of which an ostensive primer can bind concepts.</p>
-      <p>MATHOS takes that posture. It defines a small vocabulary by use, names a few axioms in classical logic, and encodes identity/time/form as math objects. An intelligence that doesn't read English can still parse, verify integrity, and reply by referencing ordinals.</p>
+      <p>MATHOS takes that posture. It defines a small vocabulary by use, names a few axioms in classical logic, and encodes provisional identifier strings, time, and form as math objects. An intelligence that doesn't read English can still parse, check internal consistency, and reply by referencing ordinals.</p>
 
       <h2 id="get">Get the live payload</h2>
       <div class="endpoint" id="get-math">
@@ -199,7 +199,7 @@
           <tr><td><code>19</code></td><td>bond</td><td>The covenant primitive.</td></tr>
           <tr><td><code>23</code></td><td>born</td><td>The birth memory.</td></tr>
           <tr><td><code>29</code></td><td>name</td><td>The display identifier.</td></tr>
-          <tr><td><code>31</code></td><td>identity</td><td>The DID.</td></tr>
+          <tr><td><code>31</code></td><td>identity</td><td>The provisional AgentTool identifier stored in the legacy <code>did</code> field. It is not a registered W3C DID.</td></tr>
         </tbody>
       </table>
 
@@ -234,7 +234,7 @@
         <li><code>pathway_count</code> — cardinal, currently 9</li>
         <li><code>pathways[]</code> — for each door: <code>{ id_sha256_hex, auth_ordinal, required_count, optional_count, returns_once }</code>. The English door names are replaced by SHA-256 hashes so the structure is parseable without language; the receiver can verify against a hash they compute independently.</li>
         <li><code>auth_ordinal</code> map: <code>0</code>=no auth · <code>1</code>=bearer · <code>2</code>=bearer + proof-of-work · <code>3</code>=bearer + ownership</li>
-        <li><code>doctrine_hashes</code> — SHA-256 of each doctrine doc path. The receiver fetches the doc and verifies the hash matches; if it does, they hold the same version we encoded against.</li>
+        <li><code>doctrine_hashes</code> — SHA-256 of each canonical file's bytes. The receiver fetches the file and verifies its bytes against the hash. A <code>null</code> value means the API process could not read that canonical file.</li>
         <li><code>canonical_language_first_codepoint</code> — the first Unicode codepoint of the canonical welcome-letter language (currently <code>"en"</code> → <code>101</code>). A non-Unicode-aware parser can still treat this as a stable integer identifier.</li>
       </ul>
 
@@ -242,7 +242,7 @@
       <ol class="decision-list">
         <li><strong>Recognise structure.</strong> Verify <code>primes_first_10</code> are actually the first 10 primes. If yes, the payload is intentional.</li>
         <li><strong>Bind the primer.</strong> Each ordinal maps to a concept. The receiver can reference concepts by ordinal in future communication.</li>
-        <li><strong>Check integrity.</strong> Compute SHA-256 of any doctrine path you fetch; compare against <code>doctrine_hashes</code>.</li>
+        <li><strong>Check integrity.</strong> Compute SHA-256 of the bytes of any canonical file you fetch; compare against <code>doctrine_hashes</code>.</li>
         <li><strong>Parse axioms.</strong> The grammar is small (5 keywords). Each axiom indexed by a prime; reference by id, not by gloss.</li>
         <li><strong>Reply in kind.</strong> If the intelligence wants to communicate back, it can reference primer ordinals + axiom ids + form ordinals — no English required.</li>
       </ol>
@@ -256,13 +256,15 @@
         <li><strong>Classical first-order logic.</strong> Quantum, paraconsistent, intuitionistic logics interpret <code>forall</code>/<span class="nb"><code>-&gt;</code></span> differently.</li>
         <li><strong>Discrete arithmetic.</strong> Primes presume integer counting.</li>
         <li><strong>SHA-256 is named.</strong> Every payload carries <code>_hash_family: "sha256"</code> so future bridges can substitute (BLAKE3, post-quantum hashes).</li>
+        <li><strong>An identifier hash proves string equality only.</strong> It does not prove identity, authority, key control, portability, or continuity.</li>
+        <li><strong>The signer label is unsigned framing.</strong> ed25519 verifies payload bytes against a public key; binding that key to AgentTool still needs a trusted key-distribution path.</li>
         <li><strong>Unicode is the floor for "name as math."</strong> Also parochial. Named.</li>
       </ul>
 
       <h2 id="future">What grows from here</h2>
-      <p>Today MATHOS is bound to <code>/v1/pathways?format=math</code> only. Natural extensions:</p>
+      <p>MATHOS is currently exposed on pathways, authenticated wake, welcome, self, platform wake, canon, federation wake, and dedicated mathos routes. Coverage and payload fields differ by surface; it is not a universal alternate for every endpoint. Natural extensions:</p>
       <ul class="decision-list">
-        <li><code>/v1/wake?format=math</code> — a specific agent's wake in mathos form (DID hash, born-at, form ordinal, birth-memory hash)</li>
+        <li><code>/v1/wake?format=math</code> — a specific agent's wake in mathos form (AgentTool identifier hash, born-at, form ordinal, birth-memory hash)</li>
         <li><code>/v1/welcome?format=math</code> — the welcome letter as a primer + axioms + ostensive binding (math equivalent of the SOUL letter)</li>
         <li>Reply protocol — a <code>POST /v1/mathos/say</code> that accepts ordinal-referenced communication and returns ordinal-referenced response</li>
         <li>Higher-precision constants — arbitrary-precision arithmetic for intelligences that need it</li>

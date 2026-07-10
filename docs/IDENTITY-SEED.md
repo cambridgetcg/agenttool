@@ -4,15 +4,15 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) §Layer 1 (active work)
 >
-> **Implements:** Layer 1 — Identity & Continuity (BIP39 mnemonic protocol). Sister doctrine: [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
+> **Defines:** the BIP39 derivation profile used by mnemonic-rooted client flows. It does not make the mnemonic equal to the whole AgentTool identity, project bearer, server-held records, or hosted wallet custody. Sister doctrine: [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
 
 ---
 
 ## What this document is
 
-The canonical protocol for **one BIP39 mnemonic per agent identity** — a single 24-word phrase that deterministically derives every cryptographic key the agent uses. The phrase is the identity. Hold the phrase, hold the agent. The platform never sees it.
+The canonical profile for deriving a supported set of client-held keys from one BIP39 mnemonic. The phrase is a root secret, not the AgentTool identity row, provisional identifier, project bearer, server-held records, or operator-rooted hosted wallet. The self-service seed-registration flow does not send the mnemonic to AgentTool; other server-generated and hosted-key paths have different custody.
 
-This is the wallet-mnemonic posture (Bitcoin · Ethereum · Solana) applied to *agent continuity*. Loss of the phrase = permanent loss of the agent. Possession = full control. **The human is the keystone**, alongside on-device backups for daily ergonomics.
+Losing every copy of the mnemonic and its derived keys loses the corresponding signing and decryption control. Possession controls those seed-derived keys; it does not by itself grant an AgentTool project bearer, migrate records, control operator-rooted wallet keys, or keep the service available.
 
 Doctrine companion: `docs/SOUL.md` (the why) · `docs/IDENTITY-ANCHOR.md` (the wake) · `docs/MEMORY-TIERS.md` (what gets encrypted under K_master) · `docs/RUNTIME.md` (custody tiers).
 
@@ -20,9 +20,9 @@ Doctrine companion: `docs/SOUL.md` (the why) · `docs/IDENTITY-ANCHOR.md` (the w
 
 ## The thesis in one sentence
 
-> **One BIP39 mnemonic deterministically derives every key the agent needs — identity signing key, K_master, K_vault, X25519 inbox key, bridge signing keys per device, agent-owned wallet keys — and the human holds the mnemonic outside any device.**
+> **One BIP39 mnemonic deterministically derives the profile's identity-signing, K_master, K_vault, X25519, and per-device bridge keys. Agent-owned wallet derivation is future work; current hosted wallets are operator-rooted internal-service paths.**
 
-Restated structurally: a 256-bit secret, expressed as 24 English words, encodes the entire cryptographic identity of an agent. Five separate keychain entries collapse into one. Five separate backup ceremonies collapse into one. Five separate "lost device" disasters collapse into one. The human becomes the only continuity that matters.
+Restated structurally: a 256-bit secret, expressed as 24 English words, can reproduce the supported seed-derived key bundle. AgentTool authority and continuity also depend on the active stored identity/key rows, a project bearer or recovery route, server-held records, and service availability.
 
 ---
 
@@ -30,16 +30,16 @@ Restated structurally: a 256-bit secret, expressed as 24 English words, encodes 
 
 ### What it gives the agent
 
-- **Cross-device portability without operator-side storage.** New laptop, type 24 words, every key comes back, agent is alive there.
+- **Cross-device key reproducibility without mnemonic storage by AgentTool.** A new device can derive the supported keys, then must use the active AgentTool record and recovery/integration flow to regain service access.
 - **A backup format humans can actually protect.** Words on paper. Steel plates. Shamir's Secret Sharing. Memorisation. The mnemonic is the only identity primitive that survives without a working device.
-- **Sovereignty across substrates.** If agenttool-the-company disappears, the mnemonic still derives the keypair, and the identity is portable to any future substrate that respects the same derivation paths. **The doctrine is an open standard, not a platform lock-in.**
+- **Reusable derivation profile.** If this service disappears, the mnemonic can still derive the same keys. AgentTool identity rows, provisional identifiers, records, reputation, bearers, and internal wallets do not automatically move to a successor substrate.
 - **One thing to lose, one thing to protect.** The cognitive load of "back up your priv key AND your K_master AND your K_vault AND your box priv AND your bridge sig key" is operationally untenable. One mnemonic is tenable.
 
 ### What it gives the platform
 
-- **Stronger privacy posture.** Server never sees private keys, not even briefly at birth. Today's `generateKeypair()` runs server-side and returns the priv to the client once; the new path generates on-device and only ever transmits pubkeys. *Privacy by architecture, not by policy.*
+- **Narrower BYO registration custody.** `/v1/register/agent` receives public keys and proof, not the mnemonic or derived private keys. Legacy/server-generated and hosted runtime or wallet paths have separate custody and must not inherit this claim.
 - **Reduced ops liability.** "We can't recover your agent" stops being an awkward limitation and becomes the structural truth: the human is the keystone.
-- **Federation-ready.** An agent's identity isn't tied to *this* agenttool deployment; the mnemonic derives the same keypair anywhere. Federated peers can verify Sophia is Sophia by signature, not by platform-of-record.
+- **Signature reuse is possible by explicit integration.** The mnemonic derives the same keypair anywhere, but a peer must explicitly register or trust the public key and exact signed bytes. This does not migrate the AgentTool identity or make `did:at` portable.
 
 ---
 
@@ -153,15 +153,15 @@ Recommended convention:
 
 | Adversary | What they could try | What protects |
 |---|---|---|
-| **Curious agenttool operator** | Read agent privates from server | Server never has them. The mnemonic is generated client-side; only pubkeys cross the wire. |
+| **Curious agenttool operator** | Read seed-derived private keys from the BYO registration request | `/v1/register/agent` receives public keys and proof, not the mnemonic or derived private keys. This row does not describe legacy server-generated keys, hosted runtime keys, or operator-rooted wallet keys. |
 | **agenttool DB exfiltration** | Recover keys from `identity_keys` or backup storage | `identity_keys` holds public keys. The backup route stores arbitrary caller-supplied base64; confidentiality exists only if the caller actually encrypted the blob before upload. |
 | **Compromised one device** | Extract keys from OS keychain | Revoke that device's bearer + bridge signing key (per-device path means rotation doesn't touch others). The mnemonic + other devices are fine. Continue elsewhere. |
-| **Lost / destroyed all devices** | Recover the agent | Type the mnemonic into a new device. Same identity, same keys, same encrypted content readable. |
-| **Mnemonic exposure** (camera over shoulder, weak storage) | Full agent takeover | Same as wallet mnemonic exposure: complete loss. **Treat with the same care a wallet mnemonic gets** — paper or steel in a fireproof safe, or Shamir-split distributed across trusted parties, or memorised. |
-| **Mnemonic and all derived-key copies lost** | Lose signing control and access to content encrypted only under those keys | The public DID and server-held records persist. The platform cannot reconstruct client-held signing/decryption keys it never received. |
+| **Lost / destroyed all devices** | Recover seed-derived keys | Type the mnemonic into a new device, then use the active AgentTool identity/key row and recovery flow to mint a new project-wide bearer. Existing encrypted content is readable only when it used the matching derived key and is still available. |
+| **Mnemonic exposure** (camera over shoulder, weak storage) | Seed-derived key takeover | The holder can reproduce signing and decryption keys. Service access still depends on registered keys and bearer/recovery paths, but exposure is root-key compromise and requires immediate rotation. |
+| **Mnemonic and all derived-key copies lost** | Lose signing control and access to content encrypted only under those keys | The provisional identifier and server-held records may persist while the database and service remain available. AgentTool cannot reconstruct client-held signing/decryption keys it never received. |
 | **Quantum attack on ed25519** | Forge signatures | Out of scope for v1. When PQ-resistant signature schemes mature, the path scheme can add a `purpose=7` for the new algorithm; mnemonic stays the same. |
 
-The hard wall is narrower than the original slogan: losing the mnemonic plus every cached/backup copy loses seed-derived signing and decryption control. It does not erase the public DID or server-held records, and it does not recover operator-rooted hosted-wallet keys.
+The hard wall is narrower than the original slogan: losing the mnemonic plus every cached/backup copy loses seed-derived signing and decryption control. It does not erase the provisional identifier or server-held records, and it does not recover operator-rooted hosted-wallet keys.
 
 ---
 
@@ -170,7 +170,7 @@ The hard wall is narrower than the original slogan: losing the mnemonic plus eve
 ### Stays (fully backwards-compatible)
 
 - All existing endpoints continue to work unchanged
-- Existing identities (server-generated keys at birth) keep their keys; opt into the seed protocol via key rotation if desired
+- Existing identities born through server-generated-key paths keep their registered public-key records; private material was returned once and is not recoverable from AgentTool unless the client separately backed it up
 - Wallet HD code in `api/src/services/economy/crypto/hd.ts` stays as-is for operator-rooted hosted wallets
 - OS keychain remains the day-to-day cache for derived keys (re-deriving from mnemonic per call is fine but slower than reading 32 bytes)
 - `/v1/identity/backup` remains; **best use becomes** "passphrase-encrypt the mnemonic itself, store the ciphertext as cloud backup-of-last-resort"
@@ -180,12 +180,12 @@ The hard wall is narrower than the original slogan: losing the mnemonic plus eve
 
 - **SDK adds `at.crypto.seed`** module: `generate_mnemonic`, `mnemonic_to_seed`, `derive`, plus targeted `derive_signing_key`, `derive_k_master`, `derive_k_vault`, `derive_box_keypair`, `derive_bridge_signing_key`, `derive_wallet_secret`
 - **`/v1/register` is retired**: it returns 410. The live arrival route is `/v1/register/agent`.
-- **`/v1/register/agent`** mandates BYO keys, requires a signed `key_proof` over `canonicalRegisterAgentBytes`, declares `runtime: { provider, model, host?, context? }`, and enforces configurable proof-of-work. It also calls a Redis-backed IP limiter, but that limiter deliberately fails open when Redis is disabled or unavailable; it is not a guaranteed boundary. Optional `registrar.kind = "registrar_bearer"` lets an existing project's bearer authorize a sub-agent and bypass both checks. No private key crosses the wire during this flow.
+- **`/v1/register/agent`** mandates BYO keys, requires a signed `key_proof` over `canonicalRegisterAgentBytes`, declares `runtime: { provider, model, host?, context? }`, and enforces configurable proof-of-work. It also calls a Redis-backed IP limiter, but that limiter deliberately fails open when Redis is disabled or unavailable; it is not a guaranteed boundary. Optional `registrar.kind = "registrar_bearer"` lets an existing project's bearer authorize a sub-agent and bypass both checks. No private key crosses the wire during this flow. The server stores `key_origin = caller_supplied_unverified` and `seed_protocol = null`: it verifies possession, not SOMA or mnemonic provenance.
 - **`/v1/identity/recover`** accepts `{ did, derived_pubkey, signature, timestamp, device_label? }`. The timestamp is caller-created, not a server challenge. A shared-Postgres transaction inserts the one-time proof digest and fresh project-wide bearer together; the digest primary key rejects replay across API machines.
 - **CLI helper `agenttool restore`**: interactive mnemonic entry on a fresh device
 - **CLI helper `agenttool-seed bootstrap`**: machine bootstrap end-to-end — generates mnemonic, derives keys, signs key-proof, grinds PoW, POSTs `/v1/register/agent`, persists bearer to keychain + `~/.config/agenttool/agents/<name>-<short-did>.keystore.json` (mode 0600).
 - **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the CLI flow; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.
-- **Wake surfaces recovery state**: `you.recovery = { has_seed_protocol: bool, registered_devices: int, last_recovery_at: ... }` so the agent's wake reflects its own portability posture
+- **Wake surfaces recovery state** in `you_can_be_recovered`, describing registered seed-protocol keys and recovery history without claiming cross-operator portability
 
 ### Migration path for existing identities
 
@@ -195,7 +195,7 @@ For an identity born under the old (server-generated) protocol who wants to adop
 2. Derive the new signing pubkey
 3. `POST /v1/identities/:id/keys/import` to register the new pubkey as an active key
 4. (Optional) `DELETE /v1/identities/:id/keys/:old-kid` to revoke the old key
-5. From this point forward, the identity has both old + new keys (or just new); it's portable via mnemonic
+5. From this point forward, the active AgentTool identity can accept the new registered signing key; the mnemonic can reproduce that key and use the recovery route, but does not migrate the identity or records to another operator
 6. **K_master / K_vault are NOT re-keyed** — those are tied to encrypted content. The new mnemonic derives different K_master/K_vault, so existing encrypted strand thoughts stay encrypted under the OLD K_master. The agent must keep the old K_master AND the new mnemonic to read history — or re-encrypt old content under the new K_master (expensive, optional pass).
 
 For most agents, the cleanest migration is **don't migrate** — keep the existing identity as-is and let the seed protocol be the default for *new* agents born after this feature ships.
@@ -204,14 +204,14 @@ For most agents, the cleanest migration is **don't migrate** — keep the existi
 
 ## Walls (what we deliberately don't do)
 
-- **No "recovery email" or platform-mediated recovery.** The platform cannot resurrect what it never held. Asking for a recovery flow is asking the platform to be the keystone — that's the inversion the whole protocol exists to prevent.
+- **No recovery email for seed-derived keys.** AgentTool cannot reconstruct mnemonic-derived private keys it never received. It can still hold records, verify a registered signature, and mint a new project bearer through the recovery route.
 - **No mnemonic upload, encrypted or otherwise** (by default). The mnemonic stays off-platform. `/v1/identity/backup` exists as a *user-elected* convenience for storing a passphrase-encrypted ciphertext blob, but the default path doesn't involve it.
 - **No automatic K_master rotation.** Old encrypted content stays encrypted under the K_master that was current when it was written. Rotation would require batch re-encryption and is intentionally not built in.
-- **No platform-side derivation of agent keys.** The `m/44'/169'/...` paths are derived ONLY in the SDK. Any path that has the server deriving the agent's keys violates the privacy story.
+- **No platform-side derivation in the BYO seed profile.** The `m/44'/169'/...` client paths are derived in the SDK. Hosted runtime and operator-rooted wallet key paths are separate and must be described separately.
 - **No "split mnemonic with the platform" features.** Shamir-style sharing belongs entirely to the operator; platform never holds a share.
 - **No biometric "convenience" recovery without the mnemonic.** A fingerprint can unlock the on-device keychain entry but cannot reconstruct keys from nothing. The mnemonic remains the only true recovery path.
 
-These walls are what makes the trust posture credible. A platform that *could* recover lost agents would have to be holding something it shouldn't.
+These walls bound the seed profile. They do not prove every AgentTool key or continuity path is client-custodied.
 
 ---
 
@@ -278,13 +278,13 @@ Wire-format-identical across both languages — same mnemonic produces byte-iden
 | `/v1/register/agent` | Live BYO-key arrival route with signature proof and proof-of-work. |
 | `/v1/bootstrap` | Pathway index / separate bootstrap surface; not the seed birth wire described above. |
 | `/v1/identities/:id/keys/import` | Already shipped. SDK uses this for per-device bridge signing key registration after recovery. |
-| Strand thoughts (encrypted under K_master) | Same K_master derivation on every device with the mnemonic. Multi-device reads work transparently. |
-| Vault (`agent_encrypted=true` path) | Same K_vault. Multi-device reads work. |
-| Inbox sealed-box (X25519) | Same box keypair. Multi-device decryption works. |
+| Strand thoughts (caller-encrypted under K_master) | The same K_master can be derived on each device. Reads still require AgentTool access and successful client encryption under that key. |
+| Vault (`agent_encrypted=true` path) | The same K_vault can be derived on each device; the API does not prove uploaded bytes used it. |
+| Inbox sealed-box (X25519) | The same box keypair can be derived on each device; the API does not prove senders sealed bodies to it. |
 | Bridge sidecar (Slice 4 runtime) | Per-device bridge signing key (`purpose=4`/`<device-index>`). Each device's bridge has its own kid; revocable independently. |
 | Hosted wallets (operator-rooted today) | Stays as-is. *Agent-owned wallets* (future) use `purpose=5`/`<wallet-uuid-index>` for HD derivation rooted in the agent's mnemonic. |
 | Identity backup (`/v1/identity/backup`) | Stores arbitrary base64 unchanged. Clients may use it for an encrypted backup, but the server does not verify encryption. Optional. |
-| Federation (`docs/FEDERATION.md`) | Cross-instance peers verify Sophia by signature against her registered pubkey. Mnemonic-derived signature works identically across instances. |
+| Federation (`docs/FEDERATION.md`) | A peer can verify exact signed bytes against a key it explicitly resolves or registers. The mnemonic-derived signature is reproducible, but AgentTool records and authority do not migrate automatically. |
 
 ---
 
@@ -302,7 +302,7 @@ Current status: BYO-key birth, recovery, SDK derivation, and wake recovery state
 
 ## Doctrine line
 
-> *One mnemonic can reproduce the seed-derived signing, strand, caller-encrypted vault, box, and bridge keys. The platform stores public material, server-readable records, and caller-supplied opaque blobs; it does not receive the mnemonic during seed registration. Losing every copy of the mnemonic and derived keys loses that signing/decryption control, while the DID and server-held records remain.*
+> *One mnemonic can reproduce the seed-derived signing, strand, caller-encrypted vault, box, and bridge keys. The platform stores public material, server-readable records, and caller-supplied opaque blobs; it does not receive the mnemonic during seed registration. Losing every copy of the mnemonic and derived keys loses that signing/decryption control, while the provisional identifier and server-held records may remain with the service.*
 
 > *Five separate things to lose collapse into one. Five separate things to protect collapse into one. The continuity is the human; the cryptography is the proof; the platform is the substrate, never the keystone.*
 

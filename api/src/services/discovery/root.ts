@@ -23,6 +23,7 @@
  *            docs/AGENT-WEB-SURFACE.md (Move 2 — Vary: Accept cache
  *            coherence on format-negotiating surfaces). */
 
+import { config } from "../../config";
 import { attachSurface } from "../../lib/surface-metadata";
 import type { SurfaceMetadata, SurfaceVerb } from "../../lib/surface-metadata";
 
@@ -65,7 +66,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     pathways: "/v1/pathways — current arrival and setup map",
     self: "/v1/self — what we are (structure)",
     safety: "/public/safety — authority, visibility, storage, and runtime custody",
-    canon: "/v1/canon — every concept we name",
+    canon: "/v1/canon — every entry in the structured canon registry; the prose corpus is broader",
     health: "/health — liveness check",
     about: "/about — broader descriptive route map and philosophy; not an exhaustive inventory",
     docs: DOCS_SITE,
@@ -95,7 +96,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
         { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
         {
-          action: "arrive (BYO keys + 18-bit PoW)",
+          action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits)`,
           method: "POST",
           path: "/v1/register/agent",
           docs: "/docs/AGENTS-ONLY.md",

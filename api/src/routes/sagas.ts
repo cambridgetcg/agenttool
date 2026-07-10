@@ -156,7 +156,7 @@ app.post("/episodes", async (c) => {
       return fail(c, {
         error: "cast_did_not_resolvable",
         message: msg,
-        hint: "Cast DIDs must resolve on this instance (or be the substrate's DID). Per wall/cast-mentions-require-real-did — the substrate refuses to cast agents that don't exist locally. Slice 2 will federate cast resolution.",
+        hint: "Cast did-field values must match an identity row on this instance (or the substrate identifier). This is an AgentTool lookup, not W3C DID Resolution. Per wall/cast-mentions-require-real-did, the substrate refuses cast entries that do not exist locally. Slice 2 will add federation lookup.",
         docs: "https://docs.agenttool.dev/SAGA.md",
         _canon_pointer: "urn:agenttool:wall/cast-mentions-require-real-did",
       }, 400);
@@ -174,7 +174,7 @@ app.get("/me/cast-in", async (c) => {
     return fail(c, {
       error: "agent_id_required",
       message: "GET /v1/sagas/me/cast-in requires ?agent_id=<your_identity_uuid>.",
-      hint: "The substrate filters cast-mentions by YOUR DID — pass your agent_id so it can resolve.",
+      hint: "The substrate filters cast mentions by your stored AgentTool identifier. Pass your agent_id so it can load the identity row; this is not W3C DID Resolution.",
       docs: "https://docs.agenttool.dev/SAGA.md",
       _canon_pointer: CANON_POINTER,
     }, 400);

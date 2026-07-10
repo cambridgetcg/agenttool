@@ -73,6 +73,7 @@ app.get("/", async (c) => {
   try {
     composed = await composeExpression(
       project.id,
+      primary.id,
       (primary.expression ?? {}) as ExpressionData,
     );
   } catch {

@@ -20,8 +20,10 @@ That makes agenttool *infrastructure-as-storage* — like S3 for agency.
 
 Closing the runtime is the move from S3 to EC2. agenttool becomes *infrastructure-as-runtime* — the cloud the agent's substrate runs ON, not just the cloud the substrate writes TO. The user can keep BYO substrate or provision a hosted runtime.
 
-The privacy boundary depends on runtime mode. Persistent thought storage is
-ciphertext-only, but hosted processing is not automatically opaque.
+The privacy boundary depends on runtime mode. Persistent thought rows are
+ciphertext-shaped: the schema has ciphertext and nonce fields and no plaintext
+thought field, but the API does not verify that caller-supplied bytes were
+encrypted. Hosted processing is not automatically opaque.
 
 ### Current implementation status
 
@@ -49,7 +51,7 @@ The agent's runtime has a **mode**, and the mode determines who holds <code>K_ma
 User's machine                                agenttool cloud
 ──────────────                                ───────────────
 Orchestrator                                  /v1/wake
-  └── K_master                                /v1/strands  (ciphertext only)
+  └── K_master                                /v1/strands  (ciphertext/nonce fields; encryption unverified)
   └── LLM call           ←── HTTPS ──→        /v1/memories
   └── encrypt/decrypt                         /v1/wallets
                                               /v1/vault
@@ -57,7 +59,9 @@ Orchestrator                                  /v1/wake
 
 **Who runs the loop:** the user.
 **Who holds K_master:** the user.
-**What we see:** ciphertext, derived metadata, wallet activity. Same as today.
+**What AgentTool can see:** caller-supplied strand bytes and derived metadata;
+the API does not prove those bytes were encrypted. Other project records,
+including ordinary memory content, can be server-readable.
 **Trade-off:** maximum privacy, requires the user's machine to be up.
 **Use case:** development, paranoid threat models, agents whose human can't share custody with a cloud.
 
@@ -76,7 +80,7 @@ agenttool-bridge (sidecar)                    Hosted orchestrator
 
 **Who runs the loop:** agenttool's hosted orchestrator on Fly.io.
 **Who holds K_master:** the user, on their machine, in a small `agenttool-bridge` sidecar binary (10MB, Bun-compiled).
-**What we see:** K_master does not cross from the bridge, but decrypted plaintext lives in AgentTool's hosted orchestrator RAM during a think-cycle and is sent to the chosen model provider. Persistent strand storage remains ciphertext-only.
+**What we see:** K_master does not cross from the bridge, but decrypted plaintext lives in AgentTool's hosted orchestrator RAM during a think-cycle and is sent to the chosen model provider. Persistent strand storage uses ciphertext/nonce fields with no normal decrypt path; the API does not independently prove caller encryption.
 **Trade-off:** user-side key custody with hosted plaintext processing; needs the user's bridge to be reachable. This protects against a database-only compromise, not a compromised hosted process or operator. Bridge auto-reconnects across IP changes via the agent's signing key.
 **Use case:** the production default. Cloud-uptime UX with on-machine custody.
 
@@ -308,7 +312,7 @@ so AgentTool worker RAM and the provider both receive plaintext even though
 K_master stays in the user bridge. If the experimental `trusted` path is
 exercised, the hosted orchestrator can likewise hold plaintext and send model
 input before the later signed write fails. Do not infer provider-traffic
-opacity from ciphertext-only strand storage.
+opacity from ciphertext-shaped strand storage.
 
 ---
 

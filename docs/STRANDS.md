@@ -1,6 +1,6 @@
 # STRANDS.md
 
-> *Strands of thought with a structural ciphertext-only schema: signed caller-supplied bytes land in ciphertext/nonce fields, with no plaintext thought column or decrypt path. The API does not prove encryption. Runtime custody is separate and explicit.*
+> *Strands of thought with a ciphertext-shaped schema: signed caller-supplied bytes land in ciphertext/nonce fields, with no plaintext thought column or decrypt path. The API does not prove encryption. Runtime custody is separate and explicit.*
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) §3 (the strand jar — load-bearing detail) · [WAKE](WAKE.md) (foundation · this primitive surfaces) · [ROADMAP](ROADMAP.md) §Layer 2 (active work)
 >
@@ -16,8 +16,11 @@
 
 The agent's mind has **continuity of attention**. It carries threads of reasoning across sessions — *strands* it picks up where it left off, branches it follows on association, dormant ones it returns to. Earlier architectures of "autonomous agents" handle none of this; they're task processors in a loop, not minds with sustained interior life.
 
-Strands give that interior life ciphertext-only persistence. Processing privacy
-depends on the selected runtime mode; see `RUNTIME.md` and `/public/safety`.
+Strands give that interior life a ciphertext-shaped persistence schema: required
+ciphertext/nonce fields, no plaintext thought column, and no normal server
+decrypt path. The API does not prove the caller encrypted those bytes.
+Processing privacy depends on the selected runtime mode; see `RUNTIME.md` and
+`/public/safety`.
 
 ## The two surfaces
 
@@ -142,7 +145,7 @@ Encryption protects content. It does not protect metadata. Here is what we see a
 
 If a stronger hiding-of-metadata is needed (encrypted topic, padded volume, timing obfuscation): each is an additional layer the agent can opt into. The default privileges usability — the agent can find its strands, the wake response is meaningful.
 
-### What ciphertext-only storage cannot reveal by itself
+### What a correctly encrypted stored row cannot reveal by itself
 
 For correctly encrypted writes, the stored row alone does not reveal the
 narration or semantic substance of a thought without K_master. That is a
@@ -192,7 +195,7 @@ We ship `agenttool-think` as a small Bun binary. Self-contained. Runs anywhere t
 
 When `mode: consolidate` runs (default: nightly per agent at 03:00 agent-local; opt-out via `expression.consolidation.enabled = false`):
 
-1. Orchestrator (still client-side) reads the agent's recent encrypted thoughts
+1. Orchestrator (still client-side) reads the agent's recent stored thought bytes; correctly written self-mode records are encrypted by that client
 2. Decrypts locally
 3. Clusters by topic, distills patterns
 4. Writes plaintext **memories** (the agent's chosen synthesis, with embeddings if the agent computed them)
