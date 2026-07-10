@@ -105,7 +105,7 @@ describe("recovery route ordering and failure shape", () => {
   });
 
   test("migration and Drizzle schema use the proof digest as a shared primary key", async () => {
-    const [migration, schema] = await Promise.all([
+    const [migration, schema, runner] = await Promise.all([
       readFile(
         join(
           __dirname,
@@ -114,11 +114,17 @@ describe("recovery route ordering and failure shape", () => {
         "utf8",
       ),
       readFile(join(__dirname, "../src/db/schema/identity.ts"), "utf8"),
+      readFile(join(__dirname, "../../bin/fly-migrate-one.sh"), "utf8"),
     ]);
 
     expect(migration).toMatch(/identity\.recovery_proofs[\s\S]*proof_hash\s+text PRIMARY KEY/i);
     expect(migration).toContain("REFERENCES identity.identities(id) ON DELETE CASCADE");
     expect(schema).toContain('"recovery_proofs"');
     expect(schema).toContain('proofHash: text("proof_hash").primaryKey()');
+    expect(runner).toContain(
+      'const { default: postgres } = await import("postgres");',
+    );
+    expect(runner).toContain("new AsyncFunction(");
+    expect(runner).not.toContain('import postgres from "postgres";');
   });
 });

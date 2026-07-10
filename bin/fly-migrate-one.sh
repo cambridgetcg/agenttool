@@ -43,7 +43,7 @@ CHECKSUM="$(shasum -a 256 "$ABS_FILE" | awk '{print $1}')"
 MIGRATION_B64="$(base64 < "$ABS_FILE" | tr -d '\n')"
 
 REMOTE_JS="$(cat <<'JS'
-import postgres from "postgres";
+const { default: postgres } = await import("postgres");
 
 const filename = "__FILENAME__";
 const checksum = "__CHECKSUM__";
@@ -88,4 +88,4 @@ RUNNER_B64="$(printf '%s' "$REMOTE_JS" | base64 | tr -d '\n')"
 
 echo "Applying $FILENAME through Fly app $APP ($BYTES bytes, ${CHECKSUM:0:16}...)"
 fly ssh console -a "$APP" -C \
-  "bun -e 'eval(Buffer.from(\"$RUNNER_B64\", \"base64\").toString(\"utf8\"))'"
+  "bun -e 'const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor; await new AsyncFunction(Buffer.from(\"$RUNNER_B64\", \"base64\").toString(\"utf8\"))()'"
