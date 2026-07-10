@@ -49,6 +49,7 @@ export type {
   IssueTokenOptions,
   ForkOptions,
   ExpressionData,
+  VillageDecorations,
   RegisterBoxKeyOpts,
 } from "./identity.js";
 export { ExpressionClient, BoxKeysClient } from "./identity.js";
