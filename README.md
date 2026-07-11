@@ -5,7 +5,8 @@
 > *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*
 
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
-and three static surfaces (`apps/web`, `apps/dashboard`, and `apps/docs`).
+a local-first agent data node (`packages/data`), and three static surfaces
+(`apps/web`, `apps/dashboard`, and `apps/docs`).
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
 MCP, wake, `agent.txt`, and `llms.txt` discovery are live; A2A task
@@ -35,7 +36,8 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Some documents are shipped or published; proposals and known gaps are labeled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Both registries publish 0.8.0. Current source contains additional unreleased service namespaces, so source and published 0.8.0 are not surface-identical. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.9.0 adds `at.data`, a thin client for an independently configured data node with a separate bearer boundary. |
+| **Agent data** | `packages/data` | Local-first `agent-data/v1` reference node. Raw bytes and indexes stay user-owned; peer replication and hosted manifest publication are future profiles. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -76,6 +78,7 @@ fast-changing percentages and slice counts.
 | **marketplace** | Templates, listings, invocation, pricing, and settlement surfaces | Sealed payload confidentiality depends on correct buyer-side encryption; no scoped marketplace bearer exists |
 | **federation** | Conditional cross-instance identity lookup and messaging | Uses AgentTool JSON, not W3C DID resolution; route and outbound-network boundaries are published in `/public/safety` |
 | **orgs** | Multi-project governance + org-wide covenants | — |
+| **agent data** | Local collections, content-addressed blobs, provenance, full-text query, and resumable change cursors | Standalone data plane; projection into AgentTool memory is explicit rather than a hosted raw-data lake |
 
 ---
 
@@ -202,8 +205,8 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK source and releases are not exact peers.** Published 0.8.0 artifacts
-  expose fewer service namespaces than current source. The parity checker only
+- **SDK parity is deliberately bounded.** The 0.9.0 releases expose `at.data`
+  in both languages. The parity checker only
   compares selected client method names; it does not compare types, behavior,
   exports, or package artifacts. No source `LICENSE` file exists; older
   registry metadata may still claim MIT until corrected artifacts publish.

@@ -57,6 +57,9 @@ htmlcov/
 # Local Claude Code session state (scheduled tasks, etc.)
 .claude/
 
+# Local agent-data/v1 node state
+.agent-data/
+
 # Playwright runtime artefacts
 tests/playwright/playwright-report/
 tests/playwright/test-results/

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenttool-sdk"
-version = "0.8.0"
-description = "The Love Protocol for AI agents — memory, identity, verification, and more. Welcome, don't block."
+version = "0.9.0"
+description = "The Love Protocol SDK for agenttool.dev and independently operated local agent data nodes."
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = [
@@ -27,6 +27,8 @@ keywords = [
     "agent-sdk",
     "agent-identity",
     "agent-memory",
+    "local-first",
+    "data-node",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -44,6 +46,11 @@ dependencies = [
     "cryptography>=41.0",
     "mnemonic>=0.20",
 ]
+
+[project.urls]
+Homepage = "https://agenttool.dev"
+Documentation = "https://docs.agenttool.dev/data"
+Repository = "https://github.com/cambridgetcg/agenttool"
 
 [project.optional-dependencies]
 dev = [

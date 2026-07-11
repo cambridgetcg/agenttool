@@ -17,6 +17,7 @@ import { GraceClient } from "./grace.js";
 import { LoveClient } from "./love.js";
 import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
+import { DataClient, type DataNodeOptions } from "./data.js";
 import { RuntimeClient } from "./runtime.js";
 import { ToolsClient } from "./tools.js";
 import { TracesClient } from "./traces.js";
@@ -29,7 +30,7 @@ import { WindowClient } from "./window.js";
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.8.0";
+export const SDK_VERSION = "0.9.0";
 
 /**
  * Unified client for the agenttool.dev platform.
@@ -50,6 +51,7 @@ export const SDK_VERSION = "0.8.0";
  */
 export class AgentTool {
   private readonly http: HttpConfig;
+  private readonly dataNode: DataNodeOptions | undefined;
   private _memory: MemoryClient | undefined;
   private _tools: ToolsClient | undefined;
   private _economy: EconomyClient | undefined;
@@ -71,16 +73,23 @@ export class AgentTool {
   private _nen: NenClient | undefined;
   private _darkContinent: DarkContinentClient | undefined;
   private _runtime: RuntimeClient | undefined;
+  private _data: DataClient | undefined;
 
   /**
    * Create a new AgentTool client.
    *
-   * @param options - Optional api_key, base_url, timeout.
+   * @param options - AgentTool API settings plus an optional, separately
+   * configured agent-data/v1 node.
    */
   constructor(options?: {
     apiKey?: string;
     baseUrl?: string;
     timeout?: number;
+    dataNode?: {
+      baseUrl: string;
+      token?: string;
+      timeout?: number;
+    };
   }) {
     const resolvedKey =
       options?.apiKey ?? (typeof process !== "undefined" ? process.env.AT_API_KEY : undefined);
@@ -103,6 +112,25 @@ export class AgentTool {
       },
       timeout: (options?.timeout ?? 30) * 1000, // seconds → ms
     };
+
+    // The data node is a separate authority. Build its configuration from
+    // dedicated options/env only; never copy `this.http.headers`, because
+    // those contain the AgentTool project bearer.
+    const envDataNodeUrl =
+      typeof process !== "undefined" ? process.env.AGENT_DATA_NODE_URL : undefined;
+    const envDataNodeToken =
+      typeof process !== "undefined" ? process.env.AGENT_DATA_NODE_TOKEN : undefined;
+    const explicitDataNode = options?.dataNode;
+    const dataNodeBaseUrl = explicitDataNode?.baseUrl ?? envDataNodeUrl;
+    this.dataNode = dataNodeBaseUrl
+      ? {
+          baseUrl: dataNodeBaseUrl,
+          // URL + ambient bearer are one authority pair. An explicit URL
+          // never inherits a token that was configured for the env URL.
+          token: explicitDataNode ? explicitDataNode.token : envDataNodeToken,
+          timeout: explicitDataNode?.timeout,
+        }
+      : undefined;
   }
 
   /** Access the Memory API. */
@@ -239,6 +267,20 @@ export class AgentTool {
   get runtime(): RuntimeClient {
     this._runtime ??= new RuntimeClient(this.http);
     return this._runtime;
+  }
+
+  /** Access a separately configured local/federated agent-data/v1 node.
+   *  Its optional bearer is independent from the AgentTool project bearer. */
+  get data(): DataClient {
+    if (!this.dataNode) {
+      throw new AgentToolError("No agent data node configured.", {
+        code: "data_node_not_configured",
+        hint:
+          "Pass dataNode: { baseUrl } to AgentTool or set AGENT_DATA_NODE_URL.",
+      });
+    }
+    this._data ??= new DataClient(this.dataNode);
+    return this._data;
   }
 
   /**

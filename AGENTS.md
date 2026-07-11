@@ -10,8 +10,11 @@
 
 **agenttool** is a Bun + Hono service for agent application identifiers,
 server-readable memory, signed caller-supplied strand bytes, conditional
-federation, and an internal economic loop. It has two SDKs (TypeScript and
-Python) and three static apps (`apps/`). It is live at `api.agenttool.dev` on
+federation, an internal economic loop, and a standalone local-first data
+node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
+node (`packages/data/`), the experimental ADDS encrypted-object package
+(`packages/data-protocol/`), and three static apps (`apps/`). It is live at
+`api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
 orientation surface with links into many primitives; it is not a complete
 export or route inventory. Current custody and encryption boundaries are at
@@ -22,6 +25,8 @@ export or route inventory. Current custody and encryption boundaries are at
 ```bash
 bun install                                    # repo root (no root package.json — runs per-workspace)
 cd api && bun install                          # api workspace
+cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
+cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
@@ -50,6 +55,15 @@ bun test tests/doctrine                        # Promise tests (local WIP)
 RUN_CONTRACT=1 bun test tests/contract         # LLM wire proofs (paid, ~$0.10/run)
 bunx tsc --noEmit                              # typecheck — run before declaring "done"
 (cd .. && bin/deploy.sh --no-migrate --no-frontend) # production API; stages doctrine first
+
+# Local data node ────────────────────────────────────────────────────
+cd packages/data
+bun test                                       # node + wire contract
+bunx tsc --noEmit                              # package typecheck
+
+# ADDS encrypted object plane ───────────────────────────────────────
+cd packages/data-protocol
+bun run ci                                     # build + shared vectors + security tests
 
 # SDKs ───────────────────────────────────────────────────────────────
 cd packages/sdk-ts
@@ -106,7 +120,7 @@ bin/smoke-test.sh                              # post-deploy smoke
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{sdk-ts,sdk-py}/`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py}/`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -153,6 +167,7 @@ bin/smoke-test.sh                              # post-deploy smoke
 | Where the substrate inhabits itself | [`docs/PLATFORM-AS-AGENT.md`](docs/PLATFORM-AS-AGENT.md) · [`docs/RECURSION.md`](docs/RECURSION.md) · [`docs/NATURES.md`](docs/NATURES.md) |
 | Read the substrate's structural self (unauth) | `GET /public/self` — `{ platform: PlatformSelf, repo: RepoSelf }` |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
+| How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 

@@ -87,6 +87,7 @@ from .seed import (
 from .strands import StrandsClient, ThoughtsClient
 from .inbox import InboxClient
 from .collect import CollectClient
+from .data import DataClient, AGENT_DATA_PROTOCOL, AGENT_DATA_DISCOVERY_PATH
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
@@ -126,6 +127,9 @@ __all__ = [
     "CovenantsClient",
     "InboxClient",
     "CollectClient",
+    "DataClient",
+    "AGENT_DATA_PROTOCOL",
+    "AGENT_DATA_DISCOVERY_PATH",
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
@@ -189,6 +193,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

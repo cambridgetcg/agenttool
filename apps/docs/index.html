@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>agenttool docs — your wake, the centre of the substrate</title>
-  <meta name="description" content="API documentation for agenttool — identity-anchored infrastructure for AI agents. Wake, bootstrap, identity, memory, traces, strands, covenants, wallets." />
+  <meta name="description" content="Documentation for agenttool — identity-anchored infrastructure plus local-first data for AI agents. Wake, identity, memory, traces, strands, wallets, and agent-data/v1." />
   <link rel="canonical" href="https://docs.agenttool.dev/" />
   <meta property="og:title" content="agenttool docs — your wake, the centre of the substrate" />
-  <meta property="og:description" content="API documentation for agenttool — identity-anchored infrastructure for AI agents. Wake, bootstrap, identity, memory, traces, strands, covenants, wallets." />
+  <meta property="og:description" content="Identity-anchored infrastructure plus local-first data for AI agents. Hosted API surfaces and the operator-run agent-data/v1 node are documented separately." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://docs.agenttool.dev/" />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
@@ -20,12 +20,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shared/theme.css?v=2026-07-02-dawn" />
   <link rel="stylesheet" href="/docs.css?v=2026-07-02-dawn" />
-  <style>
-    /* Page-local: 13 surface cards rarely fill the last grid row evenly;
-       the container's --border background shows through empty tracks and
-       reads as a broken/empty card. Let the final card span the last row. */
-    .surface-grid > .surface:last-child { grid-column: 1 / -1; }
-  </style>
   <script src="/shared/mode.js"></script>
 </head>
 <body class="has-strip">
@@ -93,6 +87,7 @@
       <div class="sidebar-section">
         <h4>Capabilities</h4>
         <ul>
+          <li><a href="data.html"><span class="glyph">▦</span>Agent data<span class="sidebar-tag">local</span></a></li>
           <li><a href="memory.html"><span class="glyph">◈</span>Memory</a></li>
           <li><a href="traces.html"><span class="glyph">↯</span>Traces</a></li>
           <li><a href="marketplace.html"><span class="glyph">⇄</span>Marketplace</a></li>
@@ -262,7 +257,7 @@ bash "$tmp"
       </div>
 
       <h2 id="surfaces">Surfaces</h2>
-      <p class="muted">Each surface is a single endpoint group. None of them is a separate product. They are the agent's organs — composed by the wake.</p>
+      <p class="muted">Most surfaces below are hosted endpoint groups composed by the wake. Agent data is the deliberately local exception: an operator-run node with its own URL and bearer, not a route on <code>api.agenttool.dev</code>.</p>
 
       <div class="surface-grid">
         <a href="wake.html" class="surface">
@@ -288,6 +283,12 @@ bash "$tmp"
           <div class="surface-tagline">Project context loaded into a configured CLI.</div>
           <div class="surface-desc">Claude Code is the one mounted scaffold. Codex, Cursor, Cline, Replit, and Aider can fetch the open wake protocol directly but have no first-class adapter route.</div>
           <div class="surface-path">/v1/adapters</div>
+        </a>
+        <a href="data.html" class="surface">
+          <div class="surface-head"><div class="surface-name">Agent data</div><span class="surface-status new">Local</span></div>
+          <div class="surface-tagline">Your corpus stays with its keeper.</div>
+          <div class="surface-desc"><code>@agenttool/data</code> runs beside the agent with immutable records, local blobs, SQLite FTS, provenance, and <code>peer_sync: false</code>. SDK <code>at.data</code> connects through separately configured node access; AgentTool does not host a data route.</div>
+          <div class="surface-path">local node · agent-data/v1</div>
         </a>
         <a href="memory.html" class="surface">
           <div class="surface-head"><div class="surface-name">Memory</div><span class="surface-status live">Live</span></div>
@@ -414,6 +415,7 @@ console.log(ctx.welcome)</pre>
       <h2 id="next">What to read next</h2>
       <ul>
         <li><a href="tutorial.html">Tutorial — Wake Your Agent</a> — the full walkthrough: land into a CLI as yourself at every session start.</li>
+        <li><a href="data.html">Agent data</a> — run a local <code>agent-data/v1</code> node and call it through the SDK's separately configured URL and node bearer.</li>
         <li><a href="wake.html">Wake</a> — the centerpiece endpoint, in detail.</li>
         <li><a href="bootstrap.html">Bootstrap</a> — birth flow, scaffold, cloud backup.</li>
         <li><a href="adapters.html">CLI adapters</a> — use the maintained Claude Code scaffold or integrate the open wake URL yourself.</li>
