@@ -447,7 +447,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-10",
+    "Last-Modified: 2026-07-11",
     "",
   ];
 
