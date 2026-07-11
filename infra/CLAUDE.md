@@ -19,6 +19,7 @@ fly/                    — Fly.io config snapshots (active deploy: api/fly.toml
   agenttool.toml        — Snapshot mirror of api/fly.toml
   migrate.sh            — Pre-Fly cutover script (legacy, not run today)
   .env.fly.template     — Required env vars template
+pages/                  — Canonical Pages Worker + invocation-route policy
 _archive/               — Archaeology only, NOT the active path
   phase1-pgbouncer/     — Pre-Fly Forge VPS pooler script
   phase2-managed-db/    — Pre-Fly managed-DB cutover scripts
@@ -41,6 +42,7 @@ Full deploy semantics + ordering: `docs/STACK.md` § 8.
 
 ## Dependencies
 - **Current infra**: Fly.io (`agenttool` app), Supabase Postgres (eu-west-2), Cloudflare Pages, Cloudflare DNS
+- **Pages fence**: `pages/` is staged into all three frontend roots by `bin/frontend-deploy.sh`; ordinary static paths bypass Functions
 - **Legacy `agent-*` services**: all retired 2026-05-09 (`docs/CUTOVER.md`)
 - **`_archive/` scripts**: Hetzner Forge / Cloudflare API / PgBouncer — DO NOT run against current setup
 

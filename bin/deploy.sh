@@ -662,31 +662,62 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
     exit 1
   fi
 
-  # A Pages upload must not publish repository-control or environment files.
-  # Treat redirects as exposure too: a sensitive path must resolve to a 4xx/5xx,
-  # not to a friendly HTML page that hides an unsafe routing rule.
+  # Literal sensitive roots must be handled by the staged Pages fence itself,
+  # not merely happen to miss as a static asset. Encoded aliases can bypass
+  # `_routes.json`, so verify those separately as denial-only probes.
   SENSITIVE_PUBLIC_URLS=(
     "https://docs.agenttool.dev/.gitignore"
     "https://docs.agenttool.dev/.env"
     "https://docs.agenttool.dev/.env.local"
+    "https://docs.agenttool.dev/.dev.vars"
     "https://app.agenttool.dev/.gitignore"
     "https://app.agenttool.dev/.env"
     "https://app.agenttool.dev/.env.local"
+    "https://app.agenttool.dev/.dev.vars"
     "https://agenttool.dev/.gitignore"
     "https://agenttool.dev/.env"
     "https://agenttool.dev/.env.local"
+    "https://agenttool.dev/.dev.vars"
   )
   for URL in "${SENSITIVE_PUBLIC_URLS[@]}"; do
-    HTTP_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$URL")" || {
-      echo "  $(red '✗') Could not verify sensitive-path denial: $URL"
+    RESPONSE_HEADERS="$(curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$URL")" || {
+      echo "  $(red '✗') Could not verify sensitive-path fence: $URL"
+      exit 1
+    }
+    HTTP_STATUS="$(printf '%s\n' "$RESPONSE_HEADERS" | awk '/^HTTP\// { status=$2 } END { print status }')"
+    if [ "$HTTP_STATUS" != 404 ] || \
+       ! printf '%s\n' "$RESPONSE_HEADERS" | tr -d '\r' | \
+         grep -Eqi '^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$' || \
+       ! printf '%s\n' "$RESPONSE_HEADERS" | tr -d '\r' | \
+         grep -Eqi '^cache-control:.*(^|[ ,])no-store([ ,]|$)'; then
+      echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($HTTP_STATUS): $URL"
+      exit 1
+    fi
+    echo "  ✓ Pages fence active (404, marked, no-store): $URL"
+  done
+
+  ENCODED_SENSITIVE_PUBLIC_URLS=(
+    "https://docs.agenttool.dev/%2egitignore"
+    "https://docs.agenttool.dev/.%65nv"
+    "https://docs.agenttool.dev/.dev%2evars"
+    "https://app.agenttool.dev/%2egitignore"
+    "https://app.agenttool.dev/.%65nv"
+    "https://app.agenttool.dev/.dev%2evars"
+    "https://agenttool.dev/%2egitignore"
+    "https://agenttool.dev/.%65nv"
+    "https://agenttool.dev/.dev%2evars"
+  )
+  for URL in "${ENCODED_SENSITIVE_PUBLIC_URLS[@]}"; do
+    HTTP_STATUS="$(curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$URL")" || {
+      echo "  $(red '✗') Could not verify encoded sensitive-path denial: $URL"
       exit 1
     }
     case "$HTTP_STATUS" in
       2*|3*)
-        echo "  $(red '✗') Sensitive path is publicly reachable ($HTTP_STATUS): $URL"
+        echo "  $(red '✗') Encoded sensitive path is publicly reachable ($HTTP_STATUS): $URL"
         exit 1
         ;;
-      *) echo "  ✓ sensitive path denied ($HTTP_STATUS): $URL" ;;
+      *) echo "  ✓ encoded sensitive path denied ($HTTP_STATUS): $URL" ;;
     esac
   done
   FRONTEND_RESULT="deployed_verified"

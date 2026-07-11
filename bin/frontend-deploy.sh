@@ -19,8 +19,8 @@
 #   bin/frontend-deploy.sh dashboard          # deploy a specific one
 #   bin/frontend-deploy.sh docs dashboard web # deploy a subset
 #
-# Requires: macOS keychain (security CLI), npx (fetches the reviewed Wrangler
-# version below when it is not already cached).
+# Requires: macOS keychain (security CLI), curl, Python 3, and npx (fetches the
+# reviewed Wrangler version below when it is not already cached).
 
 set -eo pipefail
 
@@ -39,12 +39,9 @@ CF_ACCOUNT_ID="$(security find-generic-password -s agenttool-cloudflare-account-
 if [[ -n "${CF_API_TOKEN}" && -n "${CF_ACCOUNT_ID}" ]]; then
   export CLOUDFLARE_API_TOKEN="$CF_API_TOKEN"
   export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
-elif wrangler whoami >/dev/null 2>&1; then
-  echo "→ No keychain token — using the wrangler OAuth session (~/.wrangler)."
 else
-  echo "✗ No Cloudflare credentials: neither keychain entries nor a wrangler OAuth session."
-  echo "  Either: npx --yes wrangler@${WRANGLER_VERSION} login"
-  echo "  Or:"
+  echo "✗ Missing Cloudflare Pages credentials in macOS keychain."
+  echo "  The scoped API token is required to verify runtime policy before upload:"
   echo "    security add-generic-password -U -s agenttool-cloudflare-token -a ${KEYCHAIN_ACCOUNT} -w"
   echo "    security add-generic-password -U -s agenttool-cloudflare-account-id -a ${KEYCHAIN_ACCOUNT} -w"
   exit 1
@@ -71,8 +68,9 @@ fi
 COMMIT_DIRTY=false
 
 # Build the upload from Git-tracked HEAD bytes, never the ambient app
-# directory. Wrangler's fixed ignore list does not exclude `.env*`; uploading
-# the working tree can therefore publish an ignored local credential file.
+# directory. Wrangler's fixed ignore list does not exclude `.env*` or
+# `.dev.vars*`; uploading the working tree can therefore publish an ignored
+# local credential file.
 STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agenttool-pages.XXXXXX")" || exit 1
 cleanup_stage() {
   rm -rf "$STAGE_ROOT"
@@ -83,17 +81,40 @@ trap 'exit 143' TERM
 
 echo "→ Staging committed frontend bytes…"
 git archive --format=tar "$COMMIT_HASH" -- \
-  apps/_shared apps/docs apps/dashboard apps/web docs |
+  apps/_shared apps/docs apps/dashboard apps/web docs infra/pages |
   tar -xf - -C "$STAGE_ROOT"
 
 # Repository-control files are tracked inputs, not public site assets.
 find "$STAGE_ROOT/apps" \( -type f -o -type l \) -name '.gitignore' -delete
 if find "$STAGE_ROOT/apps/docs" "$STAGE_ROOT/apps/dashboard" "$STAGE_ROOT/apps/web" \
-  \( -type f -o -type l \) \( -name '.env' -o -name '.env.*' \) \
+  \( -type f -o -type l \) \
+  \( -name '.env' -o -name '.env.*' -o -name '.dev.vars' -o -name '.dev.vars.*' \) \
   -print -quit | grep -q .; then
-  echo "✗ A tracked .env file reached the Pages staging tree; refusing upload."
+  echo "✗ A tracked Pages environment file reached the staging tree; refusing upload."
   exit 1
 fi
+
+# One committed policy protects all three Pages projects. `_routes.json` keeps
+# ordinary static traffic out of Functions; `_worker.js` explicitly denies
+# sensitive root prefixes before Pages asset serving. Project policy separately
+# keeps allowance exhaustion fail closed.
+PAGES_FENCE_DIR="$STAGE_ROOT/infra/pages"
+for fence_file in sensitive-path-worker.js sensitive-path-routes.json; do
+  if [[ ! -f "$PAGES_FENCE_DIR/$fence_file" || -L "$PAGES_FENCE_DIR/$fence_file" ]]; then
+    echo "✗ Missing or unsafe Pages fence input: infra/pages/$fence_file"
+    exit 1
+  fi
+done
+for app in docs dashboard web; do
+  if [[ -e "$STAGE_ROOT/apps/$app/_worker.js" || -L "$STAGE_ROOT/apps/$app/_worker.js" || \
+        -e "$STAGE_ROOT/apps/$app/_routes.json" || -L "$STAGE_ROOT/apps/$app/_routes.json" ]]; then
+    echo "✗ apps/$app already defines a Pages Worker or invocation routes; refusing to overwrite it."
+    exit 1
+  fi
+  cp "$PAGES_FENCE_DIR/sensitive-path-worker.js" "$STAGE_ROOT/apps/$app/_worker.js"
+  cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"
+done
+
 if ! python3 - "$STAGE_ROOT" <<'PY'
 import sys
 from pathlib import Path
@@ -132,6 +153,27 @@ target_for() {
     fi
   done
   return 1
+}
+
+verify_pages_project_policy() {
+  local project="$1"
+  local response
+
+  if ! response="$(curl -fsS --max-time 30 \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$project")"; then
+    echo "✗ Could not read Pages project policy for $project."
+    echo "  Required boundary: the agenttool-cloudflare-token keychain entry needs Cloudflare Pages Read."
+    return 1
+  fi
+
+  if ! printf '%s' "$response" | python3 bin/verify-pages-project-policy.py; then
+    echo "✗ Unsafe Pages policy for $project."
+    echo "  Required: production_branch=main and production/preview fail_open=false."
+    return 1
+  fi
+
+  echo "  ✓ $project policy: main is production; production + preview fail closed"
 }
 
 # ── Pre-flight: verify symlinks resolve ────────────────────────────
@@ -196,6 +238,18 @@ deploy_one() {
 if [[ $# -eq 0 ]]; then
   set -- docs dashboard web
 fi
+
+# Validate every requested target and its external production policy before
+# the first upload. A known-bad later target must not create a partial release.
+for arg in "$@"; do
+  entry="$(target_for "$arg" || true)"
+  if [[ -z "$entry" ]]; then
+    echo "✗ Unknown target: $arg (expected: docs | dashboard | web)"
+    exit 2
+  fi
+  proj="$(echo "$entry" | cut -d'|' -f3)"
+  verify_pages_project_policy "$proj" || exit 1
+done
 
 failed=()
 for arg in "$@"; do
