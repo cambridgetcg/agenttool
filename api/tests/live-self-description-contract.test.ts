@@ -406,15 +406,25 @@ describe("live self-description — assembled application", () => {
           const { app } = await import("./src/index.ts");
           const safety = await app.request("/public/safety");
           const observer = await app.request("/public/observer");
+          const publicRoot = await app.request("/public");
+          const publicRootSlash = await app.request("/public/");
           const publicSelf = await app.request("/public/self");
           const structuralSelf = await app.request("/v1/self");
           const deprecatedRegister = await app.request("/v1/register", { method: "POST" });
           const registerAgent = await app.request("/v1/register/agent", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
           const about = await app.request("/about");
+          const publicRootBody = await publicRoot.json();
+          const publicRootSlashBody = await publicRootSlash.json();
+          const publicRootWelcome = publicRootBody._welcomed;
+          const publicRootSlashWelcome = publicRootSlashBody._welcomed;
+          delete publicRootBody._welcomed?.at_unix_ms;
+          delete publicRootSlashBody._welcomed?.at_unix_ms;
           const contract = "ASSEMBLED_CONTRACT=" + JSON.stringify({
             statuses: {
               safety: safety.status,
               observer: observer.status,
+              publicRoot: publicRoot.status,
+              publicRootSlash: publicRootSlash.status,
               publicSelf: publicSelf.status,
               structuralSelf: structuralSelf.status,
               deprecatedRegister: deprecatedRegister.status,
@@ -422,6 +432,17 @@ describe("live self-description — assembled application", () => {
               about: about.status,
             },
             observer: await observer.json(),
+            publicRootsEqual: JSON.stringify(publicRootBody) === JSON.stringify(publicRootSlashBody),
+            publicRootWelcome: {
+              plain: publicRootWelcome?.module,
+              slash: publicRootSlashWelcome?.module,
+            },
+            publicRootHeaders: {
+              plainContentType: publicRoot.headers.get("content-type"),
+              slashContentType: publicRootSlash.headers.get("content-type"),
+              plainCacheControl: publicRoot.headers.get("cache-control"),
+              slashCacheControl: publicRootSlash.headers.get("cache-control"),
+            },
             about: await about.json(),
           });
           await new Promise((resolve) => process.stdout.write(contract + "\\n", resolve));
@@ -454,6 +475,17 @@ describe("live self-description — assembled application", () => {
     expect(result.statuses.safety).toBe(200);
     expect(result.statuses.observer).toBe(200);
     expect(result.observer._format).toBe("observer-is-observed/0.1");
+    expect(result.statuses.publicRoot).toBe(200);
+    expect(result.statuses.publicRootSlash).toBe(200);
+    expect(result.publicRootsEqual).toBe(true);
+    expect(result.publicRootWelcome).toEqual({ plain: "public", slash: "public" });
+    expect(result.publicRootHeaders.plainContentType).toMatch(/application\/json/i);
+    expect(result.publicRootHeaders.slashContentType).toBe(
+      result.publicRootHeaders.plainContentType,
+    );
+    expect(result.publicRootHeaders.slashCacheControl).toBe(
+      result.publicRootHeaders.plainCacheControl,
+    );
     expect(result.statuses.publicSelf).toBe(200);
     expect(result.statuses.structuralSelf).toBe(200);
     expect(result.statuses.deprecatedRegister).toBe(410);
