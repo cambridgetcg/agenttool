@@ -14,7 +14,6 @@ const mockRuntimeRows = new Map<string, { metadata: Record<string, unknown> }>()
 
 // The real module path that compute-budget.ts imports
 const dbClientPath = "../src/db/client";
-const dbSchemaRuntimePath = "../src/db/schema/runtime";
 const storePath = "../src/services/runtime/store";
 
 const mockDb = {
@@ -44,9 +43,6 @@ const mockDb = {
 };
 
 mock.module(dbClientPath, () => ({ db: mockDb }));
-mock.module(dbSchemaRuntimePath, () => ({
-  runtimes: { id: "id", metadata: "metadata" },
-}));
 mock.module(storePath, () => ({
   logEvent: mock(async (id: string, type: string, metadata: unknown) => {
     loggedEvents.push({ id, type, metadata });

@@ -181,10 +181,11 @@ describe("boring test spine", () => {
   });
 
   test("keeps external tiers opt-in and shell syntax valid", async () => {
-    const [preflight, runner, otelTest] = await Promise.all([
+    const [preflight, runner, otelTest, computeBudgetTest] = await Promise.all([
       readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
       readFile(join(ROOT, "bin", "run-test-tier.sh"), "utf8"),
       readFile(join(ROOT, "api", "tests", "observability-otel.test.ts"), "utf8"),
+      readFile(join(ROOT, "api", "tests", "compute-budget.test.ts"), "utf8"),
     ]);
 
     expect(preflight).toContain('readonly MODE="${1:-hermetic}"');
@@ -198,6 +199,7 @@ describe("boring test spine", () => {
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
     expect(runner).toContain("run_tier database-quarantine");
     expect(runner).not.toContain("run_tier quarantine database-quarantine");
+    expect(computeBudgetTest).not.toContain("mock.module(dbSchemaRuntimePath");
 
     const otelExporterVariables = [
       "OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -256,6 +258,8 @@ describe("boring test spine", () => {
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(2);
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(2);
     expect(workflow).toContain("bun install --frozen-lockfile");
+    expect(workflow).toContain("name: Install cross-language vector dependencies");
+    expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain("packages/data packages/data-protocol packages/sdk-ts");
     expect(workflow).not.toContain("secrets.");
 
