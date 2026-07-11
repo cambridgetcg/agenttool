@@ -1,0 +1,36 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-index",
+  "packages": [
+    {
+      "name": "@agenttool/adds",
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.1.0/manifest.json"
+        }
+      ]
+    },
+    {
+      "name": "@agenttool/data",
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/manifest.json"
+        }
+      ]
+    },
+    {
+      "name": "@agenttool/sdk",
+      "latest": "0.9.0",
+      "versions": [
+        {
+          "version": "0.9.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/manifest.json"
+        }
+      ]
+    }
+  ]
+}
