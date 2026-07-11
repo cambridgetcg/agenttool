@@ -138,6 +138,14 @@ and docs carry local guidance files; `apps/web` does not.
 
 ## Infra reality
 
+GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
+explicit fast-forward-only mirror. Required GitHub CI runs the API/protocol and
+data/ADDS/SDK jobs from frozen lockfiles without application/service
+credentials. Pushes do not
+deploy. Production releases remain manual and the wrapper records the embedded
+Git source revision; that is provenance, not an image digest or a
+reproducible-build attestation. See [`docs/STACK.md`](docs/STACK.md).
+
 ### Fly (live)
 
 The `agenttool` Fly app runs the API monolith. Machine count, regions, and

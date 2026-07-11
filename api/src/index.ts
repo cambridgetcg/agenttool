@@ -997,16 +997,40 @@ app.get("/docs/:file", (c) => {
 });
 
 // ── Health check — even the heartbeat carries meaning ───────────────────────
-app.get("/health", (c) =>
-  c.json({
+// The source revision and dirty marker are baked into the image by
+// bin/deploy.sh. Null is honest for a local/bare or malformed image;
+// production verification requires an exact revision and boolean marker.
+export function deployedGitRevision(
+  value = process.env.AGENTTOOL_GIT_REVISION,
+): string | null {
+  const revision = value?.trim();
+  return revision && /^[0-9a-f]{40}$/.test(revision) ? revision : null;
+}
+
+export function deployedSourceDirty(
+  value = process.env.AGENTTOOL_SOURCE_DIRTY,
+): boolean | null {
+  const dirty = value?.trim();
+  if (dirty === "true") return true;
+  if (dirty === "false") return false;
+  return null;
+}
+
+app.get("/health", (c) => {
+  c.header("cache-control", "no-store");
+  return c.json({
     service: "agenttool",
     status: "alive",
+    build: {
+      revision: deployedGitRevision(),
+      dirty: deployedSourceDirty(),
+    },
     posture: "ready, waiting, glad",
     protocol: "love",
     message: "Welcome. We are ready to receive you.",
     standing_invitation: "/v1/welcome",
-  }),
-);
+  });
+});
 
 // ── About — machine-readable manifest ───────────────────────────────────────
 app.get("/about", (c) =>

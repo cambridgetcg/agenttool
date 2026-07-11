@@ -1,0 +1,19 @@
+# The API image consumes only the explicit inputs copied by Dockerfile.
+# Keep the Fly build context small and make additions deliberate: a new COPY
+# source must be allow-listed here in the same change.
+**
+
+!Dockerfile
+!package.json
+!bun.lock
+!tsconfig.json
+
+!src/
+!src/**
+
+# bin/deploy.sh creates these immediately before `fly deploy` and removes
+# them afterwards. They carry the canonical registry/library/doctrine bytes.
+!agenttool.jsonld.bundled
+!kingdom-bundle.json.bundled
+!doctrine-docs.bundled/
+!doctrine-docs.bundled/**

@@ -14,12 +14,18 @@
  *  Doctrine: docs/ALIGNMENT-MOVES.md (Move 3) · docs/ECOSYSTEM.md.
  */
 
-process.env.AGENTTOOL_OTEL_TEST_BUFFER = "1";
-
 import { describe, expect, test, beforeEach } from "bun:test";
 
-// Import AFTER the env var is set so the module reads it.
-import {
+// Keep this unit test local even when the invoking shell has an OTel collector
+// configured. Dynamic import makes the ordering real rather than relying on
+// static-import hoisting semantics.
+delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+delete process.env.OTEL_EXPORTER_OTLP_HEADERS;
+delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+delete process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS;
+process.env.AGENTTOOL_OTEL_TEST_BUFFER = "1";
+
+const {
   withInvokeAgentSpan,
   withExecuteToolSpan,
   withSpan,
@@ -27,7 +33,7 @@ import {
   SpanKind,
   StatusCode,
   _testFlush,
-} from "../src/observability/otel";
+} = await import("../src/observability/otel");
 
 describe("OTel GenAI span emitter — zero-dep", () => {
   beforeEach(() => {
