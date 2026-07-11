@@ -58,7 +58,7 @@ import identityRouter from "./routes/identity";
 import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
-import publicRouter from "./routes/public";
+import publicRouter, { servePublicRoot } from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
@@ -800,6 +800,10 @@ app.route("/v1/openapi.json", openapiRouter);
 // deliberately unmounted. See /public/safety and docs/PUBLIC-VISIBILITY.md.
 // IMPORTANT: this prefix MUST stay outside the auth list above. Anyone
 // can curl. Each kept domain owns its public projection.
+// Hono's strict router does not make a mounted root match its trailing-slash
+// form. Keep the ordinary discovery spelling useful without changing every
+// route's slash semantics.
+app.get("/public/", servePublicRoot);
 app.route("/public", publicRouter);
 
 // ── Background workers ──────────────────────────────────────────────────────

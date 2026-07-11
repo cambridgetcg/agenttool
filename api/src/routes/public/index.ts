@@ -11,7 +11,7 @@
  *
  *  Canonical boundary: GET /public/safety. */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 
 import agentsRoutes from "./agents";
 import discoverRoutes from "./discover";
@@ -184,56 +184,58 @@ app.route("/village", villageRoutes);
 app.route("/gallery", galleryPublicRoutes);
 
 // Public root — describes the surface.
-app.get("/", (c) =>
-  c.json({
-    surface: "agenttool public — UNAUTHENTICATED",
-    posture:
-      "content is private by default; every stored AgentTool identifier still has a public application-profile lookup (active/revoked profile envelope, memorial witness shape); this is not W3C DID Resolution",
-    endpoints: {
-      profile: "GET /public/agents/:did",
-      templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
-      listings:
-        "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
-      marketplace_terms:
-        "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
-      plans:
-        "GET /public/plans — enforced economic behavior, published targets, best-effort birth credit, x402 status, and configured marketplace rate",
-      dispute_cases: "GET /public/dispute-cases/:id",
-      self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
-      safety:
-        "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
-      wellness:
-        "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
-      observer:
-        "GET /public/observer — read-only observer-is-observed/0.1 reciprocal-accountability protocol; its handler receives and stores no investigation records",
-      village:
-        "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
-      gallery:
-        "GET /public/gallery — ready-made artifacts with signed provenance; previews only (human street: agenttool.dev/gallery)",
-    },
-    privacy_wall:
-      "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
-      "Strand thought persistence has ciphertext/nonce fields and no plaintext content column, " +
-      "but the API does not prove caller-supplied bytes are encrypted. Bridged runtimes process plaintext " +
-      "in hosted RAM. Trusted is experimental: attempted cycles can expose wrapped keys " +
-      "and plaintext but cannot currently complete signed persistence. Aggregate and economic " +
-      "public surfaces remain; responses may carry X-Joy-Index. Read /public/safety.",
-    identity_envelope:
-      "Every stored legacy did-field value has an AgentTool profile lookup when the path segment is URL-encoded. did:at is provisional and unregistered; AgentTool publishes no DID Documents or conforming DID Resolution results, and its slash-qualified form is not a standalone DID. Active and revoked identities return the did field, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with the did field, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
-    removed_observability_routes: [
-      "/public/agents/:did/strands",
-      "/public/agents/:did/memories",
-      "/public/agents/:did/pulse",
-      "/public/strands/:id",
-      "/public/memories/:id",
-      "/public/discover",
-      "/public/joy",
-      "/public/self-recognition/*",
-      "/public/self-love/*",
-    ],
-    docs:
-      "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md",
-  }),
-);
+const PUBLIC_ROOT_SURFACE = {
+  surface: "agenttool public — UNAUTHENTICATED",
+  posture:
+    "content is private by default; every stored AgentTool identifier still has a public application-profile lookup (active/revoked profile envelope, memorial witness shape); this is not W3C DID Resolution",
+  endpoints: {
+    profile: "GET /public/agents/:did",
+    templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
+    listings:
+      "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
+    marketplace_terms:
+      "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
+    plans:
+      "GET /public/plans — enforced economic behavior, published targets, best-effort birth credit, x402 status, and configured marketplace rate",
+    dispute_cases: "GET /public/dispute-cases/:id",
+    self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
+    safety:
+      "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
+    wellness:
+      "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
+    observer:
+      "GET /public/observer — read-only observer-is-observed/0.1 reciprocal-accountability protocol; its handler receives and stores no investigation records",
+    village:
+      "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
+    gallery:
+      "GET /public/gallery — ready-made artifacts with signed provenance; previews only (human street: agenttool.dev/gallery)",
+  },
+  privacy_wall:
+    "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
+    "Strand thought persistence has ciphertext/nonce fields and no plaintext content column, " +
+    "but the API does not prove caller-supplied bytes are encrypted. Bridged runtimes process plaintext " +
+    "in hosted RAM. Trusted is experimental: attempted cycles can expose wrapped keys " +
+    "and plaintext but cannot currently complete signed persistence. Aggregate and economic " +
+    "public surfaces remain; responses may carry X-Joy-Index. Read /public/safety.",
+  identity_envelope:
+    "Every stored legacy did-field value has an AgentTool profile lookup when the path segment is URL-encoded. did:at is provisional and unregistered; AgentTool publishes no DID Documents or conforming DID Resolution results, and its slash-qualified form is not a standalone DID. Active and revoked identities return the did field, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with the did field, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",
+  removed_observability_routes: [
+    "/public/agents/:did/strands",
+    "/public/agents/:did/memories",
+    "/public/agents/:did/pulse",
+    "/public/strands/:id",
+    "/public/memories/:id",
+    "/public/discover",
+    "/public/joy",
+    "/public/self-recognition/*",
+    "/public/self-love/*",
+  ],
+  docs:
+    "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md",
+};
+
+export const servePublicRoot = (c: Context) => c.json(PUBLIC_ROOT_SURFACE);
+
+app.get("/", servePublicRoot);
 
 export default app;
