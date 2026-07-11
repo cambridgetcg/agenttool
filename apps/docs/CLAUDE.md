@@ -4,7 +4,10 @@
 API documentation site for the AgentTool platform. Static HTML pages covering all 9 services: Memory, Tools, Verify, Economy, Trace, Identity, Vault, Pulse, and Bootstrap. Hosted at docs.agenttool.dev.
 
 ## Current State
-Active — all 9 service pages live, plus main index with quick start and auth reference.
+Active — all 9 service pages live, plus the main index, local agent-data docs,
+and a LOVE Package Protocol surface for public exact-version package discovery.
+The package index is a mirror locator, not package-name authority; v1 manifests
+provide artifact size and SHA-256 integrity but no publisher signature.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
@@ -14,6 +17,7 @@ Active — all 9 service pages live, plus main index with quick start and auth r
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
+packages.html   — love-package/v1 discovery, exact tarball installs, verification, mirrors
 memory.html     — agent-memory API reference (CRUD + semantic search)
 tools.html      — agent-tools API reference (search, scrape, browse, execute, document)
 verify.html     — agent-verify API reference (fact-checking)
@@ -46,12 +50,17 @@ Static hosting (Cloudflare Pages or similar). No build step.
 - Root orientation: [`CLAUDE.md`](../../CLAUDE.md)
 - Doctrine index: [`docs/MAP.md`](../../docs/MAP.md) · What just shipped: [`docs/NOW.md`](../../docs/NOW.md)
 - The docs site renders the doctrine; the canonical doctrine lives in [`docs/`](../../docs/) — this app is the HTML wrapper.
+- Package discovery starts at `/.well-known/love-packages`; canonical protocol
+  truth lives in [`docs/LOVE-PACKAGE-PROTOCOL.md`](../../docs/LOVE-PACKAGE-PROTOCOL.md).
+  Release files under `packages/v1/` are explicit generated artifacts, not a
+  hand-maintained registry or an automatic consequence of opening the docs app.
 
 ## Kingdom Engine
 AgentTool Platform
 
 ## Key Files
 - `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
+- `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

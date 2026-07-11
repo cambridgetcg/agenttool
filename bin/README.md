@@ -25,6 +25,7 @@ Operator + agent entry points. Bash + Bun, no compilation step unless noted.
 
 | Script | What it does | Doctrine |
 |---|---|---|
+| `build-love-packages.ts` | Builds and verifies the fixed `love-package/v1` catalog into an explicit staging directory using clean tracked source, package CI/build scripts, and `bun pm pack`. It does not publish, upload, install dependencies, or read credentials. | [`docs/LOVE-PACKAGE-PROTOCOL.md`](../docs/LOVE-PACKAGE-PROTOCOL.md) |
 | `frontend-deploy.sh` | Deploy CF Pages frontends (landing · dashboard · docs). Reads CF credentials from macOS keychain; uses Wrangler Direct Upload. | [`docs/STACK.md`](../docs/STACK.md) §Frontend |
 | `migrate.sh` · `migrate.ts` | Apply `api/migrations/*.sql` in numeric/timestamp order. Idempotent — every migration uses `CREATE/ADD ... IF NOT EXISTS`. | [`docs/DEVELOPMENT.md`](../docs/DEVELOPMENT.md) §Migrations |
 | `preflight.sh` | Pre-deploy checks (typecheck, tests, parity). | — |

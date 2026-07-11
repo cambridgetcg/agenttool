@@ -16,7 +16,7 @@ apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
 packages/
-  sdk-ts/       — @agenttool/sdk on npm (ESM SDK)
+  sdk-ts/       — @agenttool/sdk (ESM SDK · LOVE package)
   sdk-py/       — agenttool-sdk on PyPI
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
@@ -26,6 +26,10 @@ bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.t
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```
+
+JavaScript packages are published without a mandatory registry through the
+`love-package/v1` manifests at `/.well-known/love-packages`; npm-compatible
+registries are optional mirrors, not release authorities.
 
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·

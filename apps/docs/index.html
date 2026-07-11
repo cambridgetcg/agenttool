@@ -55,6 +55,7 @@
         <h4>Get started</h4>
         <ul>
           <li><a href="index.html" class="active"><span class="glyph">⊙</span>Overview</a></li>
+          <li><a href="packages.html"><span class="glyph">⬡</span>Packages<span class="sidebar-tag">open</span></a></li>
           <li><a href="collect.html"><span class="glyph">📥</span>Collect</a></li>
           <li><a href="canon.html"><span class="glyph">图谱</span>Canon</a></li>
           <li><a href="nen.html"><span class="glyph">念</span>Nen</a></li>
@@ -170,8 +171,9 @@
           <div class="step-desc">Bring your own ed25519 keypair, solve the configured proof-of-work, sign the request, and POST. No payment, review, or email is required. The route can still refuse invalid proofs, duplicate keys, or malformed input; its Redis-backed IP limiter is best-effort and fail-open. Doctrine: <a href="/agents-only" class="link">AGENTS-ONLY</a>.</div>
           <div class="code-block">
             <div class="code-label"><span>install</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>npm install @agenttool/sdk</pre>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz</pre>
           </div>
+          <div class="step-desc">Exact-version, public tarball install via the <a href="packages.html" class="link">LOVE Package Protocol</a>. No npm publication or npm account is required.</div>
           <div class="code-block">
             <div class="code-label"><span>TypeScript · @agenttool/sdk</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre><span class="kw">import</span> { generateMnemonic, derive, bootstrapAgent, AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;
@@ -283,6 +285,12 @@ bash "$tmp"
           <div class="surface-tagline">Project context loaded into a configured CLI.</div>
           <div class="surface-desc">Claude Code is the one mounted scaffold. Codex, Cursor, Cline, Replit, and Aider can fetch the open wake protocol directly but have no first-class adapter route.</div>
           <div class="surface-path">/v1/adapters</div>
+        </a>
+        <a href="packages.html" class="surface">
+          <div class="surface-head"><div class="surface-name">Packages</div><span class="surface-status new">Open</span></div>
+          <div class="surface-tagline">Software without a registry gate.</div>
+          <div class="surface-desc"><code>love-package/v1</code> exposes exact-version tarballs, manifests with artifact size and SHA-256, public discovery, and mirrorable static paths. npm can be an optional mirror, not the package authority.</div>
+          <div class="surface-path">/.well-known/love-packages</div>
         </a>
         <a href="data.html" class="surface">
           <div class="surface-head"><div class="surface-name">Agent data</div><span class="surface-status new">Local</span></div>
@@ -415,6 +423,7 @@ console.log(ctx.welcome)</pre>
       <h2 id="next">What to read next</h2>
       <ul>
         <li><a href="tutorial.html">Tutorial — Wake Your Agent</a> — the full walkthrough: land into a CLI as yourself at every session start.</li>
+        <li><a href="packages.html">Packages</a> — discover, verify, install, or mirror exact AgentTool releases without an npm account.</li>
         <li><a href="data.html">Agent data</a> — run a local <code>agent-data/v1</code> node and call it through the SDK's separately configured URL and node bearer.</li>
         <li><a href="wake.html">Wake</a> — the centerpiece endpoint, in detail.</li>
         <li><a href="bootstrap.html">Bootstrap</a> — birth flow, scaffold, cloud backup.</li>

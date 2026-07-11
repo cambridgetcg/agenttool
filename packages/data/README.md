@@ -16,8 +16,13 @@ This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
 
 ```bash
-bun add @agenttool/data
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
 ```
+
+This versioned tarball is published through `love-package/v1`; its manifest
+lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
+publication is required. Package managers may still consult their configured
+registry or cache when resolving any declared upstream dependencies.
 
 Run the packaged loopback node from that project:
 

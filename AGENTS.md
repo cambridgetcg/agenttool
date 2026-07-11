@@ -13,7 +13,8 @@ server-readable memory, signed caller-supplied strand bytes, conditional
 federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
 node (`packages/data/`), the experimental ADDS encrypted-object package
-(`packages/data-protocol/`), and three static apps (`apps/`). It is live at
+(`packages/data-protocol/`), the registry-neutral `love-package/v1`
+distribution protocol, and three static apps (`apps/`). It is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
 orientation surface with links into many primitives; it is not a complete
@@ -65,6 +66,9 @@ bunx tsc --noEmit                              # package typecheck
 cd packages/data-protocol
 bun run ci                                     # build + shared vectors + security tests
 
+# Registry-neutral JavaScript package artifacts ────────────────────
+bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
+
 # SDKs ───────────────────────────────────────────────────────────────
 cd packages/sdk-ts
 bun test                                       # TS SDK tests
@@ -96,6 +100,7 @@ bin/smoke-test.sh                              # post-deploy smoke
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
+| `build-love-packages.ts` | Builds the versioned `@agenttool/data`, `@agenttool/sdk`, and `@agenttool/adds` tarballs plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
@@ -168,6 +173,7 @@ bin/smoke-test.sh                              # post-deploy smoke
 | Read the substrate's structural self (unauth) | `GET /public/self` — `{ platform: PlatformSelf, repo: RepoSelf }` |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
+| How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 

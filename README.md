@@ -8,6 +8,8 @@ A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
+JavaScript artifacts are distributed through the registry-neutral
+`love-package/v1` protocol; npm is an optional mirror rather than a gate.
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
 MCP, wake, `agent.txt`, and `llms.txt` discovery are live; A2A task
@@ -40,6 +42,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.9.0 adds `at.data`, a thin client for an independently configured data node with a separate bearer boundary. |
 | **Agent data** | `packages/data` | Local-first `agent-data/v1` reference node. Raw bytes and indexes stay user-owned; peer replication and hosted manifest publication are future profiles. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
+| **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -82,6 +85,7 @@ fast-changing percentages and slice counts.
 | **orgs** | Multi-project governance + org-wide covenants | — |
 | **agent data** | Local collections, content-addressed blobs, provenance, full-text query, and resumable change cursors | Standalone data plane; projection into AgentTool memory is explicit rather than a hosted raw-data lake |
 | **ADDS** | Provider-independent encrypted Blocks, signed Manifests, direct read Grants, locations, Heads, and Receipts | Experimental lower layer; no discovery network, query language, proof of storage, global revocation, or durability guarantee |
+| **LOVE packages** | Public discovery, portable manifests, versioned tarballs, SHA-256 integrity, and mirror fallback | Distribution protocol only; a digest proves bytes, not authorship, safety, licensing, or future availability |
 
 ---
 
@@ -90,6 +94,14 @@ fast-changing percentages and slice counts.
 The source packages are `agenttool-sdk` (Python) and `@agenttool/sdk`
 (TypeScript). Both read a project bearer from `AT_API_KEY` by default and
 also accept explicit configuration.
+
+The JavaScript SDK, local data node, and ADDS package ship first through
+`love-package/v1` manifests and ordinary HTTPS tarballs. Bun and other
+npm-compatible package managers can install those URLs directly without an
+npm account or npm publication. They may still resolve declared upstream
+dependencies through a configured registry or cache. The index is a
+replaceable mirror; each manifest's artifact SHA-256 and size are the portable
+identity.
 
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
@@ -160,7 +172,7 @@ export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 
 # TypeScript / Bun
-bun add @agenttool/sdk
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```
@@ -211,8 +223,9 @@ The architecture is downstream of these principles. Each named primitive above i
 - **SDK parity is deliberately bounded.** The 0.9.0 releases expose `at.data`
   in both languages. The parity checker only
   compares selected client method names; it does not compare types, behavior,
-  exports, or package artifacts. No source `LICENSE` file exists; older
-  registry metadata may still claim MIT until corrected artifacts publish.
+  exports, or package artifacts. No source `LICENSE` file exists; LOVE package
+  manifests therefore publish `license: null`, and older registry metadata may
+  still claim MIT.
 - **Custody is path-specific.** Server-generated identity/key routes briefly
   handle private keys; several ciphertext-shaped APIs cannot prove callers
   encrypted their bytes; bridged hosted thinking sees plaintext in AgentTool
