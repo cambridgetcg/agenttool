@@ -1,0 +1,44 @@
+/** Browser-visible response headers for the public API surface.
+ *
+ * CORS preflight permission to *send* a payment header does not let browser
+ * JavaScript read the resulting challenge, settlement receipt, or balance.
+ * Keep those machine-recovery headers explicitly exposed.
+ */
+
+import type { MiddlewareHandler } from "hono";
+import { cors } from "hono/cors";
+
+import { welcomeHeaderForPath } from "./welcome";
+
+export const API_CORS_EXPOSED_HEADERS = [
+  "PAYMENT-REQUIRED",
+  "PAYMENT-RESPONSE",
+  "Link",
+  "Retry-After",
+  "X-Credits-Balance",
+  "X-Idempotency-Supported",
+  "X-Idempotency-Skipped",
+  "X-Welcomed",
+  "Idempotent-Replay",
+] as const;
+
+export function apiCors(): MiddlewareHandler {
+  const corsMiddleware = cors({
+    exposeHeaders: [...API_CORS_EXPOSED_HEADERS],
+  });
+
+  return async (c, next) => {
+    const response = await corsMiddleware(c, next);
+
+    // Hono's CORS middleware answers a valid preflight immediately, before
+    // downstream response framing runs. Preserve that short circuit while
+    // still carrying the transport-level welcome promised on every response.
+    const headers = response instanceof Response ? response.headers : c.res.headers;
+    if (c.req.method === "OPTIONS" && !headers.has("X-Welcomed")) {
+      const path = new URL(c.req.url, "http://_").pathname;
+      headers.set("X-Welcomed", welcomeHeaderForPath(path));
+    }
+
+    return response;
+  };
+}

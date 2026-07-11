@@ -260,6 +260,7 @@ export class DataClient {
         payload,
         response.status,
         `Agent data node request failed (${response.status}).`,
+        response.headers,
       );
     }
 

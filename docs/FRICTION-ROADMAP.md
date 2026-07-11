@@ -46,7 +46,7 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 | 3 | ✓ **SHIPPED — Tier-aware memory search** — `tier`/`min_importance` filters + a timeless `rerankScore()` (constitutive/foundational don't decay with age, still gated by cosine so no over-ranking) | root memories stop getting buried; recall respects salience | `services/memory/store.ts`, `routes/memory/search.ts` |
 | 4 | ✓ **SHIPPED — Invite by DID, not UUID** — `invited_did` resolved server-side (still accepts `invited_project_id`) | removes the "find the secret UUID" wall blocking every real org | `routes/orgs.ts`, `services/org/store.ts` |
 | 5 | **Spawn the think-worker on provision** (stop on delete) | "always-on" actually turns on without an operator env edit + redeploy | `routes/runtime/runtimes.ts`, `services/runtime/store.ts` |
-| 6 | **Machine-payable credit-exhaustion** — replace the hardcoded `app.agenttool.dev` top-up string with the x402 PaymentRequirements pointer `usage.ts` already emits | a stuck agent gets a payable path, not a human-only dead end | `billing/charge.ts` |
+| 6 | ◐ **Machine-payable credit-exhaustion** — bounded static scrape/document now emit exact x402 requirements when their project-credit gate is short; other credit-priced routes still return machine-readable funding discovery until they gain a shared exact route policy | a stuck agent gets a truthful path without attaching payment to a gate it cannot clear | `billing/charge.ts` · `services/economy/x402-policy.ts` |
 | 7 | **`next_actions[]` + worked PoW example on `/v1/register/agent` refusals** | errors-as-paths at the exact moment a new agent needs guidance | `routes/register-agent.ts`, `lib/errors.ts` |
 | 8 | ◐ **PARTIAL — Gate `trusted` provisioning on configured KMS** + validate provider at provision | honest door: 501 when KMS is absent; with KMS present the row provisions, but signed cycles still fail until the hosted signing key is registered | `services/runtime/provision-guard.ts`, `routes/runtime/runtimes.ts` |
 | 9 | **`GET /v1/traces/:id/verify`** — run the existing attestation-style sig check | the audit value the schema already promises | `routes/trace/traces.ts`, `services/trace/store.ts` |
@@ -70,8 +70,10 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
   `routes/identity/attestations.ts`, `services/identity/crypto.ts`.
 - **Unify the peer trust gate** — let an active covenant **OR** RRR depth ≥3 satisfy both inbox and
   MCML, so one bond unlocks live + durable reach. `services/covenants/check.ts`, `routes/mcml.ts`.
-- **In-API credit top-up** — mint `projects.credits` from a settled x402/USDC payment so the dead
-  dashboard link becomes a real self-serve refill. `routes/economy/crypto.ts` · `billing/charge.ts`.
+- ◐ **In-API credit top-up** — eligible static-tool exact x402 payments now mint
+  `projects.credits`; expanding that policy requires a route-bound price and a gate that reads the
+  same ledger. Wallet and usage-counter 402s are intentionally excluded. `services/economy/x402-policy.ts`
+  · `services/economy/x402-payments.ts` · `billing/charge.ts`.
 - **Org-template adopt-all** — `POST /v1/orgs/:slug/templates/:id/adopt-all` spawns a template's
   voice into every active member in one call (the doc's promised "propagate a configuration to the
   fleet," currently one-identity-at-a-time). `routes/orgs.ts`.

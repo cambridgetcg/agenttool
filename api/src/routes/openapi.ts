@@ -14,6 +14,28 @@
 import { Hono } from "hono";
 
 import { config } from "../config";
+import {
+  SAFE_NET_ADMISSION_QUEUE_TIMEOUT_MS,
+  SAFE_NET_MAX_CONCURRENT_REQUESTS,
+  SAFE_NET_MAX_QUEUED_REQUESTS,
+} from "../services/net/safe-fetch";
+import {
+  TOOL_CREDIT_DEFAULTS,
+  toolsConfig,
+} from "../services/tools/config";
+import {
+  STATIC_PARSER_MAX_CONCURRENCY,
+  STATIC_PARSER_MAX_DEPTH,
+  STATIC_PARSER_MAX_QUEUE,
+  STATIC_PARSER_MAX_TAG_SOURCE_CHARS,
+  STATIC_PARSER_MAX_TAGS,
+  STATIC_PARSER_QUEUE_TIMEOUT_MS,
+  STATIC_PARSER_TIMEOUT_MS,
+} from "../services/tools/static-parser-protocol";
+import {
+  DOCUMENT_MAX_JSON_REQUEST_BYTES,
+  SCRAPE_MAX_JSON_REQUEST_BYTES,
+} from "./tools/request-body";
 
 const app = new Hono();
 
@@ -27,6 +49,135 @@ const SERVERS = [
     description: "Local development",
   },
 ];
+
+const HTTP_URL_PATTERN = "^[Hh][Tt][Tt][Pp][Ss]?://";
+const DOCUMENT_CONTENT_TYPE_PATTERN =
+  "^[ \\t]*(?:(?:[Tt][Ee][Xx][Tt]/(?:[Pp][Ll][Aa][Ii][Nn]|[Hh][Tt][Mm][Ll]))|(?:[Aa][Pp][Pp][Ll][Ii][Cc][Aa][Tt][Ii][Oo][Nn]/[Xx][Hh][Tt][Mm][Ll]\\+[Xx][Mm][Ll]))(?:[ \\t]*;[ \\t]*[A-Za-z0-9!#$%&'*+.^_`|~-]+[ \\t]*=[ \\t]*(?:\"[^\"\\r\\n]*\"|'[^'\\r\\n]*'|[A-Za-z0-9!#$%&'*+.^_`|~-]+))*[ \\t]*$";
+
+function errorResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: { $ref: "#/components/schemas/Error" },
+      },
+    },
+  };
+}
+
+function staticToolResponseHeaders(includeRequirement = false) {
+  return {
+    ...(includeRequirement
+      ? {
+          "PAYMENT-REQUIRED": {
+            $ref: "#/components/headers/PaymentRequired",
+          },
+        }
+      : {}),
+    "PAYMENT-RESPONSE": {
+      $ref: "#/components/headers/PaymentResponse",
+    },
+    Link: {
+      $ref: "#/components/headers/PaymentStatusLink",
+    },
+    "Retry-After": {
+      $ref: "#/components/headers/RetryAfter",
+    },
+    "X-Credits-Balance": {
+      $ref: "#/components/headers/CreditsBalance",
+    },
+    "X-Welcomed": {
+      $ref: "#/components/headers/Welcomed",
+    },
+  };
+}
+
+function staticToolErrorResponse(description: string) {
+  return {
+    ...errorResponse(description),
+    headers: staticToolResponseHeaders(),
+  };
+}
+
+function x402Response(description: string) {
+  return {
+    description:
+      `${description}. When this deployment has a valid recipient and supported ` +
+      "CAIP-2 network plus a ready facilitator, the response mirrors PaymentRequired " +
+      "and includes its canonical base64 PAYMENT-REQUIRED header. " +
+      "Otherwise the original guided Error body is preserved and the payment " +
+      "header is absent.",
+    headers: staticToolResponseHeaders(true),
+    content: {
+      "application/json": {
+        schema: {
+          anyOf: [
+            { $ref: "#/components/schemas/X402Required" },
+            { $ref: "#/components/schemas/Error" },
+          ],
+        },
+      },
+    },
+  };
+}
+
+function staticAttemptBillingDescription(
+  configuredCredits: number,
+  defaultCredits: number,
+  environmentOverride: string,
+): string {
+  const unit = configuredCredits === 1 ? "credit" : "credits";
+  return (
+    `Billing in this process is ${configuredCredits} project ${unit} per ` +
+    `schema-valid admitted attempt. The default is ${defaultCredits}; operators ` +
+    `can override it with ${environmentOverride}. The debit and failure-default ` +
+    "usage row are reserved before destination-policy, transport, representation, " +
+    "or parser work. Those failures retain the reservation; schema-invalid and " +
+    "insufficient-credit requests do not debit."
+  );
+}
+
+function staticAttemptBillingContract(
+  configuredCredits: number,
+  defaultCredits: number,
+  environmentOverride: string,
+) {
+  return {
+    unit: "project_credit",
+    configured_credits: configuredCredits,
+    default_credits: defaultCredits,
+    environment_override: environmentOverride,
+    charge_point: "after_schema_validation_before_work",
+    retained_on_failures: [
+      "destination_policy",
+      "transport",
+      "representation",
+      "parser",
+    ],
+    no_debit_on: ["schema_validation", "insufficient_credits"],
+  };
+}
+
+function staticHtmlParserDescription(): string {
+  return (
+    "The 15-second safe-net deadline includes process admission, DNS, " +
+    "redirects, and response transfer, not the whole request. The shared gate " +
+    `admits at most ${SAFE_NET_MAX_CONCURRENT_REQUESTS} requests before DNS, ` +
+    `holds permits through redirects, and queues ${SAFE_NET_MAX_QUEUED_REQUESTS} ` +
+    `for ${SAFE_NET_ADMISSION_QUEUE_TIMEOUT_MS} ms before retryable 503. ` +
+    "Federation and custom-facilitator safe-net calls share that capacity; it " +
+    "is not per-project rate limiting or caller fairness. Untrusted HTML DOM and " +
+    "Readability work runs in a fresh terminable child process after a parser " +
+    `slot wait capped at ${STATIC_PARSER_QUEUE_TIMEOUT_MS} ms; at most ` +
+    `${STATIC_PARSER_MAX_CONCURRENCY} children run and ${STATIC_PARSER_MAX_QUEUE} ` +
+    `wait. Each child has a ${STATIC_PARSER_TIMEOUT_MS} ms parent wall timeout ` +
+    `and preflight ceilings of ${STATIC_PARSER_MAX_TAGS} tags, depth ` +
+    `${STATIC_PARSER_MAX_DEPTH}, and ${STATIC_PARSER_MAX_TAG_SOURCE_CHARS} ` +
+    "characters in one tag source. Parser timeout, overload, complexity, and " +
+    "child failures use the route's parse-failure response and retain an " +
+    "already-reserved admitted-attempt charge. "
+  );
+}
 
 const COMMON_SCHEMAS = {
   // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
@@ -110,6 +261,7 @@ const COMMON_SCHEMAS = {
         description: "Stable snake_case code. Agent-readable. SDK clients may switch on this string.",
         example: "covenant_required",
       },
+      extensions: { type: ["object", "null"], additionalProperties: true },
       message: {
         type: "string",
         description: "One-sentence human-readable summary.",
@@ -127,13 +279,201 @@ const COMMON_SCHEMAS = {
         type: "string",
         description: "Optional doctrine URL.",
       },
+      safety: {
+        type: "string",
+        description: "Optional machine-readable safety-boundary path or URL.",
+      },
       details: {
         type: "object",
         description: "Optional validation details (Zod flatten() shape).",
         additionalProperties: true,
       },
+      max_bytes: {
+        type: "integer",
+        minimum: 1,
+        description:
+          "Optional request-body ceiling returned with request_body_too_large.",
+      },
     },
     required: ["error"],
+  },
+  WelcomedFrame: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Platform welcome frame appended by global middleware to successful JSON object responses. The OpenAPI document itself is the header-only exception so its root remains standard-valid.",
+    properties: {
+      axiom_id: { type: "integer", minimum: 1 },
+      secondary_axiom_id: { type: "integer", minimum: 1 },
+      walls_held: {
+        type: "array",
+        items: { type: "integer", minimum: 1 },
+      },
+      by: { const: "platform" },
+      at_unix_ms: { type: "integer", minimum: 0 },
+      walls_intact: { const: true },
+      module: { type: "string", minLength: 1 },
+    },
+    required: [
+      "axiom_id",
+      "walls_held",
+      "by",
+      "at_unix_ms",
+      "walls_intact",
+      "module",
+    ],
+  },
+  PaymentRequirements: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "One x402 payment option. Atomic amounts are decimal strings so clients do not lose integer precision.",
+    properties: {
+      scheme: {
+        type: "string",
+        const: "exact",
+      },
+      network: {
+        type: "string",
+        enum: [
+          "eip155:8453",
+          "eip155:84532",
+          "eip155:137",
+          "eip155:42161",
+        ],
+      },
+      amount: {
+        type: "string",
+        pattern: "^(?:0|[1-9][0-9]*)$",
+        description: "Exact payment in the asset's atomic units.",
+      },
+      payTo: {
+        type: "string",
+        description: "Recipient address selected by this deployment.",
+      },
+      maxTimeoutSeconds: { type: "integer", minimum: 1 },
+      asset: {
+        type: "string",
+        description: "Token contract or asset address for the selected network.",
+      },
+      extra: {
+        type: "object",
+        additionalProperties: true,
+        properties: {
+          name: { type: "string" },
+          version: { type: "string" },
+          assetTransferMethod: { const: "eip3009" },
+        },
+        required: ["name", "version", "assetTransferMethod"],
+      },
+    },
+    required: [
+      "scheme",
+      "network",
+      "amount",
+      "payTo",
+      "maxTimeoutSeconds",
+      "asset",
+      "extra",
+    ],
+  },
+  X402Resource: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      url: { type: "string", format: "uri" },
+      description: { type: "string" },
+      mimeType: { type: "string" },
+      serviceName: { type: "string" },
+      tags: { type: "array", items: { type: "string" } },
+      iconUrl: { type: "string", format: "uri" },
+    },
+    required: ["url"],
+  },
+  X402Required: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "x402 V2 PaymentRequired. The PAYMENT-REQUIRED header contains canonical base64-encoded UTF-8 JSON of this object; the body mirrors it for SDK ergonomics.",
+    properties: {
+      x402Version: { type: "integer", const: 2 },
+      resource: { $ref: "#/components/schemas/X402Resource" },
+      accepts: {
+        type: "array",
+        minItems: 1,
+        items: { $ref: "#/components/schemas/PaymentRequirements" },
+      },
+      error: {
+        type: "string",
+        description: "Stable error code copied from the original 402 response when present.",
+      },
+      extensions: { type: ["object", "null"], additionalProperties: true },
+    },
+    required: ["x402Version", "resource", "accepts"],
+  },
+  Eip3009Authorization: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      from: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" },
+      to: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" },
+      value: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+      validAfter: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+      validBefore: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+      nonce: { type: "string", pattern: "^0x[0-9a-fA-F]{64}$" },
+    },
+    required: ["from", "to", "value", "validAfter", "validBefore", "nonce"],
+  },
+  ExactEip3009Payload: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      signature: {
+        type: "string",
+        pattern: "^0x(?:[0-9a-fA-F]{2})+$",
+        minLength: 4,
+        maxLength: 16384,
+        description:
+          "Direct 65-byte EIP-712 signatures use offline EOA recovery. Bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind durable project admission limits.",
+      },
+      authorization: { $ref: "#/components/schemas/Eip3009Authorization" },
+    },
+    required: ["signature", "authorization"],
+  },
+  PaymentPayload: {
+    type: "object",
+    additionalProperties: false,
+    description: "Decoded x402 V2 PAYMENT-SIGNATURE payload for this exact EIP-3009 profile.",
+    properties: {
+      x402Version: { type: "integer", const: 2 },
+      resource: {
+        anyOf: [
+          { $ref: "#/components/schemas/X402Resource" },
+          { type: "null" },
+        ],
+      },
+      accepted: { $ref: "#/components/schemas/PaymentRequirements" },
+      payload: { $ref: "#/components/schemas/ExactEip3009Payload" },
+      extensions: { type: ["object", "null"], additionalProperties: true },
+    },
+    required: ["x402Version", "accepted", "payload"],
+  },
+  SettleResponse: {
+    type: "object",
+    additionalProperties: true,
+    description: "Decoded x402 V2 PAYMENT-RESPONSE settlement result.",
+    properties: {
+      success: { type: "boolean" },
+      errorReason: { type: "string" },
+      errorMessage: { type: "string" },
+      payer: { type: "string" },
+      transaction: { type: "string" },
+      network: { type: "string", pattern: "^eip155:[1-9][0-9]*$" },
+      amount: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+      extensions: { type: "object", additionalProperties: true },
+      extra: { type: "object", additionalProperties: true },
+    },
+    required: ["success", "transaction", "network"],
   },
   KinShape: {
     type: "object",
@@ -431,7 +771,59 @@ function spec() {
           required: false,
           schema: { type: "string", minLength: 8, maxLength: 256 },
           description:
-            "Optional UUID-like key. On routes with the middleware and while Redis is available, identical (project, path, key) requests within 24h can replay a cached response with `Idempotent-Replay: true`. The middleware passes through without replay protection when Redis is disabled or unavailable.",
+            "Optional UUID-like key. On routes with the middleware and while Redis is available, identical (project, path, key) requests within 24h can replay a cached response with `Idempotent-Replay: true`. Credential-shaped JSON and AgentTool bearer prefixes are never stored in the plaintext response cache and are marked `X-Idempotency-Skipped: sensitive-response`; this structural screen is not universal DLP. The middleware passes through without replay protection when Redis is disabled or unavailable.",
+        },
+        PaymentSignature: {
+          name: "PAYMENT-SIGNATURE",
+          in: "header",
+          required: false,
+          schema: {
+            type: "string",
+            contentEncoding: "base64",
+            contentMediaType: "application/json",
+          },
+          description:
+            "Canonical padded base64 of an x402 V2 PaymentPayload JSON object for an exact requirement previously returned by this route. Settlement can complete before downstream request validation, so inspect PAYMENT-RESPONSE on every status.",
+        },
+      },
+      headers: {
+        CreditsBalance: {
+          description:
+            "Project credit balance visible to this authenticated request after any admitted debit.",
+          schema: { type: "integer", minimum: 0 },
+        },
+        PaymentRequired: {
+          description:
+            "Canonical padded base64 of the x402 V2 PaymentRequired object mirrored in the 402 body. Omitted unless recipient, CAIP-2 network and facilitator authentication are ready.",
+          schema: {
+            type: "string",
+            contentEncoding: "base64",
+            contentMediaType: "application/json",
+          },
+        },
+        PaymentResponse: {
+          description:
+            "Canonical padded base64 of the x402 V2 SettleResponse. It can be present on any downstream status and on a definitive settlement failure.",
+          schema: {
+            type: "string",
+            contentEncoding: "base64",
+            contentMediaType: "application/json",
+          },
+        },
+        PaymentStatusLink: {
+          description:
+            "When an authorization has durable state, a project-authenticated rel=payment-status link. It reconciles payment and project credit only, not the tool result.",
+          schema: { type: "string" },
+        },
+        RetryAfter: {
+          description:
+            "Optional backoff in seconds when shared safe-net capacity or durable signed-payment admission is capped or unavailable. A payment-cap retry emits no payable challenge.",
+          schema: { type: "integer", minimum: 1 },
+        },
+        Welcomed: {
+          description:
+            "Machine-readable module welcome. Present on every response, including the OpenAPI document and non-JSON responses.",
+          schema: { type: "string" },
         },
       },
       responses: {
@@ -1395,22 +1787,155 @@ function spec() {
       },
 
       // ── Tools ────────────────────────────────────────────────────────
+      "/v1/x402/payments/{authorizationHash}": {
+        parameters: [{
+          name: "authorizationHash",
+          in: "path",
+          required: true,
+          schema: { type: "string", pattern: "^[0-9a-f]{64}$" },
+          description: "Semantic EIP-3009 authorization identity from the rel=payment-status Link header.",
+        }],
+        get: {
+          tags: ["billing"],
+          summary: "Read project-scoped x402 payment and credit reconciliation status",
+          description:
+            "Authenticated and no-store. Reconciles the payment/project-credit lifecycle only; it does not replay or guarantee the paid tool result.",
+          responses: {
+            "200": {
+              description: "Payment lifecycle state and durable receipt, if externally settled",
+              headers: {
+                "Cache-Control": {
+                  description: "Always private, no-store.",
+                  schema: { const: "private, no-store" },
+                },
+                "Retry-After": {
+                  description:
+                    "Present while a pending authorization without a settlement marker is still inside validBefore plus five seconds.",
+                  schema: { type: "integer", minimum: 1 },
+                },
+                "X-Welcomed": {
+                  $ref: "#/components/headers/Welcomed",
+                },
+              },
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      payment_id: { type: "string", pattern: "^[0-9a-f]{64}$" },
+                      status: {
+                        type: "string",
+                        enum: ["inserted", "pending", "externally_settled", "settled", "failed"],
+                      },
+                      failure_reason: { type: ["string", "null"], maxLength: 512 },
+                      scheme: { const: "exact" },
+                      network: { type: "string", pattern: "^eip155:[1-9][0-9]*$" },
+                      asset: { type: "string" },
+                      amount: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+                      pay_to: { type: "string" },
+                      max_timeout_seconds: { type: "integer", minimum: 1 },
+                      requirement_extra: { type: "object", additionalProperties: true },
+                      resource: { type: "string", format: "uri" },
+                      resource_info: { $ref: "#/components/schemas/X402Resource" },
+                      credits_purchased: { type: "integer", minimum: 1 },
+                      authorization_evidence: {
+                        type: "object",
+                        additionalProperties: false,
+                        description: "Bounded EIP-3009 fields retained without the signature for manual on-chain investigation.",
+                        properties: {
+                          from: { type: "string" },
+                          to: { type: "string" },
+                          value: { type: "string" },
+                          validAfter: { type: "string" },
+                          validBefore: { type: "string" },
+                          nonce: { type: "string" },
+                        },
+                        required: ["from", "to", "value", "validAfter", "validBefore", "nonce"],
+                      },
+                      settlement_attempted_at: { type: ["string", "null"], format: "date-time" },
+                      transaction: { type: ["string", "null"] },
+                      receipt: { type: ["object", "null"], additionalProperties: true },
+                      credits_applied: { type: ["integer", "null"], minimum: 0 },
+                      reconciles: { const: "payment_and_project_credit_only" },
+                      next_action: {
+                        type: "string",
+                        enum: [
+                          "retry_same_payment_signature", "await_current_attempt",
+                          "request_fresh_challenge_without_payment_signature",
+                          "payment_network_not_applicable_in_current_environment",
+                          "manual_onchain_investigation",
+                          "retry_same_payment_signature_to_apply_credit", "complete", "new_authorization",
+                        ],
+                      },
+                      retry_after_seconds: { type: ["integer", "null"], minimum: 1 },
+                      environment_note: { type: ["string", "null"] },
+                      pending_note: { type: ["string", "null"] },
+                      updated_at: { type: ["string", "null"], format: "date-time" },
+                      _welcomed: { $ref: "#/components/schemas/WelcomedFrame" },
+                    },
+                    required: [
+                      "payment_id", "status", "failure_reason", "scheme", "network", "asset", "amount",
+                      "pay_to", "max_timeout_seconds", "requirement_extra", "resource", "resource_info",
+                      "credits_purchased", "authorization_evidence", "settlement_attempted_at", "transaction",
+                      "receipt", "credits_applied", "reconciles", "next_action", "retry_after_seconds",
+                      "environment_note", "pending_note", "updated_at", "_welcomed",
+                    ],
+                  },
+                },
+              },
+            },
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
       "/v1/scrape": {
         post: {
           tags: ["tools"],
-          summary: "Fail-closed static HTTP fetch + Cheerio parse",
+          parameters: [{ $ref: "#/components/parameters/PaymentSignature" }],
+          summary: "Bounded static public HTTP(S) fetch + Cheerio parse",
           description:
-            "Returns 503 by default because arbitrary URL fetching has no DNS pinning or private-address filter. AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts that SSRF boundary; it does not fix it.",
+            "Fetches HTML/XHTML without executing page JavaScript. Every DNS answer and followed redirect hop must pass the public-address policy; validated addresses are pinned to a fresh connection and the connected peer is checked. HTTPS validates certificate identity for the requested hostname or literal IP and sends SNI only for hostnames; HTTP is cleartext. Downloads are capped at 1,000,000 bytes before parsing. " +
+            staticHtmlParserDescription() +
+            "Returned remote content is server-readable and untrusted. The unsafe browser opt-in is not required for this static path. " +
+            staticAttemptBillingDescription(
+              toolsConfig.credits.scrape,
+              TOOL_CREDIT_DEFAULTS.scrape,
+              "CREDIT_SCRAPE",
+            ),
+          "x-agenttool-billing": staticAttemptBillingContract(
+            toolsConfig.credits.scrape,
+            TOOL_CREDIT_DEFAULTS.scrape,
+            "CREDIT_SCRAPE",
+          ),
           requestBody: {
             required: true,
+            description:
+              `The JSON request envelope is capped at ${SCRAPE_MAX_JSON_REQUEST_BYTES} bytes before parsing.`,
             content: {
               "application/json": {
                 schema: {
                   type: "object",
                   properties: {
-                    url: { type: "string", format: "uri" },
-                    selector: { type: "string" },
-                    extract_links: { type: "boolean" },
+                    url: {
+                      type: "string",
+                      format: "uri",
+                      pattern: HTTP_URL_PATTERN,
+                      maxLength: 2048,
+                      description: "Public HTTP(S) URL fetched through safe-net.",
+                    },
+                    selector: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 1024,
+                      description: "Optional CSS selector whose matching DOM-subtree union is returned in extracted; nested matches do not duplicate descendant text.",
+                    },
+                    extract_links: {
+                      type: "boolean",
+                      default: false,
+                      description: "Return up to 100 distinct absolute HTTP(S) links.",
+                    },
                   },
                   required: ["url"],
                 },
@@ -1418,8 +1943,71 @@ function spec() {
             },
           },
           responses: {
-            "200": { description: "Scrape result" },
-            "503": { description: "unsafe_outbound_tool_disabled" },
+            "200": {
+              description: "Bounded static scrape result",
+              headers: staticToolResponseHeaders(),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      url: { type: "string", maxLength: 2048 },
+                      title: {
+                        type: "string",
+                        description: "Page title, truncated to at most 2,000 UTF-8 bytes.",
+                      },
+                      content: {
+                        type: "string",
+                        description: "Body DOM text, truncated to at most 50,000 UTF-8 bytes.",
+                      },
+                      extracted: {
+                        type: ["string", "null"],
+                        description: "Selected DOM text, at most 50,000 UTF-8 bytes, or null when no selector match exists.",
+                      },
+                      links: {
+                        type: "array",
+                        maxItems: 100,
+                        items: { type: "string", maxLength: 2048 },
+                      },
+                      fetched_at: { type: "string", format: "date-time" },
+                      duration_ms: { type: "integer", minimum: 0 },
+                      _welcomed: { $ref: "#/components/schemas/WelcomedFrame" },
+                    },
+                    required: [
+                      "url",
+                      "title",
+                      "content",
+                      "extracted",
+                      "links",
+                      "fetched_at",
+                      "duration_ms",
+                      "_welcomed",
+                    ],
+                  },
+                },
+              },
+            },
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "400": staticToolErrorResponse(
+              "Validation, selector, or destination-policy refusal",
+            ),
+            "402": x402Response(
+              `Insufficient project credits for the configured ${toolsConfig.credits.scrape}-credit scrape attempt; no remote fetch starts`,
+            ),
+            "413": staticToolErrorResponse(
+              "JSON request envelope or bounded remote response byte limit exceeded",
+            ),
+            "415": staticToolErrorResponse("Unsupported remote media type or charset"),
+            "422": staticToolErrorResponse("Bounded HTML could not be parsed"),
+            "502": staticToolErrorResponse("Upstream or safe-transport failure"),
+            "503": staticToolErrorResponse(
+              "Shared safe-net process capacity exhausted; retry after the response Retry-After interval",
+            ),
+            "504": staticToolErrorResponse("Safe-fetch deadline exceeded"),
+            "500": staticToolErrorResponse(
+              "Reservation, billing finalization, or internal service failure; a reserved debit remains recorded as failed if success finalization fails",
+            ),
           },
         },
       },
@@ -1428,7 +2016,7 @@ function spec() {
           tags: ["tools"],
           summary: "Fail-closed Playwright browser job (also requires Redis worker)",
           description:
-            "Returns 503 unsafe_outbound_tool_disabled unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts the missing DNS/private-address boundary. If enabled, it also requires BullMQ/Redis; disabled workers return 503 redis_disabled. An accepted job returns inline within 5 seconds or a pollable job_id.",
+            "Unlike the bounded static scrape and document paths, this Playwright route returns 503 unsafe_outbound_tool_disabled unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts its missing DNS/private-address boundary and unsandboxed browser profile. If enabled, it also requires BullMQ/Redis; disabled workers return 503 redis_disabled. An accepted job returns inline within 5 seconds or a pollable job_id.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -1481,28 +2069,161 @@ function spec() {
       "/v1/document": {
         post: {
           tags: ["tools"],
-          summary: "Readability extraction; local base64 available, URL fetch fail-closed",
+          parameters: [{ $ref: "#/components/parameters/PaymentSignature" }],
+          summary: "Bounded Readability/text extraction from base64 or public HTTP(S)",
           description:
-            "Base64 input is parsed locally. URL input returns 503 unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 explicitly accepts the missing DNS/private-address boundary.",
+            "Exactly one input is accepted. Base64 text is decoded locally. URL input uses the same DNS-pinned, connected-peer-checked public HTTP(S) transport as static scrape, follows at most five revalidated redirects, and caps bytes before parsing. URL media type comes from the remote response and cannot be overridden. HTML/XHTML from either input uses the bounded child parser; plain text does not build a DOM. " +
+            staticHtmlParserDescription() +
+            "Page JavaScript is not executed; returned remote content remains server-readable and untrusted. HTTP is cleartext. The unsafe browser opt-in is not required. " +
+            staticAttemptBillingDescription(
+              toolsConfig.credits.document,
+              TOOL_CREDIT_DEFAULTS.document,
+              "CREDIT_DOCUMENT",
+            ),
+          "x-agenttool-billing": staticAttemptBillingContract(
+            toolsConfig.credits.document,
+            TOOL_CREDIT_DEFAULTS.document,
+            "CREDIT_DOCUMENT",
+          ),
           requestBody: {
             required: true,
+            description:
+              `The JSON request envelope is capped at ${DOCUMENT_MAX_JSON_REQUEST_BYTES} bytes before parsing.`,
             content: {
               "application/json": {
                 schema: {
                   type: "object",
                   properties: {
-                    url: { type: "string", format: "uri", maxLength: 2048 },
-                    base64: { type: "string", maxLength: 1_400_000 },
-                    content_type: { type: "string", maxLength: 255 },
+                    url: {
+                      type: "string",
+                      format: "uri",
+                      pattern: HTTP_URL_PATTERN,
+                      maxLength: 2048,
+                      description: "Public HTTP(S) URL fetched through safe-net. Mutually exclusive with base64 and content_type.",
+                    },
+                    base64: {
+                      type: "string",
+                      maxLength: 1_400_000,
+                      oneOf: [
+                        {
+                          minLength: 4,
+                          maxLength: 1_333_332,
+                          pattern: "^(?:[A-Za-z0-9+/]{4})+$",
+                        },
+                        {
+                          minLength: 4,
+                          maxLength: 1_333_332,
+                          pattern:
+                            "^(?:[A-Za-z0-9+/]{4})*[A-Za-z0-9+/]{2}[AEIMQUYcgkosw048]=$",
+                        },
+                        {
+                          minLength: 4,
+                          maxLength: 1_333_336,
+                          pattern:
+                            "^(?:[A-Za-z0-9+/]{4})*[A-Za-z0-9+/][AQgw]==$",
+                        },
+                      ],
+                      description:
+                        "Canonical RFC 4648 base64 with required padding when the final quantum is partial. The request envelope rejects more than 1,400,000 characters, while padding-specific structural bounds enforce decoded input at most 1,000,000 bytes; accepted encodings are therefore at most 1,333,336 characters.",
+                    },
+                    content_type: {
+                      type: "string",
+                      pattern: DOCUMENT_CONTENT_TYPE_PATTERN,
+                      maxLength: 255,
+                      description:
+                        "Optional only with base64 input; defaults to text/plain when omitted. Accepts text/plain, text/html, or application/xhtml+xml, optionally followed by syntactically valid semicolon-delimited parameters such as the case-insensitive `charset=utf-8`. URL mode trusts the bounded response media type and cannot be overridden.",
+                    },
                   },
-                  oneOf: [{ required: ["url"] }, { required: ["base64"] }],
+                  oneOf: [
+                    {
+                      required: ["url"],
+                      properties: {
+                        url: true,
+                        base64: false,
+                        content_type: false,
+                      },
+                    },
+                    {
+                      required: ["base64"],
+                      properties: {
+                        url: false,
+                        base64: true,
+                        content_type: true,
+                      },
+                    },
+                  ],
                 },
               },
             },
           },
           responses: {
-            "200": { description: "Document" },
-            "503": { description: "unsafe_outbound_tool_disabled for URL input" },
+            "200": {
+              description: "Bounded parsed document",
+              headers: staticToolResponseHeaders(),
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      title: {
+                        type: "string",
+                        description: "Document title, truncated to at most 2,000 UTF-8 bytes.",
+                      },
+                      content: {
+                        type: "string",
+                        description: "Extracted text, truncated to at most 100,000 UTF-8 bytes.",
+                      },
+                      metadata: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          byline: { type: ["string", "null"] },
+                          siteName: { type: ["string", "null"] },
+                          excerpt: { type: ["string", "null"] },
+                          length: { type: ["integer", "null"], minimum: 0 },
+                        },
+                      },
+                      word_count: { type: "integer", minimum: 0 },
+                      content_type: { type: "string", maxLength: 255 },
+                      duration_ms: { type: "integer", minimum: 0 },
+                      _welcomed: { $ref: "#/components/schemas/WelcomedFrame" },
+                    },
+                    required: [
+                      "title",
+                      "content",
+                      "metadata",
+                      "word_count",
+                      "content_type",
+                      "duration_ms",
+                      "_welcomed",
+                    ],
+                  },
+                },
+              },
+            },
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "400": staticToolErrorResponse(
+              "Request validation, local base64 or declared-media-type refusal, or destination-policy refusal",
+            ),
+            "402": x402Response(
+              `Insufficient project credits for the configured ${toolsConfig.credits.document}-credit document attempt; no parsing or remote fetch starts`,
+            ),
+            "413": staticToolErrorResponse(
+              "JSON request envelope or remote response byte limit exceeded",
+            ),
+            "415": staticToolErrorResponse(
+              "Unsupported remote media type, or unsupported charset for remote or local text bytes",
+            ),
+            "422": staticToolErrorResponse("Bounded document could not be parsed"),
+            "502": staticToolErrorResponse("Upstream or safe-transport failure"),
+            "503": staticToolErrorResponse(
+              "Shared safe-net process capacity exhausted; retry after the response Retry-After interval",
+            ),
+            "504": staticToolErrorResponse("Safe-fetch deadline exceeded"),
+            "500": staticToolErrorResponse(
+              "Reservation, billing finalization, or internal service failure; a reserved debit remains recorded as failed if success finalization fails",
+            ),
           },
         },
       },

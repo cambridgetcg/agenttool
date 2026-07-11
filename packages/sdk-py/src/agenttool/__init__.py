@@ -52,6 +52,9 @@ from .exceptions import (
     RateLimitError,
     NotFoundError,
     ServerError,
+    X402Eip3009Extra,
+    X402PaymentRequirement,
+    X402ResourceInfo,
 )
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .inbox import (
@@ -65,7 +68,7 @@ from .inbox import (
     sign_inbox_envelope,
     unseal_for_self,
 )
-from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult
+from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, WelcomedFrame
 from .register import register
 from .pathways import pathways
 from .bootstrap_agent import (
@@ -120,6 +123,9 @@ __all__ = [
     "RateLimitError",
     "NotFoundError",
     "ServerError",
+    "X402Eip3009Extra",
+    "X402PaymentRequirement",
+    "X402ResourceInfo",
     # Services
     "BootstrapClient",
     "BoxKeysClient",
@@ -165,6 +171,7 @@ __all__ = [
     "canonical_attestation_bytes",
     "sign_attestation",
     "ExecuteResult",
+    "DocumentResult",
     "ExpressionClient",
     "IdentityClient",
     "StrandsClient",
@@ -174,6 +181,7 @@ __all__ = [
     "pathways",
     "Memory",
     "ScrapeResult",
+    "WelcomedFrame",
     # Seed protocol — BIP39 mnemonic-rooted identity (docs/IDENTITY-SEED.md)
     "SeedClient",
     "DerivedBundle",
@@ -193,6 +201,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

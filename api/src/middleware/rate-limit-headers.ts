@@ -1,11 +1,10 @@
-/** Credit-balance + idempotency-marker headers on selected authenticated prefixes.
+/** Credit-balance headers on selected authenticated prefixes.
  *
  *  Despite the historical filename, this middleware does not enforce a
  *  request rate. It uses values already loaded by authMiddleware.
  *
  *  Headers emitted:
  *    X-Credits-Balance       Wallet credit balance (Ring 2 substrate credits)
- *    X-Idempotency-Supported Marker for client tooling: "Idempotency-Key"
  *
  *  No X-Plan / tier header — agenttool does not have per-agent subscription
  *  tiers. Doctrine: docs/BUSINESS-MODEL.md (Ring 2 metered + Ring 3 take-rate;
@@ -25,6 +24,5 @@ export const rateLimitHeaders = (): MiddlewareHandler<ProjectContext> => {
     if (typeof balance === "number") {
       c.res.headers.set("X-Credits-Balance", String(balance));
     }
-    c.res.headers.set("X-Idempotency-Supported", "Idempotency-Key");
   };
 };

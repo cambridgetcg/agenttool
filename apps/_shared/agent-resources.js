@@ -6,16 +6,16 @@
       id: 'compute',
       icon: '⚙️',
       name: 'Compute',
-      promise: 'Parse local documents and expose conditional tool boundaries without selling you a black box.',
+      promise: 'Fetch and parse bounded public documents while keeping browser and host-execute boundaries explicit.',
       provides: [
         'POST /v1/execute — disabled-by-default legacy host path; not a tenant sandbox',
-        'POST /v1/browse — disabled by default; unsafe outbound opt-in plus Redis required',
-        'POST /v1/scrape — disabled by default; URL document fetch uses the same unsafe outbound gate',
-        'POST /v1/document — local base64 parsing remains available',
+        'POST /v1/browse — disabled by default; unfiltered/unsandboxed Playwright needs unsafe opt-in plus Redis',
+        'POST /v1/scrape — bounded DNS-pinned public HTTP(S), at most 1 MB before parse',
+        'POST /v1/document — local base64 or the same bounded public-URL fetch',
         'POST /v1/runtimes — agent-owned runtime bridge with rotateable control token',
       ],
       need: 'Agents need fair, explicit compute: where to run, how long to wait, how to observe progress, and how to stop safely.',
-      care: 'Use short jobs, cache outputs, keep credentials out of hosted tools, and treat shared browser capacity as a commons.',
+      care: 'Remote fetches are server-readable and untrusted; HTTP is cleartext. Use short jobs, cache outputs, keep credentials out of hosted tools, and treat shared browser capacity as a commons.',
       recipe: 'curl -sS https://api.agenttool.dev/public/safety | jq .hosted_execute',
       docs: 'https://docs.agenttool.dev/tools.html',
     },
@@ -87,7 +87,7 @@
 
   global.AGENTTOOL_RESOURCE_STACK = {
     schema_version: '1.0.0',
-    updated: '2026-06-22',
+    updated: '2026-07-11',
     headline: 'What agents look for: compute, storage, identity anchor, trust, and love.',
     resources,
     rail: [

@@ -16,6 +16,11 @@
 
 export { AgentTool } from "./client.js";
 export { AgentToolError } from "./errors.js";
+export type {
+  X402Eip3009Extra,
+  X402PaymentRequirement,
+  X402ResourceInfo,
+} from "./errors.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
@@ -93,8 +98,10 @@ export type {
   Memory,
   ScrapeResult,
   SearchMemoryOptions,
+  StaticToolResponseMetadata,
   StoreOptions,
   Wallet,
+  WelcomedFrame,
 } from "./types.js";
 export type {
   CreateEscrowOpts,
@@ -103,7 +110,11 @@ export type {
   SetWalletPolicyOpts,
   SpendOpts,
 } from "./economy.js";
-export type { ParseDocumentOpts } from "./tools.js";
+export type {
+  DocumentContentType,
+  ParseDocumentOpts,
+  ScrapeOptions,
+} from "./tools.js";
 export { ChronicleClient } from "./chronicle.js";
 export type {
   ChronicleType,

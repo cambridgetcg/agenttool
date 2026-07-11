@@ -49,7 +49,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.9.0"
+SDK_VERSION = "0.10.0"
 
 
 class AgentTool:
@@ -380,17 +380,33 @@ class AgentTool:
             raise AgentToolError(f"API request failed: {e}") from e
         if resp.status_code >= 400:
             try:
-                payload = resp.json()
-                detail = (
-                    payload.get("message")
-                    or payload.get("error")
-                    or payload.get("detail")
-                    or resp.text
-                )
+                response_body = resp.json()
             except Exception:
-                detail = resp.text
+                response_body = None
+            parsed = AgentToolError.from_response_body(
+                response_body,
+                resp.status_code,
+                resp.text,
+                headers=resp.headers,
+            )
             raise AgentToolError(
-                f"API error ({resp.status_code}): {detail} ({method} {path})"
+                f"API error ({resp.status_code}): {parsed.message} ({method} {path})",
+                hint=parsed.hint,
+                code=resp.status_code,
+                error_code=parsed.error_code,
+                next_actions=parsed.next_actions,
+                docs=parsed.docs,
+                safety=parsed.safety,
+                details=parsed.details,
+                x402_version=parsed.x402_version,
+                accepts=parsed.accepts,
+                x402_resource=parsed.x402_resource,
+                extensions=parsed.extensions,
+                payment_required=parsed.payment_required,
+                payment_response=parsed.payment_response,
+                payment_status_link=parsed.payment_status_link,
+                retry_after=parsed.retry_after,
+                credits_balance=parsed.credits_balance,
             )
         return resp.json()
 

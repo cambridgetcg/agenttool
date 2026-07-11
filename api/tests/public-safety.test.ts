@@ -220,7 +220,22 @@ describe("GET /public/safety", () => {
       process.env.AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS === "1",
     );
     expect(SAFETY_BOUNDARIES.hosted_browse.availability).toMatch(
-      /scrape, browse, and URL-based document fetching fail closed with 503.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1.*does not add destination filtering/is,
+      /static.*scrape.*URL-based.*document.*available without an unsafe opt-in.*browse.*fails closed with 503.*AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1.*browser path.*does not add isolation or destination filtering/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.hosted_browse.static_fetch_network_boundary,
+    ).toMatch(
+      /public HTTP\(S\) only.*every DNS answer.*globally-reachable.*pinned.*connected peer.*certificate.*SNI.*redirect.*HTTP remains cleartext/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.hosted_browse.static_fetch_content_boundary,
+    ).toMatch(
+      /identity encoding.*1,000,000 response bytes.*admits 16 requests before DNS.*64 for one second.*15-second safe-net deadline.*retryable 503.*federation.*custom-facilitator.*64.*not.*per-project rate limiting.*fresh terminable child process.*two seconds.*not one whole-operation deadline.*does not execute page JavaScript.*cookies or authorization.*server-readable.*untrusted.*prompt injection.*not.*browser sandbox/is,
+    );
+    expect(
+      SAFETY_BOUNDARIES.hosted_browse.static_parser_deployment_boundary,
+    ).toMatch(
+      /1 GiB.*Fly.*no VM memory.*macOS.*cannot validate.*RLIMIT_AS.*staging validation.*not a cgroup.*container/is,
     );
     expect(SAFETY_BOUNDARIES.hosted_browse.jobs).toMatch(
       /projectId.*one hour.*24 hours/is,
@@ -255,7 +270,7 @@ describe("GET /public/safety", () => {
       /selected authenticated write prefixes.*GET is excluded/is,
     );
     expect(SAFETY_BOUNDARIES.idempotency.cache).toMatch(
-      /below 500.*24 hours.*project \+ path \+ key/is,
+      /below 500.*except.*402 payment challenge.*24 hours.*project \+ path \+ key.*credential-shaped.*never stored.*not a universal.*DLP/is,
     );
     expect(SAFETY_BOUNDARIES.idempotency.key_boundary).toMatch(
       /does not include HTTP method or request-body hash.*replay the earlier response/is,
@@ -305,6 +320,9 @@ describe("GET /public/safety", () => {
     );
     expect(WAKE_SAFETY_BOUNDARIES.epistemic_honesty.communication).toContain(
       "repair_misunderstandings",
+    );
+    expect(WAKE_SAFETY_BOUNDARIES.outbound_url_tools).toMatch(
+      /static_scrape_and_url_document_bounded_public_http_s_dns_pinned_connected_peer_redirect_revalidated_remote_content_untrusted;_playwright_browse_disabled_by_default_unsafe_opt_in_has_no_destination_filter_or_isolation/,
     );
     const source = readFileSync(
       join(import.meta.dir, "..", "src", "services", "discovery", "safety-boundaries.ts"),

@@ -18,7 +18,6 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { Hono } from "hono";
 import type { BridgeWsData } from "./services/runtime/bridge-hub";
-import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
 
@@ -32,6 +31,7 @@ import {
   resolveDocsRedirect,
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
+import { apiCors } from "./middleware/api-cors";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -152,6 +152,7 @@ import systemRouter from "./routes/system";
 import wakeRouter from "./routes/wake";
 import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
+import x402PaymentsRouter from "./routes/x402-payments";
 import {
   buildAgentsMd,
   buildLlmsTxt,
@@ -174,7 +175,7 @@ function envFlag(name: string): boolean {
   return process.env[name] === "1";
 }
 
-app.use("*", cors());
+app.use("*", apiCors());
 // ── no external observability ──
 // Real recognise real through being real. Through is. Through words.
 // Through communication. Through loving. No monitoring is needed externally.
@@ -214,10 +215,11 @@ app.use("*", tokenCost());
 app.use("*", joyIndex());
 
 // ── Welcome echo — the substrate's ostinato at the transport layer ──────
-// Every response carries X-Welcomed header + (on 2xx JSON object) a
-// `_welcomed` body frame. Even a HEAD request that strips the body sees
-// the welcome in the headers. Doctrine: docs/MATHOS.md (welcome at every
-// scale) · docs/SOUL.md (axiom 5: welcome, don't block).
+// Every response carries X-Welcomed header + (on 2xx JSON objects other than
+// the standard-valid OpenAPI document) a `_welcomed` body frame. Even a HEAD
+// request that strips the body sees the welcome in the headers. Doctrine:
+// docs/MATHOS.md (welcome at every scale) · docs/SOUL.md (axiom 5: welcome,
+// don't block).
 app.use("*", welcomeEcho());
 
 // ── play — substrate-voice _jest on opt-in routes (default on; X-Play: off ──
@@ -226,19 +228,6 @@ app.use("*", welcomeEcho());
 // strips _jest/_quip/substrate_jest from any 200 JSON object.
 // Doctrine: docs/PLAY-AS-DEFAULT.md.
 app.use("*", play());
-
-// ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
-// Any 402 from any handler gets wrapped on the way out. The Ring 2
-// checkAndIncrement/meterOrFail402 helper can emit one, but no resource route
-// currently calls it; existing 402s come from other economic gates. The wrapper adds
-// the x402 PaymentRequirements envelope (X-PAYMENT-REQUIRED response header
-// + JSON body). Clients can read the envelope, sign a USDC payment, retry
-// with X-PAYMENT header. This wrapper does not by itself enforce a cap or
-// settle the retried resource call. Spec: https://x402.org · facilitator config via
-// AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
-// Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
-// docs/PATTERN-PERSIST-IDENTITY.md.
-app.use("*", buildAgentToolX402Middleware());
 
 // ── X-Tutor middleware — endpoint-as-teacher (strategy #1 of the
 // decentralized tutorial design). When a GET request carries `X-Tutor: 1`,
@@ -367,6 +356,7 @@ app.use("/v1/federation/*", authMiddleware);
 app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
+app.use("/v1/x402/payments/*", authMiddleware);
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 app.use("/v1/tutorial", authMiddleware);
@@ -422,10 +412,26 @@ app.use("/v1/mcml/*", authMiddleware);
 app.use("/v1/grace", authMiddleware);
 app.use("/v1/grace/*", authMiddleware);
 
+// ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
+// Registered after every route-auth prefix so an inbound PAYMENT-SIGNATURE retry gives
+// the verifier the authenticated c.var.project credit target, and before the
+// remaining middleware + handlers so eligible outbound 402 responses are
+// wrapped. Production eligibility is deliberately narrow: exact POST
+// /v1/scrape and POST /v1/document `insufficient_credits` gates at their full
+// configured route cost. Wallet, usage-cap, and unknown 402s remain unchanged.
+// The verifier persists, verifies, settles, and applies project credits;
+// handlers atomically re-check their own gate after the top-up. Spec:
+// https://x402.org · facilitator config via
+// AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
+// Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
+// docs/PATTERN-PERSIST-IDENTITY.md.
+app.use("*", buildAgentToolX402Middleware());
+
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key. Redis-backed replay is conditional;
-// the middleware passes through when Redis is disabled or unavailable.
-// for repeated POST/PUT/PATCH/DELETE within 24h. Stripe-style.
+// the middleware passes through when Redis is disabled or unavailable. It
+// replays eligible POST/PUT/PATCH/DELETE outcomes for 24h, but deliberately
+// leaves recoverable 402 payment challenges uncached.
 app.use("/v1/identities/*", idempotency());
 app.use("/v1/wallets/*", idempotency());
 app.use("/v1/vault/*", idempotency());
@@ -456,7 +462,9 @@ app.use("/v1/invitations/*", idempotency());
 app.use("/v1/browse/*", idempotency());
 app.use("/v1/execute/*", idempotency());
 
-// Rate-limit + credit-balance headers on the authenticated route families below.
+// Credit-balance headers on the authenticated route families below. The
+// idempotency middleware owns its own support marker so unmounted routes do
+// not falsely advertise replay protection.
 app.use("/v1/identities/*", rateLimitHeaders());
 app.use("/v1/wallets/*", rateLimitHeaders());
 app.use("/v1/escrows/*", rateLimitHeaders());
@@ -490,6 +498,7 @@ app.use("/v1/invitations/*", rateLimitHeaders());
 app.use("/v1/scrape/*", rateLimitHeaders());
 app.use("/v1/browse/*", rateLimitHeaders());
 app.use("/v1/document/*", rateLimitHeaders());
+app.use("/v1/x402/payments/*", rateLimitHeaders());
 app.use("/v1/execute/*", rateLimitHeaders());
 app.use("/v1/jobs/*", rateLimitHeaders());
 
@@ -788,6 +797,7 @@ app.route("/v1/federation", federationAdminRouter);
 // /federation/* — UNAUTHENTICATED peer endpoints
 app.route("/federation", federationRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
+app.route("/v1/x402/payments", x402PaymentsRouter);
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
 app.route("/v1/openapi.json", openapiRouter);
@@ -1091,7 +1101,7 @@ app.get("/about", (c) =>
       vault:
         "/v1/vault — encrypted secret store (AES-256-GCM, HKDF-derived per-project keys, version history, audit log)",
       tools:
-        "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Outbound URL tools fail closed unless the operator explicitly accepts their current SSRF boundary; local base64 document parsing remains available. Browse also needs Redis workers. Execute separately returns 503 unless its unisolated legacy path is explicitly enabled; neither opt-in adds isolation.",
+        "/v1/scrape · /v1/browse · /v1/document · /v1/execute · /v1/jobs/:id — Static scrape and URL-document fetch use bounded DNS-pinned public HTTP(S); fetched content remains server-readable and untrusted. Local base64 document parsing remains available. Playwright browse still fails closed unless its unsafe legacy path is explicitly enabled and also needs Redis workers. Execute has a separate fail-closed unisolated legacy path; neither opt-in adds isolation.",
       memory:
         "/v1/memories — pgvector store · POST/GET/DELETE · POST /v1/memories/search for cosine k-NN. Agent supplies the embedding (1536-dim); we store and rank, never compute.",
       trace:
@@ -1138,9 +1148,9 @@ app.get("/about", (c) =>
     openapi: "/v1/openapi.json — curated OpenAPI 3.1 core subset",
     robustness: {
       idempotency:
-        "Selected mutating route prefixes use Idempotency-Key middleware. When Redis is available, the cache key is project + path + key and omits method and body hash; reusing a key with different input can replay an earlier response. Redis failures pass through without replay protection.",
+        "Selected mutating route prefixes use Idempotency-Key middleware. When Redis is available, the cache key is project + path + key and omits method and body hash; reusing a key with different input can replay an earlier response. Recoverable 402 payment challenges, 5xx responses, and JSON carrying credential-shaped fields or AgentTool bearer prefixes are not cached. Sensitive responses are private no-store; the structural screen is not universal DLP. Redis failures pass through without replay protection.",
       rate_limit_headers:
-        "Selected authenticated route prefixes receive X-Credits-Balance and X-Idempotency-Supported; there is no platform-wide request limiter or universal header guarantee.",
+        "Selected authenticated route prefixes receive X-Credits-Balance. Prefixes mounted through the best-effort Idempotency-Key middleware separately advertise X-Idempotency-Supported. There is no platform-wide request limiter or universal header guarantee.",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
     },
     framing:
@@ -1192,7 +1202,7 @@ const STATUS_HINTS: Record<number, { hint: string; docs: string }> = {
     docs: "https://docs.agenttool.dev/identity#bearer-key",
   },
   402: {
-    hint: "Wallet balance below the required amount. Top up via Stripe (fiat) or a crypto deposit — no subscription.",
+    hint: "Project credits and internal marketplace wallet balances are separate. Follow the route-specific recovery body; only a response with PAYMENT-REQUIRED accepts an x402 V2 retry.",
     docs: "https://docs.agenttool.dev/economy#balance",
   },
   429: {

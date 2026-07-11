@@ -17,11 +17,18 @@ Each tool is graded against three filters:
 | | |
 |---|---|
 | Library | `cheerio` (open-source) |
-| Availability | Disabled by default until DNS pinning and destination filtering exist. The explicit unsafe-outbound flag accepts, rather than fixes, the SSRF boundary. |
+| Availability | Available through the bounded public-Web transport; no unsafe flag or Redis worker is required. |
 | Use case | One-shot HTML grab, cheap (1 credit) |
 | Sovereign value | Medium — autonomous agent gets a fetch-and-parse without installing cheerio |
 | CLI redundancy | High when inside Claude Code (`WebFetch` covers it) |
-| Alignment | Keep mounted but fail closed until the network boundary is real. |
+| Alignment | ✓ Keep — static HTML/XHTML only, with transport and parser ceilings stated below. |
+
+`content` is normalized text from the parsed `<body>` after the documented DOM
+removals. `extracted` is normalized DOM text from the union of matching selector
+subtrees; a descendant match is not duplicated when an ancestor also matches. These
+are Cheerio DOM-text operations, not browser layout or rendering calculations.
+Extracted links are canonical absolute HTTP(S) URLs, deduplicated after parsing;
+relative, malformed, and non-HTTP(S) values are omitted.
 
 ### `POST /v1/browse` — remote Playwright session
 
@@ -39,11 +46,58 @@ Each tool is graded against three filters:
 | | |
 |---|---|
 | Library | `@mozilla/readability` + `linkedom` (open-source) |
-| Availability | Local base64 parsing is available. URL fetch is behind the explicit unsafe-outbound flag. |
+| Availability | Local base64 parsing and bounded public-Web URL fetch are available; neither needs Redis or the unsafe-outbound flag. |
 | Use case | Cleaner article text than raw scrape; metadata (byline, site name, excerpt) |
 | Sovereign value | Medium — Readability port is non-trivial; agents avoid the install |
 | CLI redundancy | Medium — most CLI WebFetch tools already strip HTML, less consistently |
 | Alignment | ✓ Keep — distinct from scrape (algorithmic extract vs raw body) |
+
+For local base64 input, omitted `content_type` defaults to `text/plain`. URL
+input instead requires and uses the bounded upstream response media type.
+
+#### Static fetch boundary
+
+Static scrape and URL-document fetch accept public `http:` and `https:` URLs.
+Every DNS answer must pass the conservative globally-reachable policy; the
+validated answers are pinned into the connection and the connected peer is
+checked against them. HTTPS verifies certificate identity for the requested
+DNS hostname or literal IP; SNI is sent only for DNS hostnames. Redirects are
+limited to five hops, and every
+hop repeats URL, DNS, connection, and connected-peer validation. One 15-second
+safe-net deadline includes process admission, DNS, redirects, and response
+transfer. The shared process gate admits at most 16 requests before DNS, holds
+the permit through all redirect hops, and queues at most 64 requests for one
+second. Full or expired admission maps to retryable `503` on the static routes.
+The same gate is shared by federation and custom-facilitator safe-net calls, so
+those features can contend. This bounds capacity (and at most 64 simultaneous
+connect candidates because each admitted request tries at most four at once);
+it is not per-project rate limiting or caller fairness.
+Responses must use identity content encoding and are capped at 1,000,000 bytes
+before text decoding or parser handoff. The transport refuses URL credentials
+and ambient authorization, cookie, and proxy-authorization headers.
+
+HTML DOM construction, Cheerio selection, and Readability execute in a fresh
+Bun subprocess, not on the API event loop. At most two parser children run at
+once; no more than 32 wait for a slot, and a waiter expires after two seconds.
+Each admitted child has a parent-enforced two-second wall timeout, bounded
+stdin/stdout, a stripped application environment, and an O(n) preflight capped
+at 20,000 tags, depth 256, and 65,536 characters for one tag source. The Linux
+production child additionally receives a 1 GiB address-space rlimit plus CPU,
+open-file, and stack rlimits and runs Bun's low-memory mode. macOS cannot apply the same
+address-space rlimit, and these process limits are not a container, cgroup,
+filesystem, or network namespace. The route therefore has separate transport,
+queue, parser, and database phases—not one whole-operation deadline.
+The repository's Fly configuration does not declare VM memory, and local macOS
+cannot validate the Linux address-space rlimit. Parser RSS, rlimit behavior,
+and VM headroom therefore still require staging validation before deployment.
+
+This is an SSRF and resource boundary, not a trust verdict. `http:` traffic is
+cleartext. AgentTool receives and parses the response bytes, so fetched text is
+server-readable, untrusted, and potentially prompt-injectable. The static paths
+do not execute page JavaScript or provide browser isolation. Parser complexity,
+timeout, overload, and child failures map to the existing deterministic
+`scrape_parse_failed` / `document_parse_failed` response family and retain the
+already-reserved attempt charge.
 
 ### `POST /v1/execute` — bounded host code
 
@@ -94,14 +148,24 @@ Same reasoning. agenttool is the substrate beneath the LLM, not a model proxy.
 
 ## Cost shape
 
-Disabled routes return before `charge()`. These prices apply only after the
-relevant operator gate and other dependencies allow work to start.
+Routes that are gated, dependency-blocked, or schema-invalid return before a
+debit. After schema validation, static scrape and document atomically reserve
+their fixed charge and create a failure-default usage row before network or
+parser work begins. Destination-policy refusals, transport failures,
+unsupported representations, and parser failures keep that debit and remain
+recorded as failed attempts. After a successful parse, the route must flip the
+same usage row to success and record its duration before returning success; a
+finalization failure returns 500 and leaves the billed attempt marked failed.
+The conditional debit prevents concurrent
+requests from spending the same credits, and an insufficient reservation
+returns 402 before outbound work. Browse and execute keep their separate
+operator/dependency gates before work starts.
 
 | Tool | Credits | What's billed |
 |---|---|---|
-| scrape | 1 | One HTTP fetch + parse — covers bandwidth + Cheerio compute |
+| scrape | 1 | One schema-admitted bounded static-fetch attempt |
 | browse | 5 | Playwright session — heavier (Chromium pool, remote queue) |
-| document | 3 | Readability extraction (CPU-noticeable) |
+| document | 3 | One schema-admitted local/URL extraction attempt |
 | execute | 2 / 10s | Compute time on our cluster |
 
 Reflects our infra cost, not a markup on a third-party SaaS.

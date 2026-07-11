@@ -2361,6 +2361,7 @@ app.get("/", async (c) => {
       canon: "/v1/canon",
       welcome: "/v1/welcome",
       pathways: "/v1/pathways",
+      payment_status: "/v1/x402/payments/{authorization_hash}",
     },
 
     _meta: {

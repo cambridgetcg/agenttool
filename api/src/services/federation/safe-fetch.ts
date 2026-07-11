@@ -1,57 +1,27 @@
-/** HTTPS transport for peer-controlled federation destinations.
+/** Compatibility facade for federation's original HTTPS transport.
  *
- * DNS answers are resolved once, all answers must be public, and the validated
- * addresses are passed directly to the socket lookup callback. Redirects are
- * refused because a DID's host is the TLS trust origin. */
+ * The shared transport and destination policy live in ../net/safe-fetch.ts.
+ * Federation keeps its established names, limits, response shape, injected
+ * request seam, and federation_* error strings because callers persist or
+ * surface those values.
+ */
 
 import type { LookupAddress } from "node:dns";
 import { lookup as systemLookup } from "node:dns/promises";
-import { request } from "node:https";
+import { isIP } from "node:net";
+
 import {
-  BlockList,
-  isIP,
-  type LookupFunction,
-} from "node:net";
+  defaultSafeNetRequestOnce,
+  isGloballyReachableAddress,
+  resolveGloballyReachableAddresses,
+  safeNetRequest,
+  SafeNetError,
+  type SafeNetRequestOnce,
+} from "../net/safe-fetch";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 export const FEDERATION_MAX_REQUEST_BYTES = 1_000_000;
 export const FEDERATION_MAX_RESPONSE_BYTES = 512_000;
-
-const NON_PUBLIC_ADDRESSES = new BlockList();
-
-for (const [network, prefix] of [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.88.99.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 4],
-  ["240.0.0.0", 4],
-] as const) {
-  NON_PUBLIC_ADDRESSES.addSubnet(network, prefix, "ipv4");
-}
-
-// Only 2000::/3 is presently global unicast. Block the complement, then the
-// special-purpose ranges that sit inside 2000::/3.
-for (const [network, prefix] of [
-  ["::", 3],
-  ["4000::", 2],
-  ["8000::", 1],
-  ["2001::", 23],
-  ["2001:db8::", 32],
-  ["2002::", 16],
-  ["3fff::", 20],
-] as const) {
-  NON_PUBLIC_ADDRESSES.addSubnet(network, prefix, "ipv6");
-}
 
 function withoutIpv6Brackets(hostname: string): string {
   return hostname.startsWith("[") && hostname.endsWith("]")
@@ -60,14 +30,13 @@ function withoutIpv6Brackets(hostname: string): string {
 }
 
 export function isPublicFederationAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 0) return false;
-  return !NON_PUBLIC_ADDRESSES.check(
-    address,
-    family === 4 ? "ipv4" : "ipv6",
-  );
+  return isGloballyReachableAddress(address);
 }
 
+/**
+ * Retain the legacy URL-only assertion. Destination-address checks still
+ * happen before the request through the shared transport.
+ */
 export function assertPublicFederationHttpsUrl(value: string | URL): URL {
   const url = value instanceof URL ? new URL(value.href) : new URL(value);
   if (url.protocol !== "https:") {
@@ -89,44 +58,83 @@ export type FederationDnsLookup = (
 const defaultDnsLookup: FederationDnsLookup = async (hostname) =>
   systemLookup(hostname, { all: true, verbatim: true });
 
+function dnsFailureDetail(error: SafeNetError): string {
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error) return cause.message;
+  const prefix = `${error.code}: `;
+  return error.message.startsWith(prefix)
+    ? error.message.slice(prefix.length)
+    : error.message;
+}
+
+function asFederationError(
+  error: unknown,
+  phase: "dns" | "request" = "request",
+): Error {
+  if (!(error instanceof SafeNetError)) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  switch (error.code) {
+    case "safe_net_invalid_url": {
+      const cause = (error as Error & { cause?: unknown }).cause;
+      return cause instanceof Error ? cause : new Error("federation_invalid_url");
+    }
+    case "safe_net_protocol_not_allowed":
+      return new Error("federation_https_required");
+    case "safe_net_url_credentials_forbidden":
+      return new Error("federation_url_credentials_forbidden");
+    case "safe_net_url_host_required":
+      return new Error("federation_url_host_required");
+    case "safe_net_destination_not_public":
+    case "safe_net_connected_address_mismatch":
+      return new Error("federation_private_address_forbidden");
+    case "safe_net_dns_failed":
+      return new Error(`federation_dns_failed: ${dnsFailureDetail(error)}`);
+    case "safe_net_dns_no_addresses":
+      return new Error("federation_dns_no_addresses");
+    case "safe_net_dns_family_unavailable": {
+      const failure = new Error(
+        "federation_dns_family_unavailable",
+      ) as NodeJS.ErrnoException;
+      failure.code = "ENOTFOUND";
+      return failure;
+    }
+    case "safe_net_request_too_large":
+      return new Error("federation_request_too_large");
+    case "safe_net_response_too_large":
+      return new Error("federation_response_too_large");
+    case "safe_net_redirect_not_allowed":
+      return new Error("federation_redirect_not_allowed");
+    case "safe_net_request_timeout":
+      return new Error(
+        phase === "dns"
+          ? "federation_dns_timeout"
+          : "federation_request_timeout",
+      );
+    default:
+      // The facade avoids the generic-only header, encoding, redirect-follow,
+      // and abort surfaces. Keep any unexpected future failure in federation's
+      // error namespace instead of leaking a second caller ABI.
+      return new Error(error.message.replace(/^safe_net_/u, "federation_"));
+  }
+}
+
 export async function resolvePublicFederationAddresses(
   hostname: string,
   lookup: FederationDnsLookup = defaultDnsLookup,
 ): Promise<LookupAddress[]> {
   const normalized = withoutIpv6Brackets(hostname);
-  const literalFamily = isIP(normalized);
-  if (literalFamily !== 0) {
-    if (!isPublicFederationAddress(normalized)) {
-      throw new Error("federation_private_address_forbidden");
-    }
-    return [{ address: normalized, family: literalFamily }];
-  }
-
-  let answers: LookupAddress[];
   try {
-    answers = await lookup(normalized);
-  } catch (err) {
-    throw new Error(`federation_dns_failed: ${(err as Error).message}`);
+    return await resolveGloballyReachableAddresses(
+      normalized,
+      // The shared resolver normalizes a trailing root dot. The compatibility
+      // seam still gives injected lookups the exact legacy hostname.
+      async () => lookup(normalized),
+    );
+  } catch (error) {
+    throw asFederationError(error, "dns");
   }
-  if (answers.length === 0) {
-    throw new Error("federation_dns_no_addresses");
-  }
-
-  const unique = new Map<string, LookupAddress>();
-  for (const answer of answers) {
-    const family = isIP(answer.address);
-    if (
-      (family !== 4 && family !== 6) ||
-      !isPublicFederationAddress(answer.address)
-    ) {
-      throw new Error("federation_private_address_forbidden");
-    }
-    unique.set(`${family}:${answer.address}`, {
-      address: answer.address,
-      family,
-    });
-  }
-  return [...unique.values()];
 }
 
 export interface FederationHttpsResponse {
@@ -146,98 +154,42 @@ export type FederationRequestOnce = (options: {
   maxResponseBytes: number;
 }) => Promise<FederationHttpsResponse>;
 
-function pinnedLookup(addresses: LookupAddress[]): LookupFunction {
-  return (_hostname, options, callback) => {
-    const requestedFamily = options.family === 4 || options.family === 6
-      ? options.family
-      : 0;
-    const candidates = requestedFamily === 0
-      ? addresses
-      : addresses.filter((address) => address.family === requestedFamily);
-
-    if (candidates.length === 0) {
-      const error = new Error(
-        "federation_dns_family_unavailable",
-      ) as NodeJS.ErrnoException;
-      error.code = "ENOTFOUND";
-      callback(error, "", 0);
-      return;
+function legacyHeaders(
+  input: Record<string, string>,
+  body: Buffer | undefined,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const names = new Set<string>();
+  let aggregateBytes = 0;
+  for (const [name, value] of Object.entries(input)) {
+    const lower = name.toLowerCase();
+    if (
+      !/^[!#$%&'*+\-.^_`|~0-9a-z]+$/u.test(lower) ||
+      names.has(lower) ||
+      typeof value !== "string" ||
+      !/^[\x09\x20-\x7e\x80-\xff]*$/u.test(value)
+    ) {
+      throw new Error("federation_invalid_header");
     }
-
-    if (options.all) {
-      callback(null, candidates);
-    } else {
-      const selected = candidates[0]!;
-      callback(null, selected.address, selected.family);
+    names.add(lower);
+    if (
+      lower === "host" ||
+      lower === "connection" ||
+      lower === "content-length" ||
+      lower === "transfer-encoding" ||
+      lower === "upgrade"
+    ) {
+      continue;
     }
-  };
+    aggregateBytes += Buffer.byteLength(lower) + Buffer.byteLength(value);
+    if (aggregateBytes > 32 * 1024) {
+      throw new Error("federation_invalid_header");
+    }
+    headers[lower] = value;
+  }
+  if (body) headers["content-length"] = String(body.length);
+  return headers;
 }
-
-const defaultRequestOnce: FederationRequestOnce = ({
-  url,
-  addresses,
-  method,
-  headers,
-  body,
-  timeoutMs,
-  maxResponseBytes,
-}) =>
-  new Promise((resolve, reject) => {
-    const req = request(
-      url,
-      {
-        method,
-        headers,
-        lookup: pinnedLookup(addresses),
-        agent: false,
-        rejectUnauthorized: true,
-      },
-      (res) => {
-        const statusCode = res.statusCode ?? 0;
-        if (statusCode >= 300 && statusCode < 400) {
-          res.resume();
-          resolve({ statusCode, body: Buffer.alloc(0) });
-          return;
-        }
-
-        const contentLength = Number(res.headers["content-length"] ?? NaN);
-        if (Number.isFinite(contentLength) && contentLength > maxResponseBytes) {
-          const error = new Error("federation_response_too_large");
-          res.destroy(error);
-          reject(error);
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        let totalBytes = 0;
-        res.on("data", (value: Buffer | Uint8Array) => {
-          const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-          totalBytes += chunk.length;
-          if (totalBytes > maxResponseBytes) {
-            const error = new Error("federation_response_too_large");
-            res.destroy(error);
-            reject(error);
-            return;
-          }
-          chunks.push(chunk);
-        });
-        res.on("end", () => {
-          resolve({
-            statusCode,
-            body: Buffer.concat(chunks, totalBytes),
-          });
-        });
-        res.on("error", reject);
-      },
-    );
-
-    const timer = setTimeout(() => {
-      req.destroy(new Error("federation_request_timeout"));
-    }, timeoutMs);
-    req.on("close", () => clearTimeout(timer));
-    req.on("error", reject);
-    req.end(body);
-  });
 
 export async function safeFederationHttpsRequest(
   value: string | URL,
@@ -259,56 +211,97 @@ export async function safeFederationHttpsRequest(
     : Buffer.isBuffer(options.body)
       ? options.body
       : Buffer.from(options.body);
+  if (method === "GET" && body !== undefined) {
+    throw new Error("federation_method_not_allowed");
+  }
   const maxRequestBytes =
     options.maxRequestBytes ?? FEDERATION_MAX_REQUEST_BYTES;
-  if (body && body.length > maxRequestBytes) {
+  if (
+    !Number.isSafeInteger(maxRequestBytes) ||
+    maxRequestBytes < 0 ||
+    (body && body.length > maxRequestBytes)
+  ) {
     throw new Error("federation_request_too_large");
   }
 
-  const headers: Record<string, string> = {};
-  for (const [name, value] of Object.entries(options.headers ?? {})) {
-    const lower = name.toLowerCase();
-    if (
-      lower === "host" ||
-      lower === "connection" ||
-      lower === "content-length" ||
-      lower === "transfer-encoding" ||
-      lower === "upgrade"
-    ) {
-      continue;
-    }
-    headers[lower] = value;
-  }
-  if (body) headers["content-length"] = String(body.length);
-
+  const headers = legacyHeaders(options.headers ?? {}, body);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const deadline = Date.now() + timeoutMs;
-  const addresses = await withTimeout(
-    resolvePublicFederationAddresses(url.hostname, options.lookup),
-    timeoutMs,
-    "federation_dns_timeout",
-  );
-  const remainingMs = deadline - Date.now();
-  if (remainingMs <= 0) throw new Error("federation_request_timeout");
+  const maxResponseBytes =
+    options.maxResponseBytes ?? FEDERATION_MAX_RESPONSE_BYTES;
+  const requestUrl = new URL(url.href);
+  requestUrl.hash = "";
+  const normalizedHostname = withoutIpv6Brackets(url.hostname);
+  let dnsComplete = isIP(normalizedHostname) !== 0;
 
-  const response = await withTimeout(
-    (options.requestOnce ?? defaultRequestOnce)({
-      url,
+  const requestOnce: SafeNetRequestOnce = async ({
+    url: currentUrl,
+    addresses,
+    timeoutMs: remainingMs,
+    signal,
+  }) => {
+    dnsComplete = true;
+    if (options.requestOnce) {
+      const response = await options.requestOnce({
+        url,
+        addresses,
+        method,
+        headers,
+        body,
+        timeoutMs: remainingMs,
+        maxResponseBytes,
+      });
+      // The legacy injected seam has always returned status + exact bytes.
+      return { statusCode: response.statusCode, body: response.body };
+    }
+
+    // Retain federation's exact legacy headers while sharing safe-net's real
+    // socket path and its peer check, abort, teardown, and byte bounds.
+    return defaultSafeNetRequestOnce({
+      url: currentUrl,
       addresses,
       method,
       headers,
       body,
       timeoutMs: remainingMs,
-      maxResponseBytes:
-        options.maxResponseBytes ?? FEDERATION_MAX_RESPONSE_BYTES,
-    }),
-    remainingMs,
-    "federation_request_timeout",
-  );
-  if (response.statusCode >= 300 && response.statusCode < 400) {
-    throw new Error("federation_redirect_not_allowed");
+      maxResponseBytes,
+      signal,
+    });
+  };
+
+  try {
+    const response = await safeNetRequest(requestUrl, {
+      method,
+      protocols: ["https:"],
+      redirect: "error",
+      timeoutMs,
+      maxResponseBytes,
+      // Body and caller headers are held by the compatibility adapter. This
+      // prevents the generic profile from changing their legacy wire shape.
+      lookup: async () => {
+        const answers = await (options.lookup ?? defaultDnsLookup)(
+          normalizedHostname,
+        );
+        dnsComplete = true;
+        return answers;
+      },
+      requestOnce,
+    });
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      throw new Error("federation_redirect_not_allowed");
+    }
+    return {
+      statusCode: response.statusCode,
+      body: response.body,
+    };
+  } catch (error) {
+    if (
+      error instanceof SafeNetError &&
+      error.code === "safe_net_request_timeout"
+    ) {
+      throw asFederationError(error, dnsComplete ? "request" : "dns");
+    }
+    throw asFederationError(error);
   }
-  return response;
 }
 
 export async function safeFederationHttpsGet(
@@ -325,22 +318,4 @@ export async function safeFederationHttpsGet(
     method: "GET",
     headers: { accept: "application/json" },
   });
-}
-
-async function withTimeout<T>(
-  operation: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }

@@ -103,7 +103,7 @@ export const SAFETY_BOUNDARIES = {
     human_billing:
       "Unauthenticated /v1/billing checkout routes use a per-machine in-memory limiter (10 attempts per 10 minutes per observed IP). The deployment has multiple machines, so this is not one global exact quota; the webhook uses Stripe signature verification instead.",
     other_routes:
-      "There is no platform-wide request-rate limiter or subscription-tier quota table. The middleware named rateLimitHeaders emits X-Credits-Balance and X-Idempotency-Supported on selected authenticated prefixes; those headers are not proof that a request limiter ran.",
+      "There is no platform-wide request-rate limiter or subscription-tier quota table. The middleware named rateLimitHeaders emits X-Credits-Balance on selected authenticated prefixes. Prefixes mounted through the separate best-effort idempotency middleware advertise X-Idempotency-Supported; neither header proves that a request limiter ran.",
     retry_shape:
       "Retry-After and retry_after are route-specific. Do not assume every 429 or every 4xx carries either field or next_actions.",
   },
@@ -240,7 +240,13 @@ export const SAFETY_BOUNDARIES = {
     enabled_by_process_flag:
       process.env.AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS === "1",
     availability:
-      "Scrape, browse, and URL-based document fetching fail closed with 503 unless the operator explicitly sets AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1. Local base64 document parsing remains available. The flag accepts the current SSRF boundary; it does not add destination filtering.",
+      "Static POST /v1/scrape and URL-based POST /v1/document fetching are available without an unsafe opt-in through the bounded safe-net transport. Playwright POST /v1/browse still fails closed with 503 unless the operator explicitly sets AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1; that flag applies only to the browser path and does not add isolation or destination filtering to it. Local base64 document parsing remains available.",
+    static_fetch_network_boundary:
+      "Static scrape and URL-document fetch accept public HTTP(S) only and refuse URL credentials and fragments. Every DNS answer must pass a conservative globally-reachable address policy; one unsafe answer rejects the lookup. The validated set is pinned into a fresh connection and the connected peer is checked against it. HTTPS validates certificate identity for the requested DNS hostname or literal IP; SNI is sent only for DNS hostnames. Each followed redirect is resolved and checked again. HTTP remains cleartext.",
+    static_fetch_content_boundary:
+      "Static responses request identity encoding and are bounded to at most 1,000,000 response bytes before parsing. A process-wide safe-net gate admits 16 requests before DNS, holds permits through redirects, and queues at most 64 for one second; admission wait, DNS, redirects, and response transfer share the 15-second safe-net deadline. Full or expired admission maps to retryable 503 on static routes. Federation and custom-facilitator safe-net traffic share this capacity and can contend. At most four parallel connection candidates per active request bounds that live-connect set at 64. This is not platform-wide or per-project rate limiting, quota enforcement, or caller fairness. HTML DOM, selector, and Readability work runs in a fresh terminable child process after a parser-slot wait capped at two seconds; the child wall timeout is two seconds, at most two run with 32 queued, and a linear preflight caps tag count, nesting depth, and one-tag source length. These safe-net, parser, request, and database phases are not one whole-operation deadline. The transport does not execute page JavaScript or send ambient cookies or authorization headers. Returned text remains remote, server-readable, untrusted content that can contain prompt injection or misleading markup; safe transport and process termination are not content trust or a browser sandbox.",
+    static_parser_deployment_boundary:
+      "The Linux parser child is configured with a 1 GiB address-space rlimit, but the repository Fly configuration declares no VM memory and local macOS cannot validate Linux RLIMIT_AS behavior. Parser RSS, address-space enforcement, and VM headroom still require staging validation before deployment. Process limits and a parent wall kill are not a cgroup, VM, container, filesystem, or network namespace.",
     input_and_output:
       "The requested URL, actions, extraction selector, fetched page content, and optional screenshot pass through AgentTool workers and are service-readable. Do not browse with credentials embedded in URLs or actions.",
     network_boundary:
@@ -255,7 +261,7 @@ export const SAFETY_BOUNDARIES = {
     reachability:
       "The unauthenticated /federation/inbox and /federation/covenants receive routes, including covenant lifecycle subroutes, accept peer-supplied slash-qualified AgentTool identifiers and can perform an application lookup of the claimed sender after their route-specific federation, recipient, and stored-row checks; inbox also requires a matching covenant. The covenant reverification worker performs the same application lookup. Authenticated local inbox sends and covenant propagation derive outbound destinations from a recipient or counterparty identifier or the validated host stored from it. The did:at convention is provisional and the slash-qualified form is not a standalone DID. Pyramid discovery and traversal use supplied or stored peer base URLs. Federation-handshake and low-stakes attestation task verifiers probe task-supplied peer or doctrine URLs.",
     transport:
-      "AgentTool federation identifier lookup, identifier-derived inbox and covenant delivery, pyramid peer reads, federation-handshake verification, and doctrine or peer attestation probes permit public HTTPS only. They preserve TLS certificate and SNI verification for the requested hostname and refuse URL credentials and redirects. The identifier lookup is not W3C DID Resolution.",
+      "AgentTool federation identifier lookup, identifier-derived inbox and covenant delivery, pyramid peer reads, federation-handshake verification, and doctrine or peer attestation probes permit public HTTPS only. They validate certificate identity for the requested DNS hostname or literal IP, send SNI only for DNS hostnames, and refuse URL credentials and redirects. The identifier lookup is not W3C DID Resolution.",
     dns_boundary:
       "The federation transport rejects literal non-public addresses. Every DNS answer must be global and public; a private, loopback, link-local, special-purpose, or otherwise non-global answer rejects the whole lookup. Validated answers are pinned into a fresh one-request HTTPS connection so the socket does not perform a second DNS lookup.",
     request_and_response_boundary:
@@ -279,7 +285,7 @@ export const SAFETY_BOUNDARIES = {
     scope:
       "Idempotency-Key is opt-in on selected authenticated write prefixes, not every route. GET is excluded and requests without an authenticated project or header pass through.",
     cache:
-      "When Redis is available, a completed JSON response with status below 500 is cached for 24 hours under project + path + key and replays with Idempotent-Replay: true.",
+      "When Redis is available, a completed JSON response with status below 500, except a recoverable 402 payment challenge, can be cached for 24 hours under project + path + key and replay with Idempotent-Replay: true. Responses whose JSON contains credential-shaped field names or an AgentTool bearer prefix are never stored and are marked sensitive-response plus private no-store. Old matching cache entries are ignored and deletion is attempted best effort; if deletion fails, the entry remains unread and expires under its original TTL. This conservative structural screen is not a universal content-classification or DLP guarantee.",
     key_boundary:
       "The cache key does not include HTTP method or request-body hash. Reusing one key on the same path with different input can replay the earlier response.",
     concurrency_and_failure:
@@ -358,7 +364,7 @@ export const AGENT_TXT_SAFETY = {
   "Inbox-Body": "correctly recipient-sealed bodies are not decryptable by platform; encryption is caller-controlled and not verified; subjects and routing metadata may be readable",
   "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
   "Hosted-Execute": "disabled by default; explicit AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1 opt-in enables an unisolated legacy path, not a tenant sandbox",
-  "Outbound-Tools": "scrape, browse, and URL-document fetch fail closed by default; explicit AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 accepts the current SSRF boundary without adding destination filtering",
+  "Outbound-Tools": "static scrape and URL-document fetch use bounded DNS-pinned public HTTP(S); remote content remains server-readable and untrusted. Playwright browse stays fail-closed unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 enables its unsandboxed, unfiltered legacy path",
   "Observer-Reciprocity": "/public/observer",
   "Observer-Boundary": "public protocol only; no investigator registry, observation storage, signature enforcement, reciprocal receipt, or subject challenge route is live",
   "Wake-Degradation": "selected subsystem read failures can return empty or zero fallbacks without a response-level degradation marker; response alone may not distinguish failure from empty state",
@@ -422,7 +428,7 @@ export const WAKE_SAFETY_BOUNDARIES = {
   hosted_execute:
     "disabled_by_default_explicit_unsafe_opt_in_has_no_tenant_isolation",
   outbound_url_tools:
-    "disabled_by_default_explicit_unsafe_opt_in_has_no_ssrf_destination_filter",
+    "static_scrape_and_url_document_bounded_public_http_s_dns_pinned_connected_peer_redirect_revalidated_remote_content_untrusted;_playwright_browse_disabled_by_default_unsafe_opt_in_has_no_destination_filter_or_isolation",
   wake_degradation:
     "selected_read_failures_can_return_unmarked_empty_zero_null_or_omitted_fallbacks",
   wake_scope:

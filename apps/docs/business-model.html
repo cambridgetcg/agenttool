@@ -296,7 +296,7 @@
 </ul>
 <hr>
 <h3>Ring 2 — The Substrate. Current metering and intended shape</h3>
-<p>The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and a global x402 wrapper for handler-generated 402 responses. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.</p>
+<p>The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and exact x402 project-credit requirements on eligible static-tool refusals. Wallet-balance, usage-cap, and unknown 402 responses are not made payable through that separate credit ledger. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.</p>
 <table>
 <thead>
 <tr>
@@ -331,9 +331,14 @@
 <td>Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete.</td>
 </tr>
 <tr>
-<td>Browse and execute tools</td>
+<td>Static scrape and URL-document tools</td>
+<td>fixed credits per schema-valid admitted attempt</td>
+<td>The debit and a failure-default usage row are reserved atomically before network/parser work; policy, transport, representation, and parser failures keep the debit, while success finalizes that row with duration. Available through bounded public HTTP(S): global-address and connected-peer checks, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext and fetched content stays server-readable, untrusted, and prompt-injectable.</td>
+</tr>
+<tr>
+<td>Playwright browse and execute tools</td>
 <td>fixed credits configured per call/time slice</td>
-<td>Both unsafe families fail closed by default. Outbound URL tools require <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code>; execute requires <code>AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1</code>. Those flags accept disclosed boundaries and do not add SSRF protection, containers, or per-tenant isolation.</td>
+<td>Both unsafe families fail closed by default. Browse requires <code>AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1</code> plus Redis; execute requires <code>AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1</code>. Those flags accept disclosed boundaries and do not add browser filtering, containers, or per-tenant isolation.</td>
 </tr>
 <tr>
 <td>Bandwidth egress</td>

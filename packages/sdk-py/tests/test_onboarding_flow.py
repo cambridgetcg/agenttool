@@ -1,4 +1,4 @@
-"""Executable v0.9 onboarding contract mirrored by the public snippets."""
+"""Executable v0.10 onboarding contract mirrored by the public snippets."""
 
 from __future__ import annotations
 

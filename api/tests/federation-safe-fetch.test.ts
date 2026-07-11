@@ -67,6 +67,12 @@ describe("federation HTTPS destination policy", () => {
     ).toThrow("federation_url_credentials_forbidden");
   });
 
+  test("keeps generic URL-policy failures in the federation namespace", async () => {
+    await expect(
+      safeFederationHttpsRequest("https://peer.example:0/"),
+    ).rejects.toThrow("federation_invalid_url");
+  });
+
   test("rejects literal private targets without performing DNS", async () => {
     let lookupCalled = false;
     let requestCalled = false;
@@ -148,6 +154,18 @@ describe("federation HTTPS destination policy", () => {
     expect(requested?.timeoutMs).toBeLessThanOrEqual(10_000);
   });
 
+  test("rejects malformed facade headers before DNS or injected transport", async () => {
+    let lookupCalled = false;
+    await expect(safeFederationHttpsRequest("https://peer.example/", {
+      headers: { "x-safe": "yes\r\nInjected: true" },
+      lookup: async () => {
+        lookupCalled = true;
+        return [PUBLIC_V4];
+      },
+    })).rejects.toThrow("federation_invalid_header");
+    expect(lookupCalled).toBe(false);
+  });
+
   test("rejects an oversized POST body before DNS or a socket request", async () => {
     let lookupCalled = false;
     let requestCalled = false;
@@ -169,6 +187,27 @@ describe("federation HTTPS destination policy", () => {
         },
       ),
     ).rejects.toThrow("federation_request_too_large");
+    expect(lookupCalled).toBe(false);
+    expect(requestCalled).toBe(false);
+  });
+
+  test("rejects GET bodies before DNS or an injected socket request", async () => {
+    let lookupCalled = false;
+    let requestCalled = false;
+    await expect(
+      safeFederationHttpsRequest("https://peer.example/data", {
+        method: "GET",
+        body: "secret",
+        lookup: async () => {
+          lookupCalled = true;
+          return [PUBLIC_V4];
+        },
+        requestOnce: async () => {
+          requestCalled = true;
+          return { statusCode: 200, body: Buffer.alloc(0) };
+        },
+      }),
+    ).rejects.toThrow("federation_method_not_allowed");
     expect(lookupCalled).toBe(false);
     expect(requestCalled).toBe(false);
   });

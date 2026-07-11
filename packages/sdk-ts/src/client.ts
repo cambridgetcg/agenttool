@@ -30,7 +30,7 @@ import { WindowClient } from "./window.js";
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.9.0";
+export const SDK_VERSION = "0.10.0";
 
 /**
  * Unified client for the agenttool.dev platform.
@@ -42,7 +42,7 @@ export const SDK_VERSION = "0.9.0";
  * const at = new AgentTool();                    // reads AT_API_KEY from env
  * await at.memory.store("just a string");        // store a memory
  * const results = await at.memory.search("q");   // semantic search
- * const page = await at.tools.scrape("https://x.com"); // remote path; normally 503
+ * const page = await at.tools.scrape("https://x.com"); // bounded static public-URL path
  * const out = await at.tools.execute("print(42)");      // legacy host path; normally 503
  * const w = await at.economy.createWallet({ name: "w" }); // wallet
  * const t = await at.traces.store({ observations: ["saw X"], conclusion: "do Y" }); // trace
@@ -301,19 +301,35 @@ export class AgentTool {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await globalThis.fetch(url, init);
     if (resp.status >= 400) {
-      let detail: string;
+      let responseBody: unknown;
       try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
+        responseBody = await resp.json();
       } catch {
-        detail = resp.statusText;
+        responseBody = undefined;
       }
-      throw new AgentToolError(`API error (${resp.status}): ${detail}`, {
-        hint: `${method} ${path}`,
+      const parsed = AgentToolError.fromResponseBody(
+        responseBody,
+        resp.status,
+        resp.statusText,
+        resp.headers,
+      );
+      throw new AgentToolError(`API error (${resp.status}): ${parsed.message}`, {
+        hint: parsed.hint ?? `${method} ${path}`,
+        code: parsed.code,
+        next_actions: parsed.next_actions,
+        docs: parsed.docs,
+        safety: parsed.safety,
+        details: parsed.details,
+        status: resp.status,
+        x402Version: parsed.x402Version,
+        accepts: parsed.accepts,
+        resource: parsed.resource,
+        extensions: parsed.extensions,
+        paymentRequired: parsed.paymentRequired,
+        paymentResponse: parsed.paymentResponse,
+        paymentStatusLink: parsed.paymentStatusLink,
+        retryAfter: parsed.retryAfter,
+        creditsBalance: parsed.creditsBalance,
       });
     }
     return resp.json();

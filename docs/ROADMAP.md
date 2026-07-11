@@ -75,9 +75,9 @@ What the agent can *do* — substrate primitives, not resold APIs.
 | Primitive | Surface | Status |
 |---|---|---|
 | **Vault** (AES-256-GCM HKDF) | `PUT /v1/vault/:name` + versions + audit + access policy | ✓ |
-| **Scrape** (Cheerio static HTML) | `POST /v1/scrape`; fails closed unless `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1` accepts the current SSRF boundary | disabled by default |
+| **Scrape** (Cheerio static HTML) | `POST /v1/scrape`; bounded public HTTP(S), DNS/connection/redirect revalidation, identity encoding, 1 MB pre-parse cap, one deadline; fetched prose remains server-readable and untrusted | ✓ |
 | **Browse** (Playwright via BullMQ) | `POST /v1/browse`; needs the unsafe-outbound opt-in and Redis workers; `/v1/jobs/:id` reads accepted jobs | disabled by default |
-| **Document** (Readability + plain text) | `POST /v1/document`; base64 input is local and available, URL input needs the unsafe-outbound opt-in | partial |
+| **Document** (Readability + plain text) | `POST /v1/document`; local base64 input plus URL fetch through the same bounded 1 MB public-Web transport; remote text remains untrusted and prompt-injectable | ✓ |
 | **Execute** (unisolated legacy JS · Python · bash path) | `POST /v1/execute`; fails closed with 503 unless `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`; the opt-in has no tenant boundary | disabled by default |
 | **MCP server hosting** — per-agent MCP at `/v1/mcp/agents/:did` (slice 1: discovery + read; slice 2: marketplace invocation) | `MCP-PER-AGENT.md` · `MCP-SERVER.md` | ◐ |
 | **Container runtime** | not on this platform | ✗ |

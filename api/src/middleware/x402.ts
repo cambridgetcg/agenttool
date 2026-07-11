@@ -1,283 +1,399 @@
-/** x402 — HTTP 402 Payment Required, internet-native agent payments.
+/** x402 V2 HTTP transport primitives.
  *
- *  Move 4 of docs/ALIGNMENT-MOVES.md. Coinbase x402 protocol donated to
- *  Linux Foundation 2026-04-02. 22 launch orgs. 69k+ active agents, 119M+
- *  transactions on Base, 35M+ on Solana, ~$50–600M cumulative annualized
- *  settled volume, zero protocol fees. Supports Base, Polygon, Arbitrum,
- *  World, Solana.
+ * The canonical wire is deliberately small:
+ *   - PAYMENT-REQUIRED: base64(JSON PaymentRequired)
+ *   - PAYMENT-SIGNATURE: base64(JSON PaymentPayload)
+ *   - PAYMENT-RESPONSE: base64(JSON SettleResponse)
  *
- *  Wire (per x402 spec):
- *
- *    1. Client requests a paid resource.
- *    2. Server returns `402 Payment Required` with body:
- *       {
- *         "x402Version": 1,
- *         "accepts": [PaymentRequirements, …],
- *         "error": "free-tier exhausted"
- *       }
- *       and `X-PAYMENT-REQUIRED` response header containing the same JSON.
- *    3. Client signs payment off-chain (or onchain), sends a follow-up
- *       request with `X-PAYMENT: <base64-encoded payment payload>`.
- *    4. Server verifies via facilitator (e.g. https://api.cdp.coinbase.com/v2/x402).
- *    5. On success: 200 OK + `X-PAYMENT-RESPONSE` header carrying
- *       settlement info (tx hash, etc.).
- *
- *  This module provides the *envelope*: build PaymentRequirements,
- *  wrap a Hono response in the x402 envelope, and parse the X-PAYMENT
- *  header on incoming requests. Actual facilitator verification is a
- *  follow-up — for now `verifyX402Payment` returns a parsed structure
- *  that the route handler can pass to a facilitator client.
- *
- *  Persist-identity discipline (docs/PATTERN-PERSIST-IDENTITY.md):
- *  when this lands in services/economy/usage.ts, the UserOp hash (or
- *  facilitator transaction id) MUST be persisted BEFORE the facilitator
- *  POST, flipped to 'applied' after — the canonical pre-flight-write
- *  pattern for crypto payments (stripe_events was the historical shape;
- *  removed 2026-05-17, but the persist-identity pattern survives).
- *
- *  Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
- *  docs/PATTERN-PERSIST-IDENTITY.md.
+ * PaymentRequired is mirrored in the 402 JSON body for SDK ergonomics, but
+ * the headers above are the protocol contract. Production verification and
+ * durable replay handling live in services/economy/x402-payments.ts.
  */
 
 import type { Context, MiddlewareHandler } from "hono";
+import { isAddress } from "viem";
 
-// ─── x402 protocol types ─────────────────────────────────────────────
+export const X402_VERSION = 2 as const;
 
+/** Production supports EIP-3009 only. Network identifiers are CAIP-2. */
 export type X402Network =
-  | "base"
-  | "base-sepolia"
-  | "polygon"
-  | "arbitrum"
-  | "world"
-  | "solana"
-  | "solana-devnet";
+  | "eip155:8453"
+  | "eip155:84532"
+  | "eip155:137"
+  | "eip155:42161";
 
-export type X402Scheme = "exact" | "upto" | "subscribe";
-
-/** A single payment requirement per x402 spec. Server publishes one or
- *  more in the 402 response; client picks one it can fulfill. */
-export interface PaymentRequirements {
-  /** Payment scheme — "exact" pays the named amount once; "upto" caps
-   *  spending; "subscribe" pays a recurring rate. v0 uses "exact". */
-  scheme: X402Scheme;
-  /** Blockchain network on which to settle. */
-  network: X402Network;
-  /** Atomic amount in the asset's smallest unit (e.g. USDC has 6 decimals
-   *  so $0.001 = "1000"). String to avoid precision loss. */
-  maxAmountRequired: string;
-  /** The resource being paid for (URL or URI). */
-  resource: string;
-  /** Human-readable description. */
-  description: string;
-  /** MIME type the resource will return on payment. */
-  mimeType: string;
-  /** Recipient wallet address (or DID-anchored alias). */
-  payTo: string;
-  /** Seconds the requirements remain valid for client follow-up. */
-  maxTimeoutSeconds: number;
-  /** EIP-55 / SPL token address. For USDC on Base: 0x833589... */
-  asset: string;
-  /** EIP-712 typed-data hint for the client signature (optional). */
-  extra?: Record<string, unknown>;
-  /** Facilitator URL the server will use to verify the client's
-   *  payment. Clients may use this directly for off-chain schemes. */
-  outputSchema?: Record<string, unknown>;
-}
-
-export interface X402Required {
-  x402Version: 1;
-  accepts: PaymentRequirements[];
-  error?: string;
-}
-
-export interface X402PaymentHeader {
-  x402Version: 1;
-  scheme: X402Scheme;
-  network: X402Network;
-  /** Base64-encoded signed payment payload — opaque to this layer;
-   *  facilitator verifies. */
-  payload: string;
-}
-
-// ─── Builders ────────────────────────────────────────────────────────
-
-/** USDC token addresses by network (Coinbase x402 spec). */
-const USDC_ASSETS: Record<X402Network, string> = {
-  base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  "base-sepolia": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  polygon: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-  arbitrum: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-  world: "0x79A02482A880bCE3F13e09Da970dC34db4CD24d1",
-  solana: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  "solana-devnet": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-};
-
-const COINBASE_FACILITATOR = "https://api.cdp.coinbase.com/v2/x402";
-
-export interface BuildRequirementsInput {
-  resource: string; // route URL or URI
-  amountAtomic: string; // e.g. "1000" = $0.001 USDC
-  payTo: string;
+export interface ResourceInfo {
+  url: string;
   description?: string;
-  network?: X402Network;
   mimeType?: string;
-  maxTimeoutSeconds?: number;
-  facilitator?: string;
+  serviceName?: string;
+  tags?: string[];
+  iconUrl?: string;
 }
 
-export function buildPaymentRequirements(
-  input: BuildRequirementsInput,
-): PaymentRequirements {
-  const network = input.network ?? "base";
-  return {
-    scheme: "exact",
-    network,
-    maxAmountRequired: input.amountAtomic,
-    resource: input.resource,
-    description:
-      input.description ?? "Payment required to access this agenttool resource.",
-    mimeType: input.mimeType ?? "application/json",
-    payTo: input.payTo,
-    maxTimeoutSeconds: input.maxTimeoutSeconds ?? 60,
-    asset: USDC_ASSETS[network],
-    extra: {
-      facilitator: input.facilitator ?? COINBASE_FACILITATOR,
-    },
+/** x402 V2 PaymentRequirements. */
+export interface PaymentRequirements {
+  scheme: "exact";
+  network: X402Network;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  extra: Record<string, unknown> & {
+    /** EIP-712 domain name for transferWithAuthorization. */
+    name: string;
+    /** EIP-712 domain version for transferWithAuthorization. */
+    version: string;
+    assetTransferMethod: "eip3009";
   };
 }
 
-export function buildX402Required(
-  accepts: PaymentRequirements[],
-  errorMessage?: string,
-): X402Required {
-  return {
-    x402Version: 1,
-    accepts,
-    error: errorMessage,
-  };
+/** x402 V2 PaymentRequired. */
+export interface PaymentRequired {
+  x402Version: typeof X402_VERSION;
+  error?: string;
+  resource: ResourceInfo;
+  accepts: PaymentRequirements[];
+  extensions?: Record<string, unknown>;
 }
 
-// ─── Inbound X-PAYMENT header parse ──────────────────────────────────
+/** x402 V2 PaymentPayload, carried by PAYMENT-SIGNATURE. */
+export interface PaymentPayload {
+  x402Version: typeof X402_VERSION;
+  resource?: ResourceInfo;
+  accepted: PaymentRequirements;
+  payload: Record<string, unknown>;
+  extensions?: Record<string, unknown>;
+}
 
-/** Parse the `X-PAYMENT` header on an incoming request. Returns the
- *  parsed envelope. Does NOT verify the payment — caller must POST to
- *  the facilitator's /verify endpoint to confirm before granting access.
- *
- *  Per persist-identity discipline: callers MUST persist the
- *  envelope.payload hash to a `x402_payments` row with status='pending'
- *  BEFORE the facilitator POST, then flip to 'verified' or 'failed'. */
-export function parseX402Header(headerValue: string): X402PaymentHeader | null {
+/** Compatibility type name used internally while the candidate migrates. */
+export type X402PaymentHeader = PaymentPayload;
+export type X402Required = PaymentRequired;
+
+export interface SettleResponse {
+  success: boolean;
+  errorReason?: string;
+  errorMessage?: string;
+  payer?: string;
+  transaction: string;
+  network: X402Network;
+  amount?: string;
+  extensions?: Record<string, unknown>;
+  extra?: Record<string, unknown>;
+}
+
+/** Encoded-size ceiling keeps parser calls bounded even outside an HTTP
+ * server with a conservative header limit. */
+export const MAX_X402_HEADER_B64_LENGTH = 32 * 1024;
+export const MAX_X402_PAYLOAD_B64_LENGTH = MAX_X402_HEADER_B64_LENGTH;
+
+const CANONICAL_BASE64 =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+const CAIP2_EVM = /^eip155:[1-9][0-9]*$/u;
+const CANONICAL_UINT = /^(?:0|[1-9][0-9]*)$/u;
+
+export function decodeCanonicalBase64(
+  value: string,
+  maxEncodedLength: number,
+): Buffer | null {
+  if (
+    value.length === 0 ||
+    value.length > maxEncodedLength ||
+    value.length % 4 !== 0 ||
+    !CANONICAL_BASE64.test(value)
+  ) {
+    return null;
+  }
+  const decoded = Buffer.from(value, "base64");
+  return decoded.length > 0 && decoded.toString("base64") === value
+    ? decoded
+    : null;
+}
+
+export function encodeCanonicalBase64Json(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf-8").toString("base64");
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function hasOnlyKeys(record: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = new Set(allowed);
+  return Object.keys(record).every((key) => keys.has(key));
+}
+
+function isBoundedJsonRecord(record: Record<string, unknown>): boolean {
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: record, depth: 0 }];
+  let nodes = 0;
+  while (queue.length > 0) {
+    const { value, depth } = queue.pop()!;
+    nodes += 1;
+    if (nodes > 256 || depth > 8) return false;
+    if (value === null || typeof value === "boolean") continue;
+    if (typeof value === "string") {
+      if (value.length > 4096) return false;
+      continue;
+    }
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) return false;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.length > 64) return false;
+      for (const item of value) queue.push({ value: item, depth: depth + 1 });
+      continue;
+    }
+    const nested = objectRecord(value);
+    if (!nested || Object.keys(nested).length > 64) return false;
+    for (const item of Object.values(nested)) {
+      queue.push({ value: item, depth: depth + 1 });
+    }
+  }
+  return true;
+}
+
+function parseResourceInfo(value: unknown): ResourceInfo | null {
+  const record = objectRecord(value);
+  if (!record || !hasOnlyKeys(record, [
+    "url", "description", "mimeType", "serviceName", "tags", "iconUrl",
+  ])) return null;
+  if (typeof record.url !== "string" || record.url.length === 0 || record.url.length > 2048) {
+    return null;
+  }
+  for (const key of ["description", "mimeType", "serviceName", "iconUrl"] as const) {
+    if (record[key] !== undefined && typeof record[key] !== "string") return null;
+  }
+  if (
+    record.tags !== undefined &&
+    (!Array.isArray(record.tags) || record.tags.some((tag) => typeof tag !== "string"))
+  ) return null;
+  return record as unknown as ResourceInfo;
+}
+
+export function parsePaymentRequirements(value: unknown): PaymentRequirements | null {
+  const record = objectRecord(value);
+  if (!record || !hasOnlyKeys(record, [
+    "scheme", "network", "asset", "amount", "payTo", "maxTimeoutSeconds", "extra",
+  ])) return null;
+  const extra = objectRecord(record.extra);
+  if (
+    record.scheme !== "exact" ||
+    typeof record.network !== "string" ||
+    !CAIP2_EVM.test(record.network) ||
+    typeof record.asset !== "string" ||
+    !isAddress(record.asset) ||
+    typeof record.amount !== "string" ||
+    !CANONICAL_UINT.test(record.amount) ||
+    typeof record.payTo !== "string" ||
+    !isAddress(record.payTo) ||
+    typeof record.maxTimeoutSeconds !== "number" ||
+    !Number.isSafeInteger(record.maxTimeoutSeconds) ||
+    record.maxTimeoutSeconds <= 0 ||
+    !extra || !isBoundedJsonRecord(extra) ||
+    typeof extra.name !== "string" ||
+    extra.name.length === 0 ||
+    typeof extra.version !== "string" ||
+    extra.version.length === 0
+  ) return null;
+  return record as unknown as PaymentRequirements;
+}
+
+/** Strictly parse a V2 PAYMENT-SIGNATURE header. Scheme-specific EIP-3009
+ * fields and equality with the server policy are checked by the verifier. */
+export function parseX402Header(headerValue: string): PaymentPayload | null {
   try {
-    // x402 spec: header value is base64-encoded JSON.
-    const decoded = Buffer.from(headerValue, "base64").toString("utf-8");
-    const parsed = JSON.parse(decoded) as X402PaymentHeader;
-    if (parsed.x402Version !== 1) return null;
-    if (!parsed.scheme || !parsed.network || !parsed.payload) return null;
-    return parsed;
+    const decoded = decodeCanonicalBase64(
+      headerValue,
+      MAX_X402_HEADER_B64_LENGTH,
+    );
+    if (!decoded) return null;
+    const parsed = objectRecord(JSON.parse(decoded.toString("utf-8")) as unknown);
+    if (!parsed || !hasOnlyKeys(parsed, [
+      "x402Version", "resource", "accepted", "payload", "extensions",
+    ])) return null;
+    if (parsed.x402Version !== X402_VERSION) return null;
+    const accepted = parsePaymentRequirements(parsed.accepted);
+    const payload = objectRecord(parsed.payload);
+    if (!accepted || !payload) return null;
+    const resource = parsed.resource === undefined || parsed.resource === null
+      ? undefined
+      : parseResourceInfo(parsed.resource);
+    if (parsed.resource !== undefined && parsed.resource !== null && !resource) return null;
+    const extensions = parsed.extensions === undefined || parsed.extensions === null
+      ? undefined
+      : objectRecord(parsed.extensions);
+    if (
+      parsed.extensions !== undefined && parsed.extensions !== null &&
+      (!extensions || !isBoundedJsonRecord(extensions))
+    ) return null;
+    return {
+      x402Version: X402_VERSION,
+      ...(resource ? { resource } : {}),
+      accepted,
+      payload,
+      ...(extensions ? { extensions } : {}),
+    };
   } catch {
     return null;
   }
 }
 
-// ─── Hono middleware factory ─────────────────────────────────────────
+interface AssetDefinition {
+  asset: string;
+  name: string;
+  version: string;
+}
+
+/** Values pinned to x402-foundation/x402 commit
+ * 0a604079aca7b5a45a2e1620ba444e13982646c8. */
+const USDC_ASSETS: Record<X402Network, AssetDefinition> = {
+  "eip155:8453": {
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    name: "USD Coin",
+    version: "2",
+  },
+  "eip155:84532": {
+    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    name: "USDC",
+    version: "2",
+  },
+  "eip155:137": {
+    asset: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    name: "USD Coin",
+    version: "2",
+  },
+  "eip155:42161": {
+    asset: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    name: "USD Coin",
+    version: "2",
+  },
+};
+
+export interface BuildRequirementsInput {
+  amountAtomic: string;
+  payTo: string;
+  network?: X402Network;
+  maxTimeoutSeconds?: number;
+}
+
+export function buildPaymentRequirements(
+  input: BuildRequirementsInput,
+): PaymentRequirements {
+  const network = input.network ?? "eip155:8453";
+  const token = USDC_ASSETS[network];
+  return {
+    scheme: "exact",
+    network,
+    asset: token.asset,
+    amount: input.amountAtomic,
+    payTo: input.payTo,
+    maxTimeoutSeconds: input.maxTimeoutSeconds ?? 60,
+    extra: {
+      name: token.name,
+      version: token.version,
+      assetTransferMethod: "eip3009",
+    },
+  };
+}
+
+export function buildPaymentRequired(
+  resource: ResourceInfo,
+  accepts: PaymentRequirements[],
+  error?: string,
+): PaymentRequired {
+  return {
+    x402Version: X402_VERSION,
+    ...(error ? { error } : {}),
+    resource,
+    accepts,
+  };
+}
+
+export const encodePaymentRequiredHeader = encodeCanonicalBase64Json;
+export const encodePaymentResponseHeader = encodeCanonicalBase64Json;
 
 export interface X402MiddlewareOptions {
-  /** Required: how to build the payment requirements for a route that
-   *  returned 402. Called only when the inner handler returns 402 OR
-   *  when no `X-PAYMENT` header is present on a paid route. */
-  buildRequirements(c: Context): PaymentRequirements[] | Promise<PaymentRequirements[]>;
-  /** Optional: how to verify a client's X-PAYMENT header. v0 default
-   *  is "parse-only" (returns true if the envelope decodes). Real
-   *  deployments swap in a facilitator client. */
+  /** Return null when the downstream 402 is not payable by this mechanism. */
+  buildPaymentRequired(c: Context): PaymentRequired | null | Promise<PaymentRequired | null>;
   verifyPayment?(
     c: Context,
-    header: X402PaymentHeader,
+    payment: PaymentPayload,
   ): boolean | Promise<boolean>;
-  /** When the inner handler returns a non-402 response and the client
-   *  paid, write the settlement info to `X-PAYMENT-RESPONSE` header. */
+  /** Return an already encoded, proven durable settlement receipt. */
   buildSettlementHeader?(c: Context): string | undefined;
 }
 
-/** Hono middleware that:
- *    - Detects X-PAYMENT on incoming requests; verifies (or stores for
- *      verification); attaches parsed payment to `c.set("x402Payment", …)`
- *    - On a 402 response from the inner handler, wraps the response
- *      body in the x402 envelope and emits the `X-PAYMENT-REQUIRED` header
- *    - On a successful response that follows a payment, emits the
- *      `X-PAYMENT-RESPONSE` header carrying settlement info
- */
+type X402ContextState = Context & {
+  _x402Payment?: PaymentPayload;
+  _x402SuppressChallenge?: boolean;
+  _x402StatusPath?: string;
+};
+
+/** Marks a request as unsafe to rechallenge (e.g. an in-flight or ambiguous
+ * authorization). This never grants access. */
+export function suppressX402Challenge(c: Context, statusPath?: string): void {
+  const state = c as X402ContextState;
+  state._x402SuppressChallenge = true;
+  if (statusPath) state._x402StatusPath = statusPath;
+}
+
+export function setX402StatusPath(c: Context, statusPath: string): void {
+  (c as X402ContextState)._x402StatusPath = statusPath;
+}
+
 export function x402Middleware(opts: X402MiddlewareOptions): MiddlewareHandler {
   return async (c, next) => {
-    // ── 1. Inbound: parse X-PAYMENT if present ───────────────────────
-    const headerValue = c.req.header("x-payment");
-    if (headerValue) {
-      const parsed = parseX402Header(headerValue);
-      if (parsed) {
-        const verify = opts.verifyPayment ?? (() => true);
-        const ok = await verify(c, parsed);
-        if (ok) {
-          // Make the parsed payment available to the inner handler.
-          (c as Context & { _x402Payment?: X402PaymentHeader })._x402Payment = parsed;
+    const signature = c.req.header("payment-signature");
+    if (signature) {
+      const parsed = parseX402Header(signature);
+      if (parsed && opts.verifyPayment) {
+        try {
+          if (await opts.verifyPayment(c, parsed)) {
+            (c as X402ContextState)._x402Payment = parsed;
+          }
+        } catch {
+          // A verifier boundary failure never takes the resource route down.
+          // Production verifier owns post-claim ambiguity suppression.
         }
       }
     }
 
     await next();
 
-    // ── 2. Outbound: wrap 402 responses with x402 envelope ────────────
-    if (c.res.status === 402) {
-      const accepts = await opts.buildRequirements(c);
-      const errorBody = await safeReadJson(c);
-      const envelope = buildX402Required(
-        accepts,
-        typeof errorBody?.error === "string" ? errorBody.error : undefined,
-      );
-      const headers = new Headers(c.res.headers);
-      headers.set("content-type", "application/json; charset=utf-8");
-      headers.set("x-payment-required", JSON.stringify(envelope));
-      c.res = new Response(JSON.stringify(envelope), {
-        status: 402,
-        headers,
-      });
+    const state = c as X402ContextState;
+    const settlement = opts.buildSettlementHeader?.(c);
+    if (settlement) {
+      c.res.headers.set("PAYMENT-RESPONSE", settlement);
+      c.res.headers.set("Cache-Control", "private, no-store");
+    }
+    if (state._x402StatusPath) {
+      c.res.headers.append("Link", `<${state._x402StatusPath}>; rel=\"payment-status\"`);
+      c.res.headers.set("Cache-Control", "private, no-store");
+    }
+
+    if (c.res.status !== 402) return;
+    if (state._x402SuppressChallenge) {
+      c.res.headers.delete("PAYMENT-REQUIRED");
+      c.res.headers.set("Cache-Control", "private, no-store");
       return;
     }
 
-    // ── 3. Settlement: emit X-PAYMENT-RESPONSE on 2xx after payment ──
-    if (
-      c.res.status >= 200 &&
-      c.res.status < 300 &&
-      (c as Context & { _x402Payment?: X402PaymentHeader })._x402Payment &&
-      opts.buildSettlementHeader
-    ) {
-      const settlement = opts.buildSettlementHeader(c);
-      if (settlement) {
-        const headers = new Headers(c.res.headers);
-        headers.set("x-payment-response", settlement);
-        // Need to clone the response to add headers
-        const body = await c.res.clone().arrayBuffer();
-        c.res = new Response(body, {
-          status: c.res.status,
-          headers,
-        });
-      }
-    }
+    const paymentRequired = await opts.buildPaymentRequired(c);
+    if (!paymentRequired) return;
+    const headers = new Headers(c.res.headers);
+    headers.set("content-type", "application/json; charset=utf-8");
+    headers.set("Cache-Control", "private, no-store");
+    headers.set("PAYMENT-REQUIRED", encodePaymentRequiredHeader(paymentRequired));
+    c.res = new Response(JSON.stringify(paymentRequired), {
+      status: 402,
+      headers,
+    });
   };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-async function safeReadJson(c: Context): Promise<Record<string, unknown> | null> {
-  try {
-    const cloned = c.res.clone();
-    if (!cloned.headers.get("content-type")?.includes("json")) return null;
-    return (await cloned.json()) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-/** Helper for routes that want to gate behind x402: returns the parsed
- *  payment if the request carried one + the middleware verified it. */
-export function getX402Payment(c: Context): X402PaymentHeader | undefined {
-  return (c as Context & { _x402Payment?: X402PaymentHeader })._x402Payment;
+export function getX402Payment(c: Context): PaymentPayload | undefined {
+  return (c as X402ContextState)._x402Payment;
 }

@@ -1,5 +1,5 @@
 /**
- * Executable v0.9 onboarding contract.
+ * Executable v0.10 onboarding contract.
  *
  * Public snippets mirror this sequence: derive caller-held keys, bootstrap
  * once, construct AgentTool from the one-time bearer, then read wake.get().
@@ -21,7 +21,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test("the documented birth-to-wake flow executes against the v0.9 surface", async () => {
+test("the documented birth-to-wake flow executes against the v0.10 surface", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);

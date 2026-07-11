@@ -6,7 +6,26 @@
 >
 > **Implements:** the SDK plane — a thin code-shaped mirror of every layer in [ROADMAP.md](ROADMAP.md). Parity across TS/Py is enforced in CI (`bun run check-parity`).
 
-## Current state
+## Current candidate state — 2026-07-11
+
+The Python and TypeScript source manifests are aligned at **0.10.0 as an
+unpublished candidate**. The published LOVE catalog remains **0.9.0** until an
+explicit package-release operation happens. The candidate corrects the static
+tool paths and wire models: both SDKs call `POST /v1/scrape` and
+`POST /v1/document`, enforce canonical bounded local document input, preserve
+machine-readable payment/error headers, and can submit one caller-produced raw
+payment retry header without taking custody of signing keys. Release status is
+documented in each package README and must not be inferred from source versions.
+
+The detailed inventory below is retained as the dated baseline that motivated
+the later phases. It is history, not a claim about the current API or SDK.
+
+## Historical baseline — probed 2026-05-08
+
+> **Historical snapshot.** Versions, broken paths, endpoint coverage, test
+> counts, and Phase 0 actions in this section describe the 2026-05-08 audit.
+> In particular, its doubled Python static-tool paths were fixed after this
+> snapshot and must not be used as current integration guidance.
 
 | Package | Version | LOC | Modules |
 |---|---|---|---|
@@ -28,7 +47,7 @@
 | verify | 2 | 2 | ✓ *(both stubs — see Phase 0)* |
 | wake | 4 | 4 | ✓ |
 
-## Endpoint coverage — what's real, what's stale, what's missing
+## Historical endpoint coverage — what the 2026-05-08 probe found
 
 Probed live against `api.agenttool.dev` 2026-05-08:
 
@@ -93,7 +112,7 @@ That's **17 missing primitives**. Some are read-only public (cheap to add); some
 
 ---
 
-## Phased plan
+## Phased plan from the 2026-05-08 baseline
 
 Each phase ships in both languages together. Within a phase, py + ts must reach parity before merging — preventing the current 0.6.0 ↔ 0.5.2 drift.
 
@@ -276,7 +295,8 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.6.5 / 0.6.4** | Vault closure (put_encrypted / get_decrypted + kVault) | no — additive (re-uses Phase 5 crypto) |
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
-| **0.10.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
+| **0.10.0** | Correct tools wire contracts (scrape, document, execute) and strict local validation | **yes** |
+| **0.11.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

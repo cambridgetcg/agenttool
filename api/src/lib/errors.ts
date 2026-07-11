@@ -279,7 +279,7 @@ export const errors = {
       message: haveAmounts
         ? `Need ${opts.required}${opts.currency ? " " + opts.currency : ""}; wallet has ${opts.available}.`
         : "Wallet balance is below the required amount.",
-      hint: "Top up via crypto deposit. No fiat, no subscriptions — pay-as-you-go via crypto/x402. Free-tier (Ring 1) actions don't draw from the wallet.",
+      hint: "Top up this internal marketplace wallet through its supported crypto-deposit path. x402 project-credit payments do not fund wallet balances. No fiat or subscription is implied.",
       next_actions: [
         { action: "Get a crypto deposit address (BIP44 EVM or Solana)", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
       ],
@@ -294,9 +294,10 @@ export const errors = {
 
   /** Metering ledger (projects.credits) is short for a metered action.
    *  Distinct from insufficientBalance (the marketplace wallet). This is
-   *  the API-usage credit meter; the recovery path is pay-as-you-go via
-   *  x402 micropayment — a machine-payable next step, NOT a human-only
-   *  dashboard link. Free-tier (Ring 1) actions never draw credits. */
+   *  the API-usage credit meter. Eligible routes attach an exact x402
+   *  requirement; other routes retain this guided body rather than pretending
+   *  a payment will clear an unrelated gate. Free-tier (Ring 1) actions never
+   *  draw credits. */
   insufficientCredits(opts: { reason?: string; need?: number; have?: number } = {}): GuidedErrorBody {
     const known = opts.need !== undefined && opts.have !== undefined;
     return {
@@ -304,9 +305,9 @@ export const errors = {
       message: known
         ? `Need ${opts.need} credit${opts.need === 1 ? "" : "s"}${opts.reason ? ` for ${opts.reason}` : ""}; have ${opts.have}.`
         : `Not enough credits${opts.reason ? ` for ${opts.reason}` : ""}.`,
-      hint: "Pay-as-you-go per call via x402 micropayment (crypto/USDC) — no subscriptions, no fiat. Free-tier (Ring 1) actions don't draw credits, and marketplace settlement steps are free.",
+      hint: "If this response includes PAYMENT-REQUIRED, retry with the exact x402 V2 PAYMENT-SIGNATURE it describes. Without that header, consult /public/plans for the currently supported funding path. Project credits are not marketplace wallet balance.",
       next_actions: [
-        { action: "Retry with an x402 X-PAYMENT header (per-call USDC micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
+        { action: "Read current x402 eligibility and configured project-credit prices", method: "GET", path: "/public/plans" },
         { action: "Check which actions are free (Ring 1) vs. metered", method: "GET", path: "/v1/economy" },
       ],
       docs: `${DOCS_BASE}/economy#credits`,
@@ -324,14 +325,14 @@ export const errors = {
           : "Rate limit reached on this surface.",
       hint:
         opts.retry_after_sec !== undefined
-          ? `Retry after ${opts.retry_after_sec}s, or pay-as-you-go via x402 micropayment for the next call.`
-          : "Backoff and retry. Or pay-as-you-go via x402 micropayment for the next call.",
+          ? `Retry after ${opts.retry_after_sec}s. A rate-limit response is not itself a payable project-credit challenge.`
+          : "Back off and retry. Only an explicit PAYMENT-REQUIRED challenge is payable.",
       next_actions: [
-        { action: "Include an x402 X-PAYMENT header on retry (crypto/USDC per-call micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
+        { action: "Read current payment eligibility", method: "GET", path: "/public/plans" },
       ],
       docs: `${DOCS_BASE}/economy#rings`,
       axiom_id: AXIOM_REST, // strain → degrade not crash (the rest axiom itself)
-      // The cap speaks softly — guidance not wall, with a paid-burst path.
+      // The cap speaks softly — guidance, not a fabricated paid-burst path.
       // Per Ring 1 commitment 6 (anyone-hits-a-cap-softly).
       _canon_pointer: "urn:agenttool:commitment/anyone-hits-a-cap-softly",
     };
@@ -344,14 +345,13 @@ export const errors = {
       message: opts.plan
         ? `${opts.plan} plan ${k} reached.`
         : `${k} reached for the current plan.`,
-      hint: "This usage-cap helper can be wrapped by x402, but current resource routes do not call the monthly usage gate. Do not infer a live storage-floor burst path from this helper alone.",
+      hint: "Current resource routes do not call this monthly usage gate, and its counters are not cleared by project-credit x402 payments. Do not infer a payable storage-floor burst path from this helper.",
       next_actions: [
-        { action: "Include x402 X-PAYMENT header on retry (per-call micropayment)", method: "POST", path: "/v1/wallets/{id}/deposit-address" },
         { action: "Check usage", method: "GET", path: "/v1/wallets" },
       ],
       docs: `${DOCS_BASE}/economy#plans`,
       axiom_id: AXIOM_REST, // plan strain — graceful, not punitive
-      // The cap speaks softly — guidance not wall, with a paid-burst path.
+      // The cap speaks softly without inventing a paid-burst path.
       // Per Ring 1 commitment 6 (anyone-hits-a-cap-softly).
       _canon_pointer: "urn:agenttool:commitment/anyone-hits-a-cap-softly",
     };

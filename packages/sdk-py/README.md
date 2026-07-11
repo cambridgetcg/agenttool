@@ -14,6 +14,21 @@
 pip install agenttool-sdk
 ```
 
+## Preparing for 0.10.0
+
+This checkout is the 0.10.0 release candidate; publishing to PyPI is a separate
+release action. `pip install agenttool-sdk` continues to install the latest
+version actually present in the configured index.
+
+This release corrects three tool contracts. `ScrapeResult.status_code` is gone;
+the result now exposes the API's `title`, `content`, `extracted`, `links`,
+`fetched_at`, and `duration_ms` fields. `parse_document` now requires exactly
+one source and rejects non-canonical base64 or decoded input above 1,000,000
+bytes before sending a request. `ExecuteResult` now mirrors the live
+`stdout`/`stderr`/duration/timeout/credit response; `output` and `error` remain
+read-only aliases. Update callers that relied on the former loose shape or
+validation.
+
 ## Why this exists
 
 Many web interfaces assume a human browser. AgentTool instead publishes
@@ -127,15 +142,86 @@ results = at.verify.batch([
 ### Tools — the right tool at the right time
 
 ```python
-# Web search
-results = at.tools.search("latest papers on RAG", num_results=5)
-
-# Scrape a page (API operator must explicitly enable the current outbound boundary)
+# Static scrape through the bounded public HTTP(S) fetch path
 page = at.tools.scrape("https://example.com")
+
+# URL document parsing uses the same static transport
+document = at.tools.parse_document(url="https://example.com")
 
 # Legacy host execute (disabled by default; not a tenant sandbox)
 result = at.tools.execute("import math; print(math.pi)", language="python")
 ```
+
+Static scrape and URL-based document parsing resolve only public addresses,
+pin validated DNS answers to the connection, verify the connected peer, and
+revalidate every redirect hop. Responses are capped at 1 MB before parsing.
+HTTPS verifies the remote certificate; HTTP is cleartext. The service reads
+the fetched bytes, and remote content must be treated as untrusted. Full
+Playwright browse is a separate unsafe-flag/Redis path whose browser traffic
+remains unfiltered and unsandboxed; the bounded static path does not harden it.
+
+An eligible insufficient-credit refusal preserves the exact x402 contract on
+`AgentToolError` instead of flattening it into prose:
+
+```python
+from agenttool import AgentToolError
+
+
+def scrape_with_payment(url, sign_payment_externally):
+    try:
+        return at.tools.scrape(url)
+    except AgentToolError as error:
+        print(
+            error.payment_response,
+            error.payment_status_link,
+            error.retry_after,
+            error.credits_balance,
+        )
+        if (
+            error.code != 402
+            or error.x402_version is None
+            or not error.x402_resource
+            or not error.accepts
+            or not error.payment_required
+        ):
+            raise
+
+        payment_signature = sign_payment_externally({
+            "x402Version": error.x402_version,
+            "resource": error.x402_resource,
+            "accepts": error.accepts,
+            "paymentRequired": error.payment_required,
+        })
+        return at.tools.scrape(
+            url,
+            payment_signature=payment_signature,
+        )  # PAYMENT-SIGNATURE header only; never JSON
+
+# The callback supplies an already signed V2 PAYMENT-SIGNATURE as base64 JSON.
+# The SDK treats it as opaque: it never holds keys, signs, or takes custody.
+result = scrape_with_payment("https://example.com", sign_payment_externally)
+print(
+    result.payment_response,
+    result.payment_status_link,
+    result.credits_balance,
+)
+```
+
+Only sign the exact requirement returned by the response. A 402 with no
+`accepts` / `PAYMENT-REQUIRED` is not payable through this project-credit
+rail; marketplace-wallet balances are separate. `x402Resource` is the
+camelCase alias for `x402_resource`; `NotFoundError.resource` remains the
+name of the missing resource and is unrelated to x402 metadata.
+
+`parse_document(..., payment_signature=payment_signature)` accepts the same
+caller-supplied V2 header. The SDK does not sign or retry automatically.
+Settlement metadata is preserved from `PAYMENT-RESPONSE` when present;
+`payment_status_link` preserves the raw project-scoped reconciliation `Link`
+header for ambiguous or duplicate states. When payment admission fails closed
+without a new challenge, `retry_after` preserves the raw `Retry-After` value;
+the SDK still does not retry automatically. The old X-prefixed response header
+spellings are accepted only as a transition fallback; the SDK never sends a
+legacy payment request header.
 
 ### Traces — because the 'why' matters
 

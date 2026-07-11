@@ -187,6 +187,7 @@ class DataClient:
                 fallback=(
                     f"Agent data node request failed ({response.status_code})."
                 ),
+                headers=response.headers,
             )
 
         if response.status_code == 204:

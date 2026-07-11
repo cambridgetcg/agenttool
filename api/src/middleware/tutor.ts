@@ -221,6 +221,15 @@ export async function tutor(c: Context, next: Next): Promise<void> {
 
   if (!isTutorRequested(c)) return;
   if (c.req.method !== "GET") return;
+  const requestPath = new URL(c.req.url).pathname;
+  // OpenAPI root objects accept only fixed fields plus x-* extensions. Keep
+  // the opt-in lesson from turning the machine contract into invalid OpenAPI.
+  if (
+    requestPath === "/v1/openapi.json" ||
+    requestPath === "/v1/openapi.json/"
+  ) {
+    return;
+  }
   if (c.res.status < 200 || c.res.status >= 300) return;
 
   const contentType = c.res.headers.get("content-type") ?? "";
@@ -243,8 +252,7 @@ export async function tutor(c: Context, next: Next): Promise<void> {
   }
 
   // Resolve the lesson for this path.
-  const url = new URL(c.req.url);
-  const lesson = lessonFor(url.pathname);
+  const lesson = lessonFor(requestPath);
 
   // Decorate. Don't overwrite an existing _lesson if the handler set one.
   const decorated = body as Record<string, unknown>;

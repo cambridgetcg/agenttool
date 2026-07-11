@@ -359,10 +359,13 @@ describe("tools.parse_document", () => {
     });
     const at = makeClient();
     const b64 = Buffer.from("hello").toString("base64");
-    await at.tools.parse_document({ base64: b64, content_type: "text/plain" });
+    await at.tools.parse_document({
+      base64: b64,
+      content_type: "text/plain; charset=utf-8",
+    });
     const b = bodyOf(getLastCall().init);
     expect(b.base64).toBe(b64);
-    expect(b.content_type).toBe("text/plain");
+    expect(b.content_type).toBe("text/plain; charset=utf-8");
   });
 
   test("throws AgentToolError when neither url nor base64 supplied", async () => {
@@ -384,5 +387,70 @@ describe("tools.parse_document", () => {
     await expect(
       at.tools.parse_document({ base64: "A".repeat(1_400_001) }),
     ).rejects.toThrow("1,400,000 character limit");
+    for (const base64 of [
+      "",
+      "%%%",
+      "SGV sbG8=",
+      "SGVsbG8",
+      "SGVsbG8=garbage",
+      "AB==",
+      "AAB=",
+    ]) {
+      await expect(
+        at.tools.parse_document({ base64 }),
+      ).rejects.toThrow("canonical padded RFC 4648");
+    }
+    await expect(
+      at.tools.parse_document({
+        base64: Buffer.alloc(1_000_001).toString("base64"),
+      }),
+    ).rejects.toThrow("1,000,000 byte limit");
+    await expect(
+      at.tools.parse_document({
+        url: "https://example.com",
+        base64: "",
+      }),
+    ).rejects.toThrow("requires exactly one");
+    await expect(
+      at.tools.parse_document({
+        url: "https://example.com",
+        content_type: "text/html",
+      }),
+    ).rejects.toThrow("content_type is only valid with base64 input");
+  });
+
+  test("preserves structured safe-fetch guidance", async () => {
+    setupMock(400, {
+      error: "safe_net_destination_not_public",
+      message: "The destination was rejected by the public-Web network policy.",
+      safety: "/public/safety",
+      docs: "https://docs.agenttool.dev/tools",
+      details: {
+        formErrors: [],
+        fieldErrors: { url: ["Destination is not public"] },
+      },
+    });
+    const at = makeClient();
+    try {
+      await at.tools.scrape("https://private.example");
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      expect((error as AgentToolError).status).toBe(400);
+      expect((error as AgentToolError).code).toBe(
+        "safe_net_destination_not_public",
+      );
+      expect((error as AgentToolError).message).toContain(
+        "rejected by the public-Web network policy",
+      );
+      expect((error as AgentToolError).safety).toBe("/public/safety");
+      expect((error as AgentToolError).docs).toBe(
+        "https://docs.agenttool.dev/tools",
+      );
+      expect((error as AgentToolError).details).toEqual({
+        formErrors: [],
+        fieldErrors: { url: ["Destination is not public"] },
+      });
+    }
   });
 });

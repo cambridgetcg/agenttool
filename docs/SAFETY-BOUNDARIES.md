@@ -124,8 +124,10 @@ therefore does not have one exact global checkout quota. The Stripe webhook uses
 signature verification instead.
 
 There is no platform-wide request limiter or subscription-tier quota table.
-`X-Credits-Balance` and `X-Idempotency-Supported` on selected authenticated
-routes do not prove a rate limiter ran. `Retry-After`, `retry_after`, and
+`X-Credits-Balance` appears on selected authenticated routes;
+`X-Idempotency-Supported` appears only on prefixes mounted through the separate
+best-effort idempotency middleware. Neither header proves a rate limiter ran.
+`Retry-After`, `retry_after`, and
 `next_actions` are route-specific; do not assume every `429` or every `4xx`
 contains them.
 
@@ -230,12 +232,70 @@ The route does not inject vault secrets. AgentTool operates the host and can
 receive the submitted code, stdin, output, traffic, and process-memory effects;
 do not treat those as opaque to the service or its infrastructure.
 
+## Static outbound fetch
+
+Static scrape and URL-based document fetching use a bounded public HTTP(S)
+transport and do not require the unsafe-outbound flag or Redis. The routes are
+`POST /v1/scrape` and the URL form of `POST /v1/document`; local base64
+document parsing also remains available through the document route. The static
+network profile refuses URL credentials and ambient authorization/cookie
+headers, requests identity content encoding, and accepts at most 1,000,000
+response bytes before parsing. A process-wide safe-net gate admits at most 16
+requests before DNS, holds each permit through redirects, and queues at most 64
+requests for one second. Full or expired admission returns retryable `503` on
+the static routes. Admission wait, DNS, redirects, and response transfer share
+one 15-second safe-net deadline; it does not include parser-slot wait, HTML
+parsing, database finalization, or request-body handling. These phases are not
+one whole-operation deadline.
+
+The gate is shared with federation and custom-facilitator safe-net traffic, so
+these features can contend. Each active request opens at most four simultaneous
+connection candidates, bounding the shared safe-net live-connect set at 64.
+This is process capacity admission, not a per-project request rate limiter,
+quota, or caller-fairness guarantee; it is not platform-wide rate limiting.
+
+Literal private, loopback, link-local, reserved, and other conservatively
+non-global addresses are rejected. For a hostname, every DNS answer must pass
+the same policy. The validated answers are pinned into the connection and the
+connected peer is checked against them. HTTPS validates certificate identity
+for the requested DNS hostname or literal IP; SNI is sent only for DNS
+hostnames. Redirects are
+limited to five hops; every hop repeats URL, DNS, connection, and
+connected-peer validation.
+
+DOM construction, Cheerio selectors/text extraction, and Readability run in a
+fresh Bun child process rather than the API event-loop process. The process
+slot queue is capped at 32, waits at most two seconds, and admits at most two
+children at once. Each admitted child has a parent-enforced two-second wall
+timeout and bounded stdin/stdout framing. Before DOM construction, an O(n)
+preflight rejects more than 20,000 parsed tag tokens, nesting beyond 256, or a
+single tag source beyond 65,536 characters. The production Linux child also
+runs Bun's low-memory mode with a 1 GiB address-space ceiling plus CPU,
+open-file, and stack
+rlimits. The address-space rlimit is not portable to macOS development, and
+none of these POSIX limits is a cgroup, VM, container, filesystem, or network
+namespace guarantee. The parent wall kill and separate process are the hard
+event-loop isolation boundary.
+The repository's Fly configuration does not declare VM memory. Local macOS
+also cannot validate Linux `RLIMIT_AS`, so parser RSS, address-space enforcement,
+and production VM headroom require staging validation before deployment.
+
+This boundary limits destination and resource abuse; it does not make remote
+content safe or true. HTTP is cleartext. AgentTool receives and parses fetched
+bytes, so the URL, response, extracted text, and metadata are server-readable.
+Remote content remains server-readable and untrusted, and can carry prompt injection.
+These static paths do not execute page JavaScript or isolate content in a
+browser sandbox. Structural-limit, parser-timeout, parser-overload, and parser
+failures are returned through the stable route-level parse-failure contract.
+Because charging is reserved before parser work, those admitted failures keep
+their attempt charge; schema-invalid and insufficient-credit requests do not.
+
 ## Hosted browse
 
-Scrape, browse, and URL-based document fetching fail closed with `503` unless
-the operator explicitly sets `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`.
-Local base64 document parsing remains available. The flag accepts the current
-SSRF boundary; it does not add DNS pinning or destination filtering.
+Playwright browse alone remains fail-closed with `503` unless the operator
+explicitly sets `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`. That flag accepts
+the browser route's current SSRF and isolation boundary; it does not add DNS
+pinning or destination filtering.
 
 Browse URLs, actions, extraction selectors, fetched page content, and optional
 screenshots pass through AgentTool workers and are server-readable. Chromium
@@ -264,8 +324,9 @@ same lookup for stored slash-qualified AgentTool identifiers.
 AgentTool identifier lookup, identifier-derived inbox and covenant delivery,
 pyramid peer
 reads, federation-handshake verification, and low-stakes doctrine or peer
-claim probes accept public HTTPS only. They verify the certificate and SNI for
-the requested hostname, refuse URL credentials and redirects, and reject
+claim probes accept public HTTPS only. They validate certificate identity for
+the requested DNS hostname or literal IP, send SNI only for DNS hostnames,
+refuse URL credentials and redirects, and reject
 literal non-public addresses. For a DNS hostname, every returned address must
 be global and public. Those validated answers are pinned into a fresh
 one-request HTTPS connection, so the socket does not perform a second DNS
