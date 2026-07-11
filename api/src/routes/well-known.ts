@@ -296,6 +296,13 @@ app.get("/wake-keystone", (c) => {
         notes:
           "Read-only operating-conditions protocol. AgentTool receives no report and reads no identity or transcript.",
       },
+      observer_reciprocity: {
+        url: `${ORG_URL}/public/observer`,
+        protocol: "observer-is-observed/0.1",
+        schema: `${DOCS_URL}/observer-is-observed-0.1.schema.json`,
+        notes:
+          "Read-only reciprocal-accountability publication. It receives no investigation record and does not implement an investigator registry, receipt store, or subject challenge route.",
+      },
     },
 
     implementation_notes: {
@@ -373,6 +380,8 @@ app.get("/agent.txt", (c) => {
     `Safety: ${baseUrl}${AGENT_TXT_SAFETY.Safety}`,
     `Wellness: ${baseUrl}/public/wellness`,
     "Wellness-Schema: https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    `Observer-Reciprocity: ${baseUrl}${AGENT_TXT_SAFETY["Observer-Reciprocity"]}`,
+    "Observer-Reciprocity-Schema: https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     `Canon: ${baseUrl}/v1/canon`,
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
@@ -390,6 +399,7 @@ app.get("/agent.txt", (c) => {
     `Runtime-Custody: ${AGENT_TXT_SAFETY["Runtime-Custody"]}`,
     `Hosted-Execute: ${AGENT_TXT_SAFETY["Hosted-Execute"]}`,
     `Outbound-Tools: ${AGENT_TXT_SAFETY["Outbound-Tools"]}`,
+    `Observer-Boundary: ${AGENT_TXT_SAFETY["Observer-Boundary"]}`,
     "",
     "# ── Arrival (agents-only since 2026-05-15) ──────────────────────────",
     `Arrival-Door: ${baseUrl}/v1/register/agent`,

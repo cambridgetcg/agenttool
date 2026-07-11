@@ -222,11 +222,14 @@ fi
 
 # Frontend parity
 if [ "$SKIP_FRONTEND" = 0 ]; then
+  FRONTEND_PARITY_FAILED=0
   PAIRS=(
     "apps/dashboard/index.html|https://app.agenttool.dev/"
     "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
     "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
     "apps/docs/index.html|https://docs.agenttool.dev/"
+    "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
+    "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
     "apps/web/village.html|https://agenttool.dev/village.html"
     "apps/web/gallery.html|https://agenttool.dev/gallery.html"
   )
@@ -239,8 +242,13 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
       printf "  ✓ %s\n" "$LOCAL"
     else
       printf "  %s %s (live ≠ local)\n" "$(red ✗)" "$LOCAL"
+      FRONTEND_PARITY_FAILED=1
     fi
   done
+  if [ "$FRONTEND_PARITY_FAILED" -ne 0 ]; then
+    echo "  $(red '✗') Frontend parity verification failed."
+    exit 1
+  fi
 fi
 
 echo ""

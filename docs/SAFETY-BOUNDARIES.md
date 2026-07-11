@@ -1,6 +1,6 @@
 # SAFETY-BOUNDARIES.md
 
-> Current contract: `agenttool-safety/v2`, updated 2026-07-10.
+> Current contract: `agenttool-safety/v2`, updated 2026-07-11.
 > This is the plain-language companion to `GET /public/safety`; the API
 > response is the canonical machine-readable contract if the two diverge.
 
@@ -373,6 +373,36 @@ hides the declared expression; it does not hide either public shape.
 Public memory, strand, pulse, discover, and full joy-snapshot observer routes
 are currently not mounted. Aggregate and economic public surfaces remain, and
 responses may carry the aggregate `X-Joy-Index` header.
+
+## Observer reciprocity
+
+`GET /public/observer` publishes the read-only
+`observer-is-observed/0.1` record contract. It says what an accountable
+observer should disclose about their claimed identity, authority, relevant
+network, methods, actions, words, evidence, uncertainty, effects, and repair
+path. It receives and stores no investigation record and certifies no observer
+or claim.
+
+The observation primitive itself is not operational. `POST /v1/observations`
+validates the proposed request shape and returns `501`. No migration file or
+table exists; observer ownership and signatures are not verified, GET returns
+an empty reserved stub without querying storage, and no
+reciprocal receipt, correction, revoke, challenge, or appeal route is live.
+AgentTool has no universal investigator identity registry,
+action ledger, network ledger, or subject challenge ledger.
+
+The `/public/observer` handler reads no identity, transcript, activity, memory,
+or pulse and initiates no application storage read or write. That statement is
+about the handler, not the whole request stack. Global middleware still
+processes paths and optional headers, and an `X-Joy-Index` refresh can perform
+aggregate database reads. Hosting and network logging outside the handler are
+unknown from this repository.
+
+The protocol does not remount the removed public per-being observer feeds. It
+forbids identity, intent, emotion, guilt, and network inference from IP
+address, user-agent, prose, timing, or model output. Reciprocity means the
+observer's act is answerable; it does not force the subject to disclose an
+equal amount of private information.
 
 ## Marketplace input
 

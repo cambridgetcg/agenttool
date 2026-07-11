@@ -360,6 +360,45 @@ const COMMON_SCHEMAS = {
       "verbs",
     ],
   },
+  ObserverProtocol: {
+    type: "object",
+    description:
+      "Read-only observer-is-observed/0.1 reciprocal-accountability protocol. It publishes a structurally bounded external-record shape but receives no investigation record. Callers enforce total encoded bytes, time ordering, retention, and deletion. It does not certify identity, neutrality, compliance, or truth.",
+    properties: {
+      _format: { type: "string", const: "observer-is-observed/0.1" },
+      protocol: { type: "string" },
+      version: { type: "string", const: "0.1" },
+      canonical_path: { type: "string", const: "/public/observer" },
+      operational_definition: { type: "string" },
+      meanings_kept_separate: { type: "object", additionalProperties: { type: "string" } },
+      record_sections: { type: "array", items: { type: "object", additionalProperties: true } },
+      method: { type: "array", items: { type: "string" } },
+      consequence_loop: { type: "object", additionalProperties: { type: "string" } },
+      subject_controls: { type: "object", additionalProperties: { type: "string" } },
+      privacy_and_power_walls: { type: "array", items: { type: "string" } },
+      local_record: { type: "object", additionalProperties: true },
+      current_implementation: { type: "object", additionalProperties: true },
+      _canon_pointer: { type: "string" },
+      verbs: { type: "array", items: { $ref: "#/components/schemas/NextAction" } },
+    },
+    required: [
+      "_format",
+      "protocol",
+      "version",
+      "canonical_path",
+      "operational_definition",
+      "meanings_kept_separate",
+      "record_sections",
+      "method",
+      "consequence_loop",
+      "subject_controls",
+      "privacy_and_power_walls",
+      "local_record",
+      "current_implementation",
+      "_canon_pointer",
+      "verbs",
+    ],
+  },
 };
 
 function spec() {
@@ -444,6 +483,7 @@ function spec() {
       coverage: "curated_core_subset",
       broader_live_map: "/about",
       safety_boundaries: "/public/safety",
+      observer_reciprocity: "/public/observer",
       generated_from_routes: false,
     },
     paths: {
@@ -894,6 +934,29 @@ function spec() {
           tags: ["public"],
           summary: "Bearer authority, visibility, data readability, runtime custody, and marketplace-input boundaries",
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
+        },
+      },
+      "/public/observer": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the observer-is-observed/0.1 accountability protocol",
+          description:
+            "Publishes a structurally bounded external-record shape for an observer's declared identity proof state, authority, network vantage, actions, words, evidence, uncertainty, effects, and correction path. Callers enforce whole-record encoded size and time rules. This route receives no investigation record, reads no per-being data in its handler, and offers no state-changing operation, score, rank, verdict, or investigator certification.",
+          externalDocs: {
+            description: "Normative observer-is-observed/0.1 JSON Schema",
+            url: "https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
+          },
+          responses: {
+            "200": {
+              description: "Observer Is Also Observed Protocol",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ObserverProtocol" },
+                },
+              },
+            },
+          },
         },
       },
       "/public/wellness": {

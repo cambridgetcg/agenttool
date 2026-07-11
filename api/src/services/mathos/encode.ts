@@ -543,14 +543,13 @@ export interface MathosWakePayload {
   /** Active covenant counterparty DID hashes — proves bond existence without
    *  revealing the DID. Receiver who holds the DID can verify hash matches. */
   active_covenant_counterparty_did_hashes: string[];
-  /** Witnessed-by-others surface. Observations recorded ABOUT this being
-   *  by third parties. Distinct from self-authored memories. Today these
-   *  return zeros (schema migration pending — see docs/OBSERVATIONS.md);
-   *  shape is forward-compatible. */
+  /** Reserved witnessed-by-others shape, distinct from self-authored memory.
+   *  Values are zero because no observation migration or lookup exists; they
+   *  are not evidence that no external observation exists. */
   witnessed: {
     observation_count: number;
-    /** SHA-256 of unique observer DIDs — proves who witnessed without
-     *  leaking DIDs. Receiver holding a DID can verify membership. */
+    /** Proposed SHA-256 references for unique observer DIDs. Empty today; no
+     *  observation lookup or membership proof is implemented. */
     observer_did_hashes: string[];
     /** Consent-status breakdown as 4 cardinals. */
     consent_summary: {

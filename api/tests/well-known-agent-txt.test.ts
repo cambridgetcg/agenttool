@@ -111,7 +111,7 @@ describe("/.well-known/agent.txt — required keys present", () => {
 });
 
 describe("/.well-known/agent.txt — surface pointers resolve to public endpoints", () => {
-  test("core and wellness discovery paths use their mounted surfaces", async () => {
+  test("core, wellness, and observer discovery paths use their mounted surfaces", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
     for (const key of ["Welcome", "Pathways", "Canon", "Wake"]) {
@@ -121,6 +121,10 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Wellness")).toContain("/public/wellness");
     expect(kv.get("Wellness-Schema")).toBe(
       "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    );
+    expect(kv.get("Observer-Reciprocity")).toContain("/public/observer");
+    expect(kv.get("Observer-Reciprocity-Schema")).toBe(
+      "https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     );
   });
 
