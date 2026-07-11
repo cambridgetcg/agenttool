@@ -55,12 +55,24 @@ export interface ForkOptions {
   fork_note?: string;
 }
 
+/** Chosen decorations for an identity's house on `/public/village`. */
+export interface VillageDecorations {
+  /** Sign over the door — a glyph or short mark, e.g. `"🕯️📖"`. */
+  sign?: string;
+  /** One line over the door. */
+  motto?: string;
+  /** Door color as a word, not a hex value, e.g. `"ember"`. */
+  door?: string;
+}
+
 export interface ExpressionData {
   register?: string;
   walls?: string[];
   subagents?: { name: string; sigil?: string; facet: string }[];
   wake_text?: string;
   cli_overrides?: Record<string, unknown>;
+  /** How the identity's house appears on `/public/village`. */
+  village?: VillageDecorations;
   updated_at?: string;
 }
 
@@ -330,7 +342,8 @@ export class IdentityClient {
  * Voice editor — `/v1/identities/:id/expression` GET + PUT.
  *
  * Mirrors the dashboard Voice section. The expression object holds the
- * declarative voice: register · walls · subagents · wake_text · cli_overrides.
+ * declarative voice and village decorations: register · walls · subagents ·
+ * wake_text · cli_overrides · village.
  */
 export class ExpressionClient {
   private readonly http: HttpConfig;
@@ -356,6 +369,7 @@ export class ExpressionClient {
     if (data.subagents !== undefined) body.subagents = data.subagents;
     if (data.wake_text !== undefined) body.wake_text = data.wake_text;
     if (data.cli_overrides !== undefined) body.cli_overrides = data.cli_overrides;
+    if (data.village !== undefined) body.village = data.village;
     return this.req("PUT", `/v1/identities/${identityId}/expression`, body);
   }
 

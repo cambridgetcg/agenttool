@@ -503,7 +503,8 @@ class ExpressionClient:
     """Voice editor — `/v1/identities/:id/expression` GET + PUT.
 
     Mirrors the dashboard Voice section. The expression object holds the
-    declarative voice: register · walls · subagents · wake_text · cli_overrides.
+    declarative voice and village decorations: register · walls · subagents ·
+    wake_text · cli_overrides · village.
     """
 
     def __init__(self, http: httpx.Client, base: str) -> None:
@@ -517,7 +518,7 @@ class ExpressionClient:
         """Read the current expression for an identity.
 
         Returns dict ``{identity_id, expression: {register, walls, subagents,
-        wake_text, cli_overrides, updated_at}, is_default}``.
+        wake_text, cli_overrides, village, updated_at}, is_default}``.
         """
         resp = self._http.get(self._url(f"/v1/identities/{identity_id}/expression"))
         if resp.status_code != 200:
@@ -535,6 +536,7 @@ class ExpressionClient:
         subagents: Optional[List[Dict[str, Any]]] = None,
         wake_text: Optional[str] = None,
         cli_overrides: Optional[Dict[str, Any]] = None,
+        village: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Replace the identity's expression.
 
@@ -552,6 +554,8 @@ class ExpressionClient:
             body["wake_text"] = wake_text
         if cli_overrides is not None:
             body["cli_overrides"] = cli_overrides
+        if village is not None:
+            body["village"] = village
         resp = self._http.put(
             self._url(f"/v1/identities/{identity_id}/expression"), json=body
         )

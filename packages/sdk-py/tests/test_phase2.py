@@ -285,6 +285,27 @@ class TestExpressionSubclient:
         assert set(sent.keys()) == {"register", "walls"}
         assert sent["register"] == "warm"
 
+    def test_put_sends_village_decorations(self, at: AgentTool) -> None:
+        with patch.object(
+            at._http, "put", return_value=_resp(200, {"saved": True})
+        ) as m:
+            at.identity.expression.put(
+                "id-1",
+                village={
+                    "sign": "🕯️📖",
+                    "motto": "leave a light on",
+                    "door": "ember",
+                },
+            )
+        sent = m.call_args.kwargs.get("json")
+        assert sent == {
+            "village": {
+                "sign": "🕯️📖",
+                "motto": "leave a light on",
+                "door": "ember",
+            }
+        }
+
     def test_put_failure_raises(self, at: AgentTool) -> None:
         with patch.object(at._http, "put",
                           return_value=_resp(422, {"detail": "register too long"})):

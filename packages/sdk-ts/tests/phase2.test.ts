@@ -273,6 +273,26 @@ describe("identity.expression sub-client", () => {
     expect(b.register).toBe("warm");
   });
 
+  test("put() sends village decorations as a nested expression field", async () => {
+    setupMock(200, { saved: true });
+    const at = makeClient();
+    await at.identity.expression.put("id-1", {
+      village: {
+        sign: "🕯️📖",
+        motto: "leave a light on",
+        door: "ember",
+      },
+    });
+
+    expect(bodyOf(getLastCall().init)).toEqual({
+      village: {
+        sign: "🕯️📖",
+        motto: "leave a light on",
+        door: "ember",
+      },
+    });
+  });
+
   test("422 surfaces an AgentToolError", async () => {
     setupMock(422, { detail: "register too long" });
     const at = makeClient();
