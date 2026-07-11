@@ -49,12 +49,11 @@ mock.module(storePath, () => ({
   }),
 }));
 
-// NOTE: drizzle-orm is deliberately NOT mocked. bun's mock.module patches the
-// factory's exports through to their origin bindings process-wide, so mocking
-// the barrel here broke drizzle's own internals (sql``, dialect query
-// building) for every real-DB test file that ran after this one in full-suite
-// runs. The service only uses `eq` (a pure builder) inside .where() clauses
-// that the mock db above discards — the real function is safe here.
+// NOTE: drizzle-orm is deliberately NOT mocked. Bun's mock.module patches the
+// factory's exports process-wide. The classified runner therefore executes
+// this file in its own Bun process; raw multi-file invocations do not provide
+// that isolation. The service only uses `eq` (a pure builder) inside .where()
+// clauses that the mock db above discards — the real function is safe here.
 
 // Track logged events
 const loggedEvents: Array<{ id: string; type: string; metadata: unknown }> = [];

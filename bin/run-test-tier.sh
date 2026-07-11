@@ -6,7 +6,8 @@
 # New top-level api/tests/*.test.ts files enter the hermetic tier by default.
 # Exceptions stay deliberate. Nested adapters are hermetic, integration is
 # database, contract is paid, and doctrine defaults to hermetic with a named
-# known-red exception list.
+# known-red exception list. Tests that use Bun's process-global mock.module
+# run in their own Bun process so they cannot replace exports for peer files.
 
 set -euo pipefail
 
@@ -107,6 +108,10 @@ has_database_env_access() {
     "$1"
 }
 
+uses_process_global_module_mock() {
+  grep -Eq '(^|[^[:alnum:]_])mock[.]module[[:space:]]*[(]' "$1"
+}
+
 classify() {
   local path="$1"
   case "$path" in
@@ -198,17 +203,29 @@ run_tier() {
   local alternate="${2:-}"
   local path relative tier
   local files=()
+  local isolated_files=()
   while IFS= read -r path; do
     relative="${path#"$API_ROOT/"}"
     tier="$(classify "$relative")"
     if [ "$tier" = "$wanted" ] || { [ -n "$alternate" ] && [ "$tier" = "$alternate" ]; }; then
-      files+=("$relative")
+      if uses_process_global_module_mock "$path"; then
+        isolated_files+=("$relative")
+      else
+        files+=("$relative")
+      fi
     fi
   done < <(find "$API_ROOT/tests" -type f -name '*.test.ts' | LC_ALL=C sort)
-  [ "${#files[@]}" -gt 0 ] || die "tier has no tests: $wanted"
-  echo "test-tier: $wanted (${#files[@]} files)"
+  local total=$(( ${#files[@]} + ${#isolated_files[@]} ))
+  [ "$total" -gt 0 ] || die "tier has no tests: $wanted"
+  echo "test-tier: $wanted ($total files; ${#isolated_files[@]} process-isolated)"
   cd "$API_ROOT"
-  bun test "${files[@]}"
+  if [ "${#files[@]}" -gt 0 ]; then
+    bun test "${files[@]}"
+  fi
+  for relative in "${isolated_files[@]}"; do
+    echo "test-tier: process-isolated $relative"
+    bun test "$relative"
+  done
 }
 
 validate_topology

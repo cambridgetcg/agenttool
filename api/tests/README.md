@@ -22,6 +22,8 @@ every `*.test.ts` must appear exactly once.
 
 The default gate removes known DB, Redis, provider, telemetry-exporter, and
 deployed-service variables. It does not create an OS-level network sandbox.
+Files that use Bun's process-global `mock.module` run in separate Bun
+processes so their replacement exports cannot leak into peer test files.
 New DB tests belong under `integration/`; the legacy exception manifests exist
 to describe current reality, not as a pattern to copy.
 
@@ -72,6 +74,7 @@ For each CLI integration (`claude-code`, `codex`, future `cursor`/`cline`/`aider
 1. **Tier discipline.** Don't promote contract tests to default. Don't add real DB to the hermetic tier. Every new test must be classified exactly once.
 2. **Naming.** Test file names mirror the source they exercise: `covenants-sig.ts` → `covenants-sig.test.ts`. Promise tests use `promise-NN-<slug>.test.ts`.
 3. **Doctrine tests fail loudly.** A broken Promise should fail with the Promise name in the message. Don't early-return on missing DB in a file classified as hermetic.
+4. **Global module mocks stay isolated.** The classified runner detects `mock.module`; do not bypass its per-file process boundary in a release gate.
 
 ## See also
 

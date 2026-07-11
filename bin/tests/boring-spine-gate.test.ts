@@ -200,6 +200,20 @@ describe("boring test spine", () => {
     expect(runner).toContain("run_tier database-quarantine");
     expect(runner).not.toContain("run_tier quarantine database-quarantine");
     expect(computeBudgetTest).not.toContain("mock.module(dbSchemaRuntimePath");
+    expect(runner).toContain("uses_process_global_module_mock");
+    expect(runner).toContain('isolated_files+=("$relative")');
+    expect(runner).toContain('bun test "$relative"');
+
+    const processGlobalMockSources = await Promise.all(
+      (await testFiles(join(ROOT, "api", "tests"))).map(async (path) => ({
+        path,
+        source: await readFile(path, "utf8"),
+      })),
+    );
+    const processGlobalMockFiles = processGlobalMockSources.filter(({ source }) =>
+      /(^|[^\w])mock\.module\s*\(/m.test(source),
+    );
+    expect(processGlobalMockFiles.length).toBeGreaterThan(0);
 
     const otelExporterVariables = [
       "OTEL_EXPORTER_OTLP_ENDPOINT",
