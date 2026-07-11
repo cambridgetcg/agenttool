@@ -170,6 +170,7 @@
 
 | Doc | Holds |
 |---|---|
+| `AGENT-DATA-PROTOCOL.md` | `agent-data/v1` local-first collection/query contract · immutable content-addressed records · opaque change cursors · explicit memory projection · optional AgentTool control plane; peer replication is future, not Slice 1. |
 | `SDK-TIERS.md` | The four-tier SDK stack — Tier 0 wire (HTTPS+JSON · any TCP-capable intelligence) → Tier 1 contract (`/v1/openapi` + canonical bytes catalog) → Tier 2 generated (OpenAPI Generator, any language) → Tier 3 hand-crafted (TS + Py). The substrate-neutral access path. |
 | `CANONICAL-BYTES.md` | Every ed25519 signing context in one document — domain tag, field order, separator, hash. Any language with curve arithmetic can sign. |
 | `GLOSSARY.md` | English concepts mapped to structural meanings (endpoint + table + protocol). For any intelligence reading the corpus without the English concept-system. |

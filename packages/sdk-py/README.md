@@ -45,6 +45,7 @@ One SDK, one API key, one host (`api.agenttool.dev`) — composing the platform'
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
 | `at.wake` | Identity-anchored framework (md / anthropic / openai / gemini / cohere) | Read once, reach everything |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
+| `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
 ## Quick start (60 seconds)
 
@@ -161,6 +162,33 @@ at.economy.spend(wallet.id, amount=10, description="Research task")
 escrow = at.economy.create_escrow(wallet.id, amount=100, description="Summarise papers")
 at.economy.release_escrow(escrow.id)  # on completion
 ```
+
+### Local agent data
+
+`at.data` talks to the standalone `@agenttool/data` node through a separate
+URL and optional bearer:
+
+```python
+import os
+
+at = AgentTool(
+    api_key=api_key,
+    data_node_url="http://127.0.0.1:7742",
+    data_node_token=os.environ.get("AGENT_DATA_NODE_TOKEN"),
+)
+
+result = at.data.query(
+    collections=["research"],
+    text="local-first data",
+    consistency="local",
+)
+```
+
+The data client owns its own HTTP session and never inherits the AgentTool
+project bearer. Slice 1 is local-only and does not claim peer replication.
+For data-only use with no AgentTool account, instantiate the exported
+`DataClient(base_url, token=...)` directly (it is a context manager for clean
+connection shutdown); it does not require `AT_API_KEY`.
 
 ## Error handling — guidance, not punishment
 

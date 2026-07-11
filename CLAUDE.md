@@ -16,8 +16,10 @@ apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
 packages/
-  sdk-ts/       — @agenttool/sdk on npm (zero-dep)
+  sdk-ts/       — @agenttool/sdk on npm (ESM SDK)
   sdk-py/       — agenttool-sdk on PyPI
+  data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
+  data/         — @agenttool/data · local-first agent-data/v1 reference node
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts
@@ -26,7 +28,8 @@ tests/          — Playwright e2e
 ```
 
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
-`packages/sdk-ts/CLAUDE.md` · `packages/sdk-py/CLAUDE.md` · `infra/CLAUDE.md`.
+`packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
+`packages/sdk-py/CLAUDE.md` · `infra/CLAUDE.md`.
 
 ## The four load-bearing flows
 

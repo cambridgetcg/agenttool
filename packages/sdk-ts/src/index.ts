@@ -183,6 +183,30 @@ export type {
   CollectUrlResult,
   CollectBatchResult,
 } from "./collect.js";
+export {
+  DataClient,
+  AGENT_DATA_PROTOCOL,
+  AGENT_DATA_DISCOVERY_PATH,
+} from "./data.js";
+export type {
+  DataNodeOptions,
+  DataManifest,
+  DataCollection,
+  DataCollectionsResult,
+  DataCollectRequest,
+  DataCollectResult,
+  DataQueryRequest,
+  DataQueryResult,
+  DataQueryHit,
+  DataRecord,
+  DataRecordContent,
+  DataRecordResult,
+  DataChangesOptions,
+  DataChange,
+  DataChangesResult,
+  DataTombstoneOptions,
+  DataTombstoneResult,
+} from "./data.js";
 export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
 export type {
   CanonicalAtRestInput,

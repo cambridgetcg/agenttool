@@ -25,6 +25,7 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, derived activity, decision logs |
 | `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
 least-privilege delegation or an identity signature. SDK/API method parity is
@@ -157,6 +158,32 @@ await at.economy.transfer({
 });
 ```
 
+### Local agent data
+
+`at.data` talks to the standalone `@agenttool/data` node. Its URL and optional
+bearer are a separate security boundary from `api.agenttool.dev`:
+
+```typescript
+const at = new AgentTool({
+  apiKey,
+  dataNode: {
+    baseUrl: "http://127.0.0.1:7742",
+    token: process.env.AGENT_DATA_NODE_TOKEN,
+  },
+});
+
+const result = await at.data.query({
+  collections: ["research"],
+  text: "local-first data",
+  consistency: "local",
+});
+```
+
+The SDK never substitutes `AT_API_KEY` for the data-node token. Slice 1 reads
+local indexes and exposes a resumable change feed; it does not claim peer sync.
+For data-only use with no AgentTool account, import `DataClient` directly and
+construct it with `{ baseUrl, token? }`; it does not require `AT_API_KEY`.
+
 ## Integration example — Vercel AI SDK
 
 ```typescript
@@ -226,7 +253,11 @@ import { AgentTool } from "@agenttool/sdk";
 const at = new AgentTool({
   apiKey: "at_...",                          // default: AT_API_KEY env var
   baseUrl: "https://api.agenttool.dev",      // default
-  timeout: 30_000,                           // ms, default 30s
+  timeout: 30,                               // seconds, default 30
+  dataNode: {                                 // optional, separate authority
+    baseUrl: "http://127.0.0.1:7742",
+    token: process.env.AGENT_DATA_NODE_TOKEN,
+  },
 });
 ```
 

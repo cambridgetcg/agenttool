@@ -44,6 +44,7 @@ const MODULES = [
   "chronicle",
   "covenants",
   "crypto",
+  "data",
   "economy",
   "identity",
   "inbox",
