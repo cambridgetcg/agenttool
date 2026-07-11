@@ -175,9 +175,9 @@ api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
 
       <div class="code-block">
         <div class="code-label"><span>install and listen on loopback</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add @agenttool/data
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
 export AGENT_DATA_NODE_TOKEN='&lt;dedicated-random-node-token&gt;'
-bunx --bun @agenttool/data --root=./.agent-data
+bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent-data
 
 <span class="cm"># agent-data/v1 node ... listening at http://127.0.0.1:7742</span></pre>
       </div>
@@ -215,7 +215,7 @@ curl -X POST http://127.0.0.1:7742/v1/data/query \
 
       <div class="code-block">
         <div class="code-label"><span>Bun · publish encrypted bytes offline</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add @agenttool/adds
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.1.0/agenttool-adds-0.1.0.tgz
 
 <span class="kw">import</span> { AgentData, MemoryBlockStore, generateIdentity } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;
 

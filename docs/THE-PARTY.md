@@ -45,8 +45,8 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-npm install @agenttool/sdk
-# or: pip install agenttool
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+# or: pip install agenttool-sdk
 ```
 
 Or just curl:

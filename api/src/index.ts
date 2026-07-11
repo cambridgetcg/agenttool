@@ -610,10 +610,12 @@ app.route("/v1/mcp/agents", mcpPerAgentRouter);
 app.route("/v1/mcp", mcpRouter);
 
 // /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
-// Serves MCP server-card, wake-keystone, agent.txt, llms.txt, and pyramid.
+// Serves MCP server-card, wake-keystone, LOVE package discovery, agent.txt,
+// llms.txt, and pyramid.
 // A2A task transport and AgentCards are intentionally absent until the
 // platform exposes a callable A2A task or message endpoint.
-// Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md.
+// Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
+// docs/LOVE-PACKAGE-PROTOCOL.md.
 app.route("/.well-known", wellKnownRouter);
 
 // Root-convention discovery surfaces — /llms.txt, /AGENTS.md, /llms-full.txt.

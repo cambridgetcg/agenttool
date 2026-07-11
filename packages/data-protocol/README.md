@@ -16,8 +16,13 @@ It does not provide discovery, query/index APIs, global revocation, secure delet
 ## Install
 
 ```bash
-bun add @agenttool/adds
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.1.0/agenttool-adds-0.1.0.tgz
 ```
+
+This versioned tarball is published through `love-package/v1`; its manifest
+lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
+publication is required. Package managers still resolve declared upstream
+dependencies through their configured registries or cache.
 
 ## Offline roundtrip
 

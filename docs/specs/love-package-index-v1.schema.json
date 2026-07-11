@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/love-package-index-v1.schema.json",
+  "title": "LOVE Package Index v1",
+  "description": "Non-authoritative locator index for love-package/v1 manifests.",
+  "$comment": "Conformance validators MUST enable JSON Schema format assertion. The regular-expression constraints are defense in depth, not a replacement for URI parsing.",
+  "type": "object",
+  "required": [
+    "protocol",
+    "document_type",
+    "packages"
+  ],
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "love-package/v1"
+    },
+    "document_type": {
+      "type": "string",
+      "const": "package-index"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/package"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 214,
+      "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
+    },
+    "absoluteHttpUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://(?![^/?#]*@)(?![^\\s]*#)[^\\s]+$",
+      "description": "Absolute HTTP or HTTPS URL without userinfo, whitespace, or a fragment. Resolution and every redirect remain subject to the caller's SSRF/egress policy."
+    },
+    "package": {
+      "type": "object",
+      "required": [
+        "name",
+        "latest",
+        "versions"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "latest": {
+          "$ref": "#/$defs/semver"
+        },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/version"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "version": {
+      "type": "object",
+      "required": [
+        "version",
+        "manifest_url"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "manifest_url": {
+          "$ref": "#/$defs/absoluteHttpUrl"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

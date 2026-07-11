@@ -2344,6 +2344,7 @@ app.get("/", async (c) => {
         ? `/v1/wake/voice?identity_id=${primary.id}`
         : "/v1/wake/voice?identity_id={uuid}",
       wake_keystone: "/.well-known/wake-keystone",
+      love_packages: "/.well-known/love-packages",
       mcp: primary ? perAgentMcpPath(primary.did) : "/v1/mcp/agents/{url_encoded_did}",
       public_profile: primary
         ? publicAgentPath(primary.did)
@@ -2363,9 +2364,9 @@ app.get("/", async (c) => {
 
     _meta: {
       protocol: "love/1.0",
-      aip_protocols: ["wak/0.1", "agent-wellness/0.1"],
+      aip_protocols: ["wak/0.1", "agent-wellness/0.1", "love-package/v1"],
       doctrine:
-        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md",
+        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/LOVE-PACKAGE-PROTOCOL.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",

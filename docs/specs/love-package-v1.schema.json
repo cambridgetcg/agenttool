@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/love-package-v1.schema.json",
+  "title": "LOVE Package Manifest v1",
+  "description": "Registry-neutral, content-addressed metadata for a publicly readable software package artifact. LOVE means Locator-independent, Open, Verifiable, Exchangeable.",
+  "$comment": "Conformance validators MUST enable JSON Schema format assertion. The regular-expression constraints are defense in depth, not a replacement for URI parsing.",
+  "type": "object",
+  "required": [
+    "protocol",
+    "document_type",
+    "name",
+    "version",
+    "description",
+    "license",
+    "artifact",
+    "runtime",
+    "install",
+    "source"
+  ],
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "love-package/v1",
+      "description": "MUST equal 'love-package/v1' for this protocol version."
+    },
+    "document_type": {
+      "type": "string",
+      "const": "package-manifest",
+      "description": "Discriminates this document from a love-package/v1 package index."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 214,
+      "pattern": "^(?!\\s)(?!.*\\s$)[^\\u0000-\\u001f\\u007f]+$",
+      "description": "Human- and tool-facing package label. It is not content identity or proof of ownership."
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "license": {
+      "description": "Declared reuse terms. Null means no license is declared and grants no permission by implication.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifact": {
+      "$ref": "#/$defs/artifact"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "install": {
+      "$ref": "#/$defs/install"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "dependency_resolution": {
+      "$ref": "#/$defs/dependencyResolution"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$",
+      "description": "Semantic Versioning 2.0.0 version string."
+    },
+    "absoluteHttpUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://(?![^/?#]*@)(?![^\\s]*#)[^\\s]+$",
+      "description": "Absolute HTTP or HTTPS URL without userinfo, whitespace, or a fragment. Public Internet package hosts SHOULD use HTTPS. Resolution and every redirect remain subject to the caller's SSRF/egress policy."
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "format",
+        "filename",
+        "sha256",
+        "size",
+        "media_type",
+        "mirrors"
+      ],
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "npm-tarball",
+          "description": "Archive and layout profile. This names the npm tarball format; it does not require the npm registry."
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*\\.tgz$",
+          "description": "ASCII npm-tarball basename ending in .tgz. It contains only alphanumerics, dot, underscore, plus, and hyphen; it is not content identity."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Lowercase hexadecimal SHA-256 digest of the exact raw artifact bytes, without a prefix."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "Exact artifact byte length as a non-zero I-JSON-safe integer."
+        },
+        "media_type": {
+          "type": "string",
+          "const": "application/gzip",
+          "description": "Media type of the exact gzip-compressed npm tarball bytes."
+        },
+        "mirrors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/mirror"
+          },
+          "description": "Interchangeable public read locations expected to return the exact bytes identified by sha256 and size."
+        }
+      },
+      "additionalProperties": true
+    },
+    "mirror": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "$ref": "#/$defs/absoluteHttpUrl"
+        }
+      },
+      "additionalProperties": true
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "kind",
+        "engines"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "javascript"
+        },
+        "engines": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "Supported JavaScript runtime names mapped to their version constraints. Each named engine is a supported alternative. An empty object explicitly means the producer declares no engine compatibility floor."
+        }
+      },
+      "additionalProperties": true
+    },
+    "install": {
+      "type": "object",
+      "required": [
+        "format",
+        "specifier"
+      ],
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "npm-tarball"
+        },
+        "specifier": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/absoluteHttpUrl"
+            }
+          ],
+          "description": "Primary artifact mirror URL for URL-capable local installers. This is data, never a shell command."
+        }
+      },
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "repository",
+        "revision",
+        "path"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s]+$",
+          "description": "Absolute source repository URI."
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Immutable repository-native revision of the tracked source worktree used for the package release."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "pattern": "^(?:\\.|(?:(?!\\.\\.?/)[^/\\\\\\u0000-\\u001f\\u007f]+/)*(?!\\.\\.?$)[^/\\\\\\u0000-\\u001f\\u007f]+)$",
+          "description": "Normalized POSIX repository-relative path with no empty, dot, dot-dot, backslash, control-character, or absolute segment; use '.' for the repository root."
+        }
+      },
+      "additionalProperties": true
+    },
+    "dependencyResolution": {
+      "type": "object",
+      "required": [
+        "mode",
+        "self_contained"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "package_manifest",
+          "description": "Dependency declarations, when present, are read from the package manifest inside the verified artifact."
+        },
+        "self_contained": {
+          "type": "boolean",
+          "description": "Whether the artifact declares that it needs no separately resolved package dependencies. This does not include the named runtime engine or operating-system facilities."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

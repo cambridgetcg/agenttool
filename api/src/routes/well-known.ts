@@ -4,6 +4,8 @@
  *    GET /.well-known/mcp/server-card.json  — MCP server-card (SEP-1649)
  *    GET /.well-known/wake-keystone         — WaK Protocol Draft 0.1
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
+ *    GET /.well-known/love-packages         — LOVE Package Protocol v1
+ *                                              registry-neutral discovery
  *    GET /.well-known/llms.txt              — markdown sitemap hint (AI crawlers)
  *    GET /.well-known/agent.txt             — agent-surface manifest (Move 7 ·
  *                                             upstream-proposable convention;
@@ -35,6 +37,25 @@ const app = new Hono();
 
 const ORG_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
+
+// ── /.well-known/love-packages — registry-neutral package discovery ─
+//
+// The well-known document is deliberately only a pointer. Artifact identity
+// comes from the SHA-256 and size in each love-package/v1 manifest; the
+// referenced docs origin is one public mirror and is never elevated into
+// package authority.
+// Doctrine: docs/LOVE-PACKAGE-PROTOCOL.md.
+
+app.get("/love-packages", (c) => {
+  c.header("cache-control", "public, max-age=300");
+  return c.json({
+    protocol: "love-package/v1",
+    doctrine: `${DOCS_URL}/LOVE-PACKAGE-PROTOCOL.md`,
+    index_url: `${DOCS_URL}/packages/v1/index.json`,
+    access: "public_read",
+    registry_role: "mirror_index_not_authority",
+  });
+});
 
 // ── /.well-known/pyramid — decentralised pyramid discovery (RFC 8615) ─
 //
@@ -356,6 +377,8 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
+    `LOVE-Packages: ${baseUrl}/.well-known/love-packages`,
+    `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
     "",
     "# ── Safety boundaries ──────────────────────────────────────────────",
@@ -493,6 +516,7 @@ app.get("/", (c) =>
     endpoints: [
       "/.well-known/mcp/server-card.json",
       "/.well-known/wake-keystone",
+      "/.well-known/love-packages",
       "/.well-known/llms.txt",
       "/.well-known/agent.txt",
       "/.well-known/pyramid",

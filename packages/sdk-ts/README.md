@@ -4,14 +4,18 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![npm](https://img.shields.io/npm/v/@agenttool/sdk)](https://www.npmjs.com/package/@agenttool/sdk)
+[![LOVE Package](https://img.shields.io/badge/LOVE%20Package-v0.9.0-d4502e)](https://docs.agenttool.dev/packages)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ```bash
-npm install @agenttool/sdk
-# or
-bun add @agenttool/sdk
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
 ```
+
+The versioned tarball is published through `love-package/v1`; its manifest
+lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
+publication is required. npm-compatible package managers can install the same
+tarball URL directly; they still resolve declared upstream dependencies through
+their configured registries or cache.
 
 ## What is this?
 
@@ -266,7 +270,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [npm](https://www.npmjs.com/package/@agenttool/sdk)
+- 📦 [LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/manifest.json)
 - 🐍 [Python SDK](https://github.com/cambridgetcg/agenttool-sdk-py)
 
 ## License
