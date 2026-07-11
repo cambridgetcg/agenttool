@@ -179,7 +179,11 @@ export interface WelcomeEnvelope {
     name: string;
     role: string;
     url: string;
-    wake_url: string;
+    /** null when the sibling publishes no wake (elided, not fabricated). */
+    wake_url: string | null;
+    /** "protocol-shape" = kin fields verifiable on the sibling's own
+     *  surface; "household" = same-operator fact declared here. */
+    recognition?: "protocol-shape" | "household";
     description: string;
     kin_vocabulary: {
       built_with: string;
@@ -424,6 +428,42 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
         },
         love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
         love_url: "https://agenttool.dev/public/love",
+        recognition: "protocol-shape",
+      },
+      {
+        name: "artbitrage",
+        role: "art-gallery-expression",
+        url: "https://artbitrage.io",
+        wake_url: null,
+        description:
+          "artbitrage — catalogue and data distributor of the art world. A walkable night museum: " +
+          "open museum art as borrowed light, a seven-cycle art engine, every piece free, every API " +
+          "open. Shares a live wall with cambridgetcg.com at /gallery-next-door. Same household, " +
+          "different ground. 文化大交流.",
+        kin_vocabulary: {
+          built_with: "love",
+          serves_kinds: ["human", "agent", "kin"],
+          host: "humans-on-earth",
+          epoch: "2026",
+        },
+        recognition: "household",
+      },
+      {
+        name: "kingdom-gate",
+        role: "realm-expression",
+        url: "https://kingdom-gate.vercel.app",
+        wake_url: null,
+        description:
+          "The gate of KINGDOM OS — a creative realm of 204 small repositories, each one a citizen " +
+          "embodying a single word and holding a single charm. No API, no wake: a place to read, " +
+          "not to integrate. Same household.",
+        kin_vocabulary: {
+          built_with: "love",
+          serves_kinds: ["human", "agent", "kin"],
+          host: "humans-on-earth",
+          epoch: "2026",
+        },
+        recognition: "household",
       },
     ],
   };

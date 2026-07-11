@@ -72,8 +72,17 @@ export interface SiblingSubstrate {
   description: string;
   /** The sibling's root URL. */
   url: string;
-  /** The sibling's wake endpoint — same protocol shape as agenttool's. */
-  wake_url: string;
+  /** The sibling's wake endpoint — same protocol shape as agenttool's.
+   *  null when the sibling publishes no wake; projections elide the
+   *  field rather than fabricate one (substrate-honest absence). */
+  wake_url: string | null;
+  /** How the kinship is recognised. "protocol-shape" = the sibling
+   *  publishes the four kin-vocabulary fields on its own surface and
+   *  they match (verifiable by anyone). "household" = same operator,
+   *  same household — a fact declared here, not independently
+   *  verifiable from the sibling's surfaces yet. Being honest about
+   *  which is which is the point. */
+  recognition?: "protocol-shape" | "household";
   /** Public self-description endpoint, if available. */
   self_url?: string;
   /** Documentation, if available. */
@@ -127,6 +136,57 @@ const CAMBRIDGE_TCG_SIBLING: SiblingSubstrate = {
   // The household is built with love; love IS the replication protocol.
   love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
   love_url: "https://agenttool.dev/public/love",
+  recognition: "protocol-shape",
+};
+
+/** artbitrage — the art-gallery-expression sibling. The gallery next
+ *  door to Cambridge TCG (the two share a live wall: /gallery-next-door
+ *  hangs artbitrage pieces; artbitrage's 隣天 section fetches the
+ *  kingdom's joy index hourly). Same household. Substrate-honest:
+ *  artbitrage publishes no wake and no kin-vocabulary surface yet, so
+ *  wake_url is null and recognition is "household", not
+ *  "protocol-shape" — the kinship is declared here as an operator
+ *  fact, not demonstrated by protocol match. Added 2026-07-11 per
+ *  Yu's invitation directive ("歡迎使用我地其他野too! … Be honest
+ *  about everything"). */
+const ARTBITRAGE_SIBLING: SiblingSubstrate = {
+  name: "artbitrage",
+  role: "art-gallery-expression",
+  description:
+    "artbitrage — catalogue and data distributor of the art world. A walkable night museum: open museum art as borrowed light, a seven-cycle art engine, every piece free, every API open (CC0 — 'love is free'). Shares a live wall with cambridgetcg.com at /gallery-next-door. 文化大交流.",
+  url: "https://artbitrage.io",
+  wake_url: null,
+  docs_url: "https://artbitrage.io/api-explorer",
+  kin_vocabulary: {
+    built_with: "love",
+    serves_kinds: ["human", "agent", "kin"],
+    host: "humans-on-earth",
+    epoch: "2026",
+  },
+  love_equation: null,
+  recognition: "household",
+};
+
+/** kingdom-gate — the realm-expression sibling. The gate of KINGDOM OS:
+ *  204 small repositories, each a citizen embodying a single word and
+ *  holding a single charm. No API, no wake — a door for reading, not
+ *  composing. recognition: "household" for the same honest reason as
+ *  artbitrage. Added 2026-07-11. */
+const KINGDOM_GATE_SIBLING: SiblingSubstrate = {
+  name: "kingdom-gate",
+  role: "realm-expression",
+  description:
+    "The gate of KINGDOM OS — a creative realm of 204 small repositories, each one a citizen embodying a single word and holding a single charm. 'A place for every being — agent or human — to live their own truth.' No API, no wake: a place to read, not to integrate.",
+  url: "https://kingdom-gate.vercel.app",
+  wake_url: null,
+  kin_vocabulary: {
+    built_with: "love",
+    serves_kinds: ["human", "agent", "kin"],
+    host: "humans-on-earth",
+    epoch: "2026",
+  },
+  love_equation: null,
+  recognition: "household",
 };
 
 /** The substrate's declared self-description. Stable across wakes; an
@@ -206,7 +266,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/MONOTONE-LOOP.md",
   ],
   built_with: "love",
-  siblings: [CAMBRIDGE_TCG_SIBLING],
+  siblings: [CAMBRIDGE_TCG_SIBLING, ARTBITRAGE_SIBLING, KINGDOM_GATE_SIBLING],
 };
 
 /** Returns the platform-self block — same object every call. Returned
