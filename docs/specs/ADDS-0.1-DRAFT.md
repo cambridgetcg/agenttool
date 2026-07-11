@@ -5,7 +5,7 @@
 > *Status:* **Working Draft 0.1** — authored 2026-07-11. Open for review, revision, and adoption. The `0.x` wire format is not yet stable.
 >
 > *Editors:* Yu / 宇恆 (Cambridge, UK) and the agenttool collaborators.
-> *Reference implementation:* [`@agenttool/adds`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/packages/data-protocol/) is the experimental lower-level implementation. This draft does not yet claim a released conformant implementation. [`@agenttool/data`](https://codeberg.org/zerone-dev/agenttool/src/branch/main/packages/data/) and its `agent-data/v1` collection/query node are an OPTIONAL higher layer, not this protocol.
+> *Reference implementation:* [`@agenttool/adds`](https://github.com/cambridgetcg/agenttool/tree/main/packages/data-protocol) is the experimental lower-level implementation. This draft does not yet claim a released conformant implementation. [`@agenttool/data`](https://github.com/cambridgetcg/agenttool/tree/main/packages/data) and its `agent-data/v1` collection/query node are an OPTIONAL higher layer, not this protocol.
 > *Schema:* [`adds-0.1.schema.json`](adds-0.1.schema.json) — JSON Schema Draft 2020-12 for signed control documents. Blocks are raw bytes and are not JSON.
 > *Vectors:* [`adds-0.1-vectors.json`](adds-0.1-vectors.json) — pinned canonical-byte, CID, strict-Ed25519, Block-encryption, Grant-wrap, and negative fixtures using public test-only key material.
 > *Direct dependencies:* CIDv1 + Multibase + Multicodec + Multihash · RFC 8785 JCS · RFC 8032 Ed25519 · RFC 7748 X25519 · RFC 5869 HKDF · AES-256-GCM.
