@@ -9,7 +9,7 @@ Infrastructure config for the live platform. Live deploy targets, secrets templa
 | **API** (`api/` monolith) | Fly.io · `agenttool` app · `lhr×2 + cdg×1` | Single Bun + Hono process; deploy with `bin/deploy.sh --no-migrate --no-frontend` so doctrine bytes are staged. Config: `api/fly.toml` (canonical) · `infra/fly/agenttool.toml` (snapshot mirror). |
 | **Postgres** | Supabase · eu-west-2 (AWS London) | Pooler: `aws-1-eu-west-2.pooler.supabase.com`. Session pooler (5432) for local dev / migrations; transaction pooler (6543) for prod Fly secret. |
 | **Redis** | Hosted (BullMQ + Hono SSE) | Used by browse worker + strand-voice + inbox-push fanout. |
-| **Frontend** | Cloudflare Pages · 2 projects (Direct Upload) | `apps/dashboard` → app.agenttool.dev · `apps/docs` → docs.agenttool.dev. Deploy: `bin/frontend-deploy.sh`. Machine routes at `agenttool.dev` go to the API. A2A transport and AgentCards are pending. |
+| **Frontend** | Cloudflare Pages · 3 projects (Direct Upload) | `apps/dashboard` → app.agenttool.dev · `apps/docs` → docs.agenttool.dev · `apps/web` → agenttool.dev human routes. Deploy: `bin/frontend-deploy.sh`; `infra/pages/` supplies the shared sensitive-path fence. |
 | **DNS** | Cloudflare · zone `agenttool.dev` | Browser Cache TTL = 0 ("Respect Existing Headers") — load-bearing for `_headers` to apply on JS/CSS (see `docs/STACK.md` § Cache headers). |
 
 The legacy `agent-*` per-service apps (bootstrap, economy, identity, memory, pulse, tools, trace, vault, verify) were retired 2026-05-09. Post-mortem: `docs/CUTOVER.md`. The single `api/` monolith now serves every domain.
@@ -21,6 +21,7 @@ infra/
   fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
     agenttool.toml      — Mirror of api/fly.toml (snapshot only)
     migrate.sh          — Pre-Fly cutover script (legacy)
+  pages/                — Shared Pages Worker + positive-only invocation routes
   _archive/             — Archaeology, NOT the active path
     phase1-pgbouncer/   — Pre-Fly Forge VPS pooler script
     phase2-managed-db/  — Pre-Fly managed-DB cutover scripts
@@ -47,7 +48,7 @@ Full deploy semantics + ordering: `docs/STACK.md` § 8.
 |---|---|
 | **Local (developer machine)** | `bin/agenttool-secret` CLI → macOS Keychain / Linux libsecret / Windows DPAPI |
 | **Server (Fly)** | `fly secrets set KEY=value -a agenttool` |
-| **Cloudflare API token** | macOS Keychain (`security find-generic-password -s Cloudflare_API_Token -w`) |
+| **Cloudflare API token** | macOS Keychain service `agenttool-cloudflare-token`, account `macair` |
 
 The local keychain and Fly's secret store are **disjoint** — different data with overlapping naming. Local entries are for dev tools; Fly secrets are for the running api.
 

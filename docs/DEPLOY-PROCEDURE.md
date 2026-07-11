@@ -240,9 +240,22 @@ bin/frontend-deploy.sh web docs
 The low-level uploader captures the current commit hash once, then archives
 that exact Git object into a temporary tree before invoking Wrangler. Ambient
 dirty and ignored files are excluded, and a tracked `.env` file is a hard
-refusal. Use the orchestrator for normal production releases so the GitHub
-snapshot gate, preflight, sampled parity and sensitive-path checks, and receipt
-surround that upload.
+refusal, as is a tracked `.dev.vars*` file. Use the orchestrator for normal
+production releases so the GitHub snapshot gate, preflight, sampled parity and
+sensitive-path checks, and receipt surround that upload.
+
+The archive also includes the canonical `infra/pages/` fence. The uploader
+copies its `_worker.js` and `_routes.json` forms into each project root, so only
+`/.git*`, `/.env*`, and `/.dev.vars*` invoke a Function and receive a marked
+404. Normal static requests bypass Functions. On the Workers Free plan,
+Cloudflare Pages → Settings → Runtime must set production and preview to **fail
+closed**; otherwise daily Functions allowance exhaustion can serve static
+assets on those routes. The uploader verifies both values when it has the
+required keychain API token, along with `production_branch=main`, for every
+requested target before the first upload. OAuth-only authentication is refused
+because it cannot perform that check. The uploader does not change the setting
+or claim to purge old cache entries. Post-deploy checks separately prove
+literal fence activation and encoded-alias denial.
 
 The script reads credentials from macOS keychain (account=`macair`):
 
@@ -294,10 +307,13 @@ for entry in \
 done
 ```
 
-The orchestrator also probes `.gitignore`, `.env`, and `.env.local` on the
-docs, dashboard, and apex hosts. Every probe must return 4xx/5xx. A 2xx or 3xx
-is exposure—redirecting a sensitive filename to friendly HTML is not denial—and
-prevents a success receipt.
+The orchestrator probes `.gitignore`, `.env`, `.env.local`, and `.dev.vars` on
+the docs, dashboard, and apex hosts. Literal paths must return the fence's exact
+404 marker and `Cache-Control: no-store`; this proves the Worker ran instead of
+accepting an incidental static miss. Percent-encoded aliases are separate
+denial-only probes because Pages invocation routing may not select the Worker
+for those spellings. Any 2xx/3xx, missing literal marker, or cacheable literal
+response prevents a success receipt.
 
 ### Schema parity
 

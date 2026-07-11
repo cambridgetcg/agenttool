@@ -142,7 +142,10 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("trap 'on_deploy_exit");
     expect(deploy).toContain("https://docs.agenttool.dev/.gitignore");
     expect(deploy).toContain("https://app.agenttool.dev/.env.local");
-    expect(deploy).toContain("Sensitive path is publicly reachable");
+    expect(deploy).toContain("https://agenttool.dev/.dev.vars");
+    expect(deploy).toContain("x-agenttool-sensitive-path-fence:");
+    expect(deploy).toContain("Pages fence did not produce its marked non-cacheable 404");
+    expect(deploy).toContain("Encoded sensitive path is publicly reachable");
   });
 
   test("health reports only valid embedded source metadata and disables caching", async () => {

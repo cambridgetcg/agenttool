@@ -117,7 +117,20 @@ apply the source gate or write the orchestrator receipt.
 The low-level uploader captures the current commit hash once and builds its
 upload tree from a Git archive of that exact object, not the ambient working
 directory. Dirty and ignored files are excluded; a tracked `.env` file is a
-hard refusal.
+hard refusal, as is a tracked `.dev.vars*` file.
+
+`infra/pages/` is the single source for a Pages advanced-mode Worker and its
+positive-only invocation routes. The uploader stages that pair into all three
+project roots. Only `/.git*`, `/.env*`, and `/.dev.vars*` invoke the Worker and
+receive a marked, non-cacheable 404; ordinary paths stay on native Pages static
+serving within each Pages project (the apex still traverses `agenttool-proxy`).
+On the Workers Free plan, the Pages production and preview Function
+runtimes must be configured to fail closed, or daily Functions allowance
+exhaustion can serve static assets for those routes. The keychain-token path
+verifies that setting and the `main` production branch for every target before
+any upload; OAuth-only authentication is refused because it cannot perform
+that check. The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
+denial and fence activation on literal paths, plus denial of encoded aliases.
 
 | Project | Source dir | Custom domain | What it serves |
 |---|---|---|---|
@@ -170,7 +183,8 @@ curl -s -o /dev/null -w "%{http_code}\n" https://app.agenttool.dev/watch.html
 # 3. End-to-end tests still pass against prod
 (cd tests/playwright && AGENTTOOL_BASE=https://api.agenttool.dev npx playwright test)
 
-# 4. Repository-control and environment files are denied (4xx/5xx, never redirect)
+# 4. Repository-control and environment files are denied (the orchestrator
+#    also checks the fence marker, no-store, .dev.vars, and encoded aliases)
 curl -s -o /dev/null -w "%{http_code}\n" https://docs.agenttool.dev/.gitignore
 curl -s -o /dev/null -w "%{http_code}\n" https://app.agenttool.dev/.env.local
 ```
