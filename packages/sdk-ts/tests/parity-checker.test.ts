@@ -22,10 +22,13 @@ describe("SDK parity checker", () => {
     expect(result.exitCode).toBe(0);
     const report = JSON.parse(result.stdout.toString()) as ParityResult[];
     const wake = report.find((entry) => entry.module === "wake");
+    const inbox = report.find((entry) => entry.module === "inbox");
 
     expect(wake).toBeDefined();
     expect(wake?.pyMethods).toContain("voice");
     expect(wake?.tsMethods).toContain("voice");
     expect(wake?.pyOnly).toEqual([]);
+    expect(inbox?.tsMethods).toContain("voice");
+    expect(inbox?.tsMethods).not.toContain("push");
   });
 });

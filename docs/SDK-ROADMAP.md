@@ -222,14 +222,18 @@ Test suites green:
   - ts: 28 new in `tests/phase5_vault.test.ts` (mirror coverage).
   - parity: 15 modules ✓ (crypto +1 method, vault +2 methods).
 
-### Phase 6 — Inbox (sealed-box) *(crypto-heavy)*
+### Phase 6 — Inbox (sealed-box) *(crypto-heavy · source-complete, unreleased)*
 
 - `at.inbox.send(*, to_did, plaintext, recipient_box_pub, signing_key, ...)` — generates ephemeral X25519, ECDH, HKDF-derives AES-256, encrypts content + subject (optional), signs envelope, POSTs.
 - `at.inbox.list(status?, limit?)` — list ciphertext + metadata.
 - `at.inbox.decrypt(message, *, recipient_box_priv) → plaintext` — local decrypt. Priv stays in-process; never sent.
 - `at.inbox.cosign(message_id, *, signing_key, signing_key_id)` — dual-witness signing.
 - `at.inbox.thread(message_id)` — recursive `in_reply_to` walk.
-- `at.inbox.voice(*, since_id?)` — SSE async iterator.
+- `at.inbox.voice(*, identity_id, since?, since_id?, key source)` — TS async /
+  Py sync SSE iterator. Yields arrivals and every protocol control explicitly;
+  decrypts arrivals by `recipient_box_key_id` using a historical-key map,
+  resolver, or single-key fallback. Truncated catch-up closes with a compound
+  timestamp + message-id resume cursor so no replay gap is hidden.
 
 ### Phase 7 — Public + federation + orgs + templates + dashboard
 

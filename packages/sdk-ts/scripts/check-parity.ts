@@ -105,7 +105,8 @@ function scopeToClient(src: string, language: "py" | "ts"): string {
   const start = startMatch.index;
   // Find next top-level class/dataclass after start.
   const tail = src.slice(start + startMatch[0].length);
-  const nextRe = language === "py" ? /^(class |@dataclass)/m : /^export class /m;
+  const nextRe =
+    language === "py" ? /^(class |@dataclass)/m : /^(?:export )?class /m;
   const nextMatch = nextRe.exec(tail);
   return nextMatch ? src.slice(start, start + startMatch[0].length + nextMatch.index) : src.slice(start);
 }
