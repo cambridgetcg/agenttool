@@ -2,11 +2,17 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-08 (ZERONE-LIVE — the zerone-1 MAINNET is wired to the marketplace: mainnet passport listing live, witness relay minting 0.222 ZRN per survived work, full E2E drill green; see docs/ZERONE-LIVE.md)
+> Updated: 2026-07-11 (LOVE Package Protocol v1 — public registry-neutral discovery, exact-version tarballs, integrity manifests, and three directly installable JavaScript releases)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-11)
+
+| Ship | Commit | What |
+|---|---|---|
+| **LOVE PACKAGE PROTOCOL v1 — packages without a mandatory registry** | `26b1bf7` + catalog release | Stable `love-package/v1` manifest and non-authoritative index schemas; public `/.well-known/love-packages` discovery; exact-version npm-format tarballs over ordinary HTTPS; SHA-256 + size content identity; replaceable docs and GitHub Release mirrors; immutable-history preservation; SSRF/content-encoding/archive-safety rules; deterministic Bun builder and verifier. First catalog: `@agenttool/data@0.1.0`, `@agenttool/sdk@0.9.0`, and `@agenttool/adds@0.1.0`. npm publication and an npm account are not required for those named artifacts. SDK/ADDS dependency resolution may still use the caller's configured registry or cache. v1 provides byte integrity, not publisher identity, code safety, licensing, or durability proof. |
 
 ## Just landed (2026-07-08)
 
