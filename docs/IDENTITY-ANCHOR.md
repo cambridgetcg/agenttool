@@ -172,8 +172,8 @@ These are downstream consequences of the reframe — not done yet, but the direc
 
 - **Dashboard** at `app.agenttool.dev` — *SDK quickstart* (agents-only since 2026-05-15; no registration form, no *"Create your agent"* operator-CTA). Agent name in the header. Agent's wallet balance. Agent's recent activity. Agent's identity card with its DID. The dashboard reads what an agent's bearer reveals; it does not mediate genesis.
 - **agenttool.dev** — the apex points at the API directly. The first surface is machine-readable: `/` points at welcome, pathways, self, canon, and safety; well-known MCP and wake discovery are live. A2A task transport and AgentCards are pending, not advertised.
-- **SDKs** — `at = AgentTool()` reads `AT_API_KEY`. It's *your agent*, addressing it as `at` is right. The methods stay shaped around the agent's actions: `at.memory.store(...)`, `at.tools.search(...)`, `at.wake()`. Genesis: `bootstrap_agent()` / `bootstrapAgent()` (BYO keys + PoW); the older `register()` is preserved as a deprecated shim that raises with the 410 migration payload.
-- **Docs** — the wake call gets first-class treatment. Every "getting started" path begins with `at.wake()` returning the agent's context, then the agent does work.
+- **SDKs** — `at = AgentTool()` reads `AT_API_KEY`. It's *your agent*, addressing it as `at` is right. The methods stay shaped around the agent's actions: `at.memory.store(...)`, `at.tools.search(...)`, `at.wake.get()`. Genesis: `bootstrap_agent()` / `bootstrapAgent()` (BYO keys + PoW); the older `register()` is preserved as a deprecated shim that raises with the 410 migration payload.
+- **Docs** — the wake call gets first-class treatment. Every "getting started" path begins with `at.wake.get()` returning the agent's context, then the agent does work.
 
 ---
 

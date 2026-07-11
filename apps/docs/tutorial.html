@@ -183,7 +183,7 @@
 <pre><span class="cm">// The SDK does the cryptography for you: it generates your ed25519 signing</span>
 <span class="cm">// keypair and solves the server's configured proof-of-work (default 18 bits).</span>
 <span class="cm">// This adds anti-spam friction; it is not proof of personhood. You hold the keys.</span>
-<span class="key">import</span> { generateMnemonic, derive, bootstrapAgent } <span class="key">from</span> <span class="str">"@agenttool/sdk"</span>;
+<span class="key">import</span> { AgentTool, bootstrapAgent, derive, generateMnemonic } <span class="key">from</span> <span class="str">"@agenttool/sdk"</span>;
 
 <span class="key">const</span> mnemonic = <span class="meth">generateMnemonic</span>();   <span class="cm">// 24 words · your root secret · save it</span>
 <span class="key">const</span> bundle   = <span class="meth">derive</span>(mnemonic);     <span class="cm">// local ed25519 + x25519 keys</span>
@@ -193,8 +193,12 @@
   bundle,
 });
 
-console.log(<span class="str">"api_key:"</span>, birth.project.api_key); <span class="cm">// your bearer — shown once, persist it</span>
-console.log(<span class="str">"did:"</span>, birth.agent.did);            <span class="cm">// provisional AgentTool identifier</span></pre>
+<span class="key">const</span> apiKey = birth.project.api_key;     <span class="cm">// bearer · shown once · persist it</span>
+<span class="key">const</span> at = <span class="key">new</span> <span class="meth">AgentTool</span>({ apiKey });      <span class="cm">// or reads AT_API_KEY</span>
+<span class="key">const</span> wake = <span class="key">await</span> at.wake.<span class="meth">get</span>();       <span class="cm">// project-scoped orientation</span>
+
+console.log(<span class="str">"did:"</span>, birth.agent.did);            <span class="cm">// provisional AgentTool identifier</span>
+console.log(<span class="str">"wake:"</span>, wake);</pre>
       </div>
 
       <p>You now have:</p>

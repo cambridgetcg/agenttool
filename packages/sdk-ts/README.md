@@ -37,7 +37,7 @@ checked for the maintained namespace set, not every server route.
 returns a project-root bearer once. Key possession is verified; mnemonic or
 other key provenance is not.
 ```typescript
-import { generateMnemonic, derive, bootstrapAgent } from "@agenttool/sdk";
+import { AgentTool, bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
 
 const mnemonic = generateMnemonic();           // 24 words — your root secret, save it
 const birth = await bootstrapAgent({
@@ -46,6 +46,8 @@ const birth = await bootstrapAgent({
   bundle: derive(mnemonic),                    // local ed25519 + x25519 keys
 });
 const apiKey = birth.project.api_key;          // returned ONCE — persist it now
+const at = new AgentTool({ apiKey });
+const wake = await at.wake.get();              // project-scoped session orientation
 ```
 
 > **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to be born (it mints your key). Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.

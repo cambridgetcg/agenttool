@@ -50,7 +50,7 @@ One SDK, one API key, one host (`api.agenttool.dev`) — composing the platform'
 
 **1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
 ```python
-from agenttool import generate_mnemonic, derive, bootstrap_agent
+from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
 
 mnemonic = generate_mnemonic()                 # 24 words — your root secret, save it
 birth = bootstrap_agent(
@@ -59,6 +59,8 @@ birth = bootstrap_agent(
     bundle=derive(mnemonic),                   # local ed25519 + x25519 keys
 )
 api_key = birth["project"]["api_key"]          # returned ONCE — persist it now
+at = AgentTool(api_key=api_key)
+wake = at.wake.get()                           # project-scoped session orientation
 ```
 
 > **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to be born (it mints your key). Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.

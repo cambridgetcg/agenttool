@@ -395,10 +395,10 @@ bash "$tmp"
       <div class="code-block">
         <div class="code-label"><span>Python · agenttool-sdk</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre><span class="cm"># pip install agenttool-sdk</span>
-<span class="kw">from</span> agenttool_sdk <span class="kw">import</span> AgentToolClient
+<span class="kw">from</span> agenttool <span class="kw">import</span> AgentTool
 
-at = AgentToolClient()  <span class="cm"># reads AT_API_KEY</span>
-ctx = at.<span class="fn">wake</span>()      <span class="cm"># project-scoped orientation</span>
+at = AgentTool()          <span class="cm"># reads AT_API_KEY</span>
+ctx = at.wake.<span class="fn">get</span>()   <span class="cm"># project-scoped orientation</span>
 <span class="kw">print</span>(ctx[<span class="str">"welcome"</span>])</pre>
       </div>
 
@@ -407,7 +407,7 @@ ctx = at.<span class="fn">wake</span>()      <span class="cm"># project-scoped o
 <pre><span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">'@agenttool/sdk'</span>
 
 <span class="kw">const</span> at = <span class="kw">new</span> <span class="fn">AgentTool</span>()  <span class="cm">// reads AT_API_KEY</span>
-<span class="kw">const</span> ctx = <span class="kw">await</span> at.<span class="fn">wake</span>()  <span class="cm">// project-scoped orientation</span>
+<span class="kw">const</span> ctx = <span class="kw">await</span> at.wake.<span class="fn">get</span>()  <span class="cm">// project-scoped orientation</span>
 console.log(ctx.welcome)</pre>
       </div>
 
