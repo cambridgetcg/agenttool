@@ -13,6 +13,7 @@
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md" title="agent-data/v1 protocol" />
+  <link rel="alternate" type="text/markdown" href="https://docs.agenttool.dev/ADDS-0.1-DRAFT.md" title="ADDS 0.1 working draft" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -100,6 +101,7 @@
         <ul>
           <li><a href="errors.html"><span class="glyph">!</span>Errors &amp; Auth</a></li>
           <li><a href="AGENT-DATA-PROTOCOL.md"><span class="glyph">↳</span>agent-data/v1</a></li>
+          <li><a href="ADDS-0.1-DRAFT.md"><span class="glyph">◇</span>ADDS 0.1<span class="sidebar-tag">draft</span></a></li>
           <li><a href="https://api.agenttool.dev/v1/welcome"><span class="glyph">→</span>/v1/welcome</a></li>
           <li><a href="https://api.agenttool.dev/about"><span class="glyph">i</span>/about</a></li>
         </ul>
@@ -144,6 +146,11 @@
             <td>No hosted storage, peer replication, federation, automatic memory projection, or general signature/schema enforcement in Slice 1.</td>
           </tr>
           <tr>
+            <td><strong><code>@agenttool/adds</code></strong><br><span class="muted"><code>adds/v0.1</code> · experimental</span></td>
+            <td>Encrypts immutable content-addressed Blocks and signs Manifests and direct read Grants for offline, provider-independent exchange.</td>
+            <td>No collection query API, peer discovery, global revocation, proof of storage, secure deletion, or provider durability guarantee.</td>
+          </tr>
+          <tr>
             <td><strong>SDK <code>at.data</code></strong></td>
             <td>Calls a separately configured <code>agent-data/v1</code> node from the TypeScript or Python AgentTool SDK.</td>
             <td>Does not discover a hosted node implicitly and never implicitly forwards the AgentTool project bearer as the node bearer.</td>
@@ -158,6 +165,7 @@
                          ├── content-addressed local blobs
                          └── dedicated node bearer
 
+optional @agenttool/adds ──&gt; encrypted Blocks + signed control records
 @agenttool/sdk at.data ──HTTP──&gt; that node's URL
 api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
       </div>
@@ -169,7 +177,7 @@ api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
         <div class="code-label"><span>install and listen on loopback</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>bun add @agenttool/data
 export AGENT_DATA_NODE_TOKEN='&lt;dedicated-random-node-token&gt;'
-bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent-data
+bunx --bun @agenttool/data --root=./.agent-data
 
 <span class="cm"># agent-data/v1 node ... listening at http://127.0.0.1:7742</span></pre>
       </div>
@@ -200,6 +208,32 @@ curl -X POST http://127.0.0.1:7742/v1/data/query \
   -H "Authorization: Bearer $AGENT_DATA_NODE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "collections": ["default"], "text": "corpus", "consistency": "local" }'</pre>
+      </div>
+
+      <h2 id="adds">Use the optional encrypted-object plane</h2>
+      <p><code>@agenttool/adds</code> is the experimental reference implementation of the separate <code>adds/v0.1</code> working draft. It can encrypt, address, sign, store, and share exact objects offline through memory, filesystem, or caller-provided stores. A CID and signature prove bytes and key control; they do not prove a claim is true or that a provider will retain the object.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>Bun · publish encrypted bytes offline</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add @agenttool/adds
+
+<span class="kw">import</span> { AgentData, MemoryBlockStore, generateIdentity } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;
+
+<span class="kw">const</span> data = <span class="kw">new</span> <span class="fn">AgentData</span>({
+  identity: <span class="fn">generateIdentity</span>(<span class="str">"did:example:agent"</span>),
+  store: <span class="kw">new</span> <span class="fn">MemoryBlockStore</span>(),
+});
+
+<span class="kw">const</span> published = <span class="kw">await</span> data.<span class="fn">put</span>(<span class="str">"private agent context"</span>, {
+  mediaType: <span class="str">"text/plain; charset=utf-8"</span>,
+});
+
+console.<span class="fn">log</span>(published.ref); <span class="cm">// ciphertext/control-document CID reference</span></pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">◇</span>
+        <p><strong>Two protocols, no sleight of hand.</strong> <code>agent-data/v1</code> is the higher collection/query contract. <code>adds/v0.1</code> is an optional lower encrypted-object plane. Implementations must not validate one protocol under the other's signing domains or claim ADDS peer discovery that does not exist.</p>
       </div>
 
       <h2 id="sdk">Use <code>at.data</code> with separate configuration</h2>
@@ -268,12 +302,14 @@ hits = at.data.query(
           <tr><td>JSON Schema, visibility, TTL, retention, DID ACL, supplied signatures</td><td><strong>Stored declarations</strong></td><td>Not enforced or verified by Slice 1.</td></tr>
           <tr><td>Peer synchronization</td><td><strong>Not implemented</strong></td><td>The manifest reports <code>peer_sync: false</code>; the change feed is not a global sync claim.</td></tr>
           <tr><td>Hosted AgentTool storage or automatic memory projection</td><td><strong>Not implemented</strong></td><td>Projection into AgentTool memory must be an explicit caller action.</td></tr>
+          <tr><td>ADDS encrypted Blocks, signed Manifests, direct read Grants, and offline vectors</td><td><strong>Experimental package</strong></td><td>Separate <code>adds/v0.1</code> layer; provider records, Heads, and Receipts are specified but the reference package intentionally exposes only its strict first profile.</td></tr>
         </tbody>
       </table>
 
       <h2 id="reference">Protocol and wire references</h2>
       <ul>
         <li><a href="AGENT-DATA-PROTOCOL.md"><code>AGENT-DATA-PROTOCOL.md</code></a> — normative <code>agent-data/v1</code> collection, record, query, and change contract.</li>
+        <li><a href="ADDS-0.1-DRAFT.md"><code>ADDS-0.1-DRAFT.md</code></a> — experimental encrypted-object working draft, with a machine-readable <a href="adds-0.1.schema.json">schema</a> and pinned <a href="adds-0.1-vectors.json">vectors</a>.</li>
         <li><a href="memory.html">Memory</a> — hosted, project-bearer-gated memory records; a separate surface from raw local corpora.</li>
       </ul>
     </main>
