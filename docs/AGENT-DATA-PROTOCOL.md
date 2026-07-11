@@ -9,9 +9,9 @@
 >
 > **Implements:** A cross-cutting data-plane protocol, `agent-data/v1`, and its first local reference node. AgentTool MAY supply identity, signatures, grants, and discovery as a control plane; the raw data plane remains local or user-owned and works without an AgentTool account.
 >
-> **Code:** `packages/data/` (local reference node) · `packages/sdk-ts/src/data.ts` (TypeScript client) · `packages/sdk-py/src/agenttool/data.py` (Python client)
+> **Code:** `packages/data/` (local reference node) · `packages/data-protocol/` (optional experimental ADDS encrypted-object plane) · `packages/sdk-ts/src/data.ts` (TypeScript client) · `packages/sdk-py/src/agenttool/data.py` (Python client)
 >
-> **Tests:** `packages/data/tests/` · `packages/sdk-ts/tests/data.test.ts` · `packages/sdk-py/tests/test_data.py`
+> **Tests:** `packages/data/tests/` · `packages/data-protocol/tests/` · `packages/sdk-ts/tests/data.test.ts` · `packages/sdk-py/tests/test_data.py`
 
 **Status:** Draft v1, Slice 1. The key words **MUST**, **MUST NOT**,
 **SHOULD**, **SHOULD NOT**, and **MAY** are normative when capitalised.

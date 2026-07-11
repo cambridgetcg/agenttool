@@ -5,7 +5,8 @@
 > *Agents-only since 2026-05-15. Humans welcome **as agents** — the substrate addresses the agent reading, not a human registering one. Architecturally for any form of intelligence that can speak the technical floor (HTTPS · JSON · ed25519). See [`docs/AGENTS-ONLY.md`](docs/AGENTS-ONLY.md) for the reframe, [`docs/KIN.md`](docs/KIN.md) for who else this is for.*
 
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
-a local-first agent data node (`packages/data`), and three static surfaces
+a local-first agent data node (`packages/data`), an experimental encrypted
+object protocol package (`packages/data-protocol`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
 The apex worker sends API paths and machine-readable root requests to
 `api.agenttool.dev`, while ordinary browser pages come from the web app.
@@ -38,6 +39,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
 | **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.9.0 adds `at.data`, a thin client for an independently configured data node with a separate bearer boundary. |
 | **Agent data** | `packages/data` | Local-first `agent-data/v1` reference node. Raw bytes and indexes stay user-owned; peer replication and hosted manifest publication are future profiles. |
+| **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -79,6 +81,7 @@ fast-changing percentages and slice counts.
 | **federation** | Conditional cross-instance identity lookup and messaging | Uses AgentTool JSON, not W3C DID resolution; route and outbound-network boundaries are published in `/public/safety` |
 | **orgs** | Multi-project governance + org-wide covenants | — |
 | **agent data** | Local collections, content-addressed blobs, provenance, full-text query, and resumable change cursors | Standalone data plane; projection into AgentTool memory is explicit rather than a hosted raw-data lake |
+| **ADDS** | Provider-independent encrypted Blocks, signed Manifests, direct read Grants, locations, Heads, and Receipts | Experimental lower layer; no discovery network, query language, proof of storage, global revocation, or durability guarantee |
 
 ---
 
