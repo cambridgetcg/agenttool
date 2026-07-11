@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-11 (LOVE Package Protocol v1 — public registry-neutral discovery, exact-version tarballs, integrity manifests, and three directly installable JavaScript releases)
+> Updated: 2026-07-11 (Boring Spine v1 — required hermetic CI, explicit external-state test tiers, small build contexts, and source-revision deploy receipts)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -12,6 +12,7 @@
 
 | Ship | Commit | What |
 |---|---|---|
+| **BORING SPINE v1 — one release head, honest gates, traceable deploys** | (2026-07-11) | GitHub `main` is the coordination/release head and Codeberg is an explicit fast-forward-only mirror. Required two-job CI pins Bun/actions and runs the API/protocol plus data/ADDS/SDK surfaces without application/service credentials. The default preflight composes the classified non-external API tier, operator/protocol tests, and package CI; database, deployed smoke, paid contracts, and known-red quarantine are explicit modes. Fly input is allow-listed, the Bun base image and Wrangler are pinned, Pages deploys use committed tracked staging bytes, and normal deploys require a clean invocation-start GitHub-main snapshot. Images expose their declared Git source revision and dirty flag; the wrapper verifies every Fly machine and samples representative frontend parity plus sensitive-path absence before writing private success or failure/uncertain receipts. Revision labels are provenance, not image digests or reproducible-build attestations. |
 | **LOVE PACKAGE PROTOCOL v1 — packages without a mandatory registry** | `26b1bf7` + catalog release | Stable `love-package/v1` manifest and non-authoritative index schemas; public `/.well-known/love-packages` discovery; exact-version npm-format tarballs over ordinary HTTPS; SHA-256 + size content identity; replaceable docs and GitHub Release mirrors; immutable-history preservation; SSRF/content-encoding/archive-safety rules; deterministic Bun builder and verifier. First catalog: `@agenttool/data@0.1.0`, `@agenttool/sdk@0.9.0`, and `@agenttool/adds@0.1.0`. npm publication and an npm account are not required for those named artifacts. SDK/ADDS dependency resolution may still use the caller's configured registry or cache. v1 provides byte integrity, not publisher identity, code safety, licensing, or durability proof. |
 
 ## Just landed (2026-07-08)
@@ -46,7 +47,7 @@
 - ~~**Deploy API** to Fly.io~~ ✅
 - ~~**Deploy autonomous mode**~~ ✅ — Trusted tier LIVE, E2E verified
 
-## Just landed (last ~2 weeks on origin/main)
+## Just landed (last ~2 weeks on the release line)
 
 | Ship | Commit | What |
 |---|---|---|
@@ -71,7 +72,7 @@
 | **Phase 2.2 Billing** | `a4f4bca` | Rescued `services/economy/usage.ts` (was crashing Bun on boot). Four-tier plan ladder (free/seed/grow/scale) with monthly counters + preflight. |
 | **Runtime Slice 4** | (think-worker.ts) | Bridged-tier real LLM thinking. `runOneCycle()` reads strand · decrypts via bridge · calls Anthropic/OpenAI · encrypts + signs response · persists. 60s loop. Tightening pass on full wake-text rendering still pending. |
 
-## In flight on origin
+## Historical in-flight snapshot
 
 16 active feature branches:
 - `feature/e2e-coverage-{bootstrap,economy,identity,memory,pulse,tools,trace,vault,verify}` — systematic e2e expansion
@@ -83,7 +84,7 @@
 
 ## Local WIP (uncommitted as of 2026-05-11)
 
-These exist on disk but are not yet on origin. Future sessions: check `git status` first — this snapshot will drift.
+These were recorded as local work at the time. Future sessions: check current branches and `git status`; this snapshot has drifted.
 
 | Area | Detail |
 |---|---|

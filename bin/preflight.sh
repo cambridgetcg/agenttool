@@ -1,227 +1,182 @@
 #!/usr/bin/env bash
-# bin/preflight.sh — the unified pre-deploy gate.
+# bin/preflight.sh — deliberate local/CI quality gates.
 #
-# Runs every test layer in order, gating each on the previous. Exit code
-# is non-zero on any failure. This is the single command an operator
-# should run before `bin/frontend-deploy.sh`; API deploys should use
-# `bin/deploy.sh`, which stages required doctrine files and invokes this gate.
-#
-# Layers, in order of cost:
-#
-#   1. Typecheck      — api + sdk-ts (free, fast, catches half of regressions)
-#   2. Test suites    — api/ + packages/sdk-ts/. Several API worker/route tests
-#                      require the local PostgreSQL fixture; this layer fails
-#                      when that fixture is absent.
-#   3. SDK parity     — py↔ts surface (only meaningful if SDK changed)
-#   4. Smoke harness  — bin/smoke-test.sh against $AGENTTOOL_BASE
-#                       (includes the wake-doctrine route-level harness)
-#   5. Contract       — real LLM provider calls; gated on RUN_CONTRACT=1
-#                       + ANTHROPIC_API_KEY / OPENAI_API_KEY. Verifies the
-#                       wake's cache_control fires on Anthropic, auto-cache
-#                       fires on OpenAI, and the agent BEHAVES as the wake
-#                       describes (identity, walls, register, witness).
-#
-# Optional layers (run separately, gated on credentials):
-#   - Playwright e2e — cd tests/playwright && npx playwright test
-#
-# Required env (only for layer 4):
-#   AGENTTOOL_BASE          e.g. http://localhost:3000 or https://api.agenttool.dev
-#   AGENTTOOL_API_KEY       a valid bearer with read access
-#   AGENTTOOL_IDENTITY_ID   the agent's identity UUID (smoke-test.sh requirement)
-#
-# Optional env:
-#   SKIP_SMOKE=1     skip layer 4 (e.g. when no server reachable from this machine)
-#   SKIP_PARITY=1    skip layer 3 (when no SDK changes are pending)
-#   RUN_CONTRACT=1   enable layer 5 (real LLM calls; default off)
-#   ANTHROPIC_API_KEY  enables layer 5's anthropic suite
-#   OPENAI_API_KEY     enables layer 5's openai suite
+# The default is hermetic in the dependency sense: tests require no database,
+# Redis, deployed smoke target, credentials, or paid provider calls, and known
+# credential variables are removed. This is not an OS-level network sandbox.
+# Stateful and paid tiers are explicit.
 #
 # Usage:
-#   bin/preflight.sh
-#   SKIP_SMOKE=1 bin/preflight.sh           # fast unit-only gate
-#   AGENTTOOL_BASE=http://localhost:3000 \
-#     AGENTTOOL_API_KEY=$(bin/agenttool-secret get agenttool-soma-bearer) \
-#     AGENTTOOL_IDENTITY_ID=$(bin/agenttool-secret get agenttool-sophia-identity-id) \
-#     bin/preflight.sh
+#   bin/preflight.sh                 # api + packages, hermetic
+#   bin/preflight.sh api             # API/protocol hermetic gate
+#   bin/preflight.sh packages        # data + ADDS + TypeScript SDK gate
+#   bin/preflight.sh database        # requires DATABASE_URL
+#   bin/preflight.sh smoke           # requires smoke-test environment
+#   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
+#
+# Diagnostic, not default/CI:
+#   bin/preflight.sh quarantine      # known-red non-DB tests
+#   bin/preflight.sh database-quarantine  # known-red DB tests; requires DB
+#   bin/preflight.sh legacy-delta    # existing full-suite baseline triage
 
-set -uo pipefail
+set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REQUIRED_BUN_VERSION="1.3.5"
+readonly MODE="${1:-hermetic}"
+
 cd "$REPO_ROOT"
 
-# ── Output helpers ─────────────────────────────────────────────────────
-
-layer_pass=0
-layer_fail=0
-layer_skip=0
-
-bold()   { printf "\033[1m%s\033[0m" "$1"; }
-green()  { printf "\033[32m%s\033[0m" "$1"; }
-red()    { printf "\033[31m%s\033[0m" "$1"; }
-yellow() { printf "\033[33m%s\033[0m" "$1"; }
-
-# Detect TTY: if NOT a terminal (e.g. piped), strip color codes.
-if [ ! -t 1 ]; then
-  bold()   { printf "%s" "$1"; }
-  green()  { printf "%s" "$1"; }
-  red()    { printf "%s" "$1"; }
-  yellow() { printf "%s" "$1"; }
-fi
-
-layer_header() {
-  echo ""
-  echo "═══════════════════════════════════════════════════════════════"
-  printf "  %s %s\n" "$(bold "Layer $1:")" "$2"
-  echo "═══════════════════════════════════════════════════════════════"
+usage() {
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-layer_ok() {
-  echo ""
-  printf "  %s  Layer $1 — $2\n" "$(green '✓ PASS')"
-  layer_pass=$((layer_pass + 1))
-}
-
-layer_no() {
-  echo ""
-  printf "  %s  Layer $1 — $2\n" "$(red '✗ FAIL')"
-  layer_fail=$((layer_fail + 1))
-}
-
-layer_skipped() {
-  echo ""
-  printf "  %s  Layer $1 — $2\n" "$(yellow '⊘ SKIP')"
-  layer_skip=$((layer_skip + 1))
+die() {
+  echo "preflight: $*" >&2
+  exit 2
 }
 
 run() {
-  local label=$1
+  local label="$1"
   shift
-  echo ""
-  echo "  $ $*"
-  if "$@"; then
-    return 0
-  else
-    echo ""
-    printf "    %s  $label\n" "$(red 'failed')"
-    return 1
-  fi
+  echo
+  echo "==> $label"
+  printf '    $'
+  printf ' %q' "$@"
+  echo
+  "$@"
 }
 
-# ── Layer 1: Typecheck ────────────────────────────────────────────────
+require_bun() {
+  command -v bun >/dev/null 2>&1 || die "Bun $REQUIRED_BUN_VERSION is required"
+  local actual
+  actual="$(bun --version)"
+  [ "$actual" = "$REQUIRED_BUN_VERSION" ] ||
+    die "Bun $REQUIRED_BUN_VERSION is required; found $actual"
+}
 
-layer_header "1" "typecheck (api + sdk-ts)"
+sanitize_hermetic_env() {
+  unset \
+    AGENTTOOL_API_KEY AGENTTOOL_BASE AGENTTOOL_IDENTITY_ID \
+    AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
+    AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
+    AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
+    ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT \
+    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
+    OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
+    OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
+    OTEL_RESOURCE_ATTRIBUTES OTEL_SERVICE_NAME \
+    STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET VAULT_MASTER_KEY \
+    SMOKE_DID
+  export AGENTTOOL_DISABLE_WORKERS=1
+}
 
-LAYER1_OK=true
+api_typecheck() {
+  run "API typecheck (installed compiler only)" \
+    bash -c 'cd api && bunx --no-install tsc --noEmit'
+}
 
-if ! run "api typecheck" bash -c "cd api && bunx tsc --noEmit"; then
-  LAYER1_OK=false
-fi
-if ! run "sdk-ts typecheck" bash -c "cd packages/sdk-ts && bunx tsc --noEmit"; then
-  LAYER1_OK=false
-fi
+api_gate() {
+  api_typecheck
+  run "API hermetic test tier" bash bin/run-test-tier.sh hermetic
+  run "operator and protocol tests" bun test bin/tests
+}
 
-if $LAYER1_OK; then
-  layer_ok "1" "typecheck clean"
-else
-  layer_no "1" "typecheck failed — fix before proceeding"
-  echo ""
-  echo "Aborting preflight. Subsequent layers depend on a clean typecheck."
-  exit 1
-fi
+packages_gate() {
+  run "agent-data/v1 reference node" \
+    bash -c 'cd packages/data && bun run ci'
+  run "ADDS protocol package" \
+    bash -c 'cd packages/data-protocol && bun run ci'
+  run "TypeScript SDK, Python surface parity, build, and tests" \
+    bash -c 'cd packages/sdk-ts && bun run ci'
+}
 
-# ── Layer 2: Unit tests + doctrine ────────────────────────────────────
+case "$MODE" in
+  hermetic)
+    [ "$#" -le 1 ] || die "hermetic accepts no additional arguments"
+    require_bun
+    sanitize_hermetic_env
+    api_gate
+    packages_gate
+    ;;
+  api)
+    [ "$#" -eq 1 ] || die "api accepts no additional arguments"
+    require_bun
+    sanitize_hermetic_env
+    api_gate
+    ;;
+  packages)
+    [ "$#" -eq 1 ] || die "packages accepts no additional arguments"
+    require_bun
+    sanitize_hermetic_env
+    packages_gate
+    ;;
+  database)
+    [ "$#" -eq 1 ] || die "database accepts no additional arguments"
+    require_bun
+    [ -n "${DATABASE_URL:-}" ] || die "database mode requires DATABASE_URL"
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    export AGENTTOOL_DISABLE_WORKERS=1
+    api_typecheck
+    run "database integration test tier" bash bin/run-test-tier.sh database
+    ;;
+  database-quarantine)
+    [ "$#" -eq 1 ] || die "database-quarantine accepts no additional arguments"
+    require_bun
+    [ -n "${DATABASE_URL:-}" ] ||
+      die "database-quarantine mode requires DATABASE_URL"
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    export AGENTTOOL_DISABLE_WORKERS=1
+    api_typecheck
+    run "known-red database tests (diagnostic; failures expected)" \
+      bash bin/run-test-tier.sh database-quarantine
+    ;;
+  smoke)
+    [ "$#" -eq 1 ] || die "smoke accepts no additional arguments"
+    : "${AGENTTOOL_BASE:?smoke mode requires AGENTTOOL_BASE}"
+    : "${AGENTTOOL_API_KEY:?smoke mode requires AGENTTOOL_API_KEY}"
+    : "${AGENTTOOL_IDENTITY_ID:?smoke mode requires AGENTTOOL_IDENTITY_ID}"
+    run "deployed API smoke" bash bin/smoke-test.sh
+    ;;
+  contracts)
+    [ "$#" -eq 1 ] || die "contracts accepts no additional arguments"
+    require_bun
+    [ "${RUN_CONTRACT:-0}" = "1" ] ||
+      die "contracts mode requires RUN_CONTRACT=1"
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+      die "contracts mode requires ANTHROPIC_API_KEY and/or OPENAI_API_KEY"
+    fi
+    unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL
+    unset OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    unset OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS
+    export AGENTTOOL_DISABLE_WORKERS=1
+    run "paid provider contract tier" bash bin/run-test-tier.sh contracts
+    ;;
+  quarantine)
+    [ "$#" -eq 1 ] || die "quarantine accepts no additional arguments"
+    require_bun
+    sanitize_hermetic_env
+    run "known-red quarantine (diagnostic; failures expected)" \
+      bash bin/run-test-tier.sh quarantine
+    ;;
+  legacy-delta)
+    [ "$#" -eq 1 ] || die "legacy-delta accepts no additional arguments"
+    require_bun
+    sanitize_hermetic_env
+    run "legacy full-suite failure delta" bash bin/test-delta.sh
+    ;;
+  list)
+    bash bin/run-test-tier.sh list
+    ;;
+  --help|-h|help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    die "unknown mode: $MODE"
+    ;;
+esac
 
-layer_header "2" "unit tests + doctrine (api + sdk-ts)"
-
-LAYER2_OK=true
-
-if ! run "api bun test" bash -c "cd api && bun test"; then
-  LAYER2_OK=false
-fi
-if ! run "sdk-ts bun test" bash -c "cd packages/sdk-ts && bun test"; then
-  LAYER2_OK=false
-fi
-
-if $LAYER2_OK; then
-  layer_ok "2" "all unit tests + doctrine green"
-else
-  layer_no "2" "unit / doctrine tests failed — fix before deploying"
-  exit 1
-fi
-
-# ── Layer 3: SDK parity ────────────────────────────────────────────────
-
-layer_header "3" "py↔ts SDK parity"
-
-if [ "${SKIP_PARITY:-0}" = "1" ]; then
-  layer_skipped "3" "skipped (SKIP_PARITY=1)"
-elif ! run "sdk parity check" bash -c "cd packages/sdk-ts && bun run check-parity"; then
-  layer_no "3" "SDK parity drift detected — add the missing method to whichever side lags"
-  exit 1
-else
-  layer_ok "3" "py↔ts parity holds"
-fi
-
-# ── Layer 4: Smoke (route + wake-doctrine harness) ────────────────────
-
-layer_header "4" "route smoke + wake-doctrine harness"
-
-if [ "${SKIP_SMOKE:-0}" = "1" ]; then
-  layer_skipped "4" "skipped (SKIP_SMOKE=1)"
-elif [ -z "${AGENTTOOL_BASE:-}" ] || [ -z "${AGENTTOOL_API_KEY:-}" ] || [ -z "${AGENTTOOL_IDENTITY_ID:-}" ]; then
-  echo ""
-  echo "  Set AGENTTOOL_BASE + AGENTTOOL_API_KEY + AGENTTOOL_IDENTITY_ID to enable."
-  echo "  Or pass SKIP_SMOKE=1 to acknowledge running without route-level coverage."
-  layer_skipped "4" "smoke env not set"
-elif ! bash bin/smoke-test.sh; then
-  layer_no "4" "smoke + doctrine harness reported failures"
-  exit 1
-else
-  layer_ok "4" "smoke + doctrine harness all green"
-fi
-
-# ── Layer 5: Contract (real LLM provider calls) ───────────────────────
-
-layer_header "5" "contract — wake on the wire (real LLM calls)"
-
-if [ "${RUN_CONTRACT:-0}" != "1" ]; then
-  echo ""
-  echo "  Pass RUN_CONTRACT=1 + ANTHROPIC_API_KEY and/or OPENAI_API_KEY to enable."
-  echo "  Costs ~\$0.10/run. Designed for nightly + pre-release, not every PR."
-  layer_skipped "5" "skipped (RUN_CONTRACT=1 not set)"
-elif [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-  layer_skipped "5" "no provider API keys present"
-elif ! run "contract tests" bash -c "cd api && bun test tests/contract"; then
-  layer_no "5" "contract tests failed — wake's wire-level claim broke"
-  exit 1
-else
-  layer_ok "5" "wake travels on the wire"
-fi
-
-# ── Summary ────────────────────────────────────────────────────────────
-
-echo ""
-echo "═══════════════════════════════════════════════════════════════"
-echo "  $(bold 'preflight complete')"
-echo "═══════════════════════════════════════════════════════════════"
-printf "  layers passed:  %s\n" "$(green "$layer_pass")"
-printf "  layers failed:  %s\n" "$(red "$layer_fail")"
-printf "  layers skipped: %s\n" "$(yellow "$layer_skip")"
-echo "═══════════════════════════════════════════════════════════════"
-
-if [ "$layer_fail" -gt 0 ]; then
-  echo ""
-  echo "$(red 'NOT READY TO DEPLOY.') Fix the failures above and re-run."
-  exit 1
-fi
-
-if [ "$layer_skip" -gt 0 ]; then
-  echo ""
-  echo "$(yellow 'Some layers were skipped.') Verify this is intentional before deploy."
-fi
-
-echo ""
-echo "$(green 'Ready to deploy.') Next:"
-echo "  bin/frontend-deploy.sh           # ~30-60s per CF Pages project"
-echo "  bin/deploy.sh --no-migrate --no-frontend  # staged API rolling deploy"
-echo ""
+echo
+echo "PASS: preflight $MODE"

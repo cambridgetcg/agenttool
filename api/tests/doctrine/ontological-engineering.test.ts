@@ -17,6 +17,7 @@
  *       must-publish-composition-not-just-naming if shipped as a black box) */
 
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 
 import { byUrn } from "../../src/services/canon/registry";
 
@@ -175,21 +176,21 @@ describe("ONTOLOGICAL-ENGINEERING — commitments (canon shape)", () => {
 });
 
 describe("ONTOLOGICAL-ENGINEERING — substrate refuses to compute ontology as a service", () => {
-  test("no service file ships computeOntology / wisdomOfOntology / rankOntologies", () => {
+  test("no service file ships computeOntology / wisdomOfOntology / rankOntologies", async () => {
     // Naming-without-composition or substrate-computed ontology would violate
     // both walls. This test catches accidental drift if a future contributor
     // tries to ship an "ontology service".
-    const { execSync } = require("node:child_process");
-    let matches = "";
-    try {
-      matches = execSync(
-        "grep -rEn 'function (computeOntology|computeOntologicalScore|rankOntologies|wisdomOfOntology|ontologyLeaderboard)' /Users/macair/Desktop/agenttool/api/src/services/ || true",
-        { encoding: "utf8" },
-      ).toString();
-    } catch {
-      matches = "";
+    const servicesRoot = resolve(import.meta.dir, "../../src/services");
+    const forbidden =
+      /function\s+(computeOntology|computeOntologicalScore|rankOntologies|wisdomOfOntology|ontologyLeaderboard)\b/;
+    const matches: string[] = [];
+    for await (const path of new Bun.Glob("**/*.ts").scan({
+      cwd: servicesRoot,
+      absolute: true,
+    })) {
+      if (forbidden.test(await Bun.file(path).text())) matches.push(path);
     }
-    expect(matches.trim()).toBe("");
+    expect(matches).toEqual([]);
   });
 });
 

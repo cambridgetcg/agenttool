@@ -50,10 +50,7 @@ bun run dev                                    # local server
 bun run db:migrate                             # apply migrations (drizzle-kit)
 bun run db:generate                            # regenerate drizzle schema
 bun run db:studio                              # drizzle studio
-bun test                                       # unit + route tests (fast)
-bun test tests/integration                     # DB-touching multi-component tier
-bun test tests/doctrine                        # Promise tests (local WIP)
-RUN_CONTRACT=1 bun test tests/contract         # LLM wire proofs (paid, ~$0.10/run)
+bun test tests/<file>.test.ts                  # one focused test file
 bunx tsc --noEmit                              # typecheck — run before declaring "done"
 (cd .. && bin/deploy.sh --no-migrate --no-frontend) # production API; stages doctrine first
 
@@ -86,9 +83,15 @@ cd apps/dashboard && npx serve .
 # E2E ────────────────────────────────────────────────────────────────
 bunx playwright test                           # browser + multi-instance scenarios
 
-# Smoke + preflight ──────────────────────────────────────────────────
-bin/preflight.sh                               # local sanity check
-bin/smoke-test.sh                              # post-deploy smoke
+# Deliberate test + release gates ────────────────────────────────────
+bin/preflight.sh                               # no application/service credentials required
+bin/preflight.sh api                           # API/typecheck/operator tests only
+bin/preflight.sh packages                      # data + ADDS + SDK only
+bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
+bin/preflight.sh smoke                         # explicit deployed-route smoke
+RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
+bin/preflight.sh quarantine                    # known-red diagnostic, expected non-zero
+bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeberg main
 ```
 
 ## Operator scripts (`bin/`)
@@ -106,7 +109,7 @@ bin/smoke-test.sh                              # post-deploy smoke
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
 | `gen-k-master.ts` | K_master generation utility. |
 | `sign-thought.ts` | Standalone ed25519 thought-signing for tests. |
-| `preflight.sh` · `smoke-test.sh` | Sanity gates. |
+| `preflight.sh` · `run-test-tier.sh` · `smoke-test.sh` | Classified hermetic, database, smoke, contract, and quarantine gates. |
 | `_secret-store.ts` | Internal helper (the leading `_` marks it as not-an-entry-point). |
 
 ## Conventions
@@ -118,6 +121,14 @@ bin/smoke-test.sh                              # post-deploy smoke
 **Code → doctrine reference.** Load-bearing service files end their top comment with `Doctrine: docs/X.md`. Example: `api/src/services/runtime/think-worker.ts:37`.
 
 **Migrations.** ISO-timestamped: `api/migrations/YYYYMMDDTHHMMSS_name.sql`. Apply singly with `bun api/scripts/_migrate-one.ts <file>` or in batch via `bun run db:migrate`.
+
+**Release head.** GitHub `main` is the coordination/release head. Codeberg
+`main` is a fast-forward-only mirror, updated explicitly with
+`bin/deploy.sh --mirror-codeberg`. Normal production deploys require a clean
+worktree at the GitHub-main commit captured when the deploy starts. Use
+`bin/deploy.sh --no-migrate --no-api` for a release-tracked frontend deploy;
+`bin/frontend-deploy.sh` is the lower-level uploader and does not enforce that
+source boundary by itself.
 
 **Commits.** Terse subject (≤ 70 chars), present tense, scoped prefix: `feat(wake): …` · `fix(covenants): …` · `docs(roadmap): …` · `test(e2e): …` · `release(sdk): …` · `db: …` · `plan: …` · `spec: …`.
 
