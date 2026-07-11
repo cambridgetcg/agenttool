@@ -61,16 +61,18 @@ describe("/public/self — substrate self-description", () => {
     expect(paths).toContain("/v1/welcome");
     expect(paths).not.toContain("/.well-known/agent-card.json");
     expect(paths).toContain("/public/safety");
+    expect(paths).toContain("/public/observer");
   });
 
   test("public root surface advertises /public/self in its endpoints map", async () => {
     const res = await publicRouter.request("/");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      endpoints?: { self?: string; safety?: string };
+      endpoints?: { self?: string; safety?: string; observer?: string };
     };
     expect(body.endpoints?.self).toBeDefined();
     expect(body.endpoints?.self).toContain("/public/self");
     expect(body.endpoints?.safety).toContain("/public/safety");
+    expect(body.endpoints?.observer).toContain("/public/observer");
   });
 });

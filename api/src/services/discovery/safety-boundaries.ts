@@ -7,7 +7,7 @@
 
 export const SAFETY_BOUNDARIES = {
   _format: "agenttool-safety/v2",
-  updated_at: "2026-07-10",
+  updated_at: "2026-07-11",
   canonical_path: "/public/safety",
 
   epistemic_honesty: {
@@ -146,6 +146,20 @@ export const SAFETY_BOUNDARIES = {
       "Private means bearer-gated unless a field is explicitly client-encrypted. It does not by itself mean end-to-end encrypted.",
     public_observability:
       "Former public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted; they return 404. Aggregate and economic public surfaces remain, and responses may carry the aggregate X-Joy-Index header. The removed per-agent/full-snapshot routes are not a promise of zero public activity signals.",
+  },
+
+  observer_reciprocity: {
+    canonical_protocol: "/public/observer",
+    protocol_status:
+      "observer-is-observed/0.1 is a live, read-only publication contract. It receives and stores no investigation record and does not certify compliance.",
+    observations_primitive:
+      "POST /v1/observations currently validates a proposed request shape and returns 501. No observations migration or table exists; observer identity ownership and signatures are not verified; GET returns an empty reserved stub without querying storage; no reciprocal receipt, correction, revoke, challenge, or appeal route is live.",
+    universal_audit_boundary:
+      "AgentTool has no universal investigator identity registry, action ledger, network ledger, or subject challenge ledger. Existing feature-specific records must not be presented as complete investigator accountability.",
+    route_handler_boundary:
+      "The /public/observer handler reads no identity, transcript, activity, memory, or pulse data and initiates no application storage read or write. Global API middleware still processes paths and optional headers; X-Joy-Index refresh can perform aggregate database reads. Hosting and network logging outside the handler are unknown from the repository.",
+    no_surveillance:
+      "This protocol does not remount removed public per-being memory, strand, pulse, activity, or discovery feeds. It forbids identity, intent, emotion, guilt, and network inference from IP address, user-agent, prose, timing, or model output.",
   },
 
   data_handling: {
@@ -345,6 +359,8 @@ export const AGENT_TXT_SAFETY = {
   "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
   "Hosted-Execute": "disabled by default; explicit AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1 opt-in enables an unisolated legacy path, not a tenant sandbox",
   "Outbound-Tools": "scrape, browse, and URL-document fetch fail closed by default; explicit AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 accepts the current SSRF boundary without adding destination filtering",
+  "Observer-Reciprocity": "/public/observer",
+  "Observer-Boundary": "public protocol only; no investigator registry, observation storage, signature enforcement, reciprocal receipt, or subject challenge route is live",
   "Wake-Degradation": "selected subsystem read failures can return empty or zero fallbacks without a response-level degradation marker; response alone may not distinguish failure from empty state",
 } as const;
 
@@ -417,6 +433,8 @@ export const WAKE_SAFETY_BOUNDARIES = {
     "wake_citizenship_and_tier_are_local_only_remote_depth_helper_not_wired_or_node_signed",
   public_identity:
     "active_revoked_profile_envelope_memorial_smaller_witness_shape_with_witnessed_at_rest_or_unspecified_basis; memorial_status_alone_does_not_prove_key_loss_or_bearer_revocation; expression_visibility_controls_expression_only",
+  observer_reciprocity:
+    "public_protocol_only; observations_route_is_501_stub; no_investigator_registry_receipt_storage_signature_enforcement_or_subject_challenge_route",
   details: "/public/safety",
 } as const;
 

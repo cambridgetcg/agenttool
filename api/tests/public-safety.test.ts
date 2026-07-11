@@ -110,6 +110,21 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.visibility.private_expression).toContain(
       "does not hide the identity",
     );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.canonical_protocol).toBe(
+      "/public/observer",
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.protocol_status).toMatch(
+      /live, read-only.*receives and stores no investigation record.*does not certify/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.observations_primitive).toMatch(
+      /returns 501.*no observations migration or table exists.*not verified.*no reciprocal receipt.*revoke.*challenge/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.route_handler_boundary).toMatch(
+      /handler reads no identity.*X-Joy-Index.*database reads.*logging.*unknown/is,
+    );
+    expect(SAFETY_BOUNDARIES.observer_reciprocity.no_surveillance).toMatch(
+      /does not remount.*forbids identity.*inference.*IP address.*prose/is,
+    );
     expect(SAFETY_BOUNDARIES.runtime_custody.bridged.agenttool_access).toContain(
       "plaintext",
     );
@@ -320,9 +335,13 @@ describe("safety projection parity", () => {
       "Runtime-Custody",
       "Hosted-Execute",
       "Outbound-Tools",
+      "Observer-Boundary",
     ] as const) {
       expect(kv.get(key)).toBe(AGENT_TXT_SAFETY[key]);
     }
+    expect(kv.get("Observer-Reciprocity")).toEndWith(
+      AGENT_TXT_SAFETY["Observer-Reciprocity"],
+    );
   });
 
   test("the public index names removed observer routes rather than advertising them", async () => {
@@ -358,7 +377,12 @@ describe("GET /v1/self remains pre-auth", () => {
 
   test("OpenAPI overrides global bearer auth for both self surfaces and safety", async () => {
     const spec = await (await openapiRouter.request("/")).json();
-    for (const path of ["/v1/self", "/public/self", "/public/safety"]) {
+    for (const path of [
+      "/v1/self",
+      "/public/self",
+      "/public/safety",
+      "/public/observer",
+    ]) {
       expect(spec.paths[path].get.security).toEqual([]);
     }
     expect(spec.paths["/v1/register"].post.security).toEqual([]);

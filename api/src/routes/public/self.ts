@@ -80,6 +80,11 @@ app.get("/", (c) => {
             method: "GET",
             path: "/public/safety",
           },
+          {
+            action: "read the reciprocal observer protocol",
+            method: "GET",
+            path: "/public/observer",
+          },
         ],
       },
     ), "/public/self"),

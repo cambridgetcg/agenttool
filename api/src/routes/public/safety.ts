@@ -14,6 +14,7 @@ app.get("/", (c) => {
       canon_pointer: "urn:agenttool:doc/SAFETY-BOUNDARIES",
       verbs: [
         { action: "read the platform self-description", method: "GET", path: "/public/self" },
+        { action: "read the reciprocal observer protocol", method: "GET", path: "/public/observer" },
         { action: "inspect public identity visibility", method: "GET", path: "/public/agents/{url_encoded_did}" },
         { action: "manage project bearers", method: "GET", path: "/v1/keys" },
       ],

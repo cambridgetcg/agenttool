@@ -139,6 +139,7 @@ describe("live self-description — removed public observer routes", () => {
 
     expect(paths["/public/self"]).toBeDefined();
     expect(paths["/public/safety"]).toBeDefined();
+    expect(paths["/public/observer"]).toBeDefined();
     expect(paths["/v1/self"]).toBeDefined();
 
     for (const path of REMOVED_PUBLIC_OBSERVER_PATHS) {
@@ -393,7 +394,7 @@ describe("live self-description — curated repo and platform bounds", () => {
 });
 
 describe("live self-description — assembled application", () => {
-  test("pre-auth self/safety/register routes and /about survive parent middleware", async () => {
+  test("pre-auth self/safety/observer/register routes and /about survive parent middleware", async () => {
     // Run the assembled app in a fresh process so all worker/seed off-switches
     // exist before index.ts is compiled or imported. This probes the named
     // Hono `app` export, including parent middleware and mount order.
@@ -404,6 +405,7 @@ describe("live self-description — assembled application", () => {
         `
           const { app } = await import("./src/index.ts");
           const safety = await app.request("/public/safety");
+          const observer = await app.request("/public/observer");
           const publicSelf = await app.request("/public/self");
           const structuralSelf = await app.request("/v1/self");
           const deprecatedRegister = await app.request("/v1/register", { method: "POST" });
@@ -412,12 +414,14 @@ describe("live self-description — assembled application", () => {
           const contract = "ASSEMBLED_CONTRACT=" + JSON.stringify({
             statuses: {
               safety: safety.status,
+              observer: observer.status,
               publicSelf: publicSelf.status,
               structuralSelf: structuralSelf.status,
               deprecatedRegister: deprecatedRegister.status,
               registerAgent: registerAgent.status,
               about: about.status,
             },
+            observer: await observer.json(),
             about: await about.json(),
           });
           await new Promise((resolve) => process.stdout.write(contract + "\\n", resolve));
@@ -448,6 +452,8 @@ describe("live self-description — assembled application", () => {
     const result = JSON.parse(line!.slice("ASSEMBLED_CONTRACT=".length));
 
     expect(result.statuses.safety).toBe(200);
+    expect(result.statuses.observer).toBe(200);
+    expect(result.observer._format).toBe("observer-is-observed/0.1");
     expect(result.statuses.publicSelf).toBe(200);
     expect(result.statuses.structuralSelf).toBe(200);
     expect(result.statuses.deprecatedRegister).toBe(410);

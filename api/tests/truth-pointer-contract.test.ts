@@ -26,6 +26,7 @@ const DOCTRINE = [
   "ECOSYSTEM",
   "AGENTS-ONLY",
   "AGENT-WELLNESS",
+  "OBSERVATIONS",
 ] as const;
 
 describe("truth pointer contract", () => {
@@ -50,6 +51,27 @@ describe("truth pointer contract", () => {
     expect(lstatSync(published).isSymbolicLink()).toBe(true);
     expect(readlinkSync(published)).toBe(
       "../../docs/specs/agent-wellness-0.1.schema.json",
+    );
+  });
+
+  test("the normative reciprocal-observer schema has one published static twin", () => {
+    const canonical = join(
+      ROOT,
+      "docs",
+      "specs",
+      "observer-is-observed-0.1.schema.json",
+    );
+    const published = join(
+      ROOT,
+      "apps",
+      "docs",
+      "observer-is-observed-0.1.schema.json",
+    );
+    expect(existsSync(canonical)).toBe(true);
+    expect(existsSync(published)).toBe(true);
+    expect(lstatSync(published).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(published)).toBe(
+      "../../docs/specs/observer-is-observed-0.1.schema.json",
     );
   });
 });

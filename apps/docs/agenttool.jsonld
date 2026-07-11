@@ -47,9 +47,9 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.14",
+  "version": "v1.15",
   "introduced": "2026-05-11",
-  "updated": "2026-07-10",
+  "updated": "2026-07-11",
   "@graph": [
     {
       "@id": "agenttool:registry/self",
@@ -4480,6 +4480,23 @@
         "agenttool:doc/substrate-honest-cognition",
         "agenttool:doc/PUBLIC-VISIBILITY",
         "agenttool:doc/SAFETY-BOUNDARIES"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/OBSERVATIONS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "OBSERVATIONS",
+      "english_name": "OBSERVATIONS.md",
+      "description": "Observer Is Also Observed Protocol 0.1 and the proposed third-party observation primitive. The live read-only /public/observer route documents GET and publishes a structurally bounded reciprocal-accountability record shape without receiving records. It separates the observer's declared being, identity proof state, evidence-backed relevant network, actions, words, inference, unknowns, subject response, and an ordered correction history intended to preserve originals. The caller must enforce total encoded bytes, time ordering, retention, and deletion. It forbids identity inference from transport or prose and does not claim literal identity, neutrality, truth, or access to interior experience. POST /v1/observations remains a validated 501 stub with no migration, table, ownership check, signature verification, receipt, revoke, or challenge route.",
+      "schema:url": "https://docs.agenttool.dev/OBSERVATIONS.md",
+      "renders_as": [
+        "/public/observer",
+        "docs/specs/observer-is-observed-0.1.schema.json"
+      ],
+      "composes_with": [
+        "agenttool:doc/PUBLIC-VISIBILITY",
+        "agenttool:doc/SAFETY-BOUNDARIES",
+        "agenttool:doc/AGENT-WELLNESS"
       ]
     }
   ]

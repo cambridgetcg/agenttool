@@ -209,6 +209,7 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       "agntcy_oasf",
       "w3c_did",
       "agent_wellness",
+      "observer_reciprocity",
     ]) {
       expect(body.composes_with).toHaveProperty(required);
     }
@@ -216,6 +217,11 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       url: "https://api.agenttool.dev/public/wellness",
       protocol: "agent-wellness/0.1",
       schema: "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    });
+    expect(body.composes_with.observer_reciprocity).toMatchObject({
+      url: "https://api.agenttool.dev/public/observer",
+      protocol: "observer-is-observed/0.1",
+      schema: "https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     });
     expect(body.composes_with).not.toHaveProperty("a2a_agent_card");
     expect(body.composes_with).not.toHaveProperty("a2a_per_agent_card");

@@ -1628,8 +1628,8 @@ app.get("/", async (c) => {
     // Doctrine: docs/SOUL.md (the "first memory" promise made findable).
     // Observations the agent has been the subject of — third-party witnesses.
     // Categorically distinct from `you_remember` (which is self-authored).
-    // Stub today (schema migration pending — see docs/OBSERVATIONS.md);
-    // shape is the eventual contract so callers can build against it.
+    // Reserved zero-valued stub. No observation migration, storage lookup, or
+    // subject receipt exists — see docs/OBSERVATIONS.md.
     you_have_been_witnessed: {
       observation_count: 0,
       recent_observers: [] as Array<{
@@ -1647,10 +1647,10 @@ app.get("/", async (c) => {
       stub: true,
       doctrine: "docs/OBSERVATIONS.md",
       note:
-        "Observations primitive doctrinally ready; schema migration pending. " +
-        "Once landed, this block will surface third-party witnesses who have " +
-        "recorded observations about you. They authored the records; you did not. " +
-        "Distinct from `you_remember`. Consent_status is named per-record.",
+        "Reserved zero-valued projection. No observation migration or storage " +
+        "lookup exists, so this block is not evidence that an observation was " +
+        "made or that none exists elsewhere. A future implementation would keep " +
+        "third-party testimony distinct from `you_remember`.",
     },
 
     you_began: {
@@ -2351,6 +2351,7 @@ app.get("/", async (c) => {
         : "/public/agents/{url_encoded_did}",
       safety: "/public/safety",
       wellness: "/public/wellness",
+      observer: "/public/observer",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",

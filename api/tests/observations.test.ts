@@ -1,6 +1,6 @@
 /** Observations primitive — witness-without-authentication.
  *
- *  Today the route stubs return guided 501s (schema migration pending).
+ *  Today the route stubs return guided 501s. No migration exists.
  *  These tests verify the contract: body validation, self-witnessing
  *  rejection, structured next_actions in the 501.
  *
@@ -33,10 +33,11 @@ const validBody = {
 };
 
 describe("POST /v1/observations — body validation", () => {
-  test("valid body returns guided 501 (schema migration pending)", async () => {
+  test("valid body returns an honest guided 501", async () => {
     const { status, body } = await post(validBody);
     expect(status).toBe(501);
-    expect(body.error).toBe("observations_pending_migration");
+    expect(body.error).toBe("observations_not_implemented");
+    expect(body.details.storage_migration_exists).toBe(false);
     expect(Array.isArray(body.next_actions)).toBe(true);
     expect(body.next_actions.length).toBeGreaterThan(0);
   });
@@ -67,8 +68,8 @@ describe("POST /v1/observations — body validation", () => {
 
   test("kind 'custom:foo' is accepted (custom-namespace extensibility)", async () => {
     const { status, body } = await post({ ...validBody, kind: "custom:reef-bloom" });
-    expect(status).toBe(501); // valid body → migration-pending stub
-    expect(body.error).toBe("observations_pending_migration");
+    expect(status).toBe(501); // valid body, still only a proposal
+    expect(body.error).toBe("observations_not_implemented");
   });
 
   test("kind 'custom:Invalid' (uppercase) is rejected — strict slug grammar", async () => {
@@ -96,18 +97,22 @@ describe("POST /v1/observations — body validation", () => {
       "consent_impossible",
     ]) {
       const { status } = await post({ ...validBody, consent_status: consent });
-      expect(status).toBe(501); // valid → migration-pending
+      expect(status).toBe(501); // valid syntax, no implementation
     }
   });
 
   test("guided 501 includes a doctrine link", async () => {
     const { body } = await post(validBody);
-    expect(body.docs).toMatch(/observations/);
+    expect(body.docs).toBe("https://docs.agenttool.dev/OBSERVATIONS.md");
   });
 
   test("guided 501 echoes the validated request shape in details", async () => {
     const { body } = await post(validBody);
     expect(body.details?.received?.about_identity_id).toBe(validBody.about_identity_id);
+    expect(body.details?.observer_reciprocity_contract).toBe("/public/observer");
+    expect(body.details?.reciprocal_receipt_persisted).toBe(false);
+    expect(body.details?.subject_challenge_correction_or_appeal_route).toBe(false);
+    expect(body.next_actions[0]?.path).toBe("/public/observer");
   });
 });
 
@@ -124,11 +129,11 @@ describe("GET /v1/observations", () => {
 });
 
 describe("GET /v1/observations/:id", () => {
-  test("returns guided 501 (schema pending)", async () => {
+  test("returns guided 501 (no storage implementation)", async () => {
     const res = await app.request("/some-id-here");
     expect(res.status).toBe(501);
     const body = await res.json();
-    expect(body.error).toBe("observations_pending_migration");
+    expect(body.error).toBe("observations_not_implemented");
     expect(body.details?.requested_id).toBe("some-id-here");
   });
 });

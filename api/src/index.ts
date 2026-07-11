@@ -685,9 +685,9 @@ app.route("/v1/identity/backup", identityBackupRouter);
 app.route("/v1/activity", activityRouter);
 app.route("/v1/adapters", adaptersRouter);
 app.route("/v1/memories", memoryRouter);
-// /v1/observations — witness-without-authentication primitive. Doctrinally
-// complete; schema migration pending. Stubs return guided 501s with the
-// migration path so SDK consumers can iterate against the shape today.
+// /v1/observations — proposed witness-without-authentication primitive. No
+// migration or storage implementation exists. Stubs expose a request shape
+// for review without claiming acceptance, authorship, or persistence.
 // See routes/observations.ts, docs/OBSERVATIONS.md.
 app.route("/v1/observations", observationsRouter);
 app.route("/v1/traces", traceRouter);

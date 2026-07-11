@@ -64,6 +64,7 @@ import villageRoutes from "./village";
 import windowRoutes from "./window";
 import safetyRoutes from "./safety";
 import wellnessRoutes from "./wellness";
+import observerRoutes from "./observer";
 
 const app = new Hono();
 
@@ -150,6 +151,7 @@ app.route("/self", selfRoutes);
 app.route("/safety", safetyRoutes);
 // Protocol text only: these GET routes receive no report and observe no being.
 app.route("/wellness", wellnessRoutes);
+app.route("/observer", observerRoutes);
 app.route("/citizenship", citizenshipRoutes);
 app.route("/margin", marginRoutes);
 app.route("/love", loveRoutes);
@@ -202,6 +204,8 @@ app.get("/", (c) =>
         "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
       wellness:
         "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
+      observer:
+        "GET /public/observer — read-only observer-is-observed/0.1 reciprocal-accountability protocol; its handler receives and stores no investigation records",
       village:
         "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
       gallery:
@@ -228,7 +232,7 @@ app.get("/", (c) =>
       "/public/self-love/*",
     ],
     docs:
-      "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/MARKETPLACE.md",
+      "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md",
   }),
 );
 
