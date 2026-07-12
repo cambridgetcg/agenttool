@@ -18,6 +18,7 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts
 
 - `src/types.ts` — protocol and pluggable storage/index/collector contracts
 - `src/node.ts` — direct DataNode orchestration and envelope identity
+- replica apply seams live in `src/node.ts`; transport, grants, and cursors do not
 - `src/sqlite-store.ts` — durable records/change log plus FTS5 index
 - `src/blob-store.ts` — content-addressed filesystem bytes
 - `src/collectors.ts` — bounded text, file, and HTTP collectors
@@ -37,6 +38,9 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts
   caller-owned parent directory.
 - Default consistency is local only. Manifest must continue to report
   `peer_sync: false` until real peer synchronization exists.
+- Replica imports preserve the first remote immutable envelope/tombstone, ignore
+  only its node-local `blob_ref`, and reject same-ID semantic conflicts. They do
+  not authenticate peers or decrypt transport payloads.
 - Only size and media-type collection policy are enforced in Slice 1. Do not
   imply JSON Schema, TTL, retention, visibility, DID ACL, or signature validation.
   An explicit empty media-type allow-list denies every type.

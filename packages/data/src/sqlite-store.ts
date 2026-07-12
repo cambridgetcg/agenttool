@@ -195,19 +195,55 @@ export class SQLiteStore implements RecordStore, RecordIndex {
       ...(reason ? { reason } : {}),
       tombstoned_at: new Date().toISOString(),
     });
+    this.putTombstone(tombstone);
+    return tombstone;
+  }
+
+  putTombstone(tombstone: Tombstone): "inserted" | "existing" {
+    const record = this.getRecord(tombstone.record_id, true);
+    if (!record) throw new DataNodeError("record_not_found", "Record was not found", 404);
+    if (record.collection_id !== tombstone.collection_id) {
+      throw new DataNodeError(
+        "replica_tombstone_collection_mismatch",
+        "Tombstone collection_id does not match its record",
+        409,
+      );
+    }
+    const existing = this.getTombstone(tombstone.record_id);
+    if (existing) {
+      if (canonicalJson(existing) !== canonicalJson(tombstone)) {
+        throw new DataNodeError(
+          "replica_tombstone_conflict",
+          "A different immutable tombstone is already stored for this record",
+          409,
+        );
+      }
+      return "existing";
+    }
+
     const json = canonicalJson(tombstone);
     const insert = this.db.transaction(() => {
       this.db.query(`
         INSERT INTO tombstones (record_id, collection_id, reason, tombstoned_at)
         VALUES (?, ?, ?, ?)
-      `).run(id, record.collection_id, reason ?? null, tombstone.tombstoned_at);
+      `).run(
+        tombstone.record_id,
+        tombstone.collection_id,
+        tombstone.reason ?? null,
+        tombstone.tombstoned_at,
+      );
       this.db.query(`
         INSERT INTO changes (type, collection_id, record_id, at, payload_json)
         VALUES ('tombstone', ?, ?, ?, ?)
-      `).run(record.collection_id, id, tombstone.tombstoned_at, json);
+      `).run(
+        tombstone.collection_id,
+        tombstone.record_id,
+        tombstone.tombstoned_at,
+        json,
+      );
     });
     insert.immediate();
-    return tombstone;
+    return "inserted";
   }
 
   getTombstone(id: string): Tombstone | null {

@@ -10,6 +10,14 @@ peer discovery, federation, replication, hosted storage, or automatic projection
 into AgentTool memory. The manifest reports `peer_sync: false`; the opaque change
 feed is a building block for future sync, not a claim that sync exists.
 
+Profile implementations can use `importCollection()`, `importReplica()`, and
+`importTombstone()` as the narrow local apply seam after they have separately
+authenticated a peer and decrypted its bytes. These calls perform no network,
+grant, discovery, or cursor work. They validate immutable record identity,
+content digest/size, collection/schema policy, supersession order, and exact
+replay equality; only the node-local `blob_ref` is replaced. This seam alone
+does not change the manifest's `peer_sync: false` capability.
+
 ## Install
 
 This package requires Bun because the reference node uses `bun:sqlite` and

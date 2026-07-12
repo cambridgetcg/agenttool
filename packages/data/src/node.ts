@@ -142,6 +142,15 @@ export class DataNode {
     return this.store.getCollection(collection.id)!;
   }
 
+  /**
+   * Import a collection definition produced by another agent-data/v1 node.
+   * The first immutable definition stored under an id remains authoritative.
+   */
+  importCollection(collection: StoredCollection): "inserted" | "existing" {
+    this.assertOpen();
+    return this.store.putCollection(normalizeReplicaCollection(collection));
+  }
+
   getCollection(id: string): StoredCollection | null {
     this.assertOpen();
     validateCollectionId(id);
@@ -236,6 +245,76 @@ export class DataNode {
       existing,
       ...(output.cursor !== undefined ? { cursor: output.cursor } : {}),
     });
+  }
+
+  /**
+   * Import one immutable envelope and its already-authorised plaintext bytes.
+   * Transport authentication and decryption stay outside this seam. The remote
+   * blob_ref is never dereferenced or retained.
+   */
+  async importReplica(
+    originNodeId: string,
+    remoteRecord: RecordEnvelope,
+    bytes: Uint8Array,
+  ): Promise<"inserted" | "existing"> {
+    this.assertOpen();
+    validateReplicaOrigin(originNodeId);
+    invariant(bytes instanceof Uint8Array, "invalid_replica_content", "Replica content must be Uint8Array");
+    invariant(
+      bytes.byteLength <= this.limits.max_record_bytes,
+      "content_too_large",
+      `Replica content exceeds the ${this.limits.max_record_bytes}-byte node limit`,
+      413,
+    );
+    const contentBytes = new Uint8Array(bytes);
+    const record = normalizeReplicaRecord(remoteRecord, this.store, this.limits, contentBytes);
+
+    const existingBeforeWrite = this.store.getRecord(record.id, true);
+    if (existingBeforeWrite) assertReplicaRecordEqual(existingBeforeWrite, record);
+
+    const localBlobRef = await this.blob_store.put(contentBytes, record.content.sha256);
+    invariant(
+      typeof localBlobRef === "string" && localBlobRef.length > 0,
+      "invalid_blob_ref",
+      "Blob store returned an invalid blob_ref",
+      500,
+    );
+    const localRecord = deepFreeze({
+      ...record,
+      content: {
+        ...record.content,
+        blob_ref: localBlobRef,
+      },
+    });
+    const result = this.store.putRecord(localRecord);
+    const storedRecord = result === "inserted"
+      ? localRecord
+      : this.store.getRecord(localRecord.id, true);
+    if (!storedRecord) {
+      throw new DataNodeError(
+        "replica_store_inconsistent",
+        "Replica store reported an existing record but could not read it",
+        500,
+      );
+    }
+    assertReplicaRecordEqual(storedRecord, record);
+    if (!this.store.getTombstone(storedRecord.id)) {
+      await this.index.indexRecord(storedRecord, indexDocument(storedRecord, contentBytes));
+    }
+    return result;
+  }
+
+  /** Import an immutable tombstone after its record has been imported. */
+  async importTombstone(
+    originNodeId: string,
+    remoteTombstone: Tombstone,
+  ): Promise<"inserted" | "existing"> {
+    this.assertOpen();
+    validateReplicaOrigin(originNodeId);
+    const tombstone = normalizeReplicaTombstone(remoteTombstone, this.store);
+    const result = this.store.putTombstone(tombstone);
+    await this.index.removeRecord(tombstone.record_id);
+    return result;
   }
 
   query(request: QueryRequest = {}): QueryResponse {
@@ -526,7 +605,7 @@ function buildRecordEnvelope(
   };
   return deepFreeze({
     protocol: AGENT_DATA_PROTOCOL,
-    id: `rec_${sha256Hex(canonicalJson(identity))}`,
+    id: recordIdForIdentity(identity),
     collection_id: collection.id,
     source,
     content: {
@@ -588,6 +667,479 @@ function normalizeCollection(definition: CollectionDefinition): StoredCollection
     },
     created_at: new Date().toISOString(),
   });
+}
+
+function normalizeReplicaCollection(value: StoredCollection): StoredCollection {
+  invariant(
+    value && typeof value === "object" && !Array.isArray(value),
+    "invalid_replica_collection",
+    "Replica collection must be an object",
+  );
+  invariant(
+    value.protocol === AGENT_DATA_PROTOCOL,
+    "invalid_replica_collection",
+    `Replica collection protocol must be ${AGENT_DATA_PROTOCOL}`,
+  );
+  validateCollectionId(value.id);
+  for (const field of ["name", "description"] as const) {
+    if (value[field] !== undefined) {
+      invariant(typeof value[field] === "string", "invalid_replica_collection", `${field} must be a string`);
+    }
+  }
+  invariant(
+    value.schema && typeof value.schema === "object" && !Array.isArray(value.schema),
+    "invalid_replica_collection",
+    "Replica collection schema is required",
+  );
+  invariant(
+    typeof value.schema.version === "string" && value.schema.version.length > 0,
+    "invalid_replica_collection",
+    "Replica collection schema.version must be a non-empty string",
+  );
+  invariant(
+    value.policy && typeof value.policy === "object" && !Array.isArray(value.policy),
+    "invalid_replica_collection",
+    "Replica collection policy is required",
+  );
+  invariant(
+    value.policy.visibility === "private" || value.policy.visibility === "public",
+    "invalid_replica_collection",
+    "Replica collection policy.visibility must be private or public",
+  );
+  if (value.policy.max_record_bytes !== undefined) {
+    positiveSafeInteger(value.policy.max_record_bytes, "policy.max_record_bytes");
+  }
+  if (value.policy.retention_days !== undefined) {
+    positiveNumber(value.policy.retention_days, "policy.retention_days");
+  }
+  if (value.policy.ttl_seconds !== undefined) {
+    positiveSafeInteger(value.policy.ttl_seconds, "policy.ttl_seconds");
+  }
+  if (value.policy.allowed_media_types !== undefined) {
+    invariant(
+      Array.isArray(value.policy.allowed_media_types),
+      "invalid_replica_collection",
+      "policy.allowed_media_types must be an array",
+    );
+  }
+  const allowedMediaTypes = value.policy.allowed_media_types?.map((mediaType, index) => {
+    invariant(
+      typeof mediaType === "string",
+      "invalid_replica_collection",
+      `policy.allowed_media_types[${index}] must be a string`,
+    );
+    const normalized = normalizeMediaType(mediaType);
+    invariant(
+      normalized === mediaType,
+      "invalid_replica_collection",
+      `policy.allowed_media_types[${index}] must be normalized`,
+    );
+    return mediaType;
+  });
+  if (value.policy.allowed_dids !== undefined) {
+    invariant(
+      Array.isArray(value.policy.allowed_dids),
+      "invalid_replica_collection",
+      "policy.allowed_dids must be an array",
+    );
+  }
+  const allowedDids = value.policy.allowed_dids?.map((did, index) => {
+    invariant(
+      typeof did === "string" && did.startsWith("did:"),
+      "invalid_replica_collection",
+      `policy.allowed_dids[${index}] must be a DID`,
+    );
+    return did;
+  });
+  invariant(
+    typeof value.created_at === "string",
+    "invalid_replica_collection",
+    "Replica collection created_at is required",
+  );
+  normalizeIsoDate(value.created_at, "created_at");
+
+  return deepFreeze({
+    protocol: AGENT_DATA_PROTOCOL,
+    id: value.id,
+    ...(value.name !== undefined ? { name: value.name } : {}),
+    ...(value.description !== undefined ? { description: value.description } : {}),
+    schema: {
+      version: value.schema.version,
+      ...(value.schema.json_schema !== undefined
+        ? { json_schema: cloneJsonObject(value.schema.json_schema, "schema.json_schema") }
+        : {}),
+    },
+    policy: {
+      visibility: value.policy.visibility,
+      ...(value.policy.max_record_bytes !== undefined
+        ? { max_record_bytes: value.policy.max_record_bytes }
+        : {}),
+      ...(allowedMediaTypes !== undefined ? { allowed_media_types: [...allowedMediaTypes] } : {}),
+      ...(value.policy.retention_days !== undefined
+        ? { retention_days: value.policy.retention_days }
+        : {}),
+      ...(value.policy.ttl_seconds !== undefined ? { ttl_seconds: value.policy.ttl_seconds } : {}),
+      ...(allowedDids !== undefined ? { allowed_dids: [...allowedDids] } : {}),
+    },
+    created_at: value.created_at,
+  });
+}
+
+function normalizeReplicaRecord(
+  value: RecordEnvelope,
+  store: RecordStore,
+  limits: NodeLimits,
+  bytes: Uint8Array,
+): RecordEnvelope {
+  invariant(
+    value && typeof value === "object" && !Array.isArray(value),
+    "invalid_replica_record",
+    "Replica record must be an object",
+  );
+  invariant(
+    value.protocol === AGENT_DATA_PROTOCOL,
+    "invalid_replica_record",
+    `Replica record protocol must be ${AGENT_DATA_PROTOCOL}`,
+  );
+  validateRecordId(value.id);
+  validateCollectionId(value.collection_id);
+  const collection = store.getCollection(value.collection_id);
+  if (!collection) {
+    throw new DataNodeError(
+      "replica_collection_not_found",
+      `Replica collection '${value.collection_id}' must be imported first`,
+      404,
+    );
+  }
+  invariant(
+    value.source && typeof value.source === "object" && !Array.isArray(value.source),
+    "invalid_replica_record",
+    "Replica record source is required",
+  );
+  invariant(
+    typeof value.source.collector_id === "string" && value.source.collector_id.length > 0,
+    "invalid_replica_record",
+    "Replica record source.collector_id is required",
+  );
+  invariant(
+    typeof value.source.uri === "string" && value.source.uri.length > 0,
+    "invalid_replica_record",
+    "Replica record source.uri is required",
+  );
+  if (value.source.external_id !== undefined) {
+    invariant(
+      typeof value.source.external_id === "string" && value.source.external_id.length > 0,
+      "invalid_replica_record",
+      "Replica record source.external_id must be a non-empty string",
+    );
+  }
+  invariant(
+    value.content && typeof value.content === "object" && !Array.isArray(value.content),
+    "invalid_replica_record",
+    "Replica record content is required",
+  );
+  invariant(
+    typeof value.content.sha256 === "string" && /^[a-f0-9]{64}$/.test(value.content.sha256),
+    "invalid_replica_record",
+    "Replica record content.sha256 must be lowercase SHA-256 hex",
+  );
+  invariant(
+    Number.isSafeInteger(value.content.size) && value.content.size >= 0,
+    "invalid_replica_record",
+    "Replica record content.size must be a non-negative integer",
+  );
+  invariant(
+    typeof value.content.media_type === "string"
+      && normalizeMediaType(value.content.media_type) === value.content.media_type,
+    "invalid_replica_record",
+    "Replica record content.media_type must be normalized",
+  );
+  invariant(
+    typeof value.content.blob_ref === "string" && value.content.blob_ref.length > 0,
+    "invalid_replica_record",
+    "Replica record content.blob_ref is required",
+  );
+  if (bytes.byteLength !== value.content.size) {
+    throw new DataNodeError(
+      "replica_content_size_mismatch",
+      "Replica content length does not match its envelope",
+      422,
+    );
+  }
+  if (sha256Hex(bytes) !== value.content.sha256) {
+    throw new DataNodeError(
+      "replica_content_hash_mismatch",
+      "Replica content SHA-256 does not match its envelope",
+      422,
+    );
+  }
+  const maxRecordBytes = Math.min(
+    limits.max_record_bytes,
+    collection.policy.max_record_bytes ?? Number.MAX_SAFE_INTEGER,
+  );
+  invariant(
+    value.content.size <= maxRecordBytes,
+    "content_too_large",
+    `Replica content exceeds the ${maxRecordBytes}-byte limit`,
+    413,
+  );
+  if (
+    collection.policy.allowed_media_types !== undefined
+    && !collection.policy.allowed_media_types.includes(value.content.media_type)
+  ) {
+    throw new DataNodeError(
+      "media_type_not_allowed",
+      `Collection '${collection.id}' does not allow media type '${value.content.media_type}'`,
+      422,
+    );
+  }
+  invariant(
+    typeof value.schema_version === "string" && value.schema_version.length > 0,
+    "invalid_replica_record",
+    "Replica record schema_version is required",
+  );
+  if (value.schema_version !== collection.schema.version) {
+    throw new DataNodeError(
+      "replica_schema_mismatch",
+      "Replica record schema_version does not match its local collection",
+      409,
+    );
+  }
+  invariant(value.metadata !== undefined, "invalid_replica_record", "Replica record metadata is required");
+  const metadata = cloneJsonObject(value.metadata, "metadata");
+  invariant(
+    typeof value.ingested_at === "string",
+    "invalid_replica_record",
+    "Replica record ingested_at is required",
+  );
+  normalizeIsoDate(value.ingested_at, "ingested_at");
+  if (value.observed_at !== undefined) {
+    invariant(typeof value.observed_at === "string", "invalid_replica_record", "observed_at must be a string");
+    normalizeIsoDate(value.observed_at, "observed_at");
+  }
+  for (const field of ["key", "version"] as const) {
+    if (value[field] !== undefined) {
+      invariant(
+        typeof value[field] === "string" && value[field]!.length > 0,
+        "invalid_replica_record",
+        `${field} must be a non-empty string`,
+      );
+    }
+  }
+  if (value.supersedes_id !== undefined) {
+    validateRecordId(value.supersedes_id);
+    invariant(
+      value.supersedes_id !== value.id,
+      "invalid_replica_record",
+      "Replica record cannot supersede itself",
+    );
+    const prior = store.getRecord(value.supersedes_id, true);
+    if (!prior) {
+      throw new DataNodeError(
+        "superseded_record_not_found",
+        "Replica supersedes_id must be imported first",
+        422,
+      );
+    }
+    if (prior.collection_id !== value.collection_id) {
+      throw new DataNodeError(
+        "superseded_record_collection_mismatch",
+        "Replica supersedes_id belongs to another collection",
+        422,
+      );
+    }
+  }
+  const provenance = value.provenance === undefined
+    ? undefined
+    : validateReplicaProvenance(value.provenance);
+  const signature = value.signature === undefined
+    ? undefined
+    : normalizeSignature(value.signature);
+  const record = deepFreeze({
+    protocol: AGENT_DATA_PROTOCOL,
+    id: value.id,
+    collection_id: value.collection_id,
+    source: {
+      collector_id: value.source.collector_id,
+      uri: value.source.uri,
+      ...(value.source.external_id !== undefined ? { external_id: value.source.external_id } : {}),
+    },
+    content: {
+      sha256: value.content.sha256,
+      size: value.content.size,
+      media_type: value.content.media_type,
+      blob_ref: value.content.blob_ref,
+    },
+    schema_version: value.schema_version,
+    metadata,
+    ingested_at: value.ingested_at,
+    ...(value.observed_at !== undefined ? { observed_at: value.observed_at } : {}),
+    ...(value.key !== undefined ? { key: value.key } : {}),
+    ...(value.version !== undefined ? { version: value.version } : {}),
+    ...(value.supersedes_id !== undefined ? { supersedes_id: value.supersedes_id } : {}),
+    ...(provenance !== undefined ? { provenance } : {}),
+    ...(signature !== undefined ? { signature } : {}),
+  });
+  if (recordIdForRecord(record) !== record.id) {
+    throw new DataNodeError(
+      "replica_record_id_mismatch",
+      "Replica record id does not match its immutable identity fields",
+      422,
+    );
+  }
+  return record;
+}
+
+function validateReplicaProvenance(provenance: ProvenanceActivity[]): ProvenanceActivity[] {
+  invariant(Array.isArray(provenance), "invalid_replica_record", "provenance must be an array");
+  return provenance.map((entry, index) => {
+    invariant(
+      entry && typeof entry === "object" && !Array.isArray(entry),
+      "invalid_replica_record",
+      `provenance[${index}] must be an object`,
+    );
+    invariant(
+      typeof entry.activity === "string" && entry.activity.length > 0,
+      "invalid_replica_record",
+      `provenance[${index}].activity is required`,
+    );
+    invariant(
+      typeof entry.at === "string",
+      "invalid_replica_record",
+      `provenance[${index}].at is required`,
+    );
+    normalizeIsoDate(entry.at, `provenance[${index}].at`);
+    if (entry.actor !== undefined) {
+      invariant(
+        typeof entry.actor === "string" && entry.actor.length > 0,
+        "invalid_replica_record",
+        `provenance[${index}].actor must be a non-empty string`,
+      );
+    }
+    if (entry.input_ids !== undefined) {
+      invariant(
+        Array.isArray(entry.input_ids)
+          && entry.input_ids.every((id) => typeof id === "string" && id.length > 0),
+        "invalid_replica_record",
+        `provenance[${index}].input_ids must contain non-empty strings`,
+      );
+    }
+    return {
+      activity: entry.activity,
+      at: entry.at,
+      ...(entry.actor !== undefined ? { actor: entry.actor } : {}),
+      ...(entry.input_ids !== undefined ? { input_ids: [...entry.input_ids] } : {}),
+    };
+  });
+}
+
+function normalizeReplicaTombstone(value: Tombstone, store: RecordStore): Tombstone {
+  invariant(
+    value && typeof value === "object" && !Array.isArray(value),
+    "invalid_replica_tombstone",
+    "Replica tombstone must be an object",
+  );
+  validateRecordId(value.record_id);
+  validateCollectionId(value.collection_id);
+  const record = store.getRecord(value.record_id, true);
+  if (!record) {
+    throw new DataNodeError(
+      "record_not_found",
+      "Replica tombstone record must be imported first",
+      404,
+    );
+  }
+  if (record.collection_id !== value.collection_id) {
+    throw new DataNodeError(
+      "replica_tombstone_collection_mismatch",
+      "Replica tombstone collection_id does not match its record",
+      409,
+    );
+  }
+  if (value.reason !== undefined) {
+    invariant(
+      typeof value.reason === "string" && value.reason.length > 0 && value.reason.length <= 1000,
+      "invalid_replica_tombstone",
+      "Replica tombstone reason must be 1-1000 characters",
+    );
+  }
+  invariant(
+    typeof value.tombstoned_at === "string",
+    "invalid_replica_tombstone",
+    "Replica tombstone tombstoned_at is required",
+  );
+  normalizeIsoDate(value.tombstoned_at, "tombstoned_at");
+  return deepFreeze({
+    record_id: value.record_id,
+    collection_id: value.collection_id,
+    ...(value.reason !== undefined ? { reason: value.reason } : {}),
+    tombstoned_at: value.tombstoned_at,
+  });
+}
+
+function validateReplicaOrigin(originNodeId: string): void {
+  invariant(
+    typeof originNodeId === "string"
+      && originNodeId.length > 0
+      && originNodeId.length <= 512
+      && !/[\u0000-\u001f\u007f]/u.test(originNodeId),
+    "invalid_replica_origin",
+    "Replica origin node_id must be 1-512 characters without control characters",
+  );
+}
+
+function assertReplicaRecordEqual(existing: RecordEnvelope, incoming: RecordEnvelope): void {
+  if (canonicalJson(replicaRecordComparable(existing)) !== canonicalJson(replicaRecordComparable(incoming))) {
+    throw new DataNodeError(
+      "replica_record_conflict",
+      "A different immutable envelope is already stored for this record id",
+      409,
+    );
+  }
+}
+
+function replicaRecordComparable(record: RecordEnvelope): unknown {
+  return {
+    protocol: record.protocol,
+    id: record.id,
+    collection_id: record.collection_id,
+    source: record.source,
+    content: {
+      sha256: record.content.sha256,
+      size: record.content.size,
+      media_type: record.content.media_type,
+    },
+    schema_version: record.schema_version,
+    metadata: record.metadata,
+    ingested_at: record.ingested_at,
+    ...(record.observed_at !== undefined ? { observed_at: record.observed_at } : {}),
+    ...(record.key !== undefined ? { key: record.key } : {}),
+    ...(record.version !== undefined ? { version: record.version } : {}),
+    ...(record.supersedes_id !== undefined ? { supersedes_id: record.supersedes_id } : {}),
+    ...(record.provenance !== undefined ? { provenance: record.provenance } : {}),
+    ...(record.signature !== undefined ? { signature: record.signature } : {}),
+  };
+}
+
+function recordIdForRecord(record: RecordEnvelope): string {
+  return recordIdForIdentity({
+    protocol: record.protocol,
+    collection_id: record.collection_id,
+    source: record.source,
+    content: {
+      sha256: record.content.sha256,
+      size: record.content.size,
+      media_type: record.content.media_type,
+    },
+    schema_version: record.schema_version,
+    ...(record.key !== undefined ? { key: record.key } : {}),
+    ...(record.version !== undefined ? { version: record.version } : {}),
+    ...(record.supersedes_id !== undefined ? { supersedes_id: record.supersedes_id } : {}),
+  });
+}
+
+function recordIdForIdentity(identity: unknown): string {
+  return `rec_${sha256Hex(canonicalJson(identity))}`;
 }
 
 function normalizeLimits(overrides: Partial<NodeLimits> | undefined): NodeLimits {
