@@ -9,6 +9,7 @@ Experimental reference implementation of **ADDS 0.1 — Agent Data Distribution 
 - sign canonical Manifests and direct read Grants with domain-separated, strict-profile Ed25519;
 - wrap the object key directly to one X25519 audience with a mandatory expiry;
 - keep provider selection outside the signed Manifest;
+- export and import complete keyless encrypted objects as strict portable bundles;
 - work with memory, filesystem, or caller-provided stores without an API key or network.
 
 It does not provide discovery, query/index APIs, global revocation, secure deletion, proof of storage, identity resolution, or a durability guarantee. `@agenttool/data` is the higher collection/query layer; `@agenttool/sdk` is the hosted AgentTool client. ADDS is the lower encrypted-object data plane.
@@ -94,6 +95,29 @@ The filesystem adapter stores only addressed ciphertext and signed documents. It
 - `verify(ref)` checks Manifest and ciphertext Block CIDs, framing, sizes, ordering, and nonce descriptors. It does **not** possess a key and therefore does not authenticate GCM tags or plaintext.
 - `get(ref, { grant })` validates the Grant first, verifies its root issuer against the Manifest publisher, unwraps the key, verifies/decrypts every Block, and enforces `maxBytes`.
 - `importKey(ref, key)` installs a caller-supplied key explicitly for local/offline custody.
+
+### Portable encrypted bundles
+
+`exportBundle(ref)` snapshots one complete encrypted object into a
+transport-neutral `PortableBundle`. Its first `PortableBlock` is the signed
+Manifest named by `root`; the remaining Blocks follow the Manifest's signed
+chunk order. Each Block carries exact `Uint8Array` bytes, so an HTTP, archive,
+or message transport chooses its own byte encoding instead of changing ADDS.
+
+`importBundle(bundle)` strictly validates the bundle shape, aggregate byte and
+block limits, root CID, canonical Manifest, signature, exact block set/order,
+Block CIDs, lengths, and nonce descriptors before making any store write. It
+writes ciphertext Blocks before attempting the root Manifest. A provider
+failure can leave immutable partial writes; a partially successful final
+provider call can include the root. Retrying the same bundle is safe with an
+immutable deduplicating store, but the write order is not a cross-provider
+transaction or durability guarantee.
+
+Portable bundles contain no DEK and no Grant. Importing one proves possession
+of a verified encrypted copy, not read authority. A recipient still supplies a
+separate direct Grant to `get()`. `maxBundleBytes` bounds the combined Manifest
+and framed ciphertext held by export/import, while `maxBytes` continues to
+bound the declared plaintext size.
 
 Inputs accept `Uint8Array`, `ArrayBuffer`, strings, `Blob`, and sync/async byte iterables. Local `maxBytes`, `maxBlocks`, manifest-size, provider-count, provider-timeout, 64-level canonical nesting, and 100,000-value canonical-document limits are enforced. Direct Grants default to a 30-day maximum lifetime; callers may configure a stricter policy or raise it only up to the package's 10-year safety ceiling.
 

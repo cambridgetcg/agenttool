@@ -1,6 +1,7 @@
 export {
   AgentData,
   DEFAULT_CHUNK_SIZE,
+  DEFAULT_MAX_BUNDLE_BYTES,
   DEFAULT_MAX_BLOCKS,
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_GRANT_LIFETIME_SECONDS,
@@ -28,6 +29,11 @@ export {
 } from "./crypto.js";
 export * from "./errors.js";
 export {
+  validatePortableBundle,
+  type PortableBundleValidationLimits,
+  type ValidatedPortableBundle,
+} from "./portable-bundle.js";
+export {
   DEFAULT_STORE_READ_LIMIT,
   DEFAULT_STORE_TIMEOUT_MS,
   MAX_COMPOSITE_STORES,
@@ -41,6 +47,7 @@ export {
   type StoreOperationOptions,
 } from "./stores.js";
 export {
+  ADDS_BUNDLE_PROTOCOL,
   ADDS_VERSION,
   BLOCK_AAD_DOMAIN,
   GRANT_KEK_INFO,
@@ -54,6 +61,10 @@ export {
   type GrantWrap,
   type InspectOptions,
   type ManifestChunk,
+  type PortableBlock,
+  type PortableBundle,
+  type PortableBundleImportResult,
+  type PortableBundleOptions,
   type PutOptions,
   type PutResult,
   type ReplicationSummary,
