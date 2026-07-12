@@ -623,17 +623,17 @@ bin/preflight.sh              # API + packages, hermetic dependency boundary
 
 The default unsets known credentials and service URLs, disables workers, uses
 the installed Bun 1.3.5 compiler, runs the API hermetic tier plus operator
-tests, and runs the `packages/data`, `packages/data-protocol`, and TypeScript
-SDK CI gates. “Hermetic” here means no database, Redis, deployed target,
-credential, or paid-provider dependency; it is not an OS-level network
-sandbox.
+tests, gates and builds `packages/data` for its local dependent, and runs the
+`packages/data-protocol`, `packages/data-sync`, and TypeScript SDK CI gates.
+“Hermetic” here means no database, Redis, deployed target, credential, or
+paid-provider dependency; it is not an OS-level network sandbox.
 
 Explicit modes keep stateful and paid checks out of the default:
 
 | Mode | What it runs | Required input |
 |---|---|---|
 | `api` | API typecheck, hermetic API tests, operator/protocol tests | none |
-| `packages` | data reference node, ADDS package, TypeScript SDK CI/parity | none |
+| `packages` | data reference node gate/build, ADDS package, explicit data-sync bridge, TypeScript SDK CI/parity | none |
 | `database` | API typecheck and database integration tier | `DATABASE_URL` |
 | `smoke` | deployed API smoke | base URL, API key, identity ID |
 | `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and provider key(s) |

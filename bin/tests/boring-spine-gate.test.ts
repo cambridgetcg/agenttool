@@ -199,6 +199,9 @@ describe("boring test spine", () => {
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
     expect(runner).toContain("run_tier database-quarantine");
     expect(runner).not.toContain("run_tier quarantine database-quarantine");
+    expect(runner).toContain("readonly TEST_SUPPORT_FILES=(");
+    expect(runner).toContain("tests/fixtures/static-parser-noncooperative.ts");
+    expect(runner).toContain('in_list "$relative" "${TEST_SUPPORT_FILES[@]}"');
     expect(computeBudgetTest).not.toContain("mock.module(dbSchemaRuntimePath");
     expect(runner).toContain("uses_process_global_module_mock");
     expect(runner).toContain('isolated_files+=("$relative")');
@@ -268,14 +271,21 @@ describe("boring test spine", () => {
   test("pins a two-job secret-free workflow and frozen installs", async () => {
     const workflow = await readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
     expect(workflow).toContain("name: API and protocol");
-    expect(workflow).toContain("name: Data, ADDS, and SDK");
+    expect(workflow).toContain("name: Data, ADDS, sync, and SDK");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(2);
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(2);
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
-    expect(workflow).toContain("packages/data packages/data-protocol packages/sdk-ts");
+    expect(workflow).toContain(
+      "packages/data packages/data-protocol packages/data-sync packages/sdk-ts",
+    );
     expect(workflow).not.toContain("secrets.");
+
+    const preflight = await readFile(join(ROOT, "bin", "preflight.sh"), "utf8");
+    expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
+    expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
+    expect(preflight).toContain("cd packages/data-sync && bun run ci");
 
     const uses = workflow
       .split("\n")

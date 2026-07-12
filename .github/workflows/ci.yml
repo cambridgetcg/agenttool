@@ -35,7 +35,7 @@ jobs:
         run: bash bin/preflight.sh api
 
   packages:
-    name: Data, ADDS, and SDK
+    name: Data, ADDS, sync, and SDK
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -49,8 +49,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in packages/data packages/data-protocol packages/sdk-ts; do
+          for workspace in packages/data packages/data-protocol packages/data-sync packages/sdk-ts; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
-      - name: Run hermetic data, ADDS, and SDK gate
+      - name: Run hermetic data, ADDS, sync, and SDK gate
         run: bash bin/preflight.sh packages

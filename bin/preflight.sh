@@ -9,7 +9,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + TypeScript SDK gate
+#   bin/preflight.sh packages        # data + ADDS + data sync + TypeScript SDK gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -83,10 +83,12 @@ api_gate() {
 }
 
 packages_gate() {
-  run "agent-data/v1 reference node" \
-    bash -c 'cd packages/data && bun run ci'
+  run "agent-data/v1 reference node and sync dependency build" \
+    bash -c 'cd packages/data && bun run ci && bun run build'
   run "ADDS protocol package" \
     bash -c 'cd packages/data-protocol && bun run ci'
+  run "agent-data-sync/v1 explicit pull bridge" \
+    bash -c 'cd packages/data-sync && bun run ci'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
 }
