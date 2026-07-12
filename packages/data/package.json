@@ -9,6 +9,13 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./conformance": {
+      "import": "./dist/conformance.js",
+      "types": "./dist/conformance.d.ts"
+    },
+    "./conformance-report.schema.json": {
+      "default": "./schema/agent-data-conformance-report-v1.schema.json"
     }
   },
   "bin": {
@@ -16,6 +23,7 @@
   },
   "files": [
     "dist",
+    "schema",
     "README.md",
     "CLAUDE.md"
   ],

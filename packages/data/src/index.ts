@@ -18,3 +18,20 @@ export {
 export type { HttpSourceAdapterOptions } from "./collectors.js";
 export { DataNode, DEFAULT_NODE_LIMITS } from "./node.js";
 export { createDataNodeFetchHandler, serveDataNode } from "./server.js";
+export {
+  AGENT_DATA_CONFORMANCE_REPORT,
+  AGENT_DATA_CONFORMANCE_SUITE,
+  AGENT_DATA_CONFORMANCE_VERSION,
+  AGENT_DATA_HTTP_PROFILE,
+  DataNodeConformanceConfigError,
+  formatDataNodeConformanceReport,
+  runDataNodeConformance,
+} from "./conformance.js";
+export type {
+  DataNodeConformanceCheck,
+  DataNodeConformanceFixtureReport,
+  DataNodeConformanceOptions,
+  DataNodeConformanceProfile,
+  DataNodeConformanceReport,
+  DataNodeConformanceStatus,
+} from "./conformance.js";
