@@ -4,7 +4,7 @@
 Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. Published on npm as `@agenttool/sdk`.
 
 ## Current State
-Active — v0.9.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped. Uses Bun for testing.
+Active — v0.10.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -26,7 +26,7 @@ src/
   economy.ts           — EconomyClient (wallets, escrow, transactions)
   identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
-  data.ts              — DataClient (separate local node; manifest, collect, query, changes)
+  data.ts              — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.ts          — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); throws with 410 migration payload pointing at bootstrapAgent
   bootstrap-agent.ts   — Top-level bootstrapAgent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
@@ -52,7 +52,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.9.0, ESM)
+package.json                — Package config (v0.10.0, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -106,8 +106,8 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing 13 service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.9.0, ESM)
+- `package.json` — Package metadata (v0.10.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
-- `tests/data.test.ts` — local data-node wire + bearer-isolation contract
+- `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

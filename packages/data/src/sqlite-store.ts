@@ -195,19 +195,55 @@ export class SQLiteStore implements RecordStore, RecordIndex {
       ...(reason ? { reason } : {}),
       tombstoned_at: new Date().toISOString(),
     });
+    this.putTombstone(tombstone);
+    return tombstone;
+  }
+
+  putTombstone(tombstone: Tombstone): "inserted" | "existing" {
+    const record = this.getRecord(tombstone.record_id, true);
+    if (!record) throw new DataNodeError("record_not_found", "Record was not found", 404);
+    if (record.collection_id !== tombstone.collection_id) {
+      throw new DataNodeError(
+        "replica_tombstone_collection_mismatch",
+        "Tombstone collection_id does not match its record",
+        409,
+      );
+    }
+    const existing = this.getTombstone(tombstone.record_id);
+    if (existing) {
+      if (canonicalJson(existing) !== canonicalJson(tombstone)) {
+        throw new DataNodeError(
+          "replica_tombstone_conflict",
+          "A different immutable tombstone is already stored for this record",
+          409,
+        );
+      }
+      return "existing";
+    }
+
     const json = canonicalJson(tombstone);
     const insert = this.db.transaction(() => {
       this.db.query(`
         INSERT INTO tombstones (record_id, collection_id, reason, tombstoned_at)
         VALUES (?, ?, ?, ?)
-      `).run(id, record.collection_id, reason ?? null, tombstone.tombstoned_at);
+      `).run(
+        tombstone.record_id,
+        tombstone.collection_id,
+        tombstone.reason ?? null,
+        tombstone.tombstoned_at,
+      );
       this.db.query(`
         INSERT INTO changes (type, collection_id, record_id, at, payload_json)
         VALUES ('tombstone', ?, ?, ?, ?)
-      `).run(record.collection_id, id, tombstone.tombstoned_at, json);
+      `).run(
+        tombstone.collection_id,
+        tombstone.record_id,
+        tombstone.tombstoned_at,
+        json,
+      );
     });
     insert.immediate();
-    return tombstone;
+    return "inserted";
   }
 
   getTombstone(id: string): Tombstone | null {
@@ -268,6 +304,23 @@ export class SQLiteStore implements RecordStore, RecordIndex {
     const nodeId = preferred ?? `node_${randomUUID()}`;
     this.db.query("INSERT INTO node_meta (key, value) VALUES ('node_id', ?)").run(nodeId);
     return nodeId;
+  }
+
+  getOrCreateFeedId(): string {
+    const existing = this.db.query("SELECT value FROM node_meta WHERE key = 'change_feed_id'")
+      .get() as { value: string } | null;
+    if (existing) {
+      if (
+        !/^feed_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+          .test(existing.value)
+      ) {
+        throw new DataNodeError("invalid_feed_id", "Persisted change feed id is invalid", 500);
+      }
+      return existing.value;
+    }
+    const feedId = `feed_${randomUUID()}`;
+    this.db.query("INSERT INTO node_meta (key, value) VALUES ('change_feed_id', ?)").run(feedId);
+    return feedId;
   }
 
   indexRecord(record: RecordEnvelope, document: string): void {

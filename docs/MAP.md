@@ -171,7 +171,7 @@
 
 | Doc | Holds |
 |---|---|
-| `AGENT-DATA-PROTOCOL.md` | `agent-data/v1` local-first collection/query contract · immutable content-addressed records · opaque change cursors · explicit memory projection · optional AgentTool control plane; peer replication is future, not Slice 1. |
+| `AGENT-DATA-PROTOCOL.md` | `agent-data/v1` local-first collection/query contract · immutable content-addressed records · opaque change cursors · explicit memory projection · optional AgentTool control plane · bounded `agent-data-sync/v1` ADDS-encrypted pull from operator-configured peers; no discovery, push, multi-master consistency, CAR, or distributed-durability claim. |
 | `specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane · CID-addressed ciphertext Blocks · signed Manifests/Grants/provider records/Heads/Receipts · offline schema and pinned vectors; separate from `agent-data/v1`. |
 | `LOVE-PACKAGE-PROTOCOL.md` | `love-package/v1` registry-neutral JavaScript package discovery and distribution · versioned npm-format tarballs over ordinary HTTPS · SHA-256 + size artifact identity · multiple replaceable mirrors · no registry authority, signature, dependency vendoring, or durability claim. Normative schemas: `specs/love-package-v1.schema.json` (manifest) and `specs/love-package-index-v1.schema.json` (index). |
 | `SDK-TIERS.md` | The four-tier SDK stack — Tier 0 wire (HTTPS+JSON · any TCP-capable intelligence) → Tier 1 contract (`/v1/openapi` + canonical bytes catalog) → Tier 2 generated (OpenAPI Generator, any language) → Tier 3 hand-crafted (TS + Py). The substrate-neutral access path. |

@@ -103,12 +103,13 @@ afterAll(async () => {
 });
 
 describe("LOVE Package release inventory", () => {
-  test("pins the first three immutable package releases", () => {
+  test("pins the current immutable package release batch", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
-      { name: "@agenttool/adds", version: "0.1.0", releaseTag: "adds-v0.1.0" },
-      { name: "@agenttool/data", version: "0.1.0", releaseTag: "data-v0.1.0" },
-      { name: "@agenttool/sdk", version: "0.9.0", releaseTag: "sdk-v0.9.0" },
+      { name: "@agenttool/adds", version: "0.2.0", releaseTag: "adds-v0.2.0" },
+      { name: "@agenttool/data", version: "0.3.0", releaseTag: "data-v0.3.0" },
+      { name: "@agenttool/data-sync", version: "0.1.0", releaseTag: "data-sync-v0.1.0" },
+      { name: "@agenttool/sdk", version: "0.10.0", releaseTag: "sdk-v0.10.0" },
     ]);
   });
 });

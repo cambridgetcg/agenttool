@@ -1,302 +1,335 @@
-/** x402 middleware + Coinbase facilitator client — wire shape tests.
- *
- *  Pins:
- *    - buildPaymentRequirements builds a spec-shaped requirements object
- *    - middleware wraps 402 responses with x402 envelope + X-PAYMENT-REQUIRED header
- *    - middleware parses X-PAYMENT header on inbound; getX402Payment accessor returns it
- *    - parseX402Header rejects malformed envelopes
- *    - settlement header is added on 2xx after payment + buildSettlementHeader option
- *    - facilitator client posts to /verify + /settle with correct envelope shape
- *
- *  Doctrine: docs/ALIGNMENT-MOVES.md (Move 4) · docs/ECOSYSTEM.md.
- */
+/** x402 V2 wire and hardened facilitator boundary (no live I/O). */
 
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 
 import {
+  X402_VERSION,
+  buildPaymentRequired,
   buildPaymentRequirements,
-  buildX402Required,
-  parseX402Header,
-  x402Middleware,
+  encodeCanonicalBase64Json,
   getX402Payment,
-  type X402PaymentHeader,
+  parseX402Header,
+  suppressX402Challenge,
+  x402Middleware,
+  type PaymentPayload,
+  type ResourceInfo,
 } from "../src/middleware/x402";
 import {
   CoinbaseFacilitatorClient,
   buildSettlementHeader,
 } from "../src/services/economy/facilitators/coinbase";
+import { DEFAULT_X402_FACILITATOR_URL } from "../src/services/economy/x402-policy";
 
-describe("x402 — builders + parsers", () => {
-  test("buildPaymentRequirements defaults to Base USDC", () => {
-    const req = buildPaymentRequirements({
-      resource: "/v1/invocations/abc",
-      amountAtomic: "1000", // $0.001 in USDC's 6-decimal atom
-      payTo: "0x00000000000000000000000000000000000000aa",
-    });
-    expect(req.scheme).toBe("exact");
-    expect(req.network).toBe("base");
-    expect(req.maxAmountRequired).toBe("1000");
-    expect(req.asset).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
-    expect(req.payTo).toBe("0x00000000000000000000000000000000000000aa");
-    expect(req.maxTimeoutSeconds).toBe(60);
-    expect(req.extra?.facilitator).toMatch(/cdp\.coinbase\.com/);
-  });
-
-  test("buildPaymentRequirements switches asset per network", () => {
-    const polygon = buildPaymentRequirements({
-      resource: "/x",
-      amountAtomic: "1",
-      payTo: "0xabc",
-      network: "polygon",
-    });
-    expect(polygon.network).toBe("polygon");
-    expect(polygon.asset).toBe("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359");
-
-    const solana = buildPaymentRequirements({
-      resource: "/x",
-      amountAtomic: "1",
-      payTo: "abc",
-      network: "solana",
-    });
-    expect(solana.asset).toBe("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-  });
-
-  test("buildX402Required wraps requirements in protocol envelope", () => {
-    const req = buildPaymentRequirements({
-      resource: "/x",
-      amountAtomic: "1",
-      payTo: "x",
-    });
-    const env = buildX402Required([req], "free-tier exhausted");
-    expect(env.x402Version).toBe(1);
-    expect(env.accepts).toHaveLength(1);
-    expect(env.error).toBe("free-tier exhausted");
-  });
-
-  test("parseX402Header accepts a valid base64 JSON envelope", () => {
-    const payment: X402PaymentHeader = {
-      x402Version: 1,
-      scheme: "exact",
-      network: "base",
-      payload: "deadbeef",
-    };
-    const header = Buffer.from(JSON.stringify(payment)).toString("base64");
-    const parsed = parseX402Header(header);
-    expect(parsed).not.toBeNull();
-    expect(parsed?.scheme).toBe("exact");
-    expect(parsed?.payload).toBe("deadbeef");
-  });
-
-  test("parseX402Header rejects malformed inputs", () => {
-    expect(parseX402Header("not-base64-at-all-!!!")).toBeNull();
-    expect(parseX402Header(Buffer.from("{bad json").toString("base64"))).toBeNull();
-    expect(
-      parseX402Header(Buffer.from(JSON.stringify({ x402Version: 99 })).toString("base64")),
-    ).toBeNull();
-    expect(
-      parseX402Header(
-        Buffer.from(JSON.stringify({ x402Version: 1, scheme: "exact" })).toString("base64"),
-      ),
-    ).toBeNull(); // missing network + payload
-  });
+const RECIPIENT = "0xAbcd000000000000000000000000000000001234";
+const PAYER = "0x1111111111111111111111111111111111111111";
+const RESOURCE: ResourceInfo = {
+  url: "https://api.agenttool.dev/v1/scrape",
+  description: "Exact project-credit payment",
+  mimeType: "application/json",
+  serviceName: "AgentTool",
+};
+const REQUIREMENT = buildPaymentRequirements({
+  amountAtomic: "1000",
+  payTo: RECIPIENT,
 });
 
-describe("x402Middleware — Hono wiring", () => {
-  test("wraps 402 responses with x402 envelope + X-PAYMENT-REQUIRED header", async () => {
-    const app = new Hono();
-    app.use(
-      "*",
-      x402Middleware({
-        buildRequirements: () => [
-          buildPaymentRequirements({
-            resource: "/paid",
-            amountAtomic: "1000",
-            payTo: "0xdeadbeef",
-          }),
-        ],
-      }),
-    );
-    app.get("/paid", (c) => c.json({ error: "free-tier exhausted" }, 402));
-
-    const res = await app.request("/paid");
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get("x-payment-required");
-    expect(headerValue).toBeTruthy();
-    const parsed = JSON.parse(headerValue!);
-    expect(parsed.x402Version).toBe(1);
-    expect(parsed.accepts).toHaveLength(1);
-    expect(parsed.accepts[0].network).toBe("base");
-    expect(parsed.error).toBe("free-tier exhausted");
-
-    const body = (await res.json()) as { x402Version: number; accepts: unknown[] };
-    expect(body.x402Version).toBe(1);
-    expect(body.accepts).toHaveLength(1);
-  });
-
-  test("non-402 responses pass through unmodified", async () => {
-    const app = new Hono();
-    app.use(
-      "*",
-      x402Middleware({
-        buildRequirements: () => [],
-      }),
-    );
-    app.get("/free", (c) => c.json({ ok: true }));
-
-    const res = await app.request("/free");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("x-payment-required")).toBeNull();
-    expect(await res.json()).toEqual({ ok: true });
-  });
-
-  test("parses X-PAYMENT header and exposes via getX402Payment", async () => {
-    const app = new Hono();
-    app.use(
-      "*",
-      x402Middleware({
-        buildRequirements: () => [],
-        verifyPayment: () => true,
-      }),
-    );
-    app.get("/paid", (c) => {
-      const p = getX402Payment(c);
-      return c.json({ paymentScheme: p?.scheme, paymentPayload: p?.payload });
-    });
-
-    const payment: X402PaymentHeader = {
-      x402Version: 1,
-      scheme: "exact",
-      network: "base",
-      payload: "signed-payload-here",
-    };
-    const headerValue = Buffer.from(JSON.stringify(payment)).toString("base64");
-
-    const res = await app.request("/paid", {
-      headers: { "X-PAYMENT": headerValue },
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { paymentScheme: string; paymentPayload: string };
-    expect(body.paymentScheme).toBe("exact");
-    expect(body.paymentPayload).toBe("signed-payload-here");
-  });
-
-  test("emits X-PAYMENT-RESPONSE on 2xx after payment when buildSettlementHeader provided", async () => {
-    const app = new Hono();
-    app.use(
-      "*",
-      x402Middleware({
-        buildRequirements: () => [],
-        verifyPayment: () => true,
-        buildSettlementHeader: () =>
-          buildSettlementHeader({
-            success: true,
-            transaction: "0xtxhash",
-            network: "base",
-          }),
-      }),
-    );
-    app.get("/paid", (c) => c.json({ ok: true }));
-
-    const payment: X402PaymentHeader = {
-      x402Version: 1,
-      scheme: "exact",
-      network: "base",
-      payload: "x",
-    };
-    const res = await app.request("/paid", {
-      headers: { "X-PAYMENT": Buffer.from(JSON.stringify(payment)).toString("base64") },
-    });
-    expect(res.status).toBe(200);
-    const settlement = res.headers.get("x-payment-response");
-    expect(settlement).toBeTruthy();
-    const decoded = JSON.parse(Buffer.from(settlement!, "base64").toString("utf-8"));
-    expect(decoded.success).toBe(true);
-    expect(decoded.transaction).toBe("0xtxhash");
-  });
-});
-
-describe("CoinbaseFacilitatorClient — wire shape", () => {
-  test("verify posts paymentRequirements + paymentPayload to /verify", async () => {
-    let captured: { url: string; body: unknown } | null = null;
-    const mockFetch: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : (input as URL).toString();
-      captured = { url, body: JSON.parse(init?.body as string) };
-      return new Response(JSON.stringify({ valid: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
-
-    const client = new CoinbaseFacilitatorClient({
-      baseUrl: "https://example.com/x402",
-      apiKey: "test-key",
-      fetchImpl: mockFetch,
-    });
-    const req = buildPaymentRequirements({
-      resource: "/r",
-      amountAtomic: "1",
-      payTo: "0x",
-    });
-    const payment: X402PaymentHeader = {
-      x402Version: 1,
-      scheme: "exact",
-      network: "base",
-      payload: "p",
-    };
-    const result = await client.verify(req, payment);
-    expect(result.valid).toBe(true);
-    expect(captured!.url).toBe("https://example.com/x402/verify");
-    const sent = captured!.body as {
-      paymentRequirements: unknown;
-      paymentPayload: unknown;
-    };
-    expect(sent.paymentRequirements).toBeDefined();
-    expect(sent.paymentPayload).toBeDefined();
-  });
-
-  test("settle returns parsed FacilitatorSettleResult", async () => {
-    const mockFetch: typeof fetch = (async () =>
-      new Response(
-        JSON.stringify({
-          success: true,
-          transaction: "0xabc",
-          network: "base",
-        }),
-        {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        },
-      )) as typeof fetch;
-
-    const client = new CoinbaseFacilitatorClient({ fetchImpl: mockFetch });
-    const result = await client.settle(
-      buildPaymentRequirements({ resource: "/r", amountAtomic: "1", payTo: "x" }),
-      {
-        x402Version: 1,
-        scheme: "exact",
-        network: "base",
-        payload: "p",
+function payment(over: Partial<PaymentPayload> = {}): PaymentPayload {
+  return {
+    x402Version: X402_VERSION,
+    resource: RESOURCE,
+    accepted: REQUIREMENT,
+    payload: {
+      signature: `0x${"12".repeat(65)}`,
+      authorization: {
+        from: PAYER,
+        to: RECIPIENT,
+        value: "1000",
+        validAfter: "0",
+        validBefore: "9999999999",
+        nonce: `0x${"34".repeat(32)}`,
       },
-    );
-    expect(result.success).toBe(true);
-    expect(result.transaction).toBe("0xabc");
+    },
+    ...over,
+  };
+}
+
+async function thrownBy(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as Error;
+  }
+  throw new Error("expected promise to reject");
+}
+
+describe("x402 V2 builders and PAYMENT-SIGNATURE parser", () => {
+  test("builds CAIP-2 Base USDC with the pinned EIP-712 domain", () => {
+    expect(REQUIREMENT).toEqual({
+      scheme: "exact",
+      network: "eip155:8453",
+      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      amount: "1000",
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 60,
+      extra: {
+        name: "USD Coin",
+        version: "2",
+        assetTransferMethod: "eip3009",
+      },
+    });
+    expect(buildPaymentRequirements({
+      amountAtomic: "1",
+      payTo: RECIPIENT,
+      network: "eip155:84532",
+    }).extra.name).toBe("USDC");
   });
 
-  test("throws on non-2xx facilitator response with status in error message", async () => {
-    const mockFetch: typeof fetch = (async () =>
-      new Response("payment rejected", { status: 422 })) as typeof fetch;
-    const client = new CoinbaseFacilitatorClient({ fetchImpl: mockFetch });
-    let caught: Error | null = null;
-    try {
-      await client.verify(
-        buildPaymentRequirements({ resource: "/r", amountAtomic: "1", payTo: "x" }),
-        { x402Version: 1, scheme: "exact", network: "base", payload: "p" },
-      );
-    } catch (e) {
-      caught = e as Error;
+  test("parses canonical V2 and normalizes null optional resource", () => {
+    expect(parseX402Header(encodeCanonicalBase64Json(payment())))
+      .toMatchObject({ x402Version: 2, accepted: REQUIREMENT });
+    const withoutResource = payment();
+    (withoutResource as unknown as { resource: null }).resource = null;
+    expect(parseX402Header(encodeCanonicalBase64Json(withoutResource))?.resource)
+      .toBeUndefined();
+  });
+
+  test("rejects V1/custom shapes, alternate base64 and unbounded extras", () => {
+    expect(parseX402Header(encodeCanonicalBase64Json({
+      x402Version: 1,
+      scheme: "exact",
+      network: "base",
+      payload: "c2ln",
+    }))).toBeNull();
+    const valid = encodeCanonicalBase64Json(payment());
+    expect(parseX402Header(`${valid}\n`)).toBeNull();
+    expect(parseX402Header(encodeCanonicalBase64Json({
+      ...payment(),
+      accepted: { ...REQUIREMENT, network: "base" },
+    }))).toBeNull();
+    expect(parseX402Header(encodeCanonicalBase64Json({
+      ...payment(),
+      accepted: { ...REQUIREMENT, extra: { nested: "x".repeat(5000) } },
+    }))).toBeNull();
+  });
+});
+
+describe("x402 V2 Hono transport", () => {
+  test("returns base64 PAYMENT-REQUIRED and mirrors PaymentRequired in body", async () => {
+    const required = buildPaymentRequired(RESOURCE, [REQUIREMENT], "insufficient_credits");
+    const app = new Hono();
+    app.use("*", x402Middleware({ buildPaymentRequired: () => required }));
+    app.post("/v1/scrape", (c) => c.json({ error: "insufficient_credits" }, 402));
+
+    const res = await app.request("https://api.agenttool.dev/v1/scrape", { method: "POST" });
+    expect(res.status).toBe(402);
+    expect(res.headers.get("x-payment-required")).toBeNull();
+    const encoded = res.headers.get("payment-required")!;
+    expect(JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"))).toEqual(required);
+    expect(await res.json()).toEqual(required);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test("accepts only PAYMENT-SIGNATURE and exposes verified PaymentPayload", async () => {
+    const app = new Hono();
+    app.use("*", x402Middleware({
+      buildPaymentRequired: () => null,
+      verifyPayment: () => true,
+    }));
+    app.post("/paid", (c) => c.json({ network: getX402Payment(c)?.accepted.network }));
+
+    const encoded = encodeCanonicalBase64Json(payment());
+    expect((await (await app.request("/paid", {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": encoded },
+    })).json())).toEqual({ network: "eip155:8453" });
+    expect((await (await app.request("/paid", {
+      method: "POST",
+      headers: { "X-PAYMENT": encoded },
+    })).json())).toEqual({});
+  });
+
+  test("receipt survives downstream errors and a pending state suppresses rechallenge", async () => {
+    const receipt = {
+      success: true,
+      transaction: "0xtx",
+      network: "eip155:8453" as const,
+    };
+    const app = new Hono();
+    app.use("*", x402Middleware({
+      buildPaymentRequired: () => buildPaymentRequired(RESOURCE, [REQUIREMENT]),
+      verifyPayment: (c) => {
+        (c as unknown as { settlement: typeof receipt }).settlement = receipt;
+        suppressX402Challenge(c, "/v1/x402/payments/abc");
+        return false;
+      },
+      buildSettlementHeader: (c) => {
+        const value = (c as unknown as { settlement?: typeof receipt }).settlement;
+        return value ? buildSettlementHeader(value) : undefined;
+      },
+    }));
+    app.post("/v1/scrape", (c) => c.json({ error: "insufficient_credits" }, 402));
+
+    const res = await app.request("/v1/scrape", {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": encodeCanonicalBase64Json(payment()) },
+    });
+    expect(res.status).toBe(402);
+    expect(res.headers.get("payment-response")).toBeTruthy();
+    expect(res.headers.get("payment-required")).toBeNull();
+    expect(res.headers.get("link")).toContain("rel=\"payment-status\"");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test("verifier rejection is contained", async () => {
+    const app = new Hono();
+    app.use("*", x402Middleware({
+      buildPaymentRequired: () => null,
+      verifyPayment: () => { throw new Error("dependency load failed"); },
+    }));
+    app.post("/free", (c) => c.json({ ok: true }));
+    const res = await app.request("/free", {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": encodeCanonicalBase64Json(payment()) },
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("CoinbaseFacilitatorClient V2", () => {
+  test("uses fresh endpoint-bound CDP JWTs and top-level x402Version", async () => {
+    const jwtCalls: unknown[] = [];
+    const requests: Array<{ url: string; init: RequestInit; body: Record<string, unknown> }> = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push({ url: String(input), init: init!, body });
+      return new Response(JSON.stringify(
+        String(input).endsWith("/verify")
+          ? { isValid: true, payer: PAYER }
+          : {
+              success: true,
+              transaction: "0xtx",
+              network: "eip155:8453",
+              payer: PAYER,
+              amount: "1000",
+            },
+      ));
+    }) as typeof fetch;
+    let token = 0;
+    const client = new CoinbaseFacilitatorClient({
+      baseUrl: DEFAULT_X402_FACILITATOR_URL,
+      cdpApiKeyId: "key-id",
+      cdpApiKeySecret: "  PEM\nSECRET\n  ",
+      jwtGenerator: async (options) => {
+        jwtCalls.push(options);
+        token += 1;
+        return `token-${token}`;
+      },
+      fetchImpl,
+    });
+    await client.verify(REQUIREMENT, payment());
+    await client.settle(REQUIREMENT, payment());
+
+    expect(jwtCalls).toEqual([
+      {
+        apiKeyId: "key-id",
+        apiKeySecret: "  PEM\nSECRET\n  ",
+        requestMethod: "POST",
+        requestHost: "api.cdp.coinbase.com",
+        requestPath: "/platform/v2/x402/verify",
+        expiresIn: 120,
+      },
+      {
+        apiKeyId: "key-id",
+        apiKeySecret: "  PEM\nSECRET\n  ",
+        requestMethod: "POST",
+        requestHost: "api.cdp.coinbase.com",
+        requestPath: "/platform/v2/x402/settle",
+        expiresIn: 120,
+      },
+    ]);
+    expect(requests.map((request) => request.init.headers)).toEqual([
+      { "content-type": "application/json", authorization: "Bearer token-1" },
+      { "content-type": "application/json", authorization: "Bearer token-2" },
+    ]);
+    expect(requests.every((request) => request.init.redirect === "error")).toBe(true);
+    expect(requests.every((request) => request.body.x402Version === 2)).toBe(true);
+    expect(requests[0]!.body.paymentPayload).toEqual(payment());
+    expect(requests[0]!.body.paymentRequirements).toEqual(REQUIREMENT);
+  });
+
+  test("missing either CDP credential fails before fetch", async () => {
+    let fetches = 0;
+    const client = new CoinbaseFacilitatorClient({
+      baseUrl: DEFAULT_X402_FACILITATOR_URL,
+      cdpApiKeyId: "key-id",
+      cdpApiKeySecret: "",
+      fetchImpl: (async () => {
+        fetches += 1;
+        return new Response("{}");
+      }) as typeof fetch,
+    });
+    expect((await thrownBy(client.verify(REQUIREMENT, payment()))).message)
+      .toBe("coinbase_facilitator_auth_unavailable");
+    expect(fetches).toBe(0);
+  });
+
+  test("custom facilitator never receives CDP credentials", async () => {
+    let captured: RequestInit | undefined;
+    const client = new CoinbaseFacilitatorClient({
+      baseUrl: "https://facilitator.example/x402",
+      cdpApiKeyId: "key-id",
+      cdpApiKeySecret: "secret",
+      jwtGenerator: async () => "must-not-run",
+      fetchImpl: (async (_input, init) => {
+        captured = init;
+        return new Response(JSON.stringify({ isValid: true }));
+      }) as typeof fetch,
+    });
+    await client.verify(REQUIREMENT, payment());
+    expect(captured?.headers).toEqual({ "content-type": "application/json" });
+    expect(captured?.redirect).toBe("error");
+  });
+
+  test("runtime-validates V2 responses and expected settlement network", async () => {
+    const clientReturning = (value: unknown) => new CoinbaseFacilitatorClient({
+      baseUrl: "https://facilitator.example/x402",
+      fetchImpl: (async () => new Response(JSON.stringify(value))) as typeof fetch,
+    });
+    for (const value of [
+      { valid: true },
+      { isValid: "true" },
+      { isValid: true, invalidReason: "contradiction" },
+    ]) {
+      expect((await thrownBy(clientReturning(value).verify(REQUIREMENT, payment()))).message)
+        .toBe("coinbase_facilitator_invalid_verify_response");
     }
-    expect(caught).not.toBeNull();
-    expect(caught!.message).toMatch(/422/);
+    for (const value of [
+      { success: true, transaction: "0xtx" },
+      { success: true, transaction: "", network: "eip155:8453" },
+      { success: true, transaction: "0xtx", network: "base" },
+      { success: true, transaction: "0xtx", network: "eip155:137" },
+    ]) {
+      expect((await thrownBy(clientReturning(value).settle(REQUIREMENT, payment()))).message)
+        .toBe("coinbase_facilitator_invalid_settle_response");
+    }
+  });
+
+  test("sanitizes HTTP bodies and rejects redirects without following", async () => {
+    let calls = 0;
+    const client = new CoinbaseFacilitatorClient({
+      baseUrl: "https://facilitator.example/x402",
+      fetchImpl: (async () => {
+        calls += 1;
+        return new Response("secret facilitator body", {
+          status: 302,
+          headers: { location: "https://elsewhere.example" },
+        });
+      }) as typeof fetch,
+    });
+    const error = await thrownBy(client.verify(REQUIREMENT, payment()));
+    expect(error.message).toBe("coinbase_facilitator_http_302");
+    expect(error.message).not.toContain("secret");
+    expect(calls).toBe(1);
   });
 });

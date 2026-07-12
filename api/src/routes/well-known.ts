@@ -268,7 +268,7 @@ app.get("/wake-keystone", (c) => {
       x402: {
         spec: "https://x402.org",
         notes:
-          "402 responses across the platform carry x402 PaymentRequirements envelopes; the wake itself is unpaid.",
+          "Only eligible POST /v1/scrape and POST /v1/document project-credit refusals may carry an x402 V2 PAYMENT-REQUIRED challenge; the wake itself is unpaid.",
       },
       otel_gen_ai: {
         spec: "https://opentelemetry.io/docs/specs/semconv/gen-ai/",

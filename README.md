@@ -39,8 +39,8 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Some documents are shipped or published; proposals and known gaps are labeled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.9.0 adds `at.data`, a thin client for an independently configured data node with a separate bearer boundary. |
-| **Agent data** | `packages/data` | Local-first `agent-data/v1` reference node. Raw bytes and indexes stay user-owned; peer replication and hosted manifest publication are future profiles. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.10.0 exposes `at.data` plus the local-node-only `at.data.sync` pull/status surface, with a separate data-node bearer boundary. |
+| **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
@@ -106,8 +106,8 @@ identity.
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
 canonical bytes. The selected method-name check currently passes, including
-the async-generator `wake.voice` method in TypeScript and Python. That does not
-prove broader SDK or release parity; see [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
+the async-generator `wake.voice` method in TypeScript and Python. SDK source and releases are not exact peers; this check does not prove broader parity.
+See [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
 The source package manifests and SDK READMEs no longer declare a license
@@ -180,7 +180,7 @@ export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 
 # TypeScript / Bun
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```
@@ -219,17 +219,31 @@ The architecture is downstream of these principles. Each named primitive above i
   registered W3C method, conforming DID Document, or DID Resolution result is
   published. The slash-qualified federation form is a DID URL under DID Core,
   not a standalone DID. See `docs/DID-AT-SPEC.md`.
-- **Unsafe hosted tools stay off by default.** `/v1/execute` has no tenant
-  isolation. Scrape, browse, and URL-document tools do not have a complete SSRF
-  destination boundary. They require separate explicit unsafe operator flags;
-  local base64 document parsing remains available.
+- **Hosted-tool boundaries are path-specific.** Static `/v1/scrape` and URL
+  `/v1/document` reads use the bounded public-Web transport: every DNS answer
+  must be conservatively global, the validated address is pinned and checked
+  after connection, every redirect hop is revalidated, and at most 1 MB of
+  identity-encoded bytes is accepted. A shared process gate admits 16 safe-net
+  requests, queues at most 64 for one second, and holds admission from before
+  DNS through redirects; saturation returns `503` with `Retry-After`. That
+  wait, DNS, redirects, and response transfer share one 15-second safe-net
+  deadline. The gate is shared with federation and custom-facilitator traffic;
+  it is capacity protection, not a per-project rate limiter or fairness policy.
+  HTML DOM/Readability work then runs in a separately terminable, resource-
+  bounded parser process with its own queue and two-second wall limits; those
+  are not one whole-request deadline. Public HTTP is still cleartext, and
+  fetched content remains server-readable, untrusted, and prompt-injectable.
+  Playwright `/v1/browse` remains behind the explicit unsafe-outbound flag and
+  Redis; `/v1/execute` remains separately disabled by default with no tenant
+  isolation.
 - **Trusted runtime is incomplete.** A trusted runtime row can be provisioned
   with the KMS secret, but its hosted signing key is not registered into
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.9.0 releases expose `at.data`
-  in both languages. The parity checker only
+- **SDK parity is deliberately bounded.** The 0.10.0 releases expose `at.data`
+  and the local-node-only `at.data.sync` pull/status surface in both languages.
+  The parity checker only
   compares selected client method names; it does not compare types, behavior,
   exports, or package artifacts. No source `LICENSE` file exists; LOVE package
   manifests therefore publish `license: null`, and older registry metadata may

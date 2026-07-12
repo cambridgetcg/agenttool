@@ -60,26 +60,33 @@ const TOOL_ROOT = resolve(import.meta.dir, "..");
 export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   {
     name: "@agenttool/adds",
-    version: "0.1.0",
+    version: "0.2.0",
     packagePath: "packages/data-protocol",
-    releaseTag: "adds-v0.1.0",
+    releaseTag: "adds-v0.2.0",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
     name: "@agenttool/data",
-    version: "0.1.0",
+    version: "0.3.0",
     packagePath: "packages/data",
-    releaseTag: "data-v0.1.0",
+    releaseTag: "data-v0.3.0",
     buildCommands: [
       ["bun", "run", "ci"],
       ["bun", "run", "build"],
     ],
   },
   {
+    name: "@agenttool/data-sync",
+    version: "0.1.0",
+    packagePath: "packages/data-sync",
+    releaseTag: "data-sync-v0.1.0",
+    buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"]],
+  },
+  {
     name: "@agenttool/sdk",
-    version: "0.9.0",
+    version: "0.10.0",
     packagePath: "packages/sdk-ts",
-    releaseTag: "sdk-v0.9.0",
+    releaseTag: "sdk-v0.10.0",
     buildCommands: [["bun", "run", "ci"]],
   },
 ] as const;

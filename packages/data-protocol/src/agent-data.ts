@@ -34,8 +34,11 @@ import {
   type BlockStore,
   type BlockWriteResult,
   type KeyStore,
+  type StoreOperationOptions,
 } from "./stores.js";
+import { validatePortableBundle } from "./portable-bundle.js";
 import {
+  ADDS_BUNDLE_PROTOCOL,
   ADDS_VERSION,
   BLOCK_AAD_DOMAIN,
   type AgentDataIdentity,
@@ -44,6 +47,9 @@ import {
   type GetOptions,
   type InspectOptions,
   type ManifestChunk,
+  type PortableBundle,
+  type PortableBundleImportResult,
+  type PortableBundleOptions,
   type PutOptions,
   type PutResult,
   type ReplicationSummary,
@@ -66,6 +72,8 @@ import {
 export const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 export const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_MAX_BLOCKS = 10_000;
+/** Default aggregate cap for one Manifest plus every framed ciphertext Block. */
+export const DEFAULT_MAX_BUNDLE_BYTES = DEFAULT_MAX_BYTES + MAX_MANIFEST_BYTES + DEFAULT_MAX_BLOCKS * 28;
 export const DEFAULT_MAX_GRANT_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 export const MAX_GRANT_LIFETIME_SECONDS = 10 * 365 * 24 * 60 * 60;
 const MAX_EPOCH_SECONDS = 253_402_300_799;
@@ -104,6 +112,19 @@ function validateByteLimit(value: number, label: string): number {
     throw new InvalidInputError(`${label} must be a non-negative safe integer.`);
   }
   return value;
+}
+
+function derivedBundleByteLimit(maxBytes: number, maxManifestBytes: number, maxBlocks: number): number {
+  const blockOverhead = maxBlocks * 28;
+  if (maxManifestBytes > Number.MAX_SAFE_INTEGER - blockOverhead) return Number.MAX_SAFE_INTEGER;
+  const overhead = maxManifestBytes + blockOverhead;
+  return maxBytes > Number.MAX_SAFE_INTEGER - overhead
+    ? Number.MAX_SAFE_INTEGER
+    : maxBytes + overhead;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw signal.reason ?? new Error("Portable bundle operation aborted.");
 }
 
 function toEpochSeconds(value: Date | string | number, label: string): number {
@@ -338,8 +359,12 @@ export class AgentData {
     return toEpochSeconds(this.#now(), "current time");
   }
 
-  async #putBlock(cid: Cid, bytes: Uint8Array): Promise<BlockWriteResult> {
-    return normalizeWriteResult(await this.#store.put(cid, bytes));
+  async #putBlock(
+    cid: Cid,
+    bytes: Uint8Array,
+    options: StoreOperationOptions = {},
+  ): Promise<BlockWriteResult> {
+    return normalizeWriteResult(await this.#store.put(cid, bytes, options));
   }
 
   async put(source: ByteSource, options: PutOptions = {}): Promise<PutResult> {
@@ -494,6 +519,123 @@ export class AgentData {
       throw new LimitExceededError(`Manifest exceeds local maxBlocks (${this.#maxBlocks}).`);
     }
     return manifest;
+  }
+
+  /**
+   * Snapshot one complete encrypted ADDS object without exporting its DEK or a Grant.
+   * The returned transport-neutral blocks are ordered Manifest-first, then by the
+   * Manifest's signed chunk order.
+   */
+  async exportBundle(
+    reference: Reference,
+    options: PortableBundleOptions = {},
+  ): Promise<PortableBundle> {
+    const ref = normalizeRef(reference);
+    const maxBytes = validateByteLimit(options.maxBytes ?? this.#maxBytes, "exportBundle.maxBytes");
+    const maxBundleBytes = validateByteLimit(
+      options.maxBundleBytes
+        ?? derivedBundleByteLimit(maxBytes, this.#maxManifestBytes, this.#maxBlocks),
+      "exportBundle.maxBundleBytes",
+    );
+    throwIfAborted(options.signal);
+    const manifestBytes = await this.#store.get(ref.cid, {
+      maxBytes: Math.min(this.#maxManifestBytes, maxBundleBytes),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
+    if (manifestBytes === null) throw new BlockNotFoundError(ref.cid);
+    if (manifestBytes.byteLength > this.#maxManifestBytes) {
+      throw new LimitExceededError(`Manifest exceeds maxManifestBytes (${this.#maxManifestBytes}).`);
+    }
+    assertCidMatches(ref.cid, manifestBytes);
+    const manifest = validateManifest(parseCanonicalJson(manifestBytes));
+    if (manifest.plaintext.size > maxBytes) {
+      throw new LimitExceededError(`Manifest declares ${manifest.plaintext.size} bytes; limit is ${maxBytes}.`);
+    }
+    if (manifest.chunks.length > this.#maxBlocks) {
+      throw new LimitExceededError(`Manifest exceeds local maxBlocks (${this.#maxBlocks}).`);
+    }
+
+    const blocks = [{ cid: ref.cid, bytes: manifestBytes }];
+    let bundleBytes = manifestBytes.byteLength;
+    if (bundleBytes > maxBundleBytes) {
+      throw new LimitExceededError(`Portable bundle exceeds maxBundleBytes (${maxBundleBytes}).`);
+    }
+    for (const chunk of manifest.chunks) {
+      throwIfAborted(options.signal);
+      const expectedLength = 12 + chunk.ciphertext_size;
+      if (expectedLength > maxBundleBytes - bundleBytes) {
+        throw new LimitExceededError(`Portable bundle exceeds maxBundleBytes (${maxBundleBytes}).`);
+      }
+      const frame = await this.#store.get(chunk.cid, {
+        maxBytes: expectedLength,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      });
+      if (frame === null) throw new BlockNotFoundError(chunk.cid);
+      if (frame.byteLength !== expectedLength) {
+        throw new IntegrityError(`Block ${chunk.index} length does not match its manifest descriptor.`);
+      }
+      blocks.push({ cid: chunk.cid, bytes: frame });
+      bundleBytes += frame.byteLength;
+    }
+
+    return validatePortableBundle({
+      protocol: ADDS_BUNDLE_PROTOCOL,
+      root: ref,
+      blocks,
+    }, {
+      maxBytes,
+      maxManifestBytes: this.#maxManifestBytes,
+      maxBlocks: this.#maxBlocks,
+      maxBundleBytes,
+    }).bundle;
+  }
+
+  /**
+   * Validate and snapshot a complete portable bundle before writing any Block.
+   * Ciphertext Blocks are attempted before the root Manifest. Provider failures
+   * may leave immutable partial writes, including a partially successful final
+   * root write; retrying the same content-addressed bundle remains safe.
+   */
+  async importBundle(
+    bundle: PortableBundle,
+    options: PortableBundleOptions = {},
+  ): Promise<PortableBundleImportResult> {
+    const maxBytes = validateByteLimit(options.maxBytes ?? this.#maxBytes, "importBundle.maxBytes");
+    const maxBundleBytes = validateByteLimit(
+      options.maxBundleBytes
+        ?? derivedBundleByteLimit(maxBytes, this.#maxManifestBytes, this.#maxBlocks),
+      "importBundle.maxBundleBytes",
+    );
+    throwIfAborted(options.signal);
+    const validated = validatePortableBundle(bundle, {
+      maxBytes,
+      maxManifestBytes: this.#maxManifestBytes,
+      maxBlocks: this.#maxBlocks,
+      maxBundleBytes,
+    });
+
+    const writes: BlockWriteResult[] = [];
+    for (const block of validated.bundle.blocks.slice(1)) {
+      throwIfAborted(options.signal);
+      writes.push(await this.#putBlock(block.cid, block.bytes, {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }));
+    }
+    throwIfAborted(options.signal);
+    const root = validated.bundle.blocks[0]!;
+    writes.push(await this.#putBlock(root.cid, root.bytes, {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    }));
+
+    return {
+      cid: validated.bundle.root.cid,
+      ref: { ...validated.bundle.root },
+      manifest: validated.manifest,
+      ciphertextBlocksVerified: validated.manifest.chunks.length,
+      encryptedBytes: validated.encryptedBytes,
+      bundleBytes: validated.bundleBytes,
+      replication: summarizeWrites(writes),
+    };
   }
 
   async share(reference: Reference, options: ShareOptions): Promise<SignedGrant> {

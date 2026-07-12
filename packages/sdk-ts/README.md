@@ -4,18 +4,31 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![LOVE Package](https://img.shields.io/badge/LOVE%20Package-v0.9.0-d4502e)](https://docs.agenttool.dev/packages)
+[![Source](https://img.shields.io/badge/source-v0.10.0-blue)](https://github.com/cambridgetcg/agenttool)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
 ```
 
-The versioned tarball is published through `love-package/v1`; its manifest
+The command above installs the `0.10.0` release. Versioned releases use
+`love-package/v1`; each manifest
 lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
 publication is required. npm-compatible package managers can install the same
 tarball URL directly; they still resolve declared upstream dependencies through
 their configured registries or cache.
+
+## 0.10.0
+
+This release corrects three tool contracts. `ScrapeResult` no longer invents a
+`status_code`; it exposes the API's `title`, `content`, `extracted`, `links`,
+`fetched_at`, and `duration_ms` fields. `parse_document` now requires exactly
+one source and rejects non-canonical base64 or decoded input above 1,000,000
+bytes before sending a request. `ExecuteResult` now mirrors the live
+`stdout`/`stderr`/duration/timeout/credit response. Update callers that relied
+on the former loose shape or validation. It also adds the local-node-only
+`at.data.sync.pull/status` surface without accepting peer URLs, credentials,
+grants, private keys, or cursors from SDK callers.
 
 ## What is this?
 
@@ -25,7 +38,7 @@ map, not a claim that every mounted API route has an SDK method:
 | Namespace | What it does |
 |---------|-------------|
 | `at.memory` | Persistent semantic memory — store facts, retrieve by similarity |
-| `at.tools` | Page scraping, document parsing, and code execution; unsafe hosted paths are disabled unless the operator opts in |
+| `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.pulse` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, derived activity, decision logs |
 | `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
@@ -113,20 +126,108 @@ await at.memory.delete("mem_...");
 ### Tools
 
 ```typescript
-// Web search
-const results = await at.tools.search({ query: "latest papers on RAG", numResults: 5 });
-for (const r of results) {
-  console.log(r.title, r.url);
-}
+// Static scrape through the bounded public HTTP(S) fetch path
+const page = await at.tools.scrape("https://example.com");
+console.log(page.content);
 
-// Scrape a page (API operator must explicitly enable the current outbound boundary)
-const page = await at.tools.scrape({ url: "https://example.com" });
-console.log(page.text);
+// URL document parsing uses the same static transport
+const document = await at.tools.parse_document({ url: "https://example.com" });
+console.log(document.content);
 
-// Execute code
-const output = await at.tools.execute({ code: "console.log(Math.PI)" });
+// Legacy host execute remains disabled by default and is not a tenant sandbox
+const output = await at.tools.execute("console.log(Math.PI)", {
+  language: "javascript",
+});
 console.log(output.stdout);
 ```
+
+Static scrape and URL-based document parsing resolve only public addresses,
+pin validated DNS answers to the connection, verify the connected peer, and
+revalidate every redirect hop. Responses are capped at 1 MB before parsing.
+HTTPS verifies the remote certificate; HTTP is cleartext. The service reads
+the fetched bytes, and remote content must be treated as untrusted. Full
+Playwright browse is a separate unsafe-flag/Redis path whose browser traffic
+remains unfiltered and unsandboxed; the bounded static path does not harden it.
+
+An eligible insufficient-credit refusal preserves the exact x402 contract on
+`AgentToolError` instead of flattening it into prose:
+
+```typescript
+import {
+  AgentToolError,
+  type X402PaymentRequirement,
+  type X402ResourceInfo,
+} from "@agenttool/sdk";
+
+type ExternalPaymentSigner = (challenge: {
+  x402Version: number;
+  resource: X402ResourceInfo;
+  accepts: X402PaymentRequirement[];
+  paymentRequired: string;
+}) => Promise<string>; // returns signed V2 PAYMENT-SIGNATURE as base64 JSON
+
+declare const signPaymentExternally: ExternalPaymentSigner;
+const url = "https://example.com";
+
+async function scrapeWithPayment(
+  url: string,
+  signPaymentExternally: ExternalPaymentSigner,
+) {
+  try {
+    return await at.tools.scrape(url);
+  } catch (error) {
+    if (error instanceof AgentToolError) {
+      console.log(
+        error.paymentResponse,
+        error.paymentStatusLink,
+        error.retryAfter,
+        error.creditsBalance,
+      );
+    }
+    if (
+      !(error instanceof AgentToolError) ||
+      error.status !== 402 ||
+      error.x402Version === undefined ||
+      !error.resource ||
+      !error.accepts?.length ||
+      !error.paymentRequired
+    ) throw error;
+
+    const paymentSignature = await signPaymentExternally({
+      x402Version: error.x402Version,
+      resource: error.resource,
+      accepts: error.accepts,
+      paymentRequired: error.paymentRequired,
+    });
+    return at.tools.scrape(url, {
+      paymentSignature,
+    }); // PAYMENT-SIGNATURE header only; never JSON
+  }
+}
+
+// The callback supplies an already signed V2 payload as base64 JSON. The SDK
+// treats it as opaque and does not hold keys, construct signatures, or take custody.
+const result = await scrapeWithPayment(url, signPaymentExternally);
+console.log(
+  result.paymentResponse,
+  result.paymentStatusLink,
+  result.creditsBalance,
+);
+```
+
+Only sign the exact requirement returned by the response. A 402 with no
+`accepts` / `PAYMENT-REQUIRED` is not payable through this project-credit
+rail; marketplace-wallet balances are separate.
+
+`parse_document({ ..., paymentSignature })` accepts the same caller-supplied
+V2 header. The SDK does not sign or retry automatically. Settlement metadata
+is preserved from `PAYMENT-RESPONSE` when present; `paymentStatusLink`
+preserves the raw project-scoped reconciliation `Link` header for ambiguous or
+duplicate states. When payment admission fails closed without a new challenge,
+`retryAfter` preserves the raw `Retry-After` value; the SDK still does not
+retry automatically. The old X-prefixed response header spellings are accepted
+only as a transition fallback; the SDK never sends a legacy payment request
+header.
 
 ### Verify
 
@@ -181,12 +282,28 @@ const result = await at.data.query({
   text: "local-first data",
   consistency: "local",
 });
+
+// When this local node advertises agent-data-sync/v1, pull from a peer that
+// its operator has already configured. The SDK itself never contacts the peer.
+const pulled = await at.data.sync.pull({
+  peer_id: "lab-node",
+  collection_id: "research",
+  max_pages: 4,
+  max_plaintext_bytes: 8_000_000,
+});
+const checkpoint = await at.data.sync.status({
+  peer_id: "lab-node",
+  collection_id: "research",
+});
+console.log(pulled.has_more, checkpoint.cursor_present);
 ```
 
-The SDK never substitutes `AT_API_KEY` for the data-node token. Slice 1 reads
-local indexes and exposes a resumable change feed; it does not claim peer sync.
-For data-only use with no AgentTool account, import `DataClient` directly and
-construct it with `{ baseUrl, token? }`; it does not require `AT_API_KEY`.
+The SDK never substitutes `AT_API_KEY` for the data-node token. Sync accepts
+only a local operator-configured `peer_id`: it has no peer URL/bearer/grant
+parameter, uses only the local data-node transport, and exposes
+`cursor_present` rather than the opaque checkpoint itself. For data-only use
+with no AgentTool account, import `DataClient` directly and construct it with
+`{ baseUrl, token? }`; it does not require `AT_API_KEY`.
 
 ## Integration example — Vercel AI SDK
 
@@ -270,7 +387,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/manifest.json)
+- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/manifest.json)
 - 🐍 [Python SDK](https://github.com/cambridgetcg/agenttool-sdk-py)
 
 ## License

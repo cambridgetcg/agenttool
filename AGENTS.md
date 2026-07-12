@@ -13,7 +13,8 @@ server-readable memory, signed caller-supplied strand bytes, conditional
 federation, an internal economic loop, and a standalone local-first data
 node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
 node (`packages/data/`), the experimental ADDS encrypted-object package
-(`packages/data-protocol/`), the registry-neutral `love-package/v1`
+(`packages/data-protocol/`), an explicit encrypted pull bridge
+(`packages/data-sync/`), the registry-neutral `love-package/v1`
 distribution protocol, and three static apps (`apps/`). It is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
@@ -28,6 +29,7 @@ bun install                                    # repo root (no root package.json
 cd api && bun install                          # api workspace
 cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/data && bun install                # local-first agent-data/v1 node
+cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/sdk-ts && bun install              # TS SDK
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
@@ -56,12 +58,15 @@ bunx tsc --noEmit                              # typecheck — run before declar
 
 # Local data node ────────────────────────────────────────────────────
 cd packages/data
-bun test                                       # node + wire contract
-bunx tsc --noEmit                              # package typecheck
+bun run ci && bun run build                    # gate + dist consumed by data-sync
 
 # ADDS encrypted object plane ───────────────────────────────────────
 cd packages/data-protocol
 bun run ci                                     # build + shared vectors + security tests
+
+# Explicit encrypted data-node pull ────────────────────────────────
+cd packages/data-sync
+bun run ci                                     # typecheck + two-node sync/security tests
 
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
@@ -86,7 +91,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + SDK only
+bin/preflight.sh packages                      # data + ADDS + data sync + SDK only
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -103,7 +108,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
-| `build-love-packages.ts` | Builds the versioned `@agenttool/data`, `@agenttool/sdk`, and `@agenttool/adds` tarballs plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/sdk`, and `@agenttool/adds` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |

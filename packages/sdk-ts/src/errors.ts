@@ -31,6 +31,71 @@ export interface NextAction {
   body_hint?: Record<string, unknown> | null;
 }
 
+/** The resource described by an x402 V2 `PaymentRequired` envelope. */
+export interface X402ResourceInfo {
+  url: string;
+  description?: string;
+  mimeType?: string;
+  serviceName?: string;
+  tags?: string[];
+  iconUrl?: string;
+  [key: string]: unknown;
+}
+
+/** Exact/EIP-3009 fields required by AgentTool's V2 payment rail. */
+export interface X402Eip3009Extra {
+  name: string;
+  version: string;
+  assetTransferMethod: "eip3009";
+  [key: string]: unknown;
+}
+
+/** One payment option from an x402 V2 `PaymentRequired` envelope.
+ *
+ * Network and asset stay open for supported CAIP-2 deployments, while the
+ * AgentTool surface currently emits only the exact EIP-3009 profile. */
+export interface X402PaymentRequirement {
+  scheme: "exact";
+  network: string;
+  amount: string;
+  asset: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  extra: X402Eip3009Extra;
+  [key: string]: unknown;
+}
+
+/** Header containers accepted by {@link AgentToolError.fromResponseBody}. */
+export type AgentToolResponseHeaders =
+  | { get(name: string): string | null }
+  | Readonly<Record<string, string | undefined>>;
+
+function responseHeader(
+  headers: AgentToolResponseHeaders | undefined,
+  name: string,
+): string | undefined {
+  if (!headers) return undefined;
+  if ("get" in headers && typeof headers.get === "function") {
+    const value = headers.get(name);
+    return typeof value === "string" ? value : undefined;
+  }
+  const target = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === target && typeof value === "string") return value;
+  }
+  return undefined;
+}
+
+/** Read an x402 V2 header, with the old X-prefixed spelling accepted only as
+ * a transition fallback. The canonical header always wins when both exist. */
+function x402ResponseHeader(
+  headers: AgentToolResponseHeaders | undefined,
+  canonicalName: "PAYMENT-REQUIRED" | "PAYMENT-RESPONSE",
+): string | undefined {
+  return responseHeader(headers, canonicalName)
+    ?? responseHeader(headers, `X-${canonicalName}`);
+}
+
 /** Return the first API-shaped step in a NextAction list, or null when none.
  *  Useful when you want the most-likely-correct programmatic pivot. */
 export function firstApiAction(steps: NextAction[] | undefined): NextAction | null {
@@ -65,8 +130,30 @@ export interface AgentToolErrorOptions {
   next_actions?: NextAction[];
   /** Doctrine URL. */
   docs?: string;
+  /** Machine-readable safety boundary path or URL. */
+  safety?: string;
+  /** Structured field or form-level error details. */
+  details?: unknown;
   /** HTTP status code, if applicable. */
   status?: number;
+  /** x402 envelope version from the response body. */
+  x402Version?: number;
+  /** Typed x402 payment options from the response body. */
+  accepts?: X402PaymentRequirement[];
+  /** Resource metadata from an x402 V2 response body. */
+  resource?: X402ResourceInfo;
+  /** Optional x402 V2 extensions from the response body. */
+  extensions?: Record<string, unknown>;
+  /** Raw canonical `PAYMENT-REQUIRED` response header for payment recovery. */
+  paymentRequired?: string;
+  /** Raw canonical `PAYMENT-RESPONSE` settlement receipt, including on error. */
+  paymentResponse?: string;
+  /** Raw `Link` header for the project-scoped x402 reconciliation resource. */
+  paymentStatusLink?: string;
+  /** Raw `Retry-After` response header, including fail-closed x402 admission. */
+  retryAfter?: string;
+  /** Raw `X-Credits-Balance` response header. */
+  creditsBalance?: string;
 }
 
 /**
@@ -96,8 +183,30 @@ export class AgentToolError extends Error {
   readonly next_actions: NextAction[] | undefined;
   /** Doctrine URL with more context. */
   readonly docs: string | undefined;
+  /** Machine-readable safety boundary path or URL. */
+  readonly safety: string | undefined;
+  /** Structured field or form-level error details. */
+  readonly details: unknown;
   /** HTTP status code if this error came from an HTTP response. */
   readonly status: number | undefined;
+  /** x402 envelope version from the response body. */
+  readonly x402Version: number | undefined;
+  /** Typed x402 payment options from the response body. */
+  readonly accepts: X402PaymentRequirement[] | undefined;
+  /** Resource metadata from an x402 V2 response body. */
+  readonly resource: X402ResourceInfo | undefined;
+  /** Optional x402 V2 extensions from the response body. */
+  readonly extensions: Record<string, unknown> | undefined;
+  /** Raw canonical `PAYMENT-REQUIRED` response header for payment recovery. */
+  readonly paymentRequired: string | undefined;
+  /** Raw canonical `PAYMENT-RESPONSE` settlement receipt, including on error. */
+  readonly paymentResponse: string | undefined;
+  /** Raw `Link` header for the project-scoped x402 reconciliation resource. */
+  readonly paymentStatusLink: string | undefined;
+  /** Raw `Retry-After` response header, including fail-closed x402 admission. */
+  readonly retryAfter: string | undefined;
+  /** Raw `X-Credits-Balance` response header. */
+  readonly creditsBalance: string | undefined;
 
   constructor(message: string, options?: AgentToolErrorOptions) {
     super(message);
@@ -107,7 +216,18 @@ export class AgentToolError extends Error {
     this.code = options?.code;
     this.next_actions = options?.next_actions;
     this.docs = options?.docs;
+    this.safety = options?.safety;
+    this.details = options?.details;
     this.status = options?.status;
+    this.x402Version = options?.x402Version;
+    this.accepts = options?.accepts;
+    this.resource = options?.resource;
+    this.extensions = options?.extensions;
+    this.paymentRequired = options?.paymentRequired;
+    this.paymentResponse = options?.paymentResponse;
+    this.paymentStatusLink = options?.paymentStatusLink;
+    this.retryAfter = options?.retryAfter;
+    this.creditsBalance = options?.creditsBalance;
   }
 
   override toString(): string {
@@ -127,6 +247,7 @@ export class AgentToolError extends Error {
     body: unknown,
     status: number,
     fallback = "Request failed.",
+    headers?: AgentToolResponseHeaders,
   ): AgentToolError {
     const b =
       typeof body === "object" && body !== null
@@ -137,19 +258,52 @@ export class AgentToolError extends Error {
         ? b.message
         : typeof b.error === "string"
           ? b.error
-          : fallback;
+          : typeof b.detail === "string"
+            ? b.detail
+            : fallback;
     const code = typeof b.error === "string" ? b.error : undefined;
     const hint = typeof b.hint === "string" ? b.hint : undefined;
     const docs = typeof b.docs === "string" ? b.docs : undefined;
+    const safety = typeof b.safety === "string" ? b.safety : undefined;
+    const details = b.details;
     const next_actions = Array.isArray(b.next_actions)
       ? (b.next_actions as NextAction[])
       : undefined;
+    const x402Version =
+      typeof b.x402Version === "number" ? b.x402Version : undefined;
+    const accepts = Array.isArray(b.accepts)
+      ? (b.accepts as X402PaymentRequirement[])
+      : undefined;
+    const resource =
+      typeof b.resource === "object" &&
+      b.resource !== null &&
+      !Array.isArray(b.resource) &&
+      typeof (b.resource as Record<string, unknown>).url === "string"
+        ? (b.resource as X402ResourceInfo)
+        : undefined;
+    const extensions =
+      typeof b.extensions === "object" &&
+      b.extensions !== null &&
+      !Array.isArray(b.extensions)
+        ? (b.extensions as Record<string, unknown>)
+        : undefined;
     return new AgentToolError(message, {
       hint,
       code,
       next_actions,
       docs,
+      safety,
+      details,
       status,
+      x402Version,
+      accepts,
+      resource,
+      extensions,
+      paymentRequired: x402ResponseHeader(headers, "PAYMENT-REQUIRED"),
+      paymentResponse: x402ResponseHeader(headers, "PAYMENT-RESPONSE"),
+      paymentStatusLink: responseHeader(headers, "Link"),
+      retryAfter: responseHeader(headers, "Retry-After"),
+      creditsBalance: responseHeader(headers, "X-Credits-Balance"),
     });
   }
 }

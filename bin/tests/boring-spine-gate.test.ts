@@ -199,6 +199,9 @@ describe("boring test spine", () => {
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
     expect(runner).toContain("run_tier database-quarantine");
     expect(runner).not.toContain("run_tier quarantine database-quarantine");
+    expect(runner).toContain("readonly TEST_SUPPORT_FILES=(");
+    expect(runner).toContain("tests/fixtures/static-parser-noncooperative.ts");
+    expect(runner).toContain('in_list "$relative" "${TEST_SUPPORT_FILES[@]}"');
     expect(computeBudgetTest).not.toContain("mock.module(dbSchemaRuntimePath");
     expect(runner).toContain("uses_process_global_module_mock");
     expect(runner).toContain('isolated_files+=("$relative")');
@@ -275,7 +278,17 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain("packages/data packages/data-protocol packages/sdk-ts");
+    expect(workflow).toContain("name: Build local data-sync peers");
+    expect(workflow).toContain("cd packages/data && bun run build");
+    expect(workflow).toContain("cd packages/data-protocol && bun run build");
+    expect(workflow).toContain("name: Install data-sync dependencies from lockfile");
+    expect(workflow).toContain("working-directory: packages/data-sync");
     expect(workflow).not.toContain("secrets.");
+
+    const preflight = await readFile(join(ROOT, "bin", "preflight.sh"), "utf8");
+    expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
+    expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
+    expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
 
     const uses = workflow
       .split("\n")

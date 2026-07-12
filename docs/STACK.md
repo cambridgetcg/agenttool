@@ -392,8 +392,9 @@ Set `AGENTTOOL_DISABLE_WORKERS=1` to skip all in-process worker boot, including
 browse, think, payout, covenant, expiry, witness, and treasury workers. It also
 prevents the shared Redis client from being constructed, so queue-backed browse
 returns 503 and Redis-backed idempotency or streaming features degrade. This
-switch does not enable outbound scrape or browse; their separate unsafe-outbound
-opt-in remains authoritative.
+switch does not affect static scrape or URL-document fetch, which use bounded
+safe-net without Redis. Playwright browse remains unavailable unless workers
+are enabled and its separate unsafe-outbound opt-in is present.
 
 ### Legacy infra phases (`infra/`)
 
@@ -464,6 +465,22 @@ from a scoped stdin producer (`fly secrets import -a agenttool`); do not put
 values in argv, shell history, the repository, or committed env files.
 
 The local `agenttool-secret` keychain and Fly's secret store are **disjoint** — they hold different data with overlapping naming conventions. Local entries are for dev tools (migrations, smokes, deploy scripts). Fly secrets are for the running api.
+
+### x402 V2 project-credit rail
+
+The optional exact/EIP-3009 rail is fail-closed. A recipient alone does not make a payable challenge.
+
+| Variable | Contract |
+|---|---|
+| `AGENTTOOL_X402_RECIPIENT` | Non-zero EVM recipient. Missing/invalid suppresses challenges. |
+| `AGENTTOOL_X402_NETWORK` | CAIP-2 network; defaults to Base `eip155:8453`. Legacy `base`, `polygon`, and `arbitrum` aliases normalize before the wire. Invalid explicit values suppress rather than switching chains. |
+| `CDP_API_KEY_ID` + `CDP_API_KEY_SECRET` | Both required for the official CDP default. The server locally proves endpoint-bound JWT generation before advertising and generates a fresh JWT separately for `/verify` and `/settle`. Never use a static `COINBASE_CDP_API_KEY` bearer. |
+| `AGENTTOOL_X402_FACILITATOR` | Optional explicit HTTPS custom facilitator. It receives no CDP credential and is reached through the bounded SSRF-safe transport. Its settlement response is nevertheless an operator-selected trust root that can mint project credits; transport safety does not attest facilitator correctness. |
+| `AGENTTOOL_X402_ALLOW_TESTNET=1` + `AGENTTOOL_X402_ENVIRONMENT=test` | Double opt-in for Base Sepolia outside production/Fly only. Faucet USDC cannot mint live project credits. |
+
+The official base is exactly `https://api.cdp.coinbase.com/platform/v2/x402`. Payment state is inspectable at authenticated `GET /v1/x402/payments/:authorizationHash`; it does not replay tool output. No automatic on-chain reconciliation worker exists. A pending row with a settlement-attempt timestamp requires manual investigation using the persisted non-signature authorization evidence. A pending row without that marker stays status-only for the old signature: while `validBefore + 5s` is live, status supplies `Retry-After`; after expiry it directs the caller to omit `PAYMENT-SIGNATURE` and request a fresh current-policy challenge.
+
+Before facilitator admission, the server bounds the authorization to the advertised 60-second window (+5 seconds clock skew). Direct 65-byte EIP-712 signatures use offline EOA recovery; bounded EIP-1271/ERC-6492 smart-account signatures defer to the facilitator behind the same durable cap. A fail-closed PostgreSQL advisory-lock bucket permits at most 5 unresolved/failed fresh authorization identities per project per rolling 10 minutes; successful settled rows do not consume that rolling quota. Rejection returns `Retry-After: 600` without another payable prompt.
 
 ---
 
@@ -606,17 +623,17 @@ bin/preflight.sh              # API + packages, hermetic dependency boundary
 
 The default unsets known credentials and service URLs, disables workers, uses
 the installed Bun 1.3.5 compiler, runs the API hermetic tier plus operator
-tests, and runs the `packages/data`, `packages/data-protocol`, and TypeScript
-SDK CI gates. “Hermetic” here means no database, Redis, deployed target,
-credential, or paid-provider dependency; it is not an OS-level network
-sandbox.
+tests, gates and builds `packages/data` for its local dependent, and runs the
+`packages/data-protocol`, `packages/data-sync`, and TypeScript SDK CI gates.
+“Hermetic” here means no database, Redis, deployed target, credential, or
+paid-provider dependency; it is not an OS-level network sandbox.
 
 Explicit modes keep stateful and paid checks out of the default:
 
 | Mode | What it runs | Required input |
 |---|---|---|
 | `api` | API typecheck, hermetic API tests, operator/protocol tests | none |
-| `packages` | data reference node, ADDS package, TypeScript SDK CI/parity | none |
+| `packages` | data reference node gate/build, ADDS package, explicit data-sync bridge, TypeScript SDK CI/parity | none |
 | `database` | API typecheck and database integration tier | `DATABASE_URL` |
 | `smoke` | deployed API smoke | base URL, API key, identity ID |
 | `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and provider key(s) |

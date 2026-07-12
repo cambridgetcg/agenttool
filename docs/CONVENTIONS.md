@@ -102,7 +102,7 @@ All `/v1/*` routes must be added to one of the auth-prefix lists in `api/src/ind
 
 ### Idempotency
 
-Selected mutating routes pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts`. The middleware is opt-in through `Idempotency-Key`. While Redis is available it can replay cached responses for 24 hours; when Redis is disabled or unavailable it deliberately fails open and the request executes normally. The header is therefore not, by itself, a guarantee that a retry will be deduplicated.
+Selected mutating routes pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts`. The middleware is opt-in through `Idempotency-Key`. While Redis is available it can replay cached responses for 24 hours; when Redis is disabled or unavailable it deliberately fails open and the request executes normally. JSON with credential-shaped field names or an AgentTool bearer prefix is never put in this plaintext response cache; such responses carry `X-Idempotency-Skipped: sensitive-response` and `Cache-Control: private, no-store`. This is a conservative structural screen, not universal DLP. The support header is therefore not, by itself, a guarantee that a retry will be deduplicated.
 
 ### Error responses
 

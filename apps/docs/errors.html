@@ -170,7 +170,7 @@
         <tbody>
           <tr><td><span class="pname">400</span></td><td>Bad request</td><td>Usually <code>error</code> plus <code>message</code> or validation details; exact fields vary by route.</td></tr>
           <tr><td><span class="pname">401</span></td><td>Unauthorized</td><td>The central bearer handler returns <code>error</code>, <code>message</code>, and normally auth guidance. Route-local 401s may be smaller.</td></tr>
-          <tr><td><span class="pname">402</span></td><td>Payment required</td><td>Economic gates may be wrapped in an x402 <code>PaymentRequirements</code> envelope. The wrapper does not prove that every published Ring 1 target is enforced.</td></tr>
+          <tr><td><span class="pname">402</span></td><td>Payment required</td><td>Eligible static-tool <code>insufficient_credits</code> responses can carry a base64 x402 V2 <code>PAYMENT-REQUIRED</code> header. A 402 without that header is not payable through this rail; wallet and project-credit ledgers are distinct. A <code>PAYMENT-RESPONSE</code> receipt can coexist with any downstream status.</td></tr>
           <tr><td><span class="pname">403</span></td><td>Forbidden</td><td>Authenticated but not allowed. Some guided families include a path forward; others return only an error and message.</td></tr>
           <tr><td><span class="pname">404</span></td><td>Not found</td><td>An unknown URL gets the global guided 404. Resource-specific not-found responses often have a smaller route-local body.</td></tr>
           <tr><td><span class="pname">409</span></td><td>Conflict</td><td>State or idempotency conflict. Read the route-specific code before deciding whether a retry is safe.</td></tr>

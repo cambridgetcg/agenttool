@@ -3,6 +3,8 @@
 Local-first `agent-data/v1` reference node. It owns collection, immutable record,
 blob, FTS, change-feed, collector, and loopback HTTP behavior. It does not own the
 hosted AgentTool API, SDK façade, federation, peer sync, or memory projection.
+Current package release is `0.3.0`; the immutable `data-v0.1.0` and
+`data-v0.2.0` releases do not contain replica-import or feed-id seams.
 
 ## Commands
 
@@ -18,6 +20,7 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts serve
 
 - `src/types.ts` — protocol and pluggable storage/index/collector contracts
 - `src/node.ts` — direct DataNode orchestration and envelope identity
+- replica apply seams live in `src/node.ts`; transport, grants, and cursors do not
 - `src/sqlite-store.ts` — durable records/change log plus FTS5 index
 - `src/blob-store.ts` — content-addressed filesystem bytes
 - `src/collectors.ts` — bounded text, file, and HTTP collectors
@@ -40,6 +43,11 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts serve
   caller-owned parent directory.
 - Default consistency is local only. Manifest must continue to report
   `peer_sync: false` until real peer synchronization exists.
+- `feed_id` is a persisted random identifier for one physical change-feed
+  incarnation. It survives reopen and must not be derived from reusable node_id.
+- Replica imports preserve the first remote immutable envelope/tombstone, ignore
+  only its node-local `blob_ref`, and reject same-ID semantic conflicts. They do
+  not authenticate peers or decrypt transport payloads.
 - Only size and media-type collection policy are enforced in Slice 1. Do not
   imply JSON Schema, TTL, retention, visibility, DID ACL, or signature validation.
   An explicit empty media-type allow-list denies every type.

@@ -16,6 +16,11 @@
 
 export { AgentTool } from "./client.js";
 export { AgentToolError } from "./errors.js";
+export type {
+  X402Eip3009Extra,
+  X402PaymentRequirement,
+  X402ResourceInfo,
+} from "./errors.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
@@ -93,8 +98,10 @@ export type {
   Memory,
   ScrapeResult,
   SearchMemoryOptions,
+  StaticToolResponseMetadata,
   StoreOptions,
   Wallet,
+  WelcomedFrame,
 } from "./types.js";
 export type {
   CreateEscrowOpts,
@@ -103,7 +110,11 @@ export type {
   SetWalletPolicyOpts,
   SpendOpts,
 } from "./economy.js";
-export type { ParseDocumentOpts } from "./tools.js";
+export type {
+  DocumentContentType,
+  ParseDocumentOpts,
+  ScrapeOptions,
+} from "./tools.js";
 export { ChronicleClient } from "./chronicle.js";
 export type {
   ChronicleType,
@@ -185,7 +196,9 @@ export type {
 } from "./collect.js";
 export {
   DataClient,
+  DataSyncClient,
   AGENT_DATA_PROTOCOL,
+  AGENT_DATA_SYNC_PROTOCOL,
   AGENT_DATA_DISCOVERY_PATH,
 } from "./data.js";
 export type {
@@ -206,6 +219,11 @@ export type {
   DataChangesResult,
   DataTombstoneOptions,
   DataTombstoneResult,
+  DataSyncPullRequest,
+  DataSyncPullResult,
+  DataSyncStatus,
+  DataSyncStatusRequest,
+  DataSyncStatusResult,
 } from "./data.js";
 export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
 export type {

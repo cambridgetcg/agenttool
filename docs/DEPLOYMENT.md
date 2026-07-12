@@ -83,7 +83,15 @@ bun src/index.ts
 You should see: `[agenttool] listening on :3000`.
 
 If Redis is reachable and `AGENTTOOL_DISABLE_WORKERS` is not set: `🤖 browse worker started (concurrency=3)`.
-If Redis is unavailable or workers should stay off, set `AGENTTOOL_DISABLE_WORKERS=1`. The removed `/v1/search` route does not work. Scrape, browse, and URL-based document fetching also fail closed unless `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`; that opt-in accepts the disclosed SSRF boundary rather than adding isolation.
+If Redis is unavailable or workers should stay off, set `AGENTTOOL_DISABLE_WORKERS=1`.
+The removed `/v1/search` route does not work. Static scrape and URL-document
+fetch do not require Redis or an unsafe flag; they use the bounded public-Web
+transport with conservative global-address checks, pinned and verified
+connections, hop-by-hop redirect validation, one deadline, identity encoding,
+and a 1 MB pre-parse cap. Public HTTP remains cleartext and fetched content is
+untrusted. Playwright browse still requires Redis plus
+`AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`; that opt-in accepts the disclosed
+browser SSRF/isolation boundary rather than fixing it.
 
 Voice SSE: the LISTEN/NOTIFY backplane spins up lazily on the first SSE connection — no separate boot step.
 

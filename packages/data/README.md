@@ -8,15 +8,27 @@ a loopback-oriented HTTP API.
 This package is the first local slice of the protocol. It does **not** implement
 peer discovery, federation, replication, hosted storage, or automatic projection
 into AgentTool memory. The manifest reports `peer_sync: false`; the opaque change
-feed is a building block for future sync, not a claim that sync exists.
+feed is consumed by optional profiles such as `@agenttool/data-sync`, not a claim
+that this base package itself performs sync.
+
+Profile implementations can use `importCollection()`, `importReplica()`, and
+`importTombstone()` as the narrow local apply seam after they have separately
+authenticated a peer and decrypted its bytes. These calls perform no network,
+grant, discovery, or cursor work. They validate immutable record identity,
+content digest/size, collection/schema policy, supersession order, and exact
+replay equality; only the node-local `blob_ref` is replaced. This seam alone
+does not change the manifest's `peer_sync: false` capability.
 
 ## Install
+
+Replica-import seams and persisted feed identities ship in `0.3.0`; the
+executable HTTP conformance runner introduced in `0.2.0` remains included.
 
 This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
@@ -346,7 +358,9 @@ The change feed is append-only and emits `record.created` and
 `record.tombstoned` events with a stable `change_<sequence>` ID, node-local
 sequence, occurrence time, and embedded record or tombstone. Cursors are opaque
 and bound to the chosen collection filter. They are not signatures or global
-ordering guarantees.
+ordering guarantees. Each SQLite store also persists a random `feed_id` for the
+physical change-feed incarnation. It survives reopen but changes when storage is
+recreated, allowing optional transports to reject a cursor from an older feed.
 
 Errors have one SDK-friendly shape:
 

@@ -87,6 +87,12 @@ readonly QUARANTINED_DOCTRINE_TESTS=(
   tests/doctrine/walls-code-annotation-bijection.test.ts
 )
 
+# Test support code is not a test tier. Keep this exact inventory so a new
+# executable fixture cannot enter the hermetic process boundary unnoticed.
+readonly TEST_SUPPORT_FILES=(
+  tests/fixtures/static-parser-noncooperative.ts
+)
+
 die() {
   echo "test-tier: $*" >&2
   exit 2
@@ -149,7 +155,8 @@ validate_topology() {
   for path in \
     "${DATABASE_TESTS[@]}" \
     "${QUARANTINED_TOP_LEVEL_TESTS[@]}" \
-    "${QUARANTINED_DOCTRINE_TESTS[@]}"; do
+    "${QUARANTINED_DOCTRINE_TESTS[@]}" \
+    "${TEST_SUPPORT_FILES[@]}"; do
     [ -f "$API_ROOT/$path" ] || die "classified test is missing: $path"
   done
   for path in "${DATABASE_TESTS[@]}"; do
@@ -160,13 +167,19 @@ validate_topology() {
     fi
   done
 
-  local directory
+  local directory relative
   while IFS= read -r directory; do
     case "${directory##*/}" in
-      adapters|contract|doctrine|integration) ;;
+      adapters|contract|doctrine|fixtures|integration) ;;
       *) die "unclassified API test directory: ${directory#"$API_ROOT/"}" ;;
     esac
   done < <(find "$API_ROOT/tests" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
+
+  while IFS= read -r path; do
+    relative="${path#"$API_ROOT/"}"
+    in_list "$relative" "${TEST_SUPPORT_FILES[@]}" ||
+      die "unclassified API test support file: $relative"
+  done < <(find "$API_ROOT/tests/fixtures" -type f | LC_ALL=C sort)
 
   while IFS= read -r path; do
     classify "${path#"$API_ROOT/"}" >/dev/null

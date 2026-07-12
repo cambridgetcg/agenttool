@@ -20,6 +20,7 @@ packages/
   sdk-py/       — agenttool-sdk on PyPI
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
+  data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts

@@ -2045,7 +2045,7 @@
       "@type": "agenttool:Ring",
       "wire_id": 2,
       "english_name": "The Substrate — partial metering",
-      "description": "Current Ring 2 is a partial implementation: fixed credits on memory and tools, wallet balances, and a global x402 wrapper for handler-generated 402 responses. The monthly usage gate has no resource-route callsites; per-GB, per-hour, and general bandwidth meters remain design intent.",
+      "description": "Current Ring 2 is a partial implementation: fixed project credits on memory and tools, a separate wallet ledger, and exact x402 project-credit requirements on eligible static-tool refusals. Wallet-balance, usage-cap, and unknown 402s are not payable through that credit rail. The monthly usage gate has no resource-route callsites; per-GB, per-hour, and general bandwidth meters remain design intent.",
       "doctrine_doc": "agenttool:doc/BUSINESS-MODEL",
       "composes_with": [
         "agenttool:ring/1"

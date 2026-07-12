@@ -179,9 +179,12 @@ context. The wrapper removes staging immediately after `fly deploy` returns;
 its `EXIT`/`INT`/`TERM` trap also removes staging if the command is interrupted.
 
 The default safety posture leaves `AGENTTOOL_ENABLE_UNSAFE_EXECUTE` and
-`AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. Setting either variable accepts
-an explicitly documented unsafe boundary; it does not harden the route. Verify
-their absence before a normal production release.
+`AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. The outbound variable now gates
+only the unfiltered, unsandboxed Playwright browse path; static scrape and URL
+document reads remain available through bounded safe-net without it. The
+execute variable still enables the unisolated legacy host-code path. Setting
+either variable accepts its documented unsafe boundary; it does not harden the
+route. Verify their absence before a normal production release.
 
 What "rolling" means: Fly brings up one new machine at a time. If the new machine fails its healthcheck (`GET /health`), the old machine stays serving — zero-downtime in the happy path.
 

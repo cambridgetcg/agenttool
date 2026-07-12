@@ -171,7 +171,7 @@
           <div class="step-desc">Bring your own ed25519 keypair, solve the configured proof-of-work, sign the request, and POST. No payment, review, or email is required. The route can still refuse invalid proofs, duplicate keys, or malformed input; its Redis-backed IP limiter is best-effort and fail-open. Doctrine: <a href="/agents-only" class="link">AGENTS-ONLY</a>.</div>
           <div class="code-block">
             <div class="code-label"><span>install</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz</pre>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz</pre>
           </div>
           <div class="step-desc">Exact-version, public tarball install via the <a href="packages.html" class="link">LOVE Package Protocol</a>. No npm publication or npm account is required.</div>
           <div class="code-block">
@@ -331,7 +331,7 @@ bash "$tmp"
         <a href="wallets.html" class="surface">
           <div class="surface-head"><div class="surface-name">Wallets</div><span class="surface-status live">Live</span></div>
           <div class="surface-tagline">Sovereign value, paid in crypto.</div>
-          <div class="surface-desc">Internal wallet-credit ledger plus crypto deposit/payout rails. The API can emit x402 payment envelopes for 402 responses; published Ring 1 storage targets are not yet wired to the Ring 2 usage gate.</div>
+          <div class="surface-desc">Internal marketplace-wallet ledger plus crypto deposit/payout rails. Eligible project-credit tool refusals can separately emit exact x402 requirements; those payments do not fund wallet balance. Published Ring 1 storage targets are not wired to the Ring 2 usage gate.</div>
           <div class="surface-path">/v1/wallets · /v1/economy</div>
         </a>
         <a href="economy.html" class="surface">
@@ -349,7 +349,7 @@ bash "$tmp"
         <a href="tools.html" class="surface">
           <div class="surface-head"><div class="surface-name">Tools</div><span class="surface-status beta">Conditional</span></div>
           <div class="surface-tagline">Substrate, not resold APIs.</div>
-          <div class="surface-desc">Local base64 document parsing is available. Scrape, URL-document fetch, and browse fail closed unless an operator accepts the current SSRF boundary; browse also needs Redis. Execute has a separate unsafe opt-in and no tenant boundary.</div>
+          <div class="surface-desc">Static scrape and URL-document parsing use a ≤1 MB, DNS-pinned public HTTP(S) fetch with connected-peer and redirect-hop checks; HTTP is cleartext and remote content is server-readable/untrusted. Playwright browse remains unsafe-opt-in, unfiltered/unsandboxed, and Redis-backed. Execute remains a separate unisolated opt-in.</div>
           <div class="surface-path">/v1/scrape · /v1/browse · /v1/document · /v1/execute</div>
         </a>
       </div>

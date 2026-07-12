@@ -4,7 +4,7 @@
 Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
 
 ## Current State
-Active — v0.9.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped.
+Active — v0.10.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active — v0.9.0 release source. Phases 0–6 plus the separate `at.data` node 
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.9.0")
+  __init__.py            — Public surface + __version__ ("0.10.0")
   client.py              — AgentTool (composes 13 service clients + at.deciding sugar)
   _context.py            — AmbientContext for auto-trace ambient state
   bootstrap.py           — BootstrapClient (agent creation, elevation)
@@ -25,7 +25,7 @@ src/agenttool/
   economy.py             — EconomyClient (wallets, escrow, transactions)
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
   memory.py              — MemoryClient (store, search, get, delete; tiered)
-  data.py                — DataClient (separate local node; manifest, collect, query, changes)
+  data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
   bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
@@ -100,8 +100,8 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing 13 service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.9.0"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.10.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
-- `tests/test_data.py` — local data-node wire + bearer-isolation contract
+- `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

@@ -7,7 +7,7 @@ project bearer is never reused or sent to the node implicitly.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional, TypedDict, cast
 
 import httpx
 
@@ -15,7 +15,63 @@ from .exceptions import AgentToolError
 
 
 AGENT_DATA_PROTOCOL = "agent-data/v1"
+AGENT_DATA_SYNC_PROTOCOL = "agent-data-sync/v1"
 AGENT_DATA_DISCOVERY_PATH = "/.well-known/agent-data"
+
+
+class _DataSyncPullRequestRequired(TypedDict):
+    peer_id: str
+    collection_id: str
+
+
+class DataSyncPullRequest(_DataSyncPullRequestRequired, total=False):
+    """One bounded pull from a peer configured on the local data node."""
+
+    limit: int
+    max_pages: int
+    max_plaintext_bytes: int
+
+
+class DataSyncStatusRequest(TypedDict):
+    """Select one locally configured peer/collection checkpoint."""
+
+    peer_id: str
+    collection_id: str
+
+
+class _DataSyncStatusResultRequired(TypedDict):
+    protocol: Literal["agent-data-sync/v1"]
+    peer_id: str
+    collection_id: str
+    cursor_present: bool
+    records_inserted: int
+    records_existing: int
+    tombstones_applied: int
+
+
+class DataSyncStatus(_DataSyncStatusResultRequired, total=False):
+    """Sanitized checkpoint metadata. Raw peer cursors are never exposed."""
+
+    last_applied_at: str
+
+
+DataSyncStatusResult = DataSyncStatus
+
+
+class DataSyncPullResult(TypedDict):
+    """Exact public result of a bounded agent-data-sync/v1 pull."""
+
+    protocol: Literal["agent-data-sync/v1"]
+    peer_id: str
+    origin_node_id: str
+    collection_id: str
+    pages_applied: int
+    changes_applied: int
+    records_inserted: int
+    records_existing: int
+    tombstones_applied: int
+    has_more: bool
+    status: DataSyncStatus
 
 
 class DataClient:
@@ -55,6 +111,15 @@ class DataClient:
             timeout=timeout,
             follow_redirects=True,
         )
+        self._sync: Optional[DataSyncClient] = None
+
+    @property
+    def sync(self) -> DataSyncClient:
+        """Explicit peer synchronization through this local node's authority."""
+        if self._sync is None:
+            # The child has no peer URL, bearer, or independent HTTP client.
+            self._sync = DataSyncClient(self._request)
+        return self._sync
 
     def manifest(self) -> Dict[str, Any]:
         """Read the node's agent-data/v1 capability manifest."""
@@ -187,6 +252,7 @@ class DataClient:
                 fallback=(
                     f"Agent data node request failed ({response.status_code})."
                 ),
+                headers=response.headers,
             )
 
         if response.status_code == 204:
@@ -206,3 +272,86 @@ class DataClient:
         traceback: Any,
     ) -> None:
         self._close()
+
+
+class DataSyncClient:
+    """Narrow agent-data-sync/v1 façade over the local data-node transport.
+
+    ``peer_id`` names a peer configured by the local node operator. This
+    client never accepts a peer bearer and never contacts that peer directly.
+    """
+
+    def __init__(
+        self,
+        request_local_node: Callable[..., Dict[str, Any]],
+    ) -> None:
+        self._request_local_node = request_local_node
+
+    def pull(
+        self,
+        *,
+        peer_id: str,
+        collection_id: str,
+        limit: Optional[int] = None,
+        max_pages: Optional[int] = None,
+        max_plaintext_bytes: Optional[int] = None,
+    ) -> DataSyncPullResult:
+        """Pull and apply a bounded number of changes into the local node."""
+        body: Dict[str, Any] = {
+            "protocol": AGENT_DATA_SYNC_PROTOCOL,
+            "peer_id": peer_id,
+            "collection_id": collection_id,
+        }
+        if limit is not None:
+            body["limit"] = limit
+        if max_pages is not None:
+            body["max_pages"] = max_pages
+        if max_plaintext_bytes is not None:
+            body["max_plaintext_bytes"] = max_plaintext_bytes
+        result = self._request(
+            "POST",
+            "/v1/data/sync/pull",
+            body=body,
+        )
+        return cast(DataSyncPullResult, _without_raw_cursor(result))
+
+    def status(
+        self,
+        *,
+        peer_id: str,
+        collection_id: str,
+    ) -> DataSyncStatusResult:
+        """Read sanitized checkpoint state without revealing the raw cursor."""
+        result = self._request(
+            "GET",
+            "/v1/data/sync/status",
+            params={"peer_id": peer_id, "collection_id": collection_id},
+        )
+        return cast(DataSyncStatusResult, _without_raw_cursor(result))
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        try:
+            return self._request_local_node(method, path, **kwargs)
+        except AgentToolError as error:
+            # Peer-facing failures may contain an internal checkpoint or
+            # capability in prose/details. Preserve only safe stable metadata.
+            raise AgentToolError(
+                "Agent data sync request failed.",
+                code=error.code,
+                error_code=error.error_code,
+                retry_after=error.retry_after,
+            ) from None
+
+
+def _without_raw_cursor(value: Dict[str, Any]) -> Dict[str, Any]:
+    safe = dict(value)
+    safe.pop("cursor", None)
+    status = safe.get("status")
+    if isinstance(status, dict):
+        safe["status"] = _without_raw_cursor(status)
+    return safe

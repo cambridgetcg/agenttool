@@ -219,10 +219,14 @@ export interface RecordStore {
   putRecord(record: RecordEnvelope): "inserted" | "existing";
   getRecord(id: string, include_tombstoned?: boolean): RecordEnvelope | null;
   listRecords(collections?: string[], limit?: number, offset?: number): RecordEnvelope[];
+  /** Store an already validated tombstone without replacing an earlier one. */
+  putTombstone(tombstone: Tombstone): "inserted" | "existing";
   tombstoneRecord(id: string, reason?: string): Tombstone;
   getTombstone(id: string): Tombstone | null;
   listChanges(after_sequence: number, collection_id: string | undefined, limit: number): Change[];
   getOrCreateNodeId(preferred?: string): string;
+  /** Stable identifier for this physical change-feed incarnation. */
+  getOrCreateFeedId(): string;
   close?(): void;
 }
 

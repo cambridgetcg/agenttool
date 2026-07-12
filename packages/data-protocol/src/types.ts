@@ -2,6 +2,7 @@ import type { JsonObject } from "./canonical.js";
 import type { Cid } from "./cid.js";
 
 export const ADDS_VERSION = "0.1" as const;
+export const ADDS_BUNDLE_PROTOCOL = "adds-bundle/v1" as const;
 export const MANIFEST_SIGNATURE_DOMAIN = "adds-manifest/v1" as const;
 export const GRANT_SIGNATURE_DOMAIN = "adds-grant/v1" as const;
 export const BLOCK_AAD_DOMAIN = "adds-block/v1" as const;
@@ -87,6 +88,32 @@ export interface DataRef {
   cid: Cid;
 }
 
+/** One immutable ADDS control-document or ciphertext Block in a portable bundle. */
+export interface PortableBlock {
+  cid: Cid;
+  /** Exact bytes named by cid. Callers choose their own transport encoding. */
+  bytes: Uint8Array;
+}
+
+/**
+ * Transport-neutral, keyless copy of one ADDS object.
+ *
+ * The first Block is the signed Manifest named by root; the remaining Blocks
+ * follow the Manifest's signed chunk order. Grants and plaintext keys are
+ * deliberately outside this object.
+ */
+export interface PortableBundle {
+  protocol: typeof ADDS_BUNDLE_PROTOCOL;
+  root: DataRef;
+  blocks: PortableBlock[];
+}
+
+export interface PortableBundleOptions extends InspectOptions {
+  /** Maximum combined Manifest + ciphertext bytes held by this operation. */
+  maxBundleBytes?: number;
+  signal?: AbortSignal;
+}
+
 export interface ReplicationSummary {
   storedObjects: number;
   /** Per-block provider write acknowledgements; not proof of complete replicas or durability. */
@@ -159,4 +186,11 @@ export interface VerifyResult {
   /** CID, frame, descriptor, and nonce checks only; not AEAD/plaintext verification. */
   ciphertextBlocksVerified: number;
   encryptedBytes: number;
+}
+
+export interface PortableBundleImportResult extends VerifyResult {
+  ref: DataRef;
+  /** Manifest + framed ciphertext bytes accepted from the bundle. */
+  bundleBytes: number;
+  replication: ReplicationSummary;
 }

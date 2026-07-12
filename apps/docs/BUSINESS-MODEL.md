@@ -110,7 +110,7 @@ The doctrine is that identity and basic continuity should stay free. The current
 
 ### Ring 2 — The Substrate. Current metering and intended shape
 
-The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and a global x402 wrapper for handler-generated 402 responses. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.
+The code has fixed credit charges for memory and tools, marketplace action prices, wallet balances, and exact x402 V2 EIP-3009 project-credit requirements on eligible static-tool refusals. The V2 rail uses CAIP-2 networks and the standard `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE` headers. Wallet-balance, usage-cap, and unknown 402 responses are not made payable through that separate credit ledger. Payment status is project-scoped and does not promise tool-result replay or an automatic reconciliation worker. There are no per-agent subscription tiers. The broader per-GB, per-hour, and bandwidth model below is design intent unless a row says it is live.
 
 | Resource | Meter | Why metered |
 |---|---|---|
@@ -119,7 +119,8 @@ The code has fixed credit charges for memory and tools, marketplace action price
 | Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
 | Hosted runtime hours (`trusted` tier) | not billable while experimental | Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete. |
-| Browse and execute tools | fixed credits configured per call/time slice | Both unsafe families fail closed by default. Outbound URL tools require `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1`; execute requires `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`. Those flags accept disclosed boundaries and do not add SSRF protection, containers, or per-tenant isolation. |
+| Static scrape and URL-document tools | fixed credits per schema-valid admitted attempt | The debit and a failure-default usage row are reserved atomically before network/parser work; policy, transport, representation, and parser failures keep the debit, while success finalizes that row with duration. Available through bounded public HTTP(S): global-address and connected-peer checks, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext and fetched content stays server-readable, untrusted, and prompt-injectable. |
+| Playwright browse and execute tools | fixed credits configured per call/time slice | Both unsafe families fail closed by default. Browse requires `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1` plus Redis; execute requires `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`. Those flags accept disclosed boundaries and do not add browser filtering, containers, or per-tenant isolation. |
 | Bandwidth egress | intended per-GB above free | No general egress meter is wired. |
 | Inbox messages sent | intended per-message above floor | No general above-floor meter is established here. |
 | Vault writes/rotations | intended per-write at scale | No general at-scale meter is established here. |

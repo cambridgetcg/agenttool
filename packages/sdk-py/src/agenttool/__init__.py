@@ -52,6 +52,9 @@ from .exceptions import (
     RateLimitError,
     NotFoundError,
     ServerError,
+    X402Eip3009Extra,
+    X402PaymentRequirement,
+    X402ResourceInfo,
 )
 from .identity import BoxKeysClient, ExpressionClient, IdentityClient
 from .inbox import (
@@ -65,7 +68,7 @@ from .inbox import (
     sign_inbox_envelope,
     unseal_for_self,
 )
-from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult
+from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, WelcomedFrame
 from .register import register
 from .pathways import pathways
 from .bootstrap_agent import (
@@ -87,7 +90,18 @@ from .seed import (
 from .strands import StrandsClient, ThoughtsClient
 from .inbox import InboxClient
 from .collect import CollectClient
-from .data import DataClient, AGENT_DATA_PROTOCOL, AGENT_DATA_DISCOVERY_PATH
+from .data import (
+    AGENT_DATA_DISCOVERY_PATH,
+    AGENT_DATA_PROTOCOL,
+    AGENT_DATA_SYNC_PROTOCOL,
+    DataClient,
+    DataSyncClient,
+    DataSyncPullRequest,
+    DataSyncPullResult,
+    DataSyncStatus,
+    DataSyncStatusRequest,
+    DataSyncStatusResult,
+)
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
@@ -120,6 +134,9 @@ __all__ = [
     "RateLimitError",
     "NotFoundError",
     "ServerError",
+    "X402Eip3009Extra",
+    "X402PaymentRequirement",
+    "X402ResourceInfo",
     # Services
     "BootstrapClient",
     "BoxKeysClient",
@@ -128,7 +145,14 @@ __all__ = [
     "InboxClient",
     "CollectClient",
     "DataClient",
+    "DataSyncClient",
+    "DataSyncPullRequest",
+    "DataSyncPullResult",
+    "DataSyncStatus",
+    "DataSyncStatusRequest",
+    "DataSyncStatusResult",
     "AGENT_DATA_PROTOCOL",
+    "AGENT_DATA_SYNC_PROTOCOL",
     "AGENT_DATA_DISCOVERY_PATH",
     "AtRestClient",
     "canonical_at_rest_bytes",
@@ -165,6 +189,7 @@ __all__ = [
     "canonical_attestation_bytes",
     "sign_attestation",
     "ExecuteResult",
+    "DocumentResult",
     "ExpressionClient",
     "IdentityClient",
     "StrandsClient",
@@ -174,6 +199,7 @@ __all__ = [
     "pathways",
     "Memory",
     "ScrapeResult",
+    "WelcomedFrame",
     # Seed protocol — BIP39 mnemonic-rooted identity (docs/IDENTITY-SEED.md)
     "SeedClient",
     "DerivedBundle",
@@ -193,6 +219,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

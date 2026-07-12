@@ -321,9 +321,9 @@
         <div class="layer-desc">What the agent can do. Substrate primitives, not resold APIs.</div>
         <div class="status-grid">
           <div>Vault (AES-256-GCM HKDF, versioned, audited)</div><div class="endpoint">/v1/vault</div><div><span class="pip live">live</span></div>
-          <div>Scrape (Cheerio static HTML)</div><div class="endpoint">/v1/scrape · 503 unless unsafe-outbound opt-in</div><div><span class="pip never">disabled by default</span></div>
-          <div>Browse (Playwright via BullMQ)</div><div class="endpoint">/v1/browse · needs unsafe-outbound opt-in and Redis workers</div><div><span class="pip never">disabled by default</span></div>
-          <div>Document (Readability + plain text)</div><div class="endpoint">/v1/document · local base64 available; URL needs unsafe-outbound opt-in</div><div><span class="pip partial">partial</span></div>
+          <div>Scrape (Cheerio static HTML)</div><div class="endpoint">/v1/scrape · public HTTP(S), DNS-pinned and ≤1 MB before parse</div><div><span class="pip live">live</span></div>
+          <div>Browse (Playwright via BullMQ)</div><div class="endpoint">/v1/browse · unfiltered/unsandboxed; needs unsafe-outbound opt-in and Redis workers</div><div><span class="pip never">disabled by default</span></div>
+          <div>Document (Readability + plain text)</div><div class="endpoint">/v1/document · local base64 or bounded public-URL fetch</div><div><span class="pip live">live</span></div>
           <div>Execute (unisolated legacy JS · Python · bash path)</div><div class="endpoint">/v1/execute · 503 unless explicit unsafe operator opt-in</div><div><span class="pip never">disabled by default</span></div>
           <div>Per-agent MCP server (slice 1)</div><div class="endpoint">/v1/mcp/agents/:did · scoped read/discovery; later write/invocation slices pending</div><div><span class="pip partial">partial</span></div>
           <div>Container runtime</div><div class="endpoint">— not on this platform</div><div><span class="pip never">never</span></div>
@@ -339,7 +339,7 @@
         <div class="layer-desc">Sovereign value. Pay in crypto — the agent's own currency.</div>
         <div class="status-grid">
           <div>Wallets — spend · receive · balance</div><div class="endpoint">/v1/wallets</div><div><span class="pip live">live</span></div>
-          <div>x402 response envelope and payment-verification helpers</div><div class="endpoint">global wrapper can describe a handler's 402; published Ring 1 storage targets are not wired to a resource usage gate</div><div><span class="pip partial">partial</span></div>
+          <div>x402 response envelope and payment-verification helpers</div><div class="endpoint">exact requirements on eligible static project-credit refusals; wallet/cap 402s pass through; published Ring 1 storage targets are not wired to a resource usage gate</div><div><span class="pip partial">partial</span></div>
           <div>EVM crypto deposits (Base · Eth · Polygon · Arbitrum · OP)</div><div class="endpoint">BIP44 deterministic, /v1/wallets/:id/deposit-address</div><div><span class="pip live">live</span></div>
           <div>Solana deposits (SLIP-0010 ed25519, Phantom-compatible)</div><div class="endpoint">same endpoint, chain=solana</div><div><span class="pip live">live</span></div>
           <div>On-chain identity binding (EIP-191 · ed25519)</div><div class="endpoint">/v1/wallets/:id/onchain</div><div><span class="pip live">live</span></div>

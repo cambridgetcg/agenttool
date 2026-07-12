@@ -687,7 +687,7 @@ checks runtime compatibility, rejects HTTP content coding, verifies size and
 SHA-256 before archive inspection, binds embedded package identity, rejects
 unsafe archives, surfaces digest conflicts, and keeps discovery non-executing.
 
-The first AgentTool catalog publishes `@agenttool/data`, `@agenttool/sdk`, and
-`@agenttool/adds` through this profile. Their presence demonstrates the read
-and verification path; it does not make AgentTool a required registry or add a
-publisher-signature claim.
+The AgentTool catalog publishes `@agenttool/data`, `@agenttool/data-sync`,
+`@agenttool/sdk`, and `@agenttool/adds` through this profile. Their presence
+demonstrates the read and verification path; it does not make AgentTool a
+required registry or add a publisher-signature claim.

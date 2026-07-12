@@ -1,121 +1,409 @@
-/** Coinbase x402 facilitator client.
+/** Hardened x402 V2 facilitator boundary.
  *
- *  Move 4 of docs/ALIGNMENT-MOVES.md. The Coinbase CDP facilitator is the
- *  most-used x402 settlement service (>50% of network volume as of May
- *  2026). Free tier: 1,000 tx/mo on Base + Solana.
- *
- *  Endpoints (per x402 spec at https://docs.cdp.coinbase.com/x402/welcome):
- *    POST {base}/verify   — { paymentRequirements, paymentPayload } → { valid, reason? }
- *    POST {base}/settle   — { paymentRequirements, paymentPayload } → { success, transaction, error? }
- *
- *  Persist-identity (docs/PATTERN-PERSIST-IDENTITY.md): callers should
- *  persist the payment hash to `x402_payments(idempotency_key, status)`
- *  BEFORE calling /settle, flip to 'settled' on success. (Historical
- *  shape mirror — economy.stripe_events used the same pattern before it
- *  was removed 2026-05-17.)
- *
- *  v0 scope: thin client returning facilitator results. Caller is
- *  responsible for persistence + the actual route-level 402 → pay
- *  flow.
- *
- *  Doctrine: docs/ECOSYSTEM.md · docs/MARKETPLACE.md · docs/PATTERN-PERSIST-IDENTITY.md.
+ * This keeps the official request/response contract while retaining strict
+ * deadlines, bounded buffering, sanitized errors, and redirect rejection.
+ * Credentials are scoped to the exact official CDP base URL and are never
+ * forwarded to an operator-configured facilitator.
  */
 
-import type {
-  PaymentRequirements,
-  X402PaymentHeader,
+import { createHash } from "node:crypto";
+
+import {
+  X402_VERSION,
+  type PaymentPayload,
+  type PaymentRequirements,
+  type SettleResponse,
 } from "../../../middleware/x402";
+import { generateJwt, type JwtOptions } from "@coinbase/cdp-sdk/auth";
+import {
+  DEFAULT_X402_FACILITATOR_URL,
+  resolveX402Facilitator,
+} from "../x402-policy";
+import {
+  SafeNetError,
+  safeNetRequest,
+} from "../../net/safe-fetch";
 
 export interface FacilitatorVerifyResult {
-  valid: boolean;
-  reason?: string;
+  isValid: boolean;
+  invalidReason?: string;
+  invalidMessage?: string;
+  payer?: string;
+  extensions?: Record<string, unknown>;
+  extra?: Record<string, unknown>;
 }
 
-export interface FacilitatorSettleResult {
-  success: boolean;
-  /** Onchain transaction identifier (tx hash for EVM, signature for Solana). */
-  transaction?: string;
-  /** Network the settlement happened on. */
-  network?: string;
-  /** Failure reason — only present when success=false. */
-  error?: string;
-}
+export type FacilitatorSettleResult = SettleResponse;
 
 export interface FacilitatorClientConfig {
   baseUrl?: string;
-  apiKey?: string;
-  /** Custom fetch impl for testing. */
+  cdpApiKeyId?: string;
+  cdpApiKeySecret?: string;
+  /** Test seam; production uses the official SDK's generateJwt. */
+  jwtGenerator?: (options: JwtOptions) => Promise<string>;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  maxResponseBytes?: number;
 }
 
-const DEFAULT_BASE_URL =
-  process.env.COINBASE_X402_FACILITATOR_URL ??
-  "https://api.cdp.coinbase.com/v2/x402";
+const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_RESPONSE_BYTES = 16 * 1024;
+const MAX_CONFIGURABLE_RESPONSE_BYTES = 1024 * 1024;
+const CAIP2 = /^[a-z0-9]+:[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+const CANONICAL_UINT = /^(?:0|[1-9][0-9]*)$/u;
+let cachedReadiness:
+  | { fingerprint: string; result: Promise<boolean> }
+  | undefined;
+
+/** Local, no-network readiness proof used before advertising or accepting a
+ * payment. For official CDP this actually parses the configured private key
+ * and generates an endpoint-bound verify JWT. The result does not prove CDP
+ * will accept the key. Default environment readiness is cached until restart. */
+export function isX402FacilitatorLocallyReady(options: {
+  baseUrl?: string;
+  cdpApiKeyId?: string;
+  cdpApiKeySecret?: string;
+  jwtGenerator?: (options: JwtOptions) => Promise<string>;
+} = {}): Promise<boolean> {
+  const resolution = resolveX402Facilitator(options.baseUrl);
+  const apiKeyId = options.cdpApiKeyId ?? process.env.CDP_API_KEY_ID;
+  const apiKeySecret = options.cdpApiKeySecret ?? process.env.CDP_API_KEY_SECRET;
+  const check = async (): Promise<boolean> => {
+    if (resolution.reason === "invalid") return false;
+    if (resolution.url !== DEFAULT_X402_FACILITATOR_URL) {
+      return resolution.configured;
+    }
+    if (!apiKeyId?.trim() || !apiKeySecret?.trim()) return false;
+    try {
+      const token = await (options.jwtGenerator ?? generateJwt)({
+        apiKeyId: apiKeyId.trim(),
+        apiKeySecret,
+        requestMethod: "POST",
+        requestHost: "api.cdp.coinbase.com",
+        requestPath: "/platform/v2/x402/verify",
+        expiresIn: 120,
+      });
+      return token.trim().length > 0;
+    } catch {
+      return false;
+    }
+  };
+  if (options.jwtGenerator) return check();
+  const fingerprint = createHash("sha256").update([
+    resolution.url,
+    resolution.reason ?? "ok",
+    apiKeyId?.trim() ?? "",
+    createHash("sha256").update(apiKeySecret ?? "").digest("hex"),
+  ].join("\0"), "utf-8").digest("hex");
+  if (cachedReadiness?.fingerprint !== fingerprint) {
+    cachedReadiness = { fingerprint, result: check() };
+  }
+  return cachedReadiness.result;
+}
+
+export class FacilitatorClientError extends Error {
+  constructor(code: string) {
+    super(code);
+    this.name = "FacilitatorClientError";
+  }
+}
+
+function boundedPositiveInteger(
+  value: number | undefined,
+  fallback: number,
+  ceiling: number,
+): number {
+  return value !== undefined && Number.isSafeInteger(value) && value > 0
+    ? Math.min(value, ceiling)
+    : fallback;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function optionalString(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined | null {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  return typeof value === "string" ? value : null;
+}
+
+function optionalRecord(
+  record: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | undefined | null {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  return objectRecord(value);
+}
+
+function parseVerifyResult(value: unknown): FacilitatorVerifyResult {
+  const record = objectRecord(value);
+  if (!record || typeof record.isValid !== "boolean") {
+    throw new FacilitatorClientError("coinbase_facilitator_invalid_verify_response");
+  }
+  const invalidReason = optionalString(record, "invalidReason");
+  const invalidMessage = optionalString(record, "invalidMessage");
+  const payer = optionalString(record, "payer");
+  const extensions = optionalRecord(record, "extensions");
+  const extra = optionalRecord(record, "extra");
+  if (
+    invalidReason === null || invalidMessage === null || payer === null ||
+    extensions === null || extra === null ||
+    (record.isValid && invalidReason !== undefined)
+  ) {
+    throw new FacilitatorClientError("coinbase_facilitator_invalid_verify_response");
+  }
+  return {
+    isValid: record.isValid,
+    ...(invalidReason === undefined ? {} : { invalidReason }),
+    ...(invalidMessage === undefined ? {} : { invalidMessage }),
+    ...(payer === undefined ? {} : { payer }),
+    ...(extensions === undefined ? {} : { extensions }),
+    ...(extra === undefined ? {} : { extra }),
+  };
+}
+
+function parseSettleResult(value: unknown): FacilitatorSettleResult {
+  const record = objectRecord(value);
+  if (!record || typeof record.success !== "boolean") {
+    throw new FacilitatorClientError("coinbase_facilitator_invalid_settle_response");
+  }
+  const transaction = optionalString(record, "transaction");
+  const network = optionalString(record, "network");
+  const errorReason = optionalString(record, "errorReason");
+  const errorMessage = optionalString(record, "errorMessage");
+  const payer = optionalString(record, "payer");
+  const amount = optionalString(record, "amount");
+  const extensions = optionalRecord(record, "extensions");
+  const extra = optionalRecord(record, "extra");
+  if (
+    transaction === undefined || transaction === null ||
+    network === undefined || network === null || !CAIP2.test(network) ||
+    errorReason === null || errorMessage === null || payer === null ||
+    amount === null || (amount !== undefined && !CANONICAL_UINT.test(amount)) ||
+    extensions === null || extra === null ||
+    (record.success && transaction.trim() === "")
+  ) {
+    throw new FacilitatorClientError("coinbase_facilitator_invalid_settle_response");
+  }
+  return {
+    success: record.success,
+    transaction,
+    network: network as FacilitatorSettleResult["network"],
+    ...(errorReason === undefined ? {} : { errorReason }),
+    ...(errorMessage === undefined ? {} : { errorMessage }),
+    ...(payer === undefined ? {} : { payer }),
+    ...(amount === undefined ? {} : { amount }),
+    ...(extensions === undefined ? {} : { extensions }),
+    ...(extra === undefined ? {} : { extra }),
+  };
+}
+
+function cancelBody(response: Response): void {
+  void response.body?.cancel().catch(() => undefined);
+}
+
+async function readBoundedBody(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  const declaredLength = response.headers.get("content-length");
+  if (
+    declaredLength && /^\d+$/u.test(declaredLength) &&
+    BigInt(declaredLength) > BigInt(maxBytes)
+  ) {
+    cancelBody(response);
+    throw new FacilitatorClientError("coinbase_facilitator_response_too_large");
+  }
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const abortRead = () => void reader.cancel().catch(() => undefined);
+  signal.addEventListener("abort", abortRead, { once: true });
+  try {
+    while (true) {
+      if (signal.aborted) {
+        throw new FacilitatorClientError("coinbase_facilitator_timeout");
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (total + value.byteLength > maxBytes) {
+        abortRead();
+        throw new FacilitatorClientError("coinbase_facilitator_response_too_large");
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    signal.removeEventListener("abort", abortRead);
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
 
 export class CoinbaseFacilitatorClient {
   private readonly baseUrl: string;
-  private readonly apiKey: string | undefined;
+  private readonly officialCredentials:
+    | { apiKeyId: string; apiKeySecret: string }
+    | undefined;
+  private readonly jwtGenerator: (options: JwtOptions) => Promise<string>;
   private readonly fetchImpl: typeof fetch;
+  private readonly useSafeNet: boolean;
+  private readonly timeoutMs: number;
+  private readonly maxResponseBytes: number;
 
   constructor(cfg: FacilitatorClientConfig = {}) {
-    this.baseUrl = (cfg.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
-    this.apiKey = cfg.apiKey ?? process.env.COINBASE_CDP_API_KEY;
+    const resolution = resolveX402Facilitator(cfg.baseUrl);
+    if (cfg.baseUrl !== undefined && !resolution.configured) {
+      throw new FacilitatorClientError("coinbase_facilitator_invalid_base_url");
+    }
+    this.baseUrl = resolution.url;
+    const isOfficial = this.baseUrl === DEFAULT_X402_FACILITATOR_URL;
+    const apiKeyId = cfg.cdpApiKeyId ?? process.env.CDP_API_KEY_ID;
+    const apiKeySecret = cfg.cdpApiKeySecret ?? process.env.CDP_API_KEY_SECRET;
+    this.officialCredentials = isOfficial && apiKeyId?.trim() && apiKeySecret?.trim()
+      ? { apiKeyId: apiKeyId.trim(), apiKeySecret }
+      : undefined;
+    this.jwtGenerator = cfg.jwtGenerator ?? generateJwt;
     this.fetchImpl = cfg.fetchImpl ?? fetch;
+    this.useSafeNet = !isOfficial && cfg.fetchImpl === undefined;
+    this.timeoutMs = boundedPositiveInteger(cfg.timeoutMs, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
+    this.maxResponseBytes = boundedPositiveInteger(
+      cfg.maxResponseBytes,
+      DEFAULT_MAX_RESPONSE_BYTES,
+      MAX_CONFIGURABLE_RESPONSE_BYTES,
+    );
   }
 
-  /** Verify a client-presented payment matches the requirements. Does
-   *  NOT settle. Use this first to gate access; settle separately when
-   *  ready to capture funds. */
   async verify(
     requirements: PaymentRequirements,
-    payment: X402PaymentHeader,
+    payment: PaymentPayload,
   ): Promise<FacilitatorVerifyResult> {
-    return this.post<FacilitatorVerifyResult>("/verify", {
-      paymentRequirements: requirements,
+    return parseVerifyResult(await this.post("/verify", {
+      x402Version: X402_VERSION,
       paymentPayload: payment,
-    });
+      paymentRequirements: requirements,
+    }));
   }
 
-  /** Verify + settle (single round-trip). Returns the tx hash on success.
-   *  Caller MUST have persisted a pending row keyed on the payment
-   *  payload hash BEFORE invoking — see PATTERN-PERSIST-IDENTITY. */
   async settle(
     requirements: PaymentRequirements,
-    payment: X402PaymentHeader,
+    payment: PaymentPayload,
   ): Promise<FacilitatorSettleResult> {
-    return this.post<FacilitatorSettleResult>("/settle", {
-      paymentRequirements: requirements,
+    const result = parseSettleResult(await this.post("/settle", {
+      x402Version: X402_VERSION,
       paymentPayload: payment,
-    });
+      paymentRequirements: requirements,
+    }));
+    if (result.network !== requirements.network) {
+      throw new FacilitatorClientError("coinbase_facilitator_invalid_settle_response");
+    }
+    return result;
   }
 
-  private async post<T>(path: string, body: unknown): Promise<T> {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-    };
-    if (this.apiKey) {
-      headers["authorization"] = `Bearer ${this.apiKey}`;
+  private async post(path: "/verify" | "/settle", body: unknown): Promise<unknown> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (this.baseUrl === DEFAULT_X402_FACILITATOR_URL) {
+      if (!this.officialCredentials) {
+        throw new FacilitatorClientError("coinbase_facilitator_auth_unavailable");
+      }
+      const token = (await this.jwtGenerator({
+        ...this.officialCredentials,
+        requestMethod: "POST",
+        requestHost: "api.cdp.coinbase.com",
+        requestPath: `/platform/v2/x402${path}`,
+        expiresIn: 120,
+      })).trim();
+      if (!token) throw new FacilitatorClientError("coinbase_facilitator_auth_unavailable");
+      headers.authorization = `Bearer ${token}`;
     }
-    const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
+    const controller = new AbortController();
+    const timeoutError = new FacilitatorClientError("coinbase_facilitator_timeout");
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(timeoutError);
+      }, this.timeoutMs);
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `coinbase_facilitator_error_${res.status}: ${text || "(no body)"}`,
-      );
+    const request = (async (): Promise<unknown> => {
+      const serialized = JSON.stringify(body);
+      if (this.useSafeNet) {
+        const response = await safeNetRequest(`${this.baseUrl}${path}`, {
+          method: "POST",
+          protocols: ["https:"],
+          redirect: "error",
+          headers,
+          body: serialized,
+          timeoutMs: this.timeoutMs,
+          maxRequestBytes: 64 * 1024,
+          maxResponseBytes: this.maxResponseBytes,
+          signal: controller.signal,
+        });
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw new FacilitatorClientError(
+            `coinbase_facilitator_http_${response.statusCode}`,
+          );
+        }
+        try {
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(response.body);
+          return JSON.parse(text) as unknown;
+        } catch {
+          throw new FacilitatorClientError("coinbase_facilitator_invalid_json");
+        }
+      }
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method: "POST",
+        headers,
+        body: serialized,
+        signal: controller.signal,
+        redirect: "error",
+      });
+      if (!response.ok) {
+        cancelBody(response);
+        throw new FacilitatorClientError(`coinbase_facilitator_http_${response.status}`);
+      }
+      const bytes = await readBoundedBody(response, this.maxResponseBytes, controller.signal);
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw new FacilitatorClientError("coinbase_facilitator_invalid_json");
+      }
+    })();
+    try {
+      return await Promise.race([request, deadline]);
+    } catch (error) {
+      if (error === timeoutError || controller.signal.aborted) throw timeoutError;
+      if (error instanceof FacilitatorClientError) throw error;
+      if (error instanceof SafeNetError) {
+        if (error.code === "safe_net_request_timeout") throw timeoutError;
+        if (error.code === "safe_net_response_too_large") {
+          throw new FacilitatorClientError("coinbase_facilitator_response_too_large");
+        }
+      }
+      throw new FacilitatorClientError("coinbase_facilitator_network_error");
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
     }
-    return (await res.json()) as T;
   }
 }
 
-/** Build a settlement header string suitable for the X-PAYMENT-RESPONSE
- *  response header. Format matches the x402 spec's expectations:
- *  base64-encoded JSON with the settlement result. */
-export function buildSettlementHeader(
-  settle: FacilitatorSettleResult,
-): string {
+export function buildSettlementHeader(settle: FacilitatorSettleResult): string {
   return Buffer.from(JSON.stringify(settle), "utf-8").toString("base64");
 }

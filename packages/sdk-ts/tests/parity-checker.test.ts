@@ -10,7 +10,7 @@ interface ParityResult {
 }
 
 describe("SDK parity checker", () => {
-  test("counts async generator methods such as wake.voice", () => {
+  test("counts async generators and nested data.sync methods", () => {
     const sdkRoot = join(import.meta.dir, "..");
     const result = Bun.spawnSync({
       cmd: ["bun", "run", "scripts/check-parity.ts", "--json"],
@@ -23,6 +23,7 @@ describe("SDK parity checker", () => {
     const report = JSON.parse(result.stdout.toString()) as ParityResult[];
     const wake = report.find((entry) => entry.module === "wake");
     const inbox = report.find((entry) => entry.module === "inbox");
+    const dataSync = report.find((entry) => entry.module === "data.sync");
 
     expect(wake).toBeDefined();
     expect(wake?.pyMethods).toContain("voice");
@@ -30,5 +31,9 @@ describe("SDK parity checker", () => {
     expect(wake?.pyOnly).toEqual([]);
     expect(inbox?.tsMethods).toContain("voice");
     expect(inbox?.tsMethods).not.toContain("push");
+    expect(dataSync?.pyMethods).toEqual(["pull", "status"]);
+    expect(dataSync?.tsMethods).toEqual(["pull", "status"]);
+    expect(dataSync?.pyOnly).toEqual([]);
+    expect(dataSync?.tsOnly).toEqual([]);
   });
 });

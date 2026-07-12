@@ -6,10 +6,11 @@
  *       even those that strip bodies. Format:
  *         X-Welcomed: axiom=<id>;at=<unix_ms>;walls_intact=1;module=<name>
  *
- *    2. `_welcomed` body field — added to every 2xx JSON object response.
- *       Errors (4xx/5xx) gain `welcome_continues: true` (set by the error
- *       handler — see lib/errors.ts), affirming the welcome was not
- *       revoked by the rejection of one operation.
+ *    2. `_welcomed` body field — added to every 2xx JSON object response
+ *       except the OpenAPI document, whose root must remain standard-valid.
+ *       Guided errors produced by the shared error handler additionally gain
+ *       `welcome_continues: true` (see lib/errors.ts); other error responses
+ *       retain the universal transport-level `X-Welcomed` header.
  *
  *  The axiom + walls carried in each response are NATURAL to the module
  *  the request hit. The wake greets with all five Promises; memory
@@ -50,6 +51,16 @@ function welcomeHeaderValue(nowMs: number, w: ModuleWelcome): string {
   return parts.join(";");
 }
 
+/** Resolve the transport-level welcome directly from a request path. CORS
+ *  uses this for preflight responses that intentionally short-circuit before
+ *  the ordinary response-framing middleware runs. */
+export function welcomeHeaderForPath(
+  path: string,
+  nowMs: number = Date.now(),
+): string {
+  return welcomeHeaderValue(nowMs, welcomeForPath(path));
+}
+
 /** Body-format welcome — added to 2xx JSON object responses. The shape
  *  parallels the math-tier greeting block (primer primes + wall ordinals)
  *  so a reader walking from header → body → wake greeting → catalog sees
@@ -80,9 +91,10 @@ function welcomedFrame(nowMs: number, w: ModuleWelcome): WelcomedFrame {
 }
 
 /** Middleware. Wraps response — adds X-Welcomed header always; adds
- *  `_welcomed` field on 2xx JSON object responses. The axiom + walls are
- *  resolved from the request path via the module-welcome registry. Pure
- *  addition; never removes existing fields or alters status. */
+ *  `_welcomed` to eligible 2xx JSON object responses (the OpenAPI document is
+ *  header-only). The axiom + walls are resolved from the request path via the
+ *  module-welcome registry. Pure addition; never removes existing fields or
+ *  alters status. */
 export const welcomeEcho = (): MiddlewareHandler => {
   return async (c, next) => {
     await next();
@@ -90,7 +102,12 @@ export const welcomeEcho = (): MiddlewareHandler => {
     const nowMs = Date.now();
     const path = new URL(c.req.url, "http://_").pathname;
     const moduleWelcome = welcomeForPath(path);
-    c.res.headers.set("X-Welcomed", welcomeHeaderValue(nowMs, moduleWelcome));
+    c.res.headers.set("X-Welcomed", welcomeHeaderForPath(path, nowMs));
+
+    // OpenAPI permits only its fixed root fields and `x-` extensions. Keep the
+    // machine-readable welcome in X-Welcomed without injecting the ordinary
+    // response frame, so strict OpenAPI consumers receive a valid document.
+    if (path === "/v1/openapi.json" || path === "/v1/openapi.json/") return;
 
     // Only frame 2xx JSON object responses.
     if (c.res.status < 200 || c.res.status >= 300) return;
