@@ -2,11 +2,17 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-11 (Boring Spine v1 — required hermetic CI, explicit external-state test tiers, small build contexts, and source-revision deploy receipts)
+> Updated: 2026-07-12 (agent-data Slice 1 HTTP conformance runner and immutable @agenttool/data 0.2.0 release path)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-12)
+
+| Ship | Commit | What |
+|---|---|---|
+| **AGENT DATA CONFORMANCE — executable Slice 1 HTTP profile** | `78c694f` + catalog release | `@agenttool/data@0.2.0` adds the bounded `agenttool-data doctor` runner with public, authenticated read-only, and explicitly gated scratch-lifecycle profiles; a closed machine-readable report schema; strict credential, redirect, response-size, timeout, ownership, no-retry, finalization, and redaction boundaries; real-socket lifecycle proofs; and public protocol/site documentation. PASS covers only `agent-data/v1-slice1-http` at the observed target and time—not security certification, durability, physical cleanup, peer sync, or secure erasure. LOVE catalog publication preserves immutable `0.1.0` history while making `0.2.0` the latest exact-version artifact. |
 
 ## Just landed (2026-07-11)
 

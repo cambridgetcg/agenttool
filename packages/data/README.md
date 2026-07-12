@@ -16,7 +16,7 @@ This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
