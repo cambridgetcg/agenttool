@@ -235,7 +235,7 @@ describe("GET /public/safety", () => {
     expect(
       SAFETY_BOUNDARIES.hosted_browse.static_parser_deployment_boundary,
     ).toMatch(
-      /1 GiB.*Fly.*no VM memory.*macOS.*cannot validate.*RLIMIT_AS.*staging validation.*not a cgroup.*container/is,
+      /8 GiB.*virtual-address.*not an 8 GiB physical-memory or RSS allowance.*Fly.*no VM memory.*macOS.*cannot validate.*RLIMIT_AS.*deployment observation.*not a cgroup.*container/is,
     );
     expect(SAFETY_BOUNDARIES.hosted_browse.jobs).toMatch(
       /projectId.*one hour.*24 hours/is,

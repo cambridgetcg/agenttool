@@ -82,14 +82,17 @@ once; no more than 32 wait for a slot, and a waiter expires after two seconds.
 Each admitted child has a parent-enforced two-second wall timeout, bounded
 stdin/stdout, a stripped application environment, and an O(n) preflight capped
 at 20,000 tags, depth 256, and 65,536 characters for one tag source. The Linux
-production child additionally receives a 1 GiB address-space rlimit plus CPU,
-open-file, and stack rlimits and runs Bun's low-memory mode. macOS cannot apply the same
+production child additionally receives an 8 GiB virtual-address rlimit plus
+CPU, open-file, and stack rlimits and runs Bun's low-memory mode. That ceiling
+accommodates JavaScriptCore's sparse multi-gigabyte address cage; it is not an
+8 GiB physical-memory or RSS allowance. macOS cannot apply the same
 address-space rlimit, and these process limits are not a container, cgroup,
 filesystem, or network namespace. The route therefore has separate transport,
 queue, parser, and database phases—not one whole-operation deadline.
-The repository's Fly configuration does not declare VM memory, and local macOS
-cannot validate the Linux address-space rlimit. Parser RSS, rlimit behavior,
-and VM headroom therefore still require staging validation before deployment.
+The repository's Fly configuration does not declare VM memory. Bun startup and
+the parser dependencies have been exercised under this limit on the current
+Linux runtime, but concurrent parser RSS and VM headroom still require
+deployment observation.
 
 This is an SSRF and resource boundary, not a trust verdict. `http:` traffic is
 cleartext. AgentTool receives and parses the response bytes, so fetched text is
