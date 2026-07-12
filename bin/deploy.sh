@@ -640,6 +640,7 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
     "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
     "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
     "apps/docs/index.html|https://docs.agenttool.dev/"
+    "apps/docs/data.html|https://docs.agenttool.dev/data"
     "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
     "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
     "apps/web/village.html|https://agenttool.dev/village.html"

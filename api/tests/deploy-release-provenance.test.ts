@@ -148,6 +148,20 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("Encoded sensitive path is publicly reachable");
   });
 
+  test("keeps the rendered data reference byte-identical at the edge", async () => {
+    const [deploy, headers] = await Promise.all([
+      readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+      readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
+    ]);
+
+    expect(deploy).toContain(
+      '"apps/docs/data.html|https://docs.agenttool.dev/data"',
+    );
+    expect(headers).toMatch(
+      /\/data\n\s+Cache-Control: public, max-age=0, must-revalidate, no-transform/,
+    );
+  });
+
   test("health reports only valid embedded source metadata and disables caching", async () => {
     const revision = "0123456789abcdef0123456789abcdef01234567";
     const healthHome = await mkdtemp(join(tmpdir(), "agenttool-health-home-"));
