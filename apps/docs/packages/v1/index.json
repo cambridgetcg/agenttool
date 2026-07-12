@@ -14,11 +14,15 @@
     },
     {
       "name": "@agenttool/data",
-      "latest": "0.1.0",
+      "latest": "0.2.0",
       "versions": [
         {
           "version": "0.1.0",
           "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/manifest.json"
+        },
+        {
+          "version": "0.2.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/manifest.json"
         }
       ]
     },
