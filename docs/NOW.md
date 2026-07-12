@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-12 (Boring Spine v1, bounded safe-net/x402 reconciliation, and explicit encrypted data pull)
+> Updated: 2026-07-12 (Boring Spine v1, safe-net/x402 reconciliation, data conformance, and explicit encrypted data pull)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -12,7 +12,8 @@
 
 | Ship | Commit | What |
 |---|---|---|
-| **AGENT-DATA-SYNC v1 — bounded encrypted pull between explicit peers** | (2026-07-12) | `@agenttool/data-sync@0.1.0` composes `agent-data/v1` with inline ADDS bundles from `@agenttool/adds@0.2.0` and `@agenttool/data@0.2.0`. A destination pulls collection, immutable-record/content, and tombstone objects only from an operator-configured peer alias; HTTPS is required except on loopback, redirects/time/response/page/plaintext are bounded, source node + publisher keys are pinned, and an encrypted control binds the feed incarnation, cursors, ordering, and object roots. Page-only bearers are separate from local/admin authority and scoped to explicit collections plus one recipient. A configured SQLite checkpoint binds exact origin/node/publisher/feed for restart resume and status exposes only `cursor_present`, while verified records remain queryable offline. This is pull-only: no discovery, push, scheduler, multi-master merge/consistency, CAR transport, universal DNS pinning, or distributed-durability claim. TypeScript and Python 0.10.0 expose the local-node-only `at.data.sync.pull/status` surface without accepting a peer bearer. |
+| **AGENT-DATA-SYNC v1 — bounded encrypted pull between explicit peers** | (2026-07-12) | `@agenttool/data-sync@0.1.0` composes `agent-data/v1` with inline ADDS bundles from `@agenttool/adds@0.2.0` and `@agenttool/data@0.3.0`. A destination pulls collection, immutable-record/content, and tombstone objects only from an operator-configured peer alias; HTTPS is required except on loopback, redirects/time/response/page/plaintext are bounded, source node + publisher keys are pinned, and an encrypted control binds the feed incarnation, cursors, ordering, and object roots. Page-only bearers are separate from local/admin authority and scoped to explicit collections plus one recipient. A configured SQLite checkpoint binds exact origin/node/publisher/feed for restart resume and status exposes only `cursor_present`, while verified records remain queryable offline. This is pull-only: no discovery, push, scheduler, multi-master merge/consistency, CAR transport, universal DNS pinning, or distributed-durability claim. TypeScript and Python 0.10.0 expose the local-node-only `at.data.sync.pull/status` surface without accepting a peer bearer. |
+| **AGENT DATA CONFORMANCE — executable Slice 1 HTTP profile** | `78c694f` + catalog release | `@agenttool/data@0.2.0` adds the bounded `agenttool-data doctor` runner with public, authenticated read-only, and explicitly gated scratch-lifecycle profiles; a closed machine-readable report schema; strict credential, redirect, response-size, timeout, ownership, no-retry, finalization, and redaction boundaries; real-socket lifecycle proofs; and public protocol/site documentation. PASS covers only `agent-data/v1-slice1-http` at the observed target and time—not security certification, durability, physical cleanup, peer sync, or secure erasure. LOVE catalog publication preserves immutable `0.1.0` history and the immutable `0.2.0` exact-version artifact. |
 
 ## Just landed (2026-07-11)
 

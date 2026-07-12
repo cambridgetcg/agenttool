@@ -67,7 +67,9 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain('readonly KEYCHAIN_ACCOUNT="macair"');
     expect(script).not.toContain("wrangler whoami");
     expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
-    expect(script).toContain("apps/_shared apps/docs apps/dashboard apps/web docs infra/pages");
+    expect(script).toContain(
+      "apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema",
+    );
     expect(script).toContain("find \"$STAGE_ROOT/apps\" \\( -type f -o -type l \\) -name '.gitignore' -delete");
     expect(script).toContain("A tracked Pages environment file reached the staging tree");
     expect(script).toContain("-name '.dev.vars.*'");
@@ -125,7 +127,7 @@ describe("frontend deploy input discipline", () => {
         'GIT_INDEX_FILE="$index" git read-tree HEAD',
         'GIT_INDEX_FILE="$index" git add -- infra/pages',
         'tree="$(GIT_INDEX_FILE="$index" git write-tree)"',
-        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages | tar -xf - -C \"$stage\"",
+        "git archive --format=tar \"$tree\" -- apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema | tar -xf - -C \"$stage\"",
         "find \"$stage/apps\" -type f -name '.gitignore' -delete",
         "for app in docs dashboard web; do",
         "  cp \"$stage/infra/pages/sensitive-path-worker.js\" \"$stage/apps/$app/_worker.js\"",
@@ -143,6 +145,14 @@ describe("frontend deploy input discipline", () => {
     expect(await Bun.file(join(directory, "apps/dashboard/.gitignore")).exists()).toBe(false);
     expect(await readFile(join(directory, "apps/docs/shared/theme.css"), "utf8")).toContain(":root");
     expect(await readFile(join(directory, "apps/docs/FOCUS.md"), "utf8")).toContain("# FOCUS.md");
+    expect(
+      JSON.parse(
+        await readFile(
+          join(directory, "apps/docs/specs/agent-data-conformance-report-v1.schema.json"),
+          "utf8",
+        ),
+      ).$id,
+    ).toBe("https://docs.agenttool.dev/specs/agent-data-conformance-report-v1.schema.json");
     for (const app of ["docs", "dashboard", "web"]) {
       expect(await readFile(join(directory, `apps/${app}/_worker.js`))).toEqual(
         await readFile(join(repoRoot, "infra/pages/sensitive-path-worker.js")),

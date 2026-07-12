@@ -26,7 +26,9 @@ one source and rejects non-canonical base64 or decoded input above 1,000,000
 bytes before sending a request. `ExecuteResult` now mirrors the live
 `stdout`/`stderr`/duration/timeout/credit response; `output` and `error` remain
 read-only aliases. Update callers that relied on the former loose shape or
-validation.
+validation. It also adds the local-node-only `at.data.sync.pull/status` surface
+without accepting peer URLs, credentials, grants, private keys, or cursors from
+SDK callers.
 
 ## Why this exists
 

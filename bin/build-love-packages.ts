@@ -67,9 +67,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/data",
-    version: "0.2.0",
+    version: "0.3.0",
     packagePath: "packages/data",
-    releaseTag: "data-v0.2.0",
+    releaseTag: "data-v0.3.0",
     buildCommands: [
       ["bun", "run", "ci"],
       ["bun", "run", "build"],

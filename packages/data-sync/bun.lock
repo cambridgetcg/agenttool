@@ -10,7 +10,7 @@
       },
       "peerDependencies": {
         "@agenttool/adds": "^0.2.0",
-        "@agenttool/data": "^0.2.0",
+        "@agenttool/data": "^0.3.0",
       },
     },
   },

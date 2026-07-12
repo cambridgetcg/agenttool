@@ -296,7 +296,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.6.5 / 0.6.4** | Vault closure (put_encrypted / get_decrypted + kVault) | no — additive (re-uses Phase 5 crypto) |
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
-| **0.10.0** | Correct tools wire contracts (scrape, document, execute) and strict local validation | **yes** |
+| **0.10.0** | Correct tools wire contracts and strict local validation; add local-node-only `at.data.sync.pull/status` | **yes** |
 | **0.11.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 

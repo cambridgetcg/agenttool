@@ -39,8 +39,8 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Some documents are shipped or published; proposals and known gaps are labeled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.9.0 adds `at.data`, a thin client for an independently configured data node with a separate bearer boundary. |
-| **Agent data** | `packages/data` | Local-first `agent-data/v1` reference node. Raw bytes and indexes stay user-owned; peer replication and hosted manifest publication are future profiles. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.10.0 exposes `at.data` plus the local-node-only `at.data.sync` pull/status surface, with a separate data-node bearer boundary. |
+| **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
@@ -241,8 +241,9 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.9.0 releases expose `at.data`
-  in both languages. The parity checker only
+- **SDK parity is deliberately bounded.** The 0.10.0 releases expose `at.data`
+  and the local-node-only `at.data.sync` pull/status surface in both languages.
+  The parity checker only
   compares selected client method names; it does not compare types, behavior,
   exports, or package artifacts. No source `LICENSE` file exists; LOVE package
   manifests therefore publish `license: null`, and older registry metadata may

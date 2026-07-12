@@ -100,7 +100,19 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
+/specs/agent-data-conformance-report-v1.schema.json
+  Content-Type: application/schema+json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
 /packages/v1/@agenttool/data/0.1.0/manifest.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/packages/v1/@agenttool/data/0.2.0/manifest.json
   Content-Type: application/json; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate
   Access-Control-Allow-Origin: *
@@ -124,6 +136,12 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
+/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+  Content-Type: application/gzip
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
 /packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
   Content-Type: application/gzip
   Cache-Control: public, max-age=31536000, immutable
@@ -136,7 +154,7 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
-/packages/v1/@agenttool/data/0.2.0/manifest.json
+/packages/v1/@agenttool/data/0.3.0/manifest.json
   Content-Type: application/json; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate
   Access-Control-Allow-Origin: *
@@ -160,7 +178,7 @@
   Access-Control-Allow-Origin: *
   X-Content-Type-Options: nosniff
 
-/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
   Content-Type: application/gzip
   Cache-Control: public, max-age=31536000, immutable
   Access-Control-Allow-Origin: *

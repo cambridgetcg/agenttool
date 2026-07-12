@@ -175,7 +175,7 @@ api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
 
       <div class="code-block">
         <div class="code-label"><span>install and listen on loopback</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
 export AGENT_DATA_NODE_TOKEN='&lt;dedicated-random-node-token&gt;'
 bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent-data
 
@@ -185,6 +185,26 @@ bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent
       <div class="callout success">
         <span class="icon">⊙</span>
         <p><strong>Network boundary.</strong> Discovery and the capability manifest are public at the node. Every data route requires the dedicated node bearer. The CLI refuses a non-loopback bind unless that bearer is configured. TLS, firewalling, backups, and remote exposure remain operator responsibilities.</p>
+      </div>
+
+      <h2 id="doctor">Check a node with the executable profile</h2>
+      <p><code>agenttool-data doctor</code>, introduced in <code>@agenttool/data@0.2.0</code> and included in <code>0.3.0</code>, is a bounded black-box runner for <code>agent-data/v1-slice1-http</code>. Its JSON report follows the public <a href="/specs/agent-data-conformance-report-v1.schema.json">conformance report schema</a> and validates only the observed HTTP profile at that target and time; it is not a security certification, durability proof, or secure-erasure claim.</p>
+
+      <div class="code-block">
+        <div class="code-label"><span>public and authenticated read-only checks</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre><span class="cm"># Public discovery and synthetic auth-boundary probes</span>
+bunx --bun --no-install --package @agenttool/data agenttool-data \
+  doctor http://127.0.0.1:7742 --profile public
+
+<span class="cm"># Supply a dedicated node bearer through stdin, never argv</span>
+printf '%s' "$AGENT_DATA_NODE_TOKEN" | \
+  bunx --bun --no-install --package @agenttool/data agenttool-data \
+    doctor http://127.0.0.1:7742 --profile read --token-stdin</pre>
+      </div>
+
+      <div class="callout">
+        <span class="icon">!</span>
+        <p><strong>Mutation is opt-in.</strong> The full <code>slice1</code> lifecycle requires an expected node ID, a dedicated scratch collection, and explicit acknowledgement that immutable records, change events, and tombstones can remain. The runner never auto-selects a collector or claims physical cleanup.</p>
       </div>
 
       <h3>Discover, collect, and query</h3>

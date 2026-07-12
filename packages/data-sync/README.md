@@ -21,13 +21,14 @@ exact LOVE Package artifacts:
 
 ```bash
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
 ```
 
-The bridge requires both peers at `^0.2.0`. The repository uses root-only
-development overrides to link the adjacent packages. On a clean source
-checkout, build the peers once before the bridge gate:
+The bridge requires `@agenttool/adds` at `^0.2.0` and `@agenttool/data` at
+`^0.3.0`. The repository uses root-only development overrides to link the
+adjacent packages. On a clean source checkout, build the peers once before the
+bridge gate:
 
 ```bash
 (cd ../data && bun install --frozen-lockfile && bun run build)

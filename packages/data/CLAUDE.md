@@ -3,8 +3,8 @@
 Local-first `agent-data/v1` reference node. It owns collection, immutable record,
 blob, FTS, change-feed, collector, and loopback HTTP behavior. It does not own the
 hosted AgentTool API, SDK façade, federation, peer sync, or memory projection.
-Current package release is `0.2.0`; the immutable `data-v0.1.0` release does
-not contain replica-import or feed-id seams.
+Current package release is `0.3.0`; the immutable `data-v0.1.0` and
+`data-v0.2.0` releases do not contain replica-import or feed-id seams.
 
 ## Commands
 
@@ -13,7 +13,7 @@ bun install
 bun run typecheck
 bun test
 bun run build
-AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts
+AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts serve
 ```
 
 ## Map
@@ -25,7 +25,10 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts
 - `src/blob-store.ts` — content-addressed filesystem bytes
 - `src/collectors.ts` — bounded text, file, and HTTP collectors
 - `src/server.ts` — authenticated snake_case HTTP surface
-- `tests/` — node, durability, collector-security, and route proofs
+- `src/conformance.ts` — bounded no-redirect Slice 1 HTTP probes and report
+- `src/cli.ts` — strict `serve` / `doctor` parser and credential-source boundary
+- `schema/agent-data-conformance-report-v1.schema.json` — closed report schema
+- `tests/` — node, durability, collector-security, route, CLI, and socket proofs
 
 ## Invariants
 
@@ -50,6 +53,20 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts
   An explicit empty media-type allow-list denies every type.
 - HTTP manifests are public; every data route requires the dedicated node bearer.
   Never read or reuse an AgentTool API token. Refuse bearerless non-loopback bind.
+- `agenttool-data doctor` defaults to public/read-only operation. Its `slice1`
+  profile requires an expected node ID, dedicated scratch collection, explicit
+  persistent-residue acknowledgement, and a bearer from non-interactive stdin or
+  an explicitly named environment variable.
+- Public auth-boundary POST probes use malformed JSON and a random invalid
+  record segment. They send no operator credential and cannot form a standard
+  collect/tombstone mutation even if a broken target reaches route parsing.
+- The default conformance fetch requests manual redirects and rejects 3xx or an
+  observed changed/followed response URL. Injected fetch implementations are a
+  trusted test/programmatic seam and must honour those options. Reports never
+  serialize raw remote bodies, headers, cursors, credentials, or remote record
+  IDs. PASS covers only
+  `agent-data/v1-slice1-http` at the observed target/time; it is not a security,
+  identity, durability, physical-cleanup, or secure-erasure claim.
 - HTTP collection allows HTTP(S) only, rechecks redirects, bounds time/bytes, and
   blocks private destinations unless the adapter is explicitly opted in.
 - A record/change commit can precede indexing. Re-collection and default-node

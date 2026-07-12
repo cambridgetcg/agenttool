@@ -9,9 +9,9 @@
 >
 > **Implements:** A cross-cutting data-plane protocol, `agent-data/v1`, its first local reference node, and the bounded `agent-data-sync/v1` explicit encrypted-pull profile. AgentTool MAY supply identity, signatures, grants, and discovery as a control plane; the raw data plane remains local or user-owned and works without an AgentTool account.
 >
-> **Code:** `packages/data/` (local reference node) · `packages/data-protocol/` (experimental ADDS encrypted-object plane) · `packages/data-sync/` (optional explicit pull bridge) · `packages/sdk-ts/src/data.ts` (TypeScript client) · `packages/sdk-py/src/agenttool/data.py` (Python client)
+> **Code:** `packages/data/` (local reference node and `agent-data/v1-slice1-http` conformance runner) · `packages/data-protocol/` (optional experimental ADDS encrypted-object plane) · `packages/data-sync/` (optional explicit pull bridge) · `packages/sdk-ts/src/data.ts` (TypeScript client) · `packages/sdk-py/src/agenttool/data.py` (Python client)
 >
-> **Tests:** `packages/data/tests/` · `packages/data-protocol/tests/` · `packages/data-sync/tests/` · `packages/sdk-ts/tests/data.test.ts` · `packages/sdk-py/tests/test_data.py`
+> **Tests:** `packages/data/tests/` (including independent socket probes) · `packages/data-protocol/tests/` · `packages/data-sync/tests/` · `packages/sdk-ts/tests/data.test.ts` · `packages/sdk-py/tests/test_data.py`
 
 **Status:** Draft v1. The `agent-data/v1` local core is Slice 1; the optional
 `agent-data-sync/v1` bridge is its first bounded pull slice. The key words
@@ -1084,7 +1084,7 @@ per-collection grant policy, or multi-master consistency. It does not use CAR
 v1/v2; `adds-bundle/v1` blocks are encoded inline in bounded JSON. A future
 bulk transport may negotiate CAR without changing core record identity, but no
 CAR support is advertised here. `@agenttool/data-sync@0.1.0` composes the
-`@agenttool/adds@0.2.0` and `@agenttool/data@0.2.0` release lines. The bridge is
+`@agenttool/adds@0.2.0` and `@agenttool/data@0.3.0` release lines. The bridge is
 distributed as source/library code; installing it does not run a node, expose
 a port, configure a peer, or deploy a hosted sync service.
 
@@ -1152,6 +1152,94 @@ a port, configure a peer, or deploy a hosted sync service.
   restart resume. It does not guarantee durability on faulty storage, unusual
   filesystems, unsynchronised backups, or implementations that choose the
   in-memory checkpoint store.
+
+## 15. Executable Slice 1 HTTP profile
+
+`agent-data/v1` permits in-process APIs, HTTP, Unix sockets, mTLS, and other
+advertised authority mechanisms. The executable
+`agent-data/v1-slice1-http` suite is therefore a conformance profile for the
+Slice 1 JSON-over-HTTP and dedicated-node-bearer surface in Section 5. A pass
+for this profile MUST NOT be presented as universal core conformance for every
+transport or authority mechanism.
+
+The reference runner is `agenttool-data doctor` in `packages/data/`. Its closed
+machine report uses `agent-data-conformance-report/v1`; the JSON Schema is
+`packages/data/schema/agent-data-conformance-report-v1.schema.json`. It has
+three profiles:
+
+The verdict is computed from required checks only: any required failure means
+`fail`; otherwise any required inconclusive/skip means `inconclusive`; otherwise
+the verdict is `pass`. Advisory status does not change the verdict. Summary
+counts include both required and advisory checks.
+
+| Profile | Authority | Mutation | Observable scope |
+|---|---|---|---|
+| `public` | no operator credential; generated invalid bearer probes | no authorised fixture writes | Both discovery manifests, standard-field equivalence and shape, absence of the standard collection list/local `blob_ref`, and protected-route rejection. The POST probes use malformed JSON and a random invalid record segment so route parsing cannot produce an actionable standard mutation. |
+| `read` | dedicated node bearer | none | `public` plus authenticated collection shape, empty-collection local query, corrupt-cursor errors, query/change overflow, and JSON media rules. It does not request a successful live change page because events embed real envelopes. |
+| `slice1` | dedicated node bearer | explicit fixture writes | `read` plus owned caller-text records, immutable deduplication, exact bytes/digest, query, cursor pagination/filter binding, tombstone lifecycle, `410`, and idempotency. |
+
+The executable expectations that are stricter than the common object prose are:
+
+| Probe | Required observation |
+|---|---|
+| Each public manifest | `200`, `Content-Type: application/json`, UTF-8 JSON object, valid standard manifest fields. Unknown response fields are ignored except forbidden `collections`/`blob_ref` data keys outside schema-description subtrees. |
+| Missing/wrong bearer on each protected route | A configured bearer profile returns `401 unauthorized`, a flat error object, and a `WWW-Authenticate` challenge whose scheme is `Bearer`. The public profile also accepts `503 data_auth_not_configured`. |
+| Authenticated collection list | `200` and `{ collections: [...] }`; collection policy fields remain optional. |
+| Empty-collection local query | `200`, no hits, and `consistency: "local"`. |
+| Corrupt change cursor | `400 invalid_cursor`. |
+| Query/change limit above the advertised maximum | `400 limit_exceeded`; the node does not silently clamp. Other body/record/item limits are shape-checked unless a safe fixture makes them observable. |
+| Non-local query consistency | `400 unsupported_consistency`. |
+| Non-JSON POST media type | `415 unsupported_media_type`. |
+| Owned fixture collect/recollect | One inserted record, then the same first envelope with one existing record even when refresh metadata changes. |
+| Tombstone reason longer than 1,000 characters | `400 invalid_request`, active exact read remains available, and no event is appended. |
+| Tombstoned exact read | `410 record_tombstoned`. |
+
+All protocol success/error responses consumed by this profile are JSON objects.
+Rate limits, authenticated credential rejection, target 5xx responses, transport
+failure, and runner safety bounds are inconclusive rather than evidence of a
+protocol mismatch.
+
+The `slice1` profile is not portable without operator setup. Core v1 has no
+HTTP collection-create/delete route and no mandatory deterministic collector.
+The reference fixture therefore requires all of:
+
+1. an exact expected `node_id` learned from public discovery;
+2. a collection provisioned solely for conformance;
+3. an advertised caller-bytes `text` collector that accepts `text/plain`;
+4. an explicit acknowledgement that mutations leave persistent residue; and
+5. a dedicated data-node bearer supplied outside argv.
+
+The runner MUST NOT auto-select or invoke the `file` or `http` collectors. It
+generates a cryptographic run marker, drains only the selected collection feed
+to a bounded terminal cursor before writing, and makes an inserted ID eligible
+for tombstoning only after its unique source/digest marker is independently
+confirmed by both the post-baseline created event and an exact byte read. A lost
+or malformed mutating response is not retried automatically because the outcome
+is uncertain. Authenticated reports publish the run marker and fixture counts,
+not server-controlled record IDs that could act as a credential covert channel.
+A missing safe fixture, exhausted feed bound, timeout, or ambiguous mutation
+outcome is inconclusive; it MUST NOT be collapsed into pass or skip.
+
+The default runner transport requests manual redirect handling, rejects every
+3xx, and rejects an observed followed or changed response URL. Target-URL
+credentials are forbidden, HTTPS is required outside loopback, and the bearer is
+sent only to fixed paths at the exact selected origin. A programmatic caller that
+injects a custom `fetch` implementation is responsible for honouring the passed
+request options; detecting a followed redirect after that transport returns
+cannot undo credential forwarding. The CLI accepts a bearer only from
+non-interactive stdin or an explicitly named environment variable; it never
+falls back to an AgentTool project bearer. These properties constrain the
+reference runner. They cannot guarantee that a shell with tracing, a proxy, the
+target, the runtime, or a crash dump does not record the credential.
+
+A passing report means only that the selected executable profile was observed
+passing at one target and time. It is not a signed certificate or endorsement
+and does not prove continuing compliance, publisher/source identity, source
+truth or safety, vulnerability absence, TLS/host ownership beyond the observed
+connection, durability/crash recovery, physical cleanup or secure erasure,
+server/proxy non-logging, collector sandboxing/SSRF resistance, enforcement of
+unadvertised policy, decentralisation/peer sync, AgentTool identity/grants, or
+behaviour outside the probes.
 
 ## Doctrine line
 

@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/data",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local-first reference node for the agent-data/v1 protocol",
   "type": "module",
   "main": "dist/index.js",
@@ -9,6 +9,13 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./conformance": {
+      "import": "./dist/conformance.js",
+      "types": "./dist/conformance.d.ts"
+    },
+    "./conformance-report.schema.json": {
+      "default": "./schema/agent-data-conformance-report-v1.schema.json"
     }
   },
   "bin": {
@@ -16,6 +23,7 @@
   },
   "files": [
     "dist",
+    "schema",
     "README.md",
     "CLAUDE.md"
   ],
