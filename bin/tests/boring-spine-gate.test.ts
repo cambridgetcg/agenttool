@@ -277,9 +277,12 @@ describe("boring test spine", () => {
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
-    expect(workflow).toContain(
-      "packages/data packages/data-protocol packages/data-sync packages/sdk-ts",
-    );
+    expect(workflow).toContain("packages/data packages/data-protocol packages/sdk-ts");
+    expect(workflow).toContain("name: Build local data-sync peers");
+    expect(workflow).toContain("cd packages/data && bun run build");
+    expect(workflow).toContain("cd packages/data-protocol && bun run build");
+    expect(workflow).toContain("name: Install data-sync dependencies from lockfile");
+    expect(workflow).toContain("working-directory: packages/data-sync");
     expect(workflow).not.toContain("secrets.");
 
     const preflight = await readFile(join(ROOT, "bin", "preflight.sh"), "utf8");
