@@ -8,7 +8,8 @@ a loopback-oriented HTTP API.
 This package is the first local slice of the protocol. It does **not** implement
 peer discovery, federation, replication, hosted storage, or automatic projection
 into AgentTool memory. The manifest reports `peer_sync: false`; the opaque change
-feed is a building block for future sync, not a claim that sync exists.
+feed is consumed by optional profiles such as `@agenttool/data-sync`, not a claim
+that this base package itself performs sync.
 
 Profile implementations can use `importCollection()`, `importReplica()`, and
 `importTombstone()` as the narrow local apply seam after they have separately
@@ -19,6 +20,11 @@ replay equality; only the node-local `blob_ref` is replaced. This seam alone
 does not change the manifest's `peer_sync: false` capability.
 
 ## Install
+
+The checkout is now an unpublished `0.2.0-dev.0` candidate. Replica-import
+seams and persisted feed identities belong to that candidate and are not in the
+immutable `0.1.0` artifact below. Publishing a compatible `0.2.x` artifact is a
+separate release action.
 
 This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
@@ -250,7 +256,9 @@ The change feed is append-only and emits `record.created` and
 `record.tombstoned` events with a stable `change_<sequence>` ID, node-local
 sequence, occurrence time, and embedded record or tombstone. Cursors are opaque
 and bound to the chosen collection filter. They are not signatures or global
-ordering guarantees.
+ordering guarantees. Each SQLite store also persists a random `feed_id` for the
+physical change-feed incarnation. It survives reopen but changes when storage is
+recreated, allowing optional transports to reject a cursor from an older feed.
 
 Errors have one SDK-friendly shape:
 

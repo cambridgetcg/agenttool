@@ -1,7 +1,8 @@
 {
-  "name": "@agenttool/data",
-  "version": "0.2.0-dev.0",
-  "description": "Local-first reference node for the agent-data/v1 protocol",
+  "name": "@agenttool/data-sync",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Explicit encrypted pull replication for agent-data/v1 nodes",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,17 +12,11 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "bin": {
-    "agenttool-data": "dist/cli.js"
-  },
   "files": [
     "dist",
     "README.md",
     "CLAUDE.md"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "engines": {
     "bun": ">=1.3"
   },
@@ -34,18 +29,26 @@
   },
   "keywords": [
     "agents",
-    "local-first",
     "data",
-    "sqlite",
-    "fts5",
-    "content-addressed"
+    "sync",
+    "replication",
+    "encrypted",
+    "local-first"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/cambridgetcg/agenttool.git",
-    "directory": "packages/data"
+    "directory": "packages/data-sync"
   },
   "homepage": "https://docs.agenttool.dev/data",
+  "peerDependencies": {
+    "@agenttool/adds": ">=0.2.0-dev.0 <0.3.0",
+    "@agenttool/data": ">=0.2.0-dev.0 <0.3.0"
+  },
+  "overrides": {
+    "@agenttool/adds": "file:../data-protocol",
+    "@agenttool/data": "file:../data"
+  },
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "typescript": "^5.7.0"

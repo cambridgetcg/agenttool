@@ -432,6 +432,7 @@ limits):
 {
   "sync": {
     "protocol": "agent-data-sync/v1",
+    "feed_id": "feed_00000000-0000-4000-8000-000000000000",
     "mode": "explicit_pull",
     "peer_discovery": false,
     "encrypted_profile": "adds/0.1-inline",
@@ -439,6 +440,10 @@ limits):
       "id": "did:example:destination-sync",
       "x25519_public_key": "unpadded-base64url-public-key",
       "x25519_key_id": "x25519-key-id"
+    },
+    "publisher": {
+      "id": "did:example:destination-sync",
+      "ed25519_public_key": "unpadded-base64url-public-key"
     },
     "limits": {
       "default_page_changes": 10,
@@ -455,8 +460,9 @@ limits):
 }
 ```
 
-The recipient block contains public encryption material, not a grant or
-private key. The wrapper does not advertise configured peer URLs or bearers.
+The recipient and publisher blocks contain public key material, not a grant or
+private key. `feed_id` names this persisted physical feed incarnation. The
+wrapper does not advertise configured peer URLs or bearers.
 `peer_sync: true` means only that this exact bounded profile is installed; it
 does not claim peer discovery, general federation, or multi-node consistency.
 
@@ -543,7 +549,7 @@ for tombstoned versions.
 | `GET /v1/data/records/:id` | node bearer | Immutable record ID | `RecordEnvelope` plus resolved content bytes | no |
 | `GET /v1/data/changes` | node bearer | `collection_id?`, `cursor?`, `limit?` | Ordered `ChangeEvent` page plus opaque next cursor | no |
 | `POST /v1/data/records/:id/tombstone` | node bearer | Optional reason | `{ record_id, tombstoned: true, tombstone }`; event is read from `/changes` | yes |
-| `POST /v1/data/sync/page` | node bearer; optional sync profile | Collection, cursor, bounds, and recipient public key | Bounded ADDS-inline encrypted page | no |
+| `POST /v1/data/sync/page` | distinct scoped page bearer; optional sync profile | Collection, cursor/feed, bounds, and pinned recipient public key | Bounded ADDS-inline encrypted page | no |
 | `POST /v1/data/sync/pull` | local node bearer; optional sync profile | Configured `peer_id`, collection, and bounds | Local apply counts plus sanitised status | yes |
 | `GET /v1/data/sync/status` | local node bearer; optional sync profile | Exactly one `peer_id` and `collection_id` | Sanitised local checkpoint status | no |
 
@@ -553,9 +559,12 @@ for tombstoned versions.
 equivalent capability manifests for the same node. The well-known document is
 the stable discovery door. The versioned endpoint is the stable SDK door.
 
-Slice 1 exposes only `/.well-known/agent-data` and
+The base Slice 1 node exposes only `/.well-known/agent-data` and
 `GET /v1/data/manifest` without a bearer. Every other `/v1/data/*` route,
-including reads, requires the separately configured data-node bearer.
+including reads, requires the separately configured data-node bearer. The
+optional wrapper makes one deliberate exception: `/sync/page` uses a distinct
+page-only bearer scoped to explicit collections and one recipient key; that
+bearer does not authorise base data, pull, or status routes.
 Operators who expose either discovery path expose the same capability facts.
 The manifest itself contains no collection list, local blob references, or
 source credentials.
@@ -721,20 +730,23 @@ own node to pull from an operator-configured peer alias:
 
 The request deliberately contains no peer URL, peer bearer, grant, recipient
 private key, or cursor. The local service resolves `peer_id` to an exact
-operator-configured origin, expected source `node_id`, and dedicated peer
-bearer. The SDK methods are `at.data.sync.pull(...)` and
+operator-configured origin, expected source `node_id`, pinned ADDS publisher id
+and Ed25519 public key, and page-only peer bearer. The SDK methods are
+`at.data.sync.pull(...)` and
 `at.data.sync.status(...)` in TypeScript and Python; they call only the local
 data node with its separately configured data-node authority. They do not
 accept a peer bearer or contact the peer directly.
 
-The destination calls the source's `/v1/data/sync/page` with the collection,
-its internal opaque cursor when one exists, explicit page/byte bounds, and its
-ADDS recipient ID plus X25519 public key and key ID. Application payloads are
+The source operator separately scopes that page bearer to an explicit
+collection allow-list and the destination's exact ADDS recipient id/X25519
+key. The destination calls `/v1/data/sync/page` with the collection, its
+internal opaque cursor and expected persisted `feed_id` when resuming,
+explicit page/byte bounds, and that recipient material. Application payloads are
 encrypted, but the source page retains clear routing, continuation, and ADDS
 control metadata:
 
-- protocol, source `origin_node_id`, `collection_id`, `previous_cursor` when
-  resuming, next `cursor`, and `has_more`;
+- protocol, source `origin_node_id`, physical `feed_id`, `collection_id`,
+  `previous_cursor` when resuming, next `cursor`, and `has_more`;
 - one encrypted page-control object;
 - one encrypted collection object; and
 - change headers containing the node-local change ID/type/sequence, collection
@@ -755,16 +767,19 @@ necessarily decrypts it before verifying and retaining it locally. This is
 application-payload encryption, not traffic-analysis resistance or end-to-end
 secrecy from either endpoint.
 
-The encrypted page-control object binds the origin, collection, previous and
-next cursors, `has_more`, collection-object root CID, and every ordered clear
+The encrypted page-control object binds the origin, feed incarnation,
+collection, previous and next cursors, `has_more`, collection-object root CID,
+and every ordered clear
 change header plus its encrypted-object root CID. The destination opens and
 checks that control object before applying collection or change objects. A
 relay therefore cannot silently edit routing, skip or reorder changes, or swap
-object roots while retaining a valid page binding. The ADDS manifest signature
-and grant establish self-contained cryptographic consistency; this first slice
-does not independently resolve or pin the advertised publisher identity/key to
-the configured peer. Live peer admission is still the configured exact origin,
-HTTPS except on loopback, dedicated bearer, and expected source node ID.
+object roots while retaining a valid page binding. The destination requires
+the control, collection, and every change object to be signed by the
+operator-pinned publisher key; it never learns that trust anchor from the page
+being checked. The protocol does not independently resolve or externally
+attest the publisher identifier. Live peer admission additionally uses the
+configured exact origin, HTTPS except on loopback, scoped page bearer, and
+expected source node ID.
 
 Before applying an object, the destination verifies the expected source node,
 page shape and bounds, control binding, ADDS bundle block CIDs, manifest and
@@ -780,10 +795,23 @@ An interrupted page can leave already verified idempotent objects locally; a
 retry replays them before advancing. Passing `checkpoint_path` selects the
 owner-only SQLite checkpoint store and permits restart resume. Without an
 explicit durable store/path, the provided in-memory checkpoint is process
-local and does not survive restart. `sync/status` exposes `cursor_present`,
+local and does not survive restart. A checkpoint binds the peer alias to the
+configured exact origin, expected node id, pinned publisher, and source feed
+incarnation. Repointing an alias fails before sending its old cursor; a
+recreated feed rejects the expected feed id instead of silently applying that
+cursor to a new sequence.
+`sync/status` exposes `cursor_present`,
 last-apply time, and aggregate counts, never the raw cursor; the pull response
 and SDK also omit it. Operators must still protect checkpoint files and should
 not log cursor-bearing peer page bodies.
+
+Feed/publisher mismatch is a deliberate stop, not an automatic reset. After
+verifying an intentional replacement and stopping competing pullers, the local
+operator can call the in-process `resetCheckpoint(peer_id, collection_id)`
+seam. It removes only private continuation state; imported immutable data stays
+local and the next pull replays the replacement feed from its beginning. v1 has
+no HTTP/SDK reset route and its active-pull guard is process-local, not a
+distributed lease.
 
 ## 6. Collection and version lifecycle
 
@@ -1006,7 +1034,7 @@ Slice 1 proves the smallest useful mechanism:
 | Query consistency | `local` only |
 | Record lifecycle | Immutable content-derived IDs, optional supersession, append-only tombstones |
 | Access | In-process node, local HTTP binding, and thin TypeScript/Python SDK clients |
-| HTTP authority | Discovery/manifest public; a node bearer gates every other route and is configured separately from AgentTool auth; SDKs never implicitly forward the project bearer |
+| HTTP authority | Discovery/manifest public; local/admin node bearer gates base data plus pull/status; a distinct collection/recipient-scoped page bearer gates peer reads; SDKs never implicitly forward the project bearer |
 | AgentTool account | Not required |
 | Collection policy | Byte/media limits enforced; visibility, retention/TTL, and DID allow-list only declared |
 | Record signatures | Carried but not verified (`signature_verification: false`) |
@@ -1029,7 +1057,7 @@ The first sync slice composes existing objects without changing their core
 meaning:
 
 ```text
-operator configures peer alias + exact origin + expected node_id + bearer
+operator configures peer alias + origin + node_id + publisher pin + page bearer
         ↓
 destination requests a bounded ADDS-encrypted change page
         ↓
@@ -1055,9 +1083,10 @@ broadcast, quorum, leader election, head selection, concurrent-version merge,
 per-collection grant policy, or multi-master consistency. It does not use CAR
 v1/v2; `adds-bundle/v1` blocks are encoded inline in bounded JSON. A future
 bulk transport may negotiate CAR without changing core record identity, but no
-CAR support is advertised here. The package is local source in this change; it
-is not added to the `love-package/v1` catalog, published, or deployed by the
-protocol implementation itself.
+CAR support is advertised here. The package is a private `0.1.0-dev.0` local
+candidate in this change and requires the unpublished ADDS/data
+`0.2.0-dev.0` source line. It is not added to the `love-package/v1` catalog,
+published, or deployed by the protocol implementation itself.
 
 ## 14. Security and privacy posture
 
@@ -1066,19 +1095,21 @@ protocol implementation itself.
 - The reference server defaults to `127.0.0.1:7742`. Only discovery and the
   capability manifest are public. Every collection, query, exact-record,
   change, collect, and tombstone request requires the dedicated node bearer.
-- When the optional sync wrapper is served, page, pull, and status routes use
-  that same dedicated node-bearer boundary. A holder of the destination bearer
-  can initiate bounded pulls from configured peers; it cannot add a peer or
-  supply the peer URL/bearer through the pull request.
-- With no node bearer configured, those protected routes fail with `503
-  data_auth_not_configured`; a bad bearer fails with `401 unauthorized`.
+- When the optional sync wrapper is served, pull and status use the local/admin
+  node bearer. Page reads use separate page-only bearers; each is pinned to an
+  explicit collection allow-list and one recipient id/X25519 key. Page tokens
+  do not authorise base data or transitive pulls through the source node.
+- With no local/admin bearer, base data plus pull/status fail with `503
+  data_auth_not_configured`. With no scoped page authority, page reads fail
+  with `503 page_auth_not_configured`; bad tokens fail with `401 unauthorized`.
   Endpoint presence in the public manifest does not prove access is configured.
-- A non-loopback bind is refused unless a node bearer is configured. This
-  prevents an accidental open bind; it does not add TLS, per-collection ACLs,
-  rate limits, or Internet-safe collector isolation.
-- Slice 1 has no per-collection or DID ACL. `policy.visibility` and
-  `policy.allowed_dids` are declarations only. A bearer holder has access to
-  every collection on that node.
+- A non-loopback bind is refused unless a local/admin bearer or at least one
+  scoped page authority is configured. This prevents an accidental open bind;
+  it does not add TLS, global rate limits, or Internet-safe collector isolation.
+- Core Slice 1 has no collection/DID ACL: `policy.visibility` and
+  `policy.allowed_dids` are declarations, and a local/admin bearer holder can
+  access every collection. The sync page allow-list is a narrower transport
+  capability, not enforcement of those stored policy fields.
 - The HTTP collector permits only HTTP(S), rejects URL userinfo, bounds
   redirects, time, and returned bytes, and rejects private/reserved
   destinations by default at each hop. It drops every caller-supplied header
@@ -1095,9 +1126,8 @@ protocol implementation itself.
   and tombstone bodies from transport intermediaries and bind the visible page
   to a signed encrypted control object. Routing IDs, cursors, ordering, timing,
   sizes, and the ADDS manifest/grant metadata described in §5.9 remain visible.
-  This profile verifies the self-contained ADDS signature/grant but does not
-  independently resolve or pin the publisher key to the configured peer
-  identity.
+  This profile pins the publisher id/key in local peer configuration, while
+  making no independent identity-resolution or external-attestation claim.
 - The file collector resolves the caller's path and requires a regular file,
   but has no configured root allow-list. Any admitted remote caller could ask
   it to read a path available to the node process.

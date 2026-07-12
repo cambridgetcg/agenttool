@@ -225,6 +225,8 @@ export interface RecordStore {
   getTombstone(id: string): Tombstone | null;
   listChanges(after_sequence: number, collection_id: string | undefined, limit: number): Change[];
   getOrCreateNodeId(preferred?: string): string;
+  /** Stable identifier for this physical change-feed incarnation. */
+  getOrCreateFeedId(): string;
   close?(): void;
 }
 

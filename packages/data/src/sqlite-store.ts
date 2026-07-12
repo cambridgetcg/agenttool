@@ -306,6 +306,23 @@ export class SQLiteStore implements RecordStore, RecordIndex {
     return nodeId;
   }
 
+  getOrCreateFeedId(): string {
+    const existing = this.db.query("SELECT value FROM node_meta WHERE key = 'change_feed_id'")
+      .get() as { value: string } | null;
+    if (existing) {
+      if (
+        !/^feed_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+          .test(existing.value)
+      ) {
+        throw new DataNodeError("invalid_feed_id", "Persisted change feed id is invalid", 500);
+      }
+      return existing.value;
+    }
+    const feedId = `feed_${randomUUID()}`;
+    this.db.query("INSERT INTO node_meta (key, value) VALUES ('change_feed_id', ?)").run(feedId);
+    return feedId;
+  }
+
   indexRecord(record: RecordEnvelope, document: string): void {
     this.db.query("DELETE FROM record_fts WHERE record_id = ?").run(record.id);
     this.db.query(`

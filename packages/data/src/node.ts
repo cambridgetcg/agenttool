@@ -58,6 +58,7 @@ export const DEFAULT_NODE_LIMITS: Readonly<NodeLimits> = Object.freeze({
 
 export class DataNode {
   readonly node_id: string;
+  readonly feed_id: string;
   readonly limits: NodeLimits;
   readonly store: RecordStore;
   readonly index: RecordIndex;
@@ -67,6 +68,7 @@ export class DataNode {
 
   private constructor(
     nodeId: string,
+    feedId: string,
     limits: NodeLimits,
     store: RecordStore,
     index: RecordIndex,
@@ -74,6 +76,7 @@ export class DataNode {
     adapters: SourceAdapter[],
   ) {
     this.node_id = nodeId;
+    this.feed_id = feedId;
     this.limits = deepFreeze({ ...limits });
     this.store = store;
     this.index = index;
@@ -107,6 +110,7 @@ export class DataNode {
 
     const node = new DataNode(
       store.getOrCreateNodeId(options.node_id),
+      store.getOrCreateFeedId(),
       limits,
       store,
       index,

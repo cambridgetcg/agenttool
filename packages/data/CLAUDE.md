@@ -3,6 +3,8 @@
 Local-first `agent-data/v1` reference node. It owns collection, immutable record,
 blob, FTS, change-feed, collector, and loopback HTTP behavior. It does not own the
 hosted AgentTool API, SDK façade, federation, peer sync, or memory projection.
+Current source is the unpublished `0.2.0-dev.0` candidate; the immutable
+`data-v0.1.0` release does not contain replica-import or feed-id seams.
 
 ## Commands
 
@@ -38,6 +40,8 @@ AGENT_DATA_NODE_TOKEN="scoped-node-token" bun src/cli.ts
   caller-owned parent directory.
 - Default consistency is local only. Manifest must continue to report
   `peer_sync: false` until real peer synchronization exists.
+- `feed_id` is a persisted random identifier for one physical change-feed
+  incarnation. It survives reopen and must not be derived from reusable node_id.
 - Replica imports preserve the first remote immutable envelope/tombstone, ignore
   only its node-local `blob_ref`, and reject same-ID semantic conflicts. They do
   not authenticate peers or decrypt transport payloads.

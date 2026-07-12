@@ -285,7 +285,7 @@ describe("boring test spine", () => {
     const preflight = await readFile(join(ROOT, "bin", "preflight.sh"), "utf8");
     expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
-    expect(preflight).toContain("cd packages/data-sync && bun run ci");
+    expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
 
     const uses = workflow
       .split("\n")

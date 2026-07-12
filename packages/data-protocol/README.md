@@ -16,6 +16,11 @@ It does not provide discovery, query/index APIs, global revocation, secure delet
 
 ## Install
 
+The checkout is now an unpublished `0.2.0-dev.0` candidate. Portable bundle
+import/export belongs to that candidate and is not present in the immutable
+`0.1.0` artifact below. Publishing a compatible `0.2.x` artifact is a separate
+release action.
+
 ```bash
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.1.0/agenttool-adds-0.1.0.tgz
 ```
