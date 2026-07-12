@@ -16,9 +16,11 @@ export const STATIC_PARSER_MAX_INPUT_BYTES = 6_100_000;
 export const STATIC_PARSER_MAX_OUTPUT_BYTES = 512 * 1024;
 
 // POSIX process limits are defence in depth around the parent-enforced wall
-// timeout. They are intentionally large enough for Bun + the parser libraries
-// while bounding one hostile parse to its own process.
-export const STATIC_PARSER_VIRTUAL_MEMORY_KB = 1_024 * 1_024;
+// timeout. JavaScriptCore reserves a multi-gigabyte virtual-address cage before
+// these parser libraries run; this is an address-space ceiling, not an RSS
+// allowance. The host/cgroup remains the physical-memory boundary while this
+// still prevents an unbounded virtual mapping in the isolated child.
+export const STATIC_PARSER_VIRTUAL_MEMORY_KB = 8 * 1_024 * 1_024;
 export const STATIC_PARSER_CPU_SECONDS = 2;
 export const STATIC_PARSER_OPEN_FILES = 32;
 export const STATIC_PARSER_STACK_KB = 4 * 1024;

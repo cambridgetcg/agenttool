@@ -191,7 +191,7 @@ describe("static HTML parser process isolation", () => {
 
   test("pins the production child ceilings without claiming portable RLIMIT_AS", () => {
     expect(STATIC_PARSER_TIMEOUT_MS).toBe(2_000);
-    expect(STATIC_PARSER_VIRTUAL_MEMORY_KB).toBe(1_024 * 1_024);
+    expect(STATIC_PARSER_VIRTUAL_MEMORY_KB).toBe(8 * 1_024 * 1_024);
     // macOS cannot lower RLIMIT_AS through /bin/sh; the parent wall kill and
     // process boundary are still exercised above. Production applies it on
     // Linux, while this assertion remains portable across both environments.
