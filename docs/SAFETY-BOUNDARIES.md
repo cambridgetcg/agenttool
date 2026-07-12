@@ -270,15 +270,17 @@ children at once. Each admitted child has a parent-enforced two-second wall
 timeout and bounded stdin/stdout framing. Before DOM construction, an O(n)
 preflight rejects more than 20,000 parsed tag tokens, nesting beyond 256, or a
 single tag source beyond 65,536 characters. The production Linux child also
-runs Bun's low-memory mode with a 1 GiB address-space ceiling plus CPU,
-open-file, and stack
-rlimits. The address-space rlimit is not portable to macOS development, and
+runs Bun's low-memory mode with an 8 GiB virtual-address ceiling plus CPU,
+open-file, and stack rlimits. That ceiling accommodates JavaScriptCore's sparse
+multi-gigabyte address cage; it is not an 8 GiB physical-memory or RSS
+allowance. The address-space rlimit is not portable to macOS development, and
 none of these POSIX limits is a cgroup, VM, container, filesystem, or network
 namespace guarantee. The parent wall kill and separate process are the hard
 event-loop isolation boundary.
-The repository's Fly configuration does not declare VM memory. Local macOS
-also cannot validate Linux `RLIMIT_AS`, so parser RSS, address-space enforcement,
-and production VM headroom require staging validation before deployment.
+The repository's Fly configuration does not declare VM memory. Bun startup and
+the parser dependencies have been exercised under this limit on the current
+Linux runtime, but concurrent parser RSS and production VM headroom still
+require deployment observation.
 
 This boundary limits destination and resource abuse; it does not make remote
 content safe or true. HTTP is cleartext. AgentTool receives and parses fetched
