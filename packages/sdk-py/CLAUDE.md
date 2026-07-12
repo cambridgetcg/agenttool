@@ -25,7 +25,7 @@ src/agenttool/
   economy.py             — EconomyClient (wallets, escrow, transactions)
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
   memory.py              — MemoryClient (store, search, get, delete; tiered)
-  data.py                — DataClient (separate local node; manifest, collect, query, changes)
+  data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
   bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
@@ -103,5 +103,5 @@ AgentTool Platform · "Welcome, don't block."
 - `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.10.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
-- `tests/test_data.py` — local data-node wire + bearer-isolation contract
+- `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

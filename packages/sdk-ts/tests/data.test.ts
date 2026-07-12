@@ -1,7 +1,13 @@
 /** agent-data/v1 SDK façade tests — all HTTP mocked, no network. */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { AgentTool, AgentToolError, DataClient } from "../src/index.js";
+import {
+  AGENT_DATA_SYNC_PROTOCOL,
+  AgentTool,
+  AgentToolError,
+  DataClient,
+  DataSyncClient,
+} from "../src/index.js";
 
 interface CapturedCall {
   url: string;
@@ -215,6 +221,186 @@ describe("AgentTool.data wire contract", () => {
       expect([...call.headers.values()].join(" ")).not.toContain(
         "agenttool-project-secret",
       );
+    }
+  });
+});
+
+describe("AgentTool.data.sync wire and authority contract", () => {
+  test("pulls and reads status only through the configured local data node", async () => {
+    const calls: CapturedCall[] = [];
+    const status = {
+      protocol: AGENT_DATA_SYNC_PROTOCOL,
+      peer_id: "peer one",
+      collection_id: "research/notes",
+      cursor_present: true,
+      last_applied_at: "2026-07-12T12:00:00.000Z",
+      records_inserted: 3,
+      records_existing: 1,
+      tombstones_applied: 2,
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body === undefined
+        ? undefined
+        : JSON.parse(String(init.body));
+      calls.push({
+        url: String(input),
+        method: init?.method ?? "GET",
+        headers: new Headers(init?.headers),
+        ...(body !== undefined ? { body } : {}),
+      });
+      const payload = String(input).includes("/pull")
+        ? {
+            protocol: AGENT_DATA_SYNC_PROTOCOL,
+            peer_id: "peer one",
+            origin_node_id: "origin-node",
+            collection_id: "research/notes",
+            pages_applied: 2,
+            changes_applied: 6,
+            records_inserted: 3,
+            records_existing: 1,
+            tombstones_applied: 2,
+            has_more: false,
+            status: { ...status, cursor: "nested-must-not-escape" },
+            // A defensive compatibility check: even a drifted local node must
+            // not make its opaque raw checkpoint public through this façade.
+            cursor: "must-not-escape",
+          }
+        : { ...status, cursor: "must-not-escape" };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const at = new AgentTool({
+      apiKey: "agenttool-project-secret",
+      dataNode: { baseUrl: "http://local-data.test", token: "local-node-token" },
+    });
+
+    expect(at.data.sync).toBeInstanceOf(DataSyncClient);
+    const pulled = await at.data.sync.pull({
+      peer_id: "peer one",
+      collection_id: "research/notes",
+      limit: 25,
+      max_pages: 2,
+      max_plaintext_bytes: 1_048_576,
+      // Unknown runtime properties are intentionally not forwarded, even
+      // when an untyped caller bypasses the compile-time request shape.
+      cursor: "caller-cursor-must-not-be-sent",
+      peer_bearer: "peer-token-must-not-be-sent",
+    } as Parameters<DataSyncClient["pull"]>[0] & {
+      cursor: string;
+      peer_bearer: string;
+    });
+    const checkpoint = await at.data.sync.status({
+      peer_id: "peer one",
+      collection_id: "research/notes",
+    });
+
+    expect(calls.map((call) => [call.method, call.url])).toEqual([
+      ["POST", "http://local-data.test/v1/data/sync/pull"],
+      [
+        "GET",
+        "http://local-data.test/v1/data/sync/status?peer_id=peer+one&collection_id=research%2Fnotes",
+      ],
+    ]);
+    expect(calls[0]!.body).toEqual({
+      protocol: "agent-data-sync/v1",
+      peer_id: "peer one",
+      collection_id: "research/notes",
+      limit: 25,
+      max_pages: 2,
+      max_plaintext_bytes: 1_048_576,
+    });
+    for (const call of calls) {
+      expect(call.headers.get("authorization")).toBe("Bearer local-node-token");
+      expect([...call.headers.values()].join(" ")).not.toContain(
+        "agenttool-project-secret",
+      );
+      expect(call.url).not.toContain("peer-token");
+    }
+    expect(calls[0]!.body).not.toHaveProperty("cursor");
+    expect(calls[0]!.body).not.toHaveProperty("token");
+    expect(calls[0]!.body).not.toHaveProperty("peer_bearer");
+    expect(pulled).not.toHaveProperty("cursor");
+    expect(checkpoint).not.toHaveProperty("cursor");
+    expect(pulled.status).not.toHaveProperty("cursor");
+    expect(pulled.status).toEqual(status);
+    expect(checkpoint).toEqual(status);
+  });
+
+  test("preserves only stable error metadata and never echoes response details", async () => {
+    const calls: CapturedCall[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        method: init?.method ?? "GET",
+        headers: new Headers(init?.headers),
+        body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
+      });
+      return new Response(JSON.stringify({
+        error: "sync_in_progress",
+        message: "A pull is already running at internal-cursor-value.",
+        details: {
+          retryable: true,
+          cursor: "internal-cursor-value",
+          peer_bearer: "peer-secret-value",
+        },
+      }), {
+        status: 409,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": "2",
+        },
+      });
+    }) as typeof fetch;
+    const data = new DataClient({
+      baseUrl: "http://local-data.test",
+      token: "local-node-token",
+    });
+
+    try {
+      await data.sync.pull({ peer_id: "peer-a", collection_id: "research" });
+      throw new Error("expected sync pull to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      expect((error as AgentToolError).code).toBe("sync_in_progress");
+      expect((error as AgentToolError).status).toBe(409);
+      expect((error as AgentToolError).message).toBe(
+        "Agent data sync request failed.",
+      );
+      expect((error as AgentToolError).hint).toBeUndefined();
+      expect((error as AgentToolError).details).toBeUndefined();
+      expect((error as AgentToolError).retryAfter).toBe("2");
+      expect(String(error)).not.toContain("local-node-token");
+      expect(String(error)).not.toContain("internal-cursor-value");
+      expect(String(error)).not.toContain("peer-secret-value");
+    }
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.body).toEqual({
+      protocol: "agent-data-sync/v1",
+      peer_id: "peer-a",
+      collection_id: "research",
+    });
+  });
+
+  test("maps local transport failures without echoing transport diagnostics", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("connect failed near peer-secret-value");
+    }) as typeof fetch;
+    const data = new DataClient({ baseUrl: "http://local-data.test" });
+
+    try {
+      await data.sync.status({ peer_id: "peer-a", collection_id: "research" });
+      throw new Error("expected sync status to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      expect((error as AgentToolError).code).toBe("data_node_unreachable");
+      expect((error as AgentToolError).message).toBe(
+        "Agent data sync request failed.",
+      );
+      expect((error as AgentToolError).hint).toBeUndefined();
+      expect(String(error)).not.toContain("peer-secret-value");
     }
   });
 });

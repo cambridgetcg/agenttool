@@ -281,12 +281,28 @@ const result = await at.data.query({
   text: "local-first data",
   consistency: "local",
 });
+
+// When this local node advertises agent-data-sync/v1, pull from a peer that
+// its operator has already configured. The SDK itself never contacts the peer.
+const pulled = await at.data.sync.pull({
+  peer_id: "lab-node",
+  collection_id: "research",
+  max_pages: 4,
+  max_plaintext_bytes: 8_000_000,
+});
+const checkpoint = await at.data.sync.status({
+  peer_id: "lab-node",
+  collection_id: "research",
+});
+console.log(pulled.has_more, checkpoint.cursor_present);
 ```
 
-The SDK never substitutes `AT_API_KEY` for the data-node token. Slice 1 reads
-local indexes and exposes a resumable change feed; it does not claim peer sync.
-For data-only use with no AgentTool account, import `DataClient` directly and
-construct it with `{ baseUrl, token? }`; it does not require `AT_API_KEY`.
+The SDK never substitutes `AT_API_KEY` for the data-node token. Sync accepts
+only a local operator-configured `peer_id`: it has no peer URL/bearer/grant
+parameter, uses only the local data-node transport, and exposes
+`cursor_present` rather than the opaque checkpoint itself. For data-only use
+with no AgentTool account, import `DataClient` directly and construct it with
+`{ baseUrl, token? }`; it does not require `AT_API_KEY`.
 
 ## Integration example — Vercel AI SDK
 

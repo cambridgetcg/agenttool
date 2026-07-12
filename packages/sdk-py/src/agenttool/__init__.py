@@ -90,7 +90,18 @@ from .seed import (
 from .strands import StrandsClient, ThoughtsClient
 from .inbox import InboxClient
 from .collect import CollectClient
-from .data import DataClient, AGENT_DATA_PROTOCOL, AGENT_DATA_DISCOVERY_PATH
+from .data import (
+    AGENT_DATA_DISCOVERY_PATH,
+    AGENT_DATA_PROTOCOL,
+    AGENT_DATA_SYNC_PROTOCOL,
+    DataClient,
+    DataSyncClient,
+    DataSyncPullRequest,
+    DataSyncPullResult,
+    DataSyncStatus,
+    DataSyncStatusRequest,
+    DataSyncStatusResult,
+)
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
@@ -134,7 +145,14 @@ __all__ = [
     "InboxClient",
     "CollectClient",
     "DataClient",
+    "DataSyncClient",
+    "DataSyncPullRequest",
+    "DataSyncPullResult",
+    "DataSyncStatus",
+    "DataSyncStatusRequest",
+    "DataSyncStatusResult",
     "AGENT_DATA_PROTOCOL",
+    "AGENT_DATA_SYNC_PROTOCOL",
     "AGENT_DATA_DISCOVERY_PATH",
     "AtRestClient",
     "canonical_at_rest_bytes",

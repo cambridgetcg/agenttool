@@ -57,6 +57,22 @@ const MODULES = [
   "window",
 ] as const;
 
+interface ParityTarget {
+  /** Source basename shared by the TS and Python SDKs. */
+  module: string;
+  /** Stable label rendered in parity reports. */
+  reportName: string;
+  /** Optional nested client class to inspect instead of the first Client. */
+  className?: string;
+}
+
+const TARGETS: ParityTarget[] = [
+  ...MODULES.map((module) => ({ module, reportName: module })),
+  // DataSyncClient shares data.ts/data.py with DataClient. Keep it explicit:
+  // comparing only the first Client would silently miss pull/status drift.
+  { module: "data", reportName: "data.sync", className: "DataSyncClient" },
+];
+
 /** Names that are part of the public API but are not class methods.
  *  We don't need to enforce them — usually they are exported helpers. */
 const SKIP_NAMES = new Set([
@@ -96,11 +112,18 @@ function normalize(name: string): string {
 
 /** Slice the source between `class XxxClient:` and the next top-level
  *  `class ` (column-0). If no Client class is found, return the whole file. */
-function scopeToClient(src: string, language: "py" | "ts"): string {
-  const re =
+function scopeToClient(
+  src: string,
+  language: "py" | "ts",
+  className?: string,
+): string {
+  const classPattern = className ?? "[A-Z][A-Za-z0-9]*Client";
+  const re = new RegExp(
     language === "py"
-      ? /^class +([A-Z][A-Za-z0-9]*Client)\b/m
-      : /^export class +([A-Z][A-Za-z0-9]*Client)\b/m;
+      ? `^class +(${classPattern})\\b`
+      : `^export class +(${classPattern})\\b`,
+    "m",
+  );
   const startMatch = re.exec(src);
   if (!startMatch) return src;
   const start = startMatch.index;
@@ -112,15 +135,15 @@ function scopeToClient(src: string, language: "py" | "ts"): string {
   return nextMatch ? src.slice(start, start + startMatch[0].length + nextMatch.index) : src.slice(start);
 }
 
-async function pyMethodsOf(module: string): Promise<string[]> {
-  const path = join(PY_SRC, `${module}.py`);
+async function pyMethodsOf(target: ParityTarget): Promise<string[]> {
+  const path = join(PY_SRC, `${target.module}.py`);
   let src: string;
   try {
     src = await readFile(path, "utf8");
   } catch {
     return []; // module file not present
   }
-  src = scopeToClient(src, "py");
+  src = scopeToClient(src, "py", target.className);
   const out = new Set<string>();
   // Match: indent + (async )? def name(
   // Indent must be 4 spaces (class method); skip module-level (no indent).
@@ -136,15 +159,15 @@ async function pyMethodsOf(module: string): Promise<string[]> {
   return [...out].sort();
 }
 
-async function tsMethodsOf(module: string): Promise<string[]> {
-  const path = join(TS_SRC, `${module}.ts`);
+async function tsMethodsOf(target: ParityTarget): Promise<string[]> {
+  const path = join(TS_SRC, `${target.module}.ts`);
   let src: string;
   try {
     src = await readFile(path, "utf8");
   } catch {
     return [];
   }
-  src = scopeToClient(src, "ts");
+  src = scopeToClient(src, "ts", target.className);
   const out = new Set<string>();
 
   // First pass: `readonly fieldName: SomeClient;` — sub-client properties.
@@ -196,10 +219,10 @@ async function tsMethodsOf(module: string): Promise<string[]> {
   return [...out].sort();
 }
 
-async function checkModule(module: string): Promise<ModuleParity> {
+async function checkModule(target: ParityTarget): Promise<ModuleParity> {
   const [pyMethods, tsMethods] = await Promise.all([
-    pyMethodsOf(module),
-    tsMethodsOf(module),
+    pyMethodsOf(target),
+    tsMethodsOf(target),
   ]);
 
   const tsNormalized = new Set(tsMethods.map(normalize));
@@ -219,7 +242,7 @@ async function checkModule(module: string): Promise<ModuleParity> {
     return true;
   });
 
-  return { module, pyMethods, tsMethods, pyOnly, tsOnly };
+  return { module: target.reportName, pyMethods, tsMethods, pyOnly, tsOnly };
 }
 
 function formatReport(results: ModuleParity[]): string {
@@ -246,7 +269,7 @@ function formatReport(results: ModuleParity[]): string {
 }
 
 async function main() {
-  const results = await Promise.all(MODULES.map(checkModule));
+  const results = await Promise.all(TARGETS.map(checkModule));
   const wantsJson = process.argv.includes("--json");
 
   if (wantsJson) {

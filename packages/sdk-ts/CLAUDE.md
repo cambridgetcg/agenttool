@@ -26,7 +26,7 @@ src/
   economy.ts           — EconomyClient (wallets, escrow, transactions)
   identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
-  data.ts              — DataClient (separate local node; manifest, collect, query, changes)
+  data.ts              — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.ts          — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); throws with 410 migration payload pointing at bootstrapAgent
   bootstrap-agent.ts   — Top-level bootstrapAgent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
@@ -109,5 +109,5 @@ AgentTool Platform · "Welcome, don't block."
 - `package.json` — Package metadata (v0.10.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
-- `tests/data.test.ts` — local data-node wire + bearer-isolation contract
+- `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

@@ -196,7 +196,9 @@ export type {
 } from "./collect.js";
 export {
   DataClient,
+  DataSyncClient,
   AGENT_DATA_PROTOCOL,
+  AGENT_DATA_SYNC_PROTOCOL,
   AGENT_DATA_DISCOVERY_PATH,
 } from "./data.js";
 export type {
@@ -217,6 +219,11 @@ export type {
   DataChangesResult,
   DataTombstoneOptions,
   DataTombstoneResult,
+  DataSyncPullRequest,
+  DataSyncPullResult,
+  DataSyncStatus,
+  DataSyncStatusRequest,
+  DataSyncStatusResult,
 } from "./data.js";
 export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
 export type {

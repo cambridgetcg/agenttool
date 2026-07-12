@@ -268,11 +268,27 @@ result = at.data.query(
     text="local-first data",
     consistency="local",
 )
+
+# When this local node advertises agent-data-sync/v1, pull from a peer that
+# its operator has already configured. The SDK itself never contacts the peer.
+pulled = at.data.sync.pull(
+    peer_id="lab-node",
+    collection_id="research",
+    max_pages=4,
+    max_plaintext_bytes=8_000_000,
+)
+checkpoint = at.data.sync.status(
+    peer_id="lab-node",
+    collection_id="research",
+)
+print(pulled["has_more"], checkpoint["cursor_present"])
 ```
 
 The data client owns its own HTTP session and never inherits the AgentTool
-project bearer. Slice 1 is local-only and does not claim peer replication.
-For data-only use with no AgentTool account, instantiate the exported
+project bearer. Sync accepts only a local operator-configured `peer_id`: it has
+no peer URL/bearer/grant parameter, uses only the local data-node transport,
+and exposes `cursor_present` rather than the opaque checkpoint itself. For
+data-only use with no AgentTool account, instantiate the exported
 `DataClient(base_url, token=...)` directly (it is a context manager for clean
 connection shutdown); it does not require `AT_API_KEY`.
 

@@ -11,6 +11,7 @@
 import { AgentToolError } from "./errors.js";
 
 export const AGENT_DATA_PROTOCOL = "agent-data/v1" as const;
+export const AGENT_DATA_SYNC_PROTOCOL = "agent-data-sync/v1" as const;
 export const AGENT_DATA_DISCOVERY_PATH = "/.well-known/agent-data" as const;
 
 /** Connection settings for an independently configured data node. */
@@ -141,6 +142,56 @@ export interface DataTombstoneResult {
   [key: string]: unknown;
 }
 
+/** One bounded pull from a peer already configured on the local data node. */
+export interface DataSyncPullRequest {
+  peer_id: string;
+  collection_id: string;
+  limit?: number;
+  max_pages?: number;
+  max_plaintext_bytes?: number;
+}
+
+/** Select one locally configured peer/collection checkpoint. */
+export interface DataSyncStatusRequest {
+  peer_id: string;
+  collection_id: string;
+}
+
+/** Sanitized local checkpoint metadata. Raw peer cursors are never exposed. */
+export interface DataSyncStatus {
+  protocol: typeof AGENT_DATA_SYNC_PROTOCOL;
+  peer_id: string;
+  collection_id: string;
+  cursor_present: boolean;
+  last_applied_at?: string;
+  records_inserted: number;
+  records_existing: number;
+  tombstones_applied: number;
+}
+
+export type DataSyncStatusResult = DataSyncStatus;
+
+/** Exact public result of a bounded agent-data-sync/v1 pull. */
+export interface DataSyncPullResult {
+  protocol: typeof AGENT_DATA_SYNC_PROTOCOL;
+  peer_id: string;
+  origin_node_id: string;
+  collection_id: string;
+  pages_applied: number;
+  changes_applied: number;
+  records_inserted: number;
+  records_existing: number;
+  tombstones_applied: number;
+  has_more: boolean;
+  status: DataSyncStatus;
+}
+
+type DataNodeRequest = (
+  method: string,
+  path: string,
+  body?: unknown,
+) => Promise<unknown>;
+
 /**
  * Client for an agent-data/v1 node.
  *
@@ -148,6 +199,8 @@ export interface DataTombstoneResult {
  * would make it too easy to leak the project bearer across this boundary.
  */
 export class DataClient {
+  /** Explicit peer synchronization through this local node's authority. */
+  readonly sync: DataSyncClient;
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number;
@@ -168,6 +221,11 @@ export class DataClient {
       Accept: "application/json",
       ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
     };
+    // The sync sub-client deliberately reuses this local-node request path.
+    // It has no peer URL, peer bearer, or independent transport of its own.
+    this.sync = new DataSyncClient((method, path, body) =>
+      this.request(method, path, body),
+    );
   }
 
   /** Read the node's agent-data/v1 capability manifest. */
@@ -267,4 +325,72 @@ export class DataClient {
     if (response.status === 204) return {};
     return response.json();
   }
+}
+
+/**
+ * Narrow agent-data-sync/v1 façade.
+ *
+ * `peer_id` names a peer configured by the local node operator. This client
+ * never accepts a peer bearer and never contacts that peer directly.
+ */
+export class DataSyncClient {
+  /** @internal */
+  constructor(private readonly requestLocalNode: DataNodeRequest) {}
+
+  /** Pull and apply a bounded number of remote changes into the local node. */
+  async pull(input: DataSyncPullRequest): Promise<DataSyncPullResult> {
+    const result = await this.request("POST", "/v1/data/sync/pull", {
+      protocol: AGENT_DATA_SYNC_PROTOCOL,
+      peer_id: input.peer_id,
+      collection_id: input.collection_id,
+      ...(input.limit !== undefined ? { limit: input.limit } : {}),
+      ...(input.max_pages !== undefined ? { max_pages: input.max_pages } : {}),
+      ...(input.max_plaintext_bytes !== undefined
+        ? { max_plaintext_bytes: input.max_plaintext_bytes }
+        : {}),
+    });
+    return withoutRawCursor(result) as unknown as DataSyncPullResult;
+  }
+
+  /** Read sanitized local checkpoint state without revealing the raw cursor. */
+  async status(input: DataSyncStatusRequest): Promise<DataSyncStatusResult> {
+    const params = new URLSearchParams({
+      peer_id: input.peer_id,
+      collection_id: input.collection_id,
+    });
+    const result = await this.request(
+      "GET",
+      `/v1/data/sync/status?${params.toString()}`,
+    );
+    return withoutRawCursor(result) as unknown as DataSyncStatusResult;
+  }
+
+  private async request(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<unknown> {
+    try {
+      return await this.requestLocalNode(method, path, body);
+    } catch (error) {
+      if (!(error instanceof AgentToolError)) throw error;
+      // A peer-facing failure may carry an internal checkpoint or capability
+      // in prose/details. Keep only metadata that is safe and useful to an
+      // SDK caller; the local node owns richer operator diagnostics.
+      throw new AgentToolError("Agent data sync request failed.", {
+        code: error.code,
+        status: error.status,
+        retryAfter: error.retryAfter,
+      });
+    }
+  }
+}
+
+function withoutRawCursor(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { cursor: _cursor, ...safe } = value as Record<string, unknown>;
+  if (safe.status && typeof safe.status === "object" && !Array.isArray(safe.status)) {
+    safe.status = withoutRawCursor(safe.status);
+  }
+  return safe;
 }
