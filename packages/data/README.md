@@ -16,7 +16,7 @@ This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
@@ -86,13 +86,117 @@ The included CLI creates a `default` collection and listens on
 `127.0.0.1:7742`:
 
 ```bash
-AGENT_DATA_NODE_TOKEN="a-dedicated-random-token" bun src/cli.ts
+AGENT_DATA_NODE_TOKEN="a-dedicated-random-token" bun src/cli.ts serve
 ```
 
 Use a scoped secret provider or child process environment in real deployments.
-The CLI reads `AGENT_DATA_NODE_TOKEN`; it never reads or falls back to an
-AgentTool API bearer. Without a node token, only discovery and the manifest are
-available over HTTP. Direct in-process APIs continue to work.
+The `serve` command reads `AGENT_DATA_NODE_TOKEN`; it never reads or falls back
+to an AgentTool API bearer. Without a node token, only discovery and the
+manifest are available over HTTP. Direct in-process APIs continue to work.
+
+## Black-box conformance
+
+`agenttool-data doctor` probes a running node over its real HTTP socket. It
+implements the executable `agent-data/v1-slice1-http` profile; it does not claim
+universal conformance for in-process, Unix-socket, mTLS, or future peer
+transports.
+
+Start with the public profile. It accepts no operator credential and requests no
+authorised fixture writes. It does send a generated invalid bearer plus
+malformed, non-actionable collect/tombstone bodies to prove that authentication
+runs before route work:
+
+```bash
+agenttool-data doctor http://127.0.0.1:7742 \
+  --profile public \
+  --format json
+```
+
+The public report includes the node's public `node_id`. Authenticated read-only
+checks require a dedicated data-node bearer from non-interactive stdin or an
+explicitly named environment variable:
+
+```bash
+secret-provider get agent-data-node-token | \
+  agenttool-data doctor https://data.example \
+    --profile read \
+    --token-stdin
+
+agenttool-data doctor http://127.0.0.1:7742 \
+  --profile read \
+  --token-env AGENT_DATA_NODE_TOKEN
+```
+
+`read` necessarily receives the authenticated collection manifests. It uses an
+empty collection filter for query and does not request a successful live change
+page, because change events embed real envelopes; valid cursor pagination is
+exercised only inside the dedicated `slice1` scratch fixture. The read profile
+still checks corrupt-cursor and query/change overflow errors without returning
+corpus records. Other advertised body/record/item limits and collection policy
+flags are shape-checked but are not all behaviorally exercised.
+
+There is no implicit fallback to `AT_API_KEY`, `AGENTTOOL_API_KEY`, or any other
+AgentTool project bearer. Token-value flags such as `--token` and `--bearer` are
+rejected so a credential is not placed in argv. An environment variable is
+still inherited process state; use a scoped secret-provider pipe when that
+boundary matters. The default fetch requests `redirect: "manual"`, rejects 3xx
+responses, and rejects an observed followed/changed response URL. A caller that
+injects a custom `fetch` implementation is responsible for honouring those
+request options; detection after a custom transport follows a redirect cannot
+undo credential forwarding. Non-loopback targets must use HTTPS.
+
+The complete fixture lifecycle is intentionally harder to invoke. Core v1 has no
+collection provisioning or physical delete endpoint, so an operator must first
+provision a collection used only for conformance and then bind the mutation to
+the expected public node ID:
+
+```bash
+secret-provider get agent-data-node-token | \
+  agenttool-data doctor https://data.example \
+    --profile slice1 \
+    --token-stdin \
+    --scratch-collection conformance \
+    --expected-node-id node_expected_from_public_run \
+    --allow-mutations \
+    --format json
+```
+
+This profile uses only the advertised caller-bytes `text` collector—never the
+`file` or `http` collectors. It inserts unique control/doom records, checks
+deduplication, exact bytes and digest, query, cursor pagination, filter binding,
+tombstones, `410`, and tombstone idempotency. It only tombstones an ID after the
+unique source/digest marker is independently confirmed by both an exact byte
+read and the post-baseline created event. Authenticated reports publish fixture
+counts and the tool-generated run marker, not server-controlled record IDs that
+could act as a credential covert channel. A tombstone is logical state:
+immutable envelopes, blobs, created/tombstone events, backups, and logs can
+remain. The report calls this persistent residue and never claims physical
+cleanup or secure erasure.
+
+Exit codes are `0` for a passing selected profile, `1` for an observed required
+mismatch, `2` for invalid local invocation/configuration, and `3` when required
+results are inconclusive (for example, timeout or an unavailable fixture
+prerequisite). JSON mode writes exactly one report to stdout; tool diagnostics
+go to stderr. The report schema is exported as
+`@agenttool/data/conformance-report.schema.json`, and the programmatic runner is
+available from `@agenttool/data/conformance`:
+
+```ts
+import { runDataNodeConformance } from "@agenttool/data/conformance";
+
+const report = await runDataNodeConformance({
+  target: "http://127.0.0.1:7742",
+  profile: "read",
+  token: process.env.AGENT_DATA_NODE_TOKEN,
+});
+```
+
+A PASS means only that this runner observed the selected executable profile at
+that target and time. It is not a signed certificate or endorsement and does
+not prove publisher identity, source truth/safety, vulnerability absence, TLS
+host ownership beyond the observed connection, durability, secure erasure,
+collector sandboxing, policy enforcement that was not advertised, peer sync,
+decentralisation, or behaviour outside the probes.
 
 ## Storage and records
 

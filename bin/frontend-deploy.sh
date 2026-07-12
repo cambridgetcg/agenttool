@@ -81,7 +81,7 @@ trap 'exit 143' TERM
 
 echo "→ Staging committed frontend bytes…"
 git archive --format=tar "$COMMIT_HASH" -- \
-  apps/_shared apps/docs apps/dashboard apps/web docs infra/pages |
+  apps/_shared apps/docs apps/dashboard apps/web docs infra/pages packages/data/schema |
   tar -xf - -C "$STAGE_ROOT"
 
 # Repository-control files are tracked inputs, not public site assets.
