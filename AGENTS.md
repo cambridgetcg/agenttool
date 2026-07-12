@@ -108,7 +108,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-seed.ts` | SOMA seed protocol — mnemonic-rooted identity provisioning. `docs/IDENTITY-SEED.md`. |
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
-| `build-love-packages.ts` | Builds the versioned `@agenttool/data`, `@agenttool/sdk`, and `@agenttool/adds` tarballs plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/sdk`, and `@agenttool/adds` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |

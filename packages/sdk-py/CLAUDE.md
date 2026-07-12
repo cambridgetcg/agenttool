@@ -4,7 +4,7 @@
 Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
 
 ## Current State
-Active — v0.10.0 candidate source; publication is a separate release action. Phases 0–6 plus the separate `at.data` node client are shipped.
+Active — v0.10.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped.
 
 ## Tech Stack
 - Python >= 3.9

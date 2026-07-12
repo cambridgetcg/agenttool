@@ -13,17 +13,21 @@ that an HTTP request is a peer-to-peer transport. CAR is deliberately not a v1
 wire dependency; the inline JSON bundle profile is bounded and can later gain a
 bulk CAR profile without changing record identity.
 
-## Local development
+## Install
 
 The package requires Bun because its optional durable checkpoint store uses
-`bun:sqlite`. This checkout is a private `0.1.0-dev.0` candidate. Its
-`private: true` manifest field blocks normal Bun/npm registry publication, and
-the package is absent from the LOVE release inventory; packing, git
-distribution, and deployment remain separate deliberate operations. Compatible `@agenttool/data` and
-`@agenttool/adds` 0.2 releases do not exist yet. Both runtime peers are required
-at `>=0.2.0-dev.0 <0.3.0`. A root-only development override links them to the
-adjacent candidate packages here. On a clean checkout, build them once before
-the bridge gate:
+`bun:sqlite`. Install the two required runtime peers and the bridge from their
+exact LOVE Package artifacts:
+
+```bash
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
+```
+
+The bridge requires both peers at `^0.2.0`. The repository uses root-only
+development overrides to link the adjacent packages. On a clean source
+checkout, build the peers once before the bridge gate:
 
 ```bash
 (cd ../data && bun install --frozen-lockfile && bun run build)
@@ -33,7 +37,7 @@ bun run ci
 bun run build
 ```
 
-No package is published or uploaded by those commands.
+Those development commands do not publish or upload a package.
 
 ## Two nodes
 

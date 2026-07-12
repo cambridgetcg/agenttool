@@ -1083,10 +1083,10 @@ broadcast, quorum, leader election, head selection, concurrent-version merge,
 per-collection grant policy, or multi-master consistency. It does not use CAR
 v1/v2; `adds-bundle/v1` blocks are encoded inline in bounded JSON. A future
 bulk transport may negotiate CAR without changing core record identity, but no
-CAR support is advertised here. The package is a private `0.1.0-dev.0` local
-candidate in this change and requires the unpublished ADDS/data
-`0.2.0-dev.0` source line. It is not added to the `love-package/v1` catalog,
-published, or deployed by the protocol implementation itself.
+CAR support is advertised here. `@agenttool/data-sync@0.1.0` composes the
+`@agenttool/adds@0.2.0` and `@agenttool/data@0.2.0` release lines. The bridge is
+distributed as source/library code; installing it does not run a node, expose
+a port, configure a peer, or deploy a hosted sync service.
 
 ## 14. Security and privacy posture
 

@@ -113,7 +113,7 @@
 
       <div class="callout success">
         <span class="icon">⊙</span>
-        <p><strong>No signup and no npm account.</strong> The catalog, manifests, and artifacts are public <code>GET</code> and <code>HEAD</code> resources. Pin an exact version in automation. This first AgentTool catalog exposes no mutable <code>latest</code> artifact URL.</p>
+        <p><strong>No signup and no npm account.</strong> The catalog, manifests, and artifacts are public <code>GET</code> and <code>HEAD</code> resources. Pin an exact version in automation. The AgentTool catalog exposes no mutable <code>latest</code> artifact URL.</p>
       </div>
 
       <h2 id="install">Install an exact version</h2>
@@ -122,35 +122,43 @@
       <table class="params-table">
         <thead><tr><th>Package</th><th>Release</th><th>Manifest</th></tr></thead>
         <tbody>
-          <tr><td><code>@agenttool/data</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/data/0.1.0/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/sdk</code></td><td><code>0.9.0</code></td><td><a href="/packages/v1/@agenttool/sdk/0.9.0/manifest.json">inspect JSON</a></td></tr>
-          <tr><td><code>@agenttool/adds</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/adds/0.1.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/data</code></td><td><code>0.2.0</code></td><td><a href="/packages/v1/@agenttool/data/0.2.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/data-sync</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/data-sync/0.1.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/sdk</code></td><td><code>0.10.0</code></td><td><a href="/packages/v1/@agenttool/sdk/0.10.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/adds</code></td><td><code>0.2.0</code></td><td><a href="/packages/v1/@agenttool/adds/0.2.0/manifest.json">inspect JSON</a></td></tr>
         </tbody>
       </table>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/data · 0.1.0 · local agent-data/v1 node</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
+        <div class="code-label"><span>@agenttool/data · 0.2.0 · local agent-data/v1 node</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
 
 <span class="kw">import</span> { DataNode } <span class="kw">from</span> <span class="str">"@agenttool/data"</span>;</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/sdk · 0.9.0 · TypeScript SDK</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+        <div class="code-label"><span>@agenttool/sdk · 0.10.0 · TypeScript SDK</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
 
 <span class="kw">import</span> { AgentTool } <span class="kw">from</span> <span class="str">"@agenttool/sdk"</span>;</pre>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>@agenttool/adds · 0.1.0 · experimental adds/v0.1 package</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.1.0/agenttool-adds-0.1.0.tgz
+        <div class="code-label"><span>@agenttool/adds · 0.2.0 · experimental adds/v0.1 package</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
 
 <span class="kw">import</span> { AgentData } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;</pre>
       </div>
 
-      <p class="muted">The same HTTPS tarballs can be consumed by other package managers that support URL dependencies. For example, <code>npm install https://…/agenttool-data-0.1.0.tgz</code> uses the npm client but does not use npm publication or require an npm account.</p>
-      <p class="muted">This first catalog contains the three JavaScript packages above. The Python <code>agenttool-sdk</code> distribution remains on PyPI and is not yet mirrored through this catalog.</p>
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/data-sync · 0.1.0 · bounded encrypted pull bridge</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
+
+<span class="kw">import</span> { DataSyncService } <span class="kw">from</span> <span class="str">"@agenttool/data-sync"</span>;</pre>
+      </div>
+
+      <p class="muted">The same HTTPS tarballs can be consumed by other package managers that support URL dependencies. For example, <code>npm install https://…/agenttool-data-0.2.0.tgz</code> uses the npm client but does not use npm publication or require an npm account.</p>
+      <p class="muted">This catalog contains the four JavaScript packages above. The Python <code>agenttool-sdk</code> distribution remains on PyPI and is not mirrored through this catalog.</p>
 
       <div class="callout">
         <span class="icon">!</span>
@@ -159,7 +167,7 @@
 
       <div class="callout">
         <span class="icon">◇</span>
-        <p><strong>Dependency boundary.</strong> <code>@agenttool/data</code> has no third-party runtime dependency. The current SDK and ADDS artifacts declare upstream dependencies; a fresh install may resolve those through your package manager's configured registry or cache. <code>love-package/v1</code> distributes the named artifact—it does not vendor its dependency graph or promise an offline install.</p>
+        <p><strong>Dependency boundary.</strong> <code>@agenttool/data</code> has no third-party runtime dependency. The SDK and ADDS artifacts declare upstream dependencies; <code>@agenttool/data-sync</code> requires the exact compatible ADDS/data release line. Install those two peer artifacts explicitly when using the bridge. A fresh install may otherwise resolve dependencies through your package manager's configured registry or cache. <code>love-package/v1</code> distributes the named artifact—it does not vendor its dependency graph or promise an offline install.</p>
       </div>
 
       <h2 id="discover">Discover it as an agent</h2>
@@ -174,7 +182,7 @@ curl -fsS https://docs.agenttool.dev/.well-known/love-packages
 curl -fsS https://docs.agenttool.dev/packages/v1/index.json
 
 <span class="cm"># One exact release</span>
-curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/manifest.json</pre>
+curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/manifest.json</pre>
       </div>
 
       <div class="code-block">
@@ -213,17 +221,17 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/manifest.
 
       <div class="code-block">
         <div class="code-label"><span>macOS / Unix shell · exact bytes</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>base=https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0
+<pre>base=https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0
 curl -fsS "$base/manifest.json"
 
 expected_size='&lt;artifact.size from manifest.json&gt;'
 expected_sha256='&lt;artifact.sha256 from manifest.json&gt;'
-curl -fsSLo agenttool-data-0.1.0.tgz "$base/agenttool-data-0.1.0.tgz"
-actual_size=$(wc -c &lt; agenttool-data-0.1.0.tgz | tr -d '[:space:]')
-actual_sha256=$(shasum -a 256 agenttool-data-0.1.0.tgz | awk '{print $1}')
+curl -fsSLo agenttool-data-0.2.0.tgz "$base/agenttool-data-0.2.0.tgz"
+actual_size=$(wc -c &lt; agenttool-data-0.2.0.tgz | tr -d '[:space:]')
+actual_sha256=$(shasum -a 256 agenttool-data-0.2.0.tgz | awk '{print $1}')
 test "$actual_size" = "$expected_size" &amp;&amp;
   test "$actual_sha256" = "$expected_sha256" &amp;&amp;
-  bun add ./agenttool-data-0.1.0.tgz</pre>
+  bun add ./agenttool-data-0.2.0.tgz</pre>
       </div>
 
       <div class="callout">
@@ -238,15 +246,18 @@ test "$actual_size" = "$expected_size" &amp;&amp;
         <div class="code-label"><span>love-package/v1 shape</span></div>
 <pre>/.well-known/love-packages
 /packages/v1/index.json
-/packages/v1/@agenttool/data/0.1.0/
+/packages/v1/@agenttool/data/0.2.0/
   ├── manifest.json
-  └── agenttool-data-0.1.0.tgz
-/packages/v1/@agenttool/sdk/0.9.0/
+  └── agenttool-data-0.2.0.tgz
+/packages/v1/@agenttool/data-sync/0.1.0/
   ├── manifest.json
-  └── agenttool-sdk-0.9.0.tgz
-/packages/v1/@agenttool/adds/0.1.0/
+  └── agenttool-data-sync-0.1.0.tgz
+/packages/v1/@agenttool/sdk/0.10.0/
   ├── manifest.json
-  └── agenttool-adds-0.1.0.tgz</pre>
+  └── agenttool-sdk-0.10.0.tgz
+/packages/v1/@agenttool/adds/0.2.0/
+  ├── manifest.json
+  └── agenttool-adds-0.2.0.tgz</pre>
       </div>
 
       <ul>
@@ -257,7 +268,7 @@ test "$actual_size" = "$expected_size" &amp;&amp;
         <li><strong>Keep npm optional.</strong> npm, GitHub Releases, an object store, IPFS, or another compatible source may mirror the same release. None is the identity of the package.</li>
       </ul>
 
-      <h2 id="boundaries">Three standards, three jobs</h2>
+      <h2 id="boundaries">Four standards, four jobs</h2>
       <table class="params-table">
         <thead><tr><th>Standard</th><th>What it moves or describes</th><th>What it does not imply</th></tr></thead>
         <tbody>
@@ -276,10 +287,15 @@ test "$actual_size" = "$expected_size" &amp;&amp;
             <td>Encrypted content-addressed Blocks plus signed Manifests and direct read Grants.</td>
             <td>Package distribution is not encrypted-object distribution, and ADDS has no peer discovery in this profile.</td>
           </tr>
+          <tr>
+            <td><strong><code>agent-data-sync/v1</code></strong></td>
+            <td>Bounded encrypted pull between explicit operator-configured peers, with private resumable checkpoints.</td>
+            <td>No discovery, push, consensus, hosted sync service, or multi-master consistency.</td>
+          </tr>
         </tbody>
       </table>
 
-      <p class="muted"><strong>In one line:</strong> <code>love-package/v1</code> gets software onto a machine; <code>agent-data/v1</code> lets an agent keep and query a corpus; <code>adds/v0.1</code> lets exact encrypted objects move independently.</p>
+      <p class="muted"><strong>In one line:</strong> <code>love-package/v1</code> gets software onto a machine; <code>agent-data/v1</code> lets an agent keep and query a corpus; <code>adds/v0.1</code> lets exact encrypted objects move independently; <code>agent-data-sync/v1</code> composes them into one explicit bounded pull path.</p>
 
       <h2 id="reference">References</h2>
       <ul>

@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/data",
-  "version": "0.2.0-dev.0",
+  "version": "0.2.0",
   "description": "Local-first reference node for the agent-data/v1 protocol",
   "type": "module",
   "main": "dist/index.js",

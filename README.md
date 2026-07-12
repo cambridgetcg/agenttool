@@ -180,7 +180,7 @@ export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 
 # TypeScript / Bun
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```

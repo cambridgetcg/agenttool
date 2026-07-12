@@ -14,11 +14,10 @@
 pip install agenttool-sdk
 ```
 
-## Preparing for 0.10.0
+## 0.10.0
 
-This checkout is the 0.10.0 release candidate; publishing to PyPI is a separate
-release action. `pip install agenttool-sdk` continues to install the latest
-version actually present in the configured index.
+This checkout is the 0.10.0 release source. `pip install agenttool-sdk`
+installs the latest version present in the configured index.
 
 This release corrects three tool contracts. `ScrapeResult.status_code` is gone;
 the result now exposes the API's `title`, `content`, `extracted`, `links`,

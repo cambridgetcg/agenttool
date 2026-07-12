@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/adds",
-  "version": "0.2.0-dev.0",
+  "version": "0.2.0",
   "description": "ADDS 0.1 — offline-first, agent-native encrypted distribution and storage",
   "type": "module",
   "main": "dist/index.js",

@@ -21,16 +21,13 @@ does not change the manifest's `peer_sync: false` capability.
 
 ## Install
 
-The checkout is now an unpublished `0.2.0-dev.0` candidate. Replica-import
-seams and persisted feed identities belong to that candidate and are not in the
-immutable `0.1.0` artifact below. Publishing a compatible `0.2.x` artifact is a
-separate release action.
+Replica-import seams and persisted feed identities ship in `0.2.0`.
 
 This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.1.0/agenttool-data-0.1.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.2.0/agenttool-data-0.2.0.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest

@@ -6,16 +6,17 @@
 >
 > **Implements:** the SDK plane — a thin code-shaped mirror of every layer in [ROADMAP.md](ROADMAP.md). Parity across TS/Py is enforced in CI (`bun run check-parity`).
 
-## Current candidate state — 2026-07-11
+## Current release — 2026-07-12
 
-The Python and TypeScript source manifests are aligned at **0.10.0 as an
-unpublished candidate**. The published LOVE catalog remains **0.9.0** until an
-explicit package-release operation happens. The candidate corrects the static
+The Python and TypeScript source manifests are aligned at **0.10.0**. The
+TypeScript artifact is distributed through the LOVE catalog; the Python wheel
+is distributed through PyPI. This release corrects the static
 tool paths and wire models: both SDKs call `POST /v1/scrape` and
 `POST /v1/document`, enforce canonical bounded local document input, preserve
 machine-readable payment/error headers, and can submit one caller-produced raw
-payment retry header without taking custody of signing keys. Release status is
-documented in each package README and must not be inferred from source versions.
+payment retry header without taking custody of signing keys. It also adds the
+local-node-only `at.data.sync.pull/status` surface without accepting peer URLs,
+bearers, grants, private keys, or cursors from SDK callers.
 
 The detailed inventory below is retained as the dated baseline that motivated
 the later phases. It is history, not a claim about the current API or SDK.

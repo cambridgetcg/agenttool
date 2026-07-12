@@ -35,7 +35,9 @@ jobs:
         run: bash bin/preflight.sh api
 
   packages:
-    name: Data, ADDS, sync, and SDK
+    # Keep this display name aligned with the protected-branch status context.
+    # The job still installs and gates data-sync below.
+    name: Data, ADDS, and SDK
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

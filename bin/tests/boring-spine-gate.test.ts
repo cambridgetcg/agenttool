@@ -271,7 +271,7 @@ describe("boring test spine", () => {
   test("pins a two-job secret-free workflow and frozen installs", async () => {
     const workflow = await readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
     expect(workflow).toContain("name: API and protocol");
-    expect(workflow).toContain("name: Data, ADDS, sync, and SDK");
+    expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(2);
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(2);
     expect(workflow).toContain("bun install --frozen-lockfile");

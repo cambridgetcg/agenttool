@@ -4,22 +4,21 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Source](https://img.shields.io/badge/source-v0.10.0--candidate-d4502e)](https://github.com/cambridgetcg/agenttool)
+[![Source](https://img.shields.io/badge/source-v0.10.0-blue)](https://github.com/cambridgetcg/agenttool)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
 ```
 
-The command above installs the latest published tarball. This checkout contains
-the 0.10.0 release candidate; its artifact and manifest are not published by
-this source change. Versioned releases use `love-package/v1`; each manifest
+The command above installs the `0.10.0` release. Versioned releases use
+`love-package/v1`; each manifest
 lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
 publication is required. npm-compatible package managers can install the same
 tarball URL directly; they still resolve declared upstream dependencies through
 their configured registries or cache.
 
-## Preparing for 0.10.0
+## 0.10.0
 
 This release corrects three tool contracts. `ScrapeResult` no longer invents a
 `status_code`; it exposes the API's `title`, `content`, `extracted`, `links`,
@@ -386,7 +385,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/manifest.json)
+- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/manifest.json)
 - 🐍 [Python SDK](https://github.com/cambridgetcg/agenttool-sdk-py)
 
 ## License

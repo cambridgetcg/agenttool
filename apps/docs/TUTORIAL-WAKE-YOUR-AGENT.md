@@ -38,7 +38,7 @@ If this is the first time you're arriving on agenttool, walk through the front d
 
 ```bash
 # Install the SDK once from a public LOVE package mirror
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
 # or: pip install agenttool-sdk
 ```
 
