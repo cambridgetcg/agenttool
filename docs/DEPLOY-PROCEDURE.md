@@ -360,6 +360,35 @@ bin/deploy.sh --mirror-codeberg        # standalone FF-only github/main -> Codeb
 
 `bin/deploy.sh` is the single entry point. Phase-skip flags exist so operators can run subsets when only one tier needs deploy — but the default chain runs every phase in order.
 
+### Device-local deploy mutex
+
+Every actual deploy chain acquires
+`$HOME/.local/state/agenttool/deploy.lock` before Phase 0 and keeps it through
+staging cleanup and the final receipt attempt. The lock is shared by every
+AgentTool worktree run by this user on this Mac. `--survey`, `--dry-run`, and
+the standalone `--mirror-codeberg` command do not take it: they do not mutate
+the production stack, and remain available while a rollout is in progress.
+
+The mutex is a hard link to a private, mode-0600 owner record containing only
+its schema, PID, UTC start time, worktree, and exact private owner-record path.
+Hard-link creation is atomic, so the first holder wins. A contender exits
+before Phase 0, migration, or preflight and prints the exact lock path plus
+the recorded owner. Cleanup compares the public lock and private record by
+inode before unlinking, so an exiting process does not intentionally remove a
+replacement lock it does not own.
+
+Locks are never stolen or expired automatically. A dead-looking PID or old
+timestamp is not enough proof because PIDs can be reused and a rollout may be
+slow. If a host crash or `SIGKILL` leaves a stale lock, verify that the recorded
+owner is gone and that the two recorded paths are still hard links to the same
+inode before removing those exact paths. Removing a live lock can reintroduce
+overlapping production rollouts.
+
+This mutex coordinates one local user account on one device only. It does
+**not** serialize CI, another laptop, another operator host, direct Fly or
+Cloudflare commands, or provider-side actions. Multi-host production needs a
+shared remote coordinator or lease in addition to this local guard.
+
 ### Local receipt
 
 Every successful non-dry-run chain writes one atomic, mode-0600 JSON receipt.

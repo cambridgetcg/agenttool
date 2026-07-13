@@ -151,6 +151,146 @@ if [ "$MIRROR_CODEBERG_ONLY" = 1 ]; then
   exit $?
 fi
 
+# ── Device-local deploy serialization ───────────────────────────────
+# A normal deploy holds one per-user, device-wide lock across worktrees.
+# `ln` publishes a complete owner record atomically: two contenders cannot
+# create the same hard link, and the holder keeps its private link so cleanup
+# can verify inode ownership before unlinking the public path. Survey, dry-run,
+# and the standalone Codeberg mirror do not mutate production and do not take
+# this lock.
+DEPLOY_LOCK_HELD=0
+DEPLOY_LOCK_OWNER_RECORD=""
+DEPLOY_LOCK_PATH=""
+
+deploy_lock_field() {
+  local field="$1"
+  local path="$2"
+  sed -n "s/^${field}=//p" "$path" 2>/dev/null | sed -n '1p'
+}
+
+describe_deploy_lock() {
+  local owner_pid owner_started owner_worktree owner_record process_state
+  echo "$(red '✗ Deploy blocked:') another local AgentTool deploy owns the device lock."
+  echo "  lock path: $DEPLOY_LOCK_PATH"
+  if [ ! -r "$DEPLOY_LOCK_PATH" ]; then
+    echo "  owner:     unavailable (the lock record is unreadable or incomplete)"
+  else
+    owner_pid="$(deploy_lock_field pid "$DEPLOY_LOCK_PATH")"
+    owner_started="$(deploy_lock_field started_at "$DEPLOY_LOCK_PATH")"
+    owner_worktree="$(deploy_lock_field worktree "$DEPLOY_LOCK_PATH")"
+    owner_record="$(deploy_lock_field owner_record "$DEPLOY_LOCK_PATH")"
+    echo "  owner pid:       ${owner_pid:-<unknown>}"
+    echo "  owner started:   ${owner_started:-<unknown>}"
+    echo "  owner worktree:  ${owner_worktree:-<unknown>}"
+    echo "  owner record:    ${owner_record:-<unknown>}"
+    process_state="not observable"
+    case "$owner_pid" in
+      ''|*[!0-9]*) process_state="unknown" ;;
+      *) kill -0 "$owner_pid" 2>/dev/null && process_state="observable" ;;
+    esac
+    echo "  owner process:   $process_state"
+  fi
+  echo "  stale policy:    never removed automatically; verify the owner is gone before removing the exact lock and owner-record paths"
+}
+
+release_deploy_lock() {
+  local failed=0
+  if [ -n "${DEPLOY_LOCK_OWNER_RECORD:-}" ] && [ -e "$DEPLOY_LOCK_OWNER_RECORD" ]; then
+    if [ -n "${DEPLOY_LOCK_PATH:-}" ] && [ -e "$DEPLOY_LOCK_PATH" ] && \
+      [ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]; then
+      rm -f -- "$DEPLOY_LOCK_PATH" || failed=1
+    elif [ "${DEPLOY_LOCK_HELD:-0}" = 1 ]; then
+      echo "$(red '✗') Refusing to release a deploy lock not owned by this process: $DEPLOY_LOCK_PATH" >&2
+      failed=1
+    fi
+    rm -f -- "$DEPLOY_LOCK_OWNER_RECORD" || failed=1
+  elif [ "${DEPLOY_LOCK_HELD:-0}" = 1 ]; then
+    echo "$(red '✗') Refusing to release a deploy lock without this process's owner record: $DEPLOY_LOCK_PATH" >&2
+    failed=1
+  fi
+  if [ "$failed" = 0 ]; then
+    DEPLOY_LOCK_HELD=0
+    DEPLOY_LOCK_OWNER_RECORD=""
+  fi
+  return "$failed"
+}
+
+acquire_deploy_lock() {
+  local lock_parent started_at owner_id lock_conflict
+  case "${HOME:-}" in
+    /*) ;;
+    *)
+      echo "$(red '✗') Deploy blocked: HOME must be an absolute path for the device-local deploy lock." >&2
+      return 1
+      ;;
+  esac
+  lock_parent="$HOME/.local/state/agenttool"
+  DEPLOY_LOCK_PATH="$lock_parent/deploy.lock"
+  (umask 077; mkdir -p "$lock_parent") || {
+    echo "$(red '✗') Deploy blocked: cannot create lock parent: $lock_parent" >&2
+    return 1
+  }
+  chmod 700 "$lock_parent" || {
+    echo "$(red '✗') Deploy blocked: cannot protect lock parent: $lock_parent" >&2
+    return 1
+  }
+  DEPLOY_LOCK_OWNER_RECORD="$(umask 077; mktemp "$lock_parent/.deploy-lock-owner.XXXXXX")" || {
+    echo "$(red '✗') Deploy blocked: cannot create a private lock owner record in: $lock_parent" >&2
+    return 1
+  }
+  owner_id="$(basename "$DEPLOY_LOCK_OWNER_RECORD")"
+  started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  (
+    umask 077
+    printf '%s\n' \
+      'schema=agenttool-local-deploy-lock/v1' \
+      "owner_id=$owner_id" \
+      "pid=$$" \
+      "started_at=$started_at" \
+      "worktree=$REPO_ROOT" \
+      "owner_record=$DEPLOY_LOCK_OWNER_RECORD" > "$DEPLOY_LOCK_OWNER_RECORD"
+  ) || {
+    echo "$(red '✗') Deploy blocked: cannot write lock owner record: $DEPLOY_LOCK_OWNER_RECORD" >&2
+    rm -f -- "$DEPLOY_LOCK_OWNER_RECORD"
+    DEPLOY_LOCK_OWNER_RECORD=""
+    return 1
+  }
+  if ! ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH" 2>/dev/null; then
+    lock_conflict=0
+    if [ -e "$DEPLOY_LOCK_PATH" ] || [ -L "$DEPLOY_LOCK_PATH" ]; then
+      lock_conflict=1
+      describe_deploy_lock
+    else
+      echo "$(red '✗') Deploy blocked: could not atomically create hard-link lock: $DEPLOY_LOCK_PATH" >&2
+    fi
+    rm -f -- "$DEPLOY_LOCK_OWNER_RECORD"
+    DEPLOY_LOCK_OWNER_RECORD=""
+    [ "$lock_conflict" = 1 ] && return 73
+    return 1
+  fi
+  DEPLOY_LOCK_HELD=1
+  echo "  ✓ local deploy lock: $DEPLOY_LOCK_PATH (pid $$, worktree $REPO_ROOT)"
+}
+
+on_lock_only_exit() {
+  local status="$1"
+  trap - EXIT INT TERM
+  if ! release_deploy_lock; then
+    echo "$(red '✗') Could not release the device-local deploy lock safely." >&2
+    [ "$status" = 0 ] && status=1
+  fi
+  exit "$status"
+}
+
+if [ "$SURVEY_ONLY" = 0 ] && [ "$DRY_RUN" = 0 ]; then
+  # Install signal/exit cleanup before acquisition so even interruption in the
+  # tiny owner-record/link window cleans only this invocation's inode.
+  trap 'on_lock_only_exit "$?"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  acquire_deploy_lock || exit $?
+fi
+
 # ── Phase 0 — Survey ──────────────────────────────────────────────────
 phase 0 "Survey"
 
@@ -549,6 +689,10 @@ on_deploy_exit() {
     echo "$(yellow '⚠ deploy stopped after an external mutation may have begun; recording failed_or_uncertain outcome')"
     write_deploy_receipt "failed_or_uncertain" "$status" ||
       echo "$(red '✗') Failed to record the interrupted/failed deploy receipt." >&2
+  fi
+  if ! release_deploy_lock; then
+    echo "$(red '✗') Could not release the device-local deploy lock safely." >&2
+    [ "$status" = 0 ] && status=1
   fi
   exit "$status"
 }
