@@ -277,6 +277,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain("api packages/data packages/data-protocol packages/sdk-ts");
+    expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("name: Build local data-sync peers");
     expect(workflow).toContain("cd packages/data && bun run build");
     expect(workflow).toContain("cd packages/data-protocol && bun run build");
