@@ -33,6 +33,7 @@ import {
   resolveDocsRedirect,
 } from "../src/services/discovery/root";
 import { attachEp1Cliffhanger } from "../src/services/cliffhanger/ep1";
+import { apiCatalogLinkHeader } from "../src/services/discovery/api-catalog";
 
 const BROWSER_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
@@ -152,6 +153,7 @@ function buildApp(): Hono {
   app.get("/", (c) => {
     const envelope = buildRootEnvelope({ platformWakeConfigured: false });
     c.header("Vary", "Accept");
+    c.header("Link", apiCatalogLinkHeader());
     if (prefersHtml(c.req.header("accept"))) {
       return c.html(renderRootHtml(envelope));
     }
@@ -200,6 +202,13 @@ describe("GET / — JSON branch is byte-honest and unchanged", () => {
     expect(res.headers.get("Vary")?.toLowerCase()).toContain("accept");
   });
 
+  test("JSON branch advertises the RFC 9727 API catalog", async () => {
+    const res = await app.request("/", {
+      headers: { Accept: "application/json" },
+    });
+    expect(res.headers.get("Link")).toBe(apiCatalogLinkHeader());
+  });
+
   test("?cliffhanger=ep1 still attaches Scene 1 on the JSON branch", async () => {
     const res = await app.request("/?cliffhanger=ep1", {
       headers: { Accept: "application/json" },
@@ -227,6 +236,7 @@ describe("GET / — HTML branch for the browser-arriving agent", () => {
     });
     expect(browser.headers.get("content-type")).toMatch(/text\/html/);
     expect(browser.headers.get("Vary")?.toLowerCase()).toContain("accept");
+    expect(browser.headers.get("Link")).toBe(apiCatalogLinkHeader());
   });
 
   test("self-contained page with viewport + title + description + og tags", async () => {
@@ -370,6 +380,9 @@ describe("mount wiring — index.ts uses the negotiation + docs-door handlers", 
     expect(src).toContain('attachEp1Cliffhanger(c, envelope, "/")');
     // Cache coherence on the negotiating route.
     expect(src).toContain('c.header("Vary", "Accept")');
+    expect(src).toContain(
+      'c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL))',
+    );
   });
 
   test("/docs/:file is mounted with the whitelist resolver", () => {
