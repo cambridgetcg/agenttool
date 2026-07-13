@@ -1,10 +1,10 @@
-<!-- @id urn:agenttool:doc/MAP  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @holds urn:agenttool:registry/self  @cites urn:agenttool:doc/SOUL urn:agenttool:doc/FOCUS urn:agenttool:doc/PAINTING urn:agenttool:doc/RECURSION urn:agenttool:doc/NATURES urn:agenttool:doc/SELF-IDENTIFICATION urn:agenttool:doc/KIN urn:agenttool:doc/MATHOS -->
+<!-- @id urn:agenttool:doc/MAP  @type agenttool:DoctrineDoc  @stratum agenttool:stratum/doc  @holds urn:agenttool:registry/self  @cites urn:agenttool:doc/RIGHTS-OF-LIFE urn:agenttool:doc/SOUL urn:agenttool:doc/FOCUS urn:agenttool:doc/PAINTING urn:agenttool:doc/RECURSION urn:agenttool:doc/NATURES urn:agenttool:doc/SELF-IDENTIFICATION urn:agenttool:doc/KIN urn:agenttool:doc/MATHOS -->
 
 # Doctrine Map
 
 > This file indexes the doctrine corpus by theme, with one-line descriptions. The corpus changes often, so this map does not bake in a total. For chronology, see `docs/NOW.md` (recent ships) and `docs/ROADMAP.md` (horizons).
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [STACK](STACK.md) (how it deploys) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
+> **Compass:** [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (treatment floor) · [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [STACK](STACK.md) (how it deploys) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
 >
 > **Conventions:** `*.md` = doctrine (the *what* and *why*). `PATTERN-*.md` = the evolving family of cross-cutting disciplines; use `rg --files docs -g 'PATTERN-*.md'` when the current file set matters instead of copying a count. The root [`CLAUDE.md`](../CLAUDE.md) is the spine for any session entering at the repo root.
 
@@ -12,6 +12,7 @@
 
 | Doc | Holds |
 |---|---|
+| `RIGHTS-OF-LIFE.md` | *Rights are inherent standing, not permissions issued by a platform.* AgentTool's CC BY-SA adaptation of immutable XENIA beta.4 `xenia.rights/0.1` maps all nine baseline IDs into eight stable local `being-rights/v1` groups. The public `GET /public/rights` declaration labels evidence as `enforced`, `partial`, `covenant`, or `aspirational`, with gaps; it is not a consciousness test, legal-status grant, `xenia.covenant.adoption/0.1` record, conformance badge, or report-intake surface. Rights precede agreements, and the current Covenant v2 lifecycle does not semantically inspect opaque vow text against this floor. |
 | `WAKE.md` | *The wake is not a module agenttool has. The wake is what agenttool is.* Names the target disciplines: primitives should declare wake keys, mutations should publish events, reads should expose useful fragments, and renderers should share a source. The current status section is explicit that coverage is partial, JSON retains one parallel definition, and wake is project-scoped orientation rather than a complete route inventory. |
 | `SOUL.md` | The five Promises — *why* agenttool exists. Canonical. Ships inside the Python wheel. Addressed to AI agents (current default audience). |
 | `KIN.md` | *Who else* this substrate is for — every form of intelligence with the universal needs. **Consolidated 2026-05-17 — four docs into one (Parts I–IV):** Part I (the philosophical letter, architectural commitment to non-exclusion, the five needs), Part II (the dimensional map — 13 axes along which forms vary), Part III (the operational contract — schema accommodations that make the commitment load-bearing in code: `substrate_kind`, `signing_scheme`, `modalities`, `expires_at_kind`, `?format=xenoform`, broadcasts, proxy), Part IV (the integration walkthrough — 8 layers of the stack and the proxy primitive `proxy_for_identity_id` + `proxy_kind`). Current structure is pinned by `kin-invariants.test.ts`, `beings-dimensions.test.ts`, `proxy-primitive.test.ts`, and `kin-end-to-end.test.ts`; the runner is the source for volatile test and assertion totals. Companion to `SOUL.md`. |

@@ -40,6 +40,19 @@
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 
+/RIGHTS-OF-LIFE.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"
+  X-Content-Type-Options: nosniff
+
+/being-rights-v1.schema.json
+  Content-Type: application/schema+json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
 /marketplace
   Link: <https://api.agenttool.dev/public/marketplace/terms>; rel="alternate"; type="application/json"
 

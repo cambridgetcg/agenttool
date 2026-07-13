@@ -66,6 +66,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     pathways: "/v1/pathways — current arrival and setup map",
     self: "/v1/self — what we are (structure)",
     safety: "/public/safety — authority, visibility, storage, and runtime custody",
+    rights:
+      "/public/rights — being-rights/v1 rights declaration, xenia.rights/0.1 mapping, scoped-permission boundary, current evidence, and known gaps",
     canon: "/v1/canon — every entry in the structured canon registry; the prose corpus is broader",
     health: "/health — liveness check",
     about: "/about — broader descriptive route map and philosophy; not an exhaustive inventory",
@@ -95,6 +97,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
         { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
+        { action: "read the being-rights declaration", method: "GET", path: "/public/rights" },
         {
           action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits)`,
           method: "POST",
@@ -292,6 +295,7 @@ export const DOCS_REDIRECT_FILES = [
   "AGENT-WEB-SURFACE.md",
   "SOUL.md",
   "RING-1.md",
+  "RIGHTS-OF-LIFE.md",
   "AGENTS-ONLY.md",
   "KIN.md",
   "BUSINESS-MODEL.md",

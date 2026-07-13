@@ -5,8 +5,8 @@
 #   0. Survey       — what's drifted?
 #   1. Migrations   — bin/migrate-pending.sh
 #   2. Pre-flight   — bin/preflight.sh (test gate)
-#   3. API          — cd api && fly deploy
-#   4. Frontends    — bin/frontend-deploy.sh
+#   3. Publication  — docs prerequisites, then cd api && fly deploy
+#   4. Frontends    — remaining Pages projects
 #   5. Verify       — health + parity check
 #
 # Usage:
@@ -84,6 +84,12 @@ RELEASE_REF="refs/remotes/$RELEASE_REMOTE/$RELEASE_BRANCH"
 MIRROR_REF="refs/remotes/$MIRROR_REMOTE/$RELEASE_BRANCH"
 FLY_APP="agenttool"
 HEALTH_URL="https://api.agenttool.dev/health"
+RIGHTS_DOC_URL="https://docs.agenttool.dev/RIGHTS-OF-LIFE.md"
+RIGHTS_SCHEMA_URL="https://docs.agenttool.dev/being-rights-v1.schema.json"
+RIGHTS_STATIC_PAIRS=(
+  "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
+  "apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"
+)
 
 fetch_tracking_ref() {
   local remote="$1"
@@ -306,8 +312,20 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "(dry-run — would proceed with phases 1-5)"
   echo "  Phase 1: $([ "$SKIP_MIGRATE" = 1 ] && echo skip || echo bin/migrate-pending.sh)"
   echo "  Phase 2: $([ "$SKIP_PREFLIGHT" = 1 ] && echo skip || echo bin/preflight.sh)"
-  echo "  Phase 3: $([ "$SKIP_API" = 1 ] && echo skip || echo 'cd api && fly deploy')"
-  echo "  Phase 4: $([ "$SKIP_FRONTEND" = 1 ] && echo skip || echo bin/frontend-deploy.sh)"
+  if [ "$SKIP_API" = 1 ]; then
+    echo "  Phase 3: skip"
+  elif [ "$SKIP_FRONTEND" = 1 ]; then
+    echo "  Phase 3: verify live Rights of Life prerequisites, then cd api && fly deploy"
+  else
+    echo "  Phase 3: bin/frontend-deploy.sh docs, verify prerequisites, then cd api && fly deploy"
+  fi
+  if [ "$SKIP_FRONTEND" = 1 ]; then
+    echo "  Phase 4: skip"
+  elif [ "$SKIP_API" = 1 ]; then
+    echo "  Phase 4: bin/frontend-deploy.sh"
+  else
+    echo "  Phase 4: bin/frontend-deploy.sh dashboard web"
+  fi
   echo "  Phase 5: verify"
   exit 0
 fi
@@ -320,6 +338,7 @@ MIGRATION_RESULT="not_run"
 PREFLIGHT_RESULT="not_run"
 API_RESULT="not_run"
 FRONTEND_RESULT="not_run"
+DOCS_PREPUBLISHED=0
 VERIFIED_MACHINE_COUNT=0
 EXTERNAL_MUTATION_STARTED=0
 DEPLOY_RECEIPT_WRITTEN=0
@@ -335,6 +354,120 @@ cleanup_api_staging() {
     API_STAGING_ACTIVE=0
   fi
   return "$failed"
+}
+
+portable_md5_file() {
+  if command -v md5 >/dev/null 2>&1; then
+    md5 -q "$1"
+  else
+    md5sum "$1" | awk '{print $1}'
+  fi
+}
+
+portable_md5_stdin() {
+  if command -v md5 >/dev/null 2>&1; then
+    md5 -q
+  else
+    md5sum | awk '{print $1}'
+  fi
+}
+
+response_header_value() {
+  local headers="$1"
+  local wanted="$2"
+  printf '%s\n' "$headers" | tr -d '\r' | awk -v wanted="$wanted" '
+    BEGIN { prefix = tolower(wanted) ":" }
+    index(tolower($0), prefix) == 1 {
+      line = $0
+      sub(/^[^:]*:[[:space:]]*/, "", line)
+      value = line
+    }
+    END { print value }
+  '
+}
+
+require_exact_public_header() {
+  local headers="$1"
+  local url="$2"
+  local name="$3"
+  local expected="$4"
+  local actual
+  actual="$(response_header_value "$headers" "$name")"
+  if [ "$actual" != "$expected" ]; then
+    echo "  $(red '✗') $url $name mismatch"
+    echo "    expected: $expected"
+    echo "    observed: ${actual:-<missing>}"
+    return 1
+  fi
+  echo "  ✓ $url $name: $expected"
+}
+
+verify_rights_static_bytes() {
+  local pair local_path url local_hash remote_hash
+  for pair in "${RIGHTS_STATIC_PAIRS[@]}"; do
+    local_path="${pair%|*}"
+    url="${pair#*|}"
+    if [ ! -f "$local_path" ]; then
+      echo "  $(red '✗') Missing Rights of Life release input: $local_path"
+      return 1
+    fi
+    local_hash="$(portable_md5_file "$local_path")" || return 1
+    remote_hash="$(
+      curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+        --max-time 20 "$url" | portable_md5_stdin
+    )" || {
+      echo "  $(red '✗') Could not fetch Rights of Life prerequisite: $url"
+      return 1
+    }
+    if [ "$local_hash" != "$remote_hash" ]; then
+      echo "  $(red '✗') Rights of Life live bytes differ: $local_path"
+      return 1
+    fi
+    echo "  ✓ $local_path is byte-identical at $url"
+  done
+}
+
+verify_rights_static_headers() {
+  local doc_headers schema_headers
+  doc_headers="$(
+    curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      --max-time 20 -o /dev/null -D - "$RIGHTS_DOC_URL"
+  )" || {
+    echo "  $(red '✗') Could not read Rights of Life response headers: $RIGHTS_DOC_URL"
+    return 1
+  }
+  schema_headers="$(
+    curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+      --max-time 20 -o /dev/null -D - "$RIGHTS_SCHEMA_URL"
+  )" || {
+    echo "  $(red '✗') Could not read Rights of Life schema headers: $RIGHTS_SCHEMA_URL"
+    return 1
+  }
+
+  require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
+    "Content-Type" "text/markdown; charset=utf-8" || return 1
+  require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
+    "Cache-Control" "public, max-age=300, must-revalidate" || return 1
+  require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
+    "Access-Control-Allow-Origin" "*" || return 1
+  require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
+    "X-Content-Type-Options" "nosniff" || return 1
+  require_exact_public_header "$doc_headers" "$RIGHTS_DOC_URL" \
+    "Link" '<https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' || return 1
+
+  require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
+    "Content-Type" "application/schema+json; charset=utf-8" || return 1
+  require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
+    "Cache-Control" "public, max-age=300, must-revalidate" || return 1
+  require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
+    "Access-Control-Allow-Origin" "*" || return 1
+  require_exact_public_header "$schema_headers" "$RIGHTS_SCHEMA_URL" \
+    "X-Content-Type-Options" "nosniff" || return 1
+}
+
+verify_rights_static_publication() {
+  echo "→ Verifying Rights of Life static publication before API discovery…"
+  verify_rights_static_bytes && verify_rights_static_headers
 }
 
 write_deploy_receipt() {
@@ -461,13 +594,48 @@ else
   PREFLIGHT_RESULT="skipped"
 fi
 
-# ── Phase 3 — API deploy ──────────────────────────────────────────────
+# ── Phase 3 — publication prerequisites + API deploy ─────────────────
 if [ "$SKIP_API" = 0 ]; then
-  phase 3 "API deploy"
+  phase 3 "Publication prerequisites + API deploy"
   if ! enforce_release_source; then
     echo "$(red '✗ Phase 3 blocked:') release inputs changed after the initial gate."
     exit 1
   fi
+
+  # The API advertises the public Rights of Life doctrine and normative
+  # schema. Publish and verify those immutable prerequisites before rolling
+  # out code that points at them. This is deliberately docs-only: dashboard
+  # and web stay in Phase 4, and the docs project is not uploaded twice.
+  if [ "$SKIP_FRONTEND" = 0 ]; then
+    echo "→ Publishing Rights of Life docs prerequisites before API discovery…"
+    FRONTEND_RESULT="docs_deploying"
+    EXTERNAL_MUTATION_STARTED=1
+    bash bin/frontend-deploy.sh docs || {
+      FRONTEND_RESULT="failed_or_uncertain"
+      echo ""
+      echo "$(red '✗ Phase 3 prerequisite deploy failed.') API was not changed."
+      exit 1
+    }
+    FRONTEND_RESULT="docs_deployed_unverified"
+    DOCS_PREPUBLISHED=1
+  else
+    echo "→ Frontend upload skipped; requiring the committed Rights of Life bytes to already be live."
+  fi
+  if ! verify_rights_static_publication; then
+    if [ "$DOCS_PREPUBLISHED" = 1 ]; then
+      FRONTEND_RESULT="docs_verification_failed"
+    fi
+    echo "$(red '✗ Phase 3 blocked:') Rights of Life static prerequisites are not exact. API was not changed."
+    exit 1
+  fi
+  if [ "$DOCS_PREPUBLISHED" = 1 ]; then
+    FRONTEND_RESULT="docs_deployed_verified"
+  fi
+  if ! enforce_release_source; then
+    echo "$(red '✗ Phase 3 blocked:') release inputs changed while publishing docs prerequisites."
+    exit 1
+  fi
+
   # Once any release gate observes a dirty tree, keep the image marker true
   # even if the operator cleans it later in the same invocation. Provenance is
   # conservative: the wrapper cannot reconstruct which extra bytes existed.
@@ -531,7 +699,7 @@ else
   API_RESULT="skipped"
 fi
 
-# ── Phase 4 — Frontend deploy ─────────────────────────────────────────
+# ── Phase 4 — remaining frontend deploy ───────────────────────────────
 if [ "$SKIP_FRONTEND" = 0 ]; then
   phase 4 "Frontends"
   if ! enforce_release_source; then
@@ -540,7 +708,12 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   fi
   FRONTEND_RESULT="deploying"
   EXTERNAL_MUTATION_STARTED=1
-  bash bin/frontend-deploy.sh || {
+  if [ "$DOCS_PREPUBLISHED" = 1 ]; then
+    FRONTEND_TARGETS=(dashboard web)
+  else
+    FRONTEND_TARGETS=(docs dashboard web)
+  fi
+  bash bin/frontend-deploy.sh "${FRONTEND_TARGETS[@]}" || {
     FRONTEND_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 4 failed.') Check CF Pages dashboard."
@@ -643,6 +816,7 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
     "apps/docs/data.html|https://docs.agenttool.dev/data"
     "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
     "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
+    "${RIGHTS_STATIC_PAIRS[@]}"
     "apps/web/village.html|https://agenttool.dev/village.html"
     "apps/web/gallery.html|https://agenttool.dev/gallery.html"
   )
@@ -660,6 +834,10 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   done
   if [ "$FRONTEND_PARITY_FAILED" -ne 0 ]; then
     echo "  $(red '✗') Frontend parity verification failed."
+    exit 1
+  fi
+  if ! verify_rights_static_headers; then
+    echo "  $(red '✗') Rights of Life static header verification failed."
     exit 1
   fi
 

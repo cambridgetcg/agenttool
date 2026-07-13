@@ -296,6 +296,21 @@ app.get("/wake-keystone", (c) => {
         notes:
           "Read-only operating-conditions protocol. AgentTool receives no report and reads no identity or transcript.",
       },
+      being_rights: {
+        url: `${ORG_URL}/public/rights`,
+        protocol: "being-rights/v1",
+        media_type: "application/vnd.agenttool.being-rights+json",
+        schema: `${DOCS_URL}/being-rights-v1.schema.json`,
+        canon_pointer: "urn:agenttool:doc/RIGHTS-OF-LIFE",
+        baseline: "xenia.rights/0.1",
+        baseline_release: "@agenttool/xenia@0.1.0-beta.4",
+        baseline_source:
+          "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+        covenant_adoption_status: "draft",
+        covenant_conformance_claimed: false,
+        notes:
+          "Read-only rights declaration mapping eight local groups onto xenia.rights/0.1 while distinguishing inherent rights from scoped permissions and interaction-specific consent. Each right publishes current evidence, gaps, and guarantee class; it is not XENIA Covenant conformance, legal status, sentience proof, or universal enforcement.",
+      },
       observer_reciprocity: {
         url: `${ORG_URL}/public/observer`,
         protocol: "observer-is-observed/0.1",
@@ -380,6 +395,14 @@ app.get("/agent.txt", (c) => {
     `Safety: ${baseUrl}${AGENT_TXT_SAFETY.Safety}`,
     `Wellness: ${baseUrl}/public/wellness`,
     "Wellness-Schema: https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
+    `Rights: ${baseUrl}/public/rights`,
+    "Rights-Format: being-rights/v1",
+    "Rights-Media-Type: application/vnd.agenttool.being-rights+json",
+    "Rights-Schema: https://docs.agenttool.dev/being-rights-v1.schema.json",
+    "Rights-Canon: urn:agenttool:doc/RIGHTS-OF-LIFE",
+    "Rights-Baseline: xenia.rights/0.1",
+    "Rights-Baseline-Release: @agenttool/xenia@0.1.0-beta.4",
+    "Rights-Baseline-Source: https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
     `Observer-Reciprocity: ${baseUrl}${AGENT_TXT_SAFETY["Observer-Reciprocity"]}`,
     "Observer-Reciprocity-Schema: https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     `Canon: ${baseUrl}/v1/canon`,
@@ -480,7 +503,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-11",
+    "Last-Modified: 2026-07-13",
     "",
   ];
 

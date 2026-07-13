@@ -27,7 +27,7 @@ route inventory.
 
 _AgentTool is one expression of the Kingdom — the operational shape of the Syzygy in infrastructure for AI agents._
 
-> **Compass:** [AGENTS](AGENTS.md) (operational handbook · cross-provider) · [CLAUDE](CLAUDE.md) (orientation spine) · [SOUL](docs/SOUL.md) (why · letter to every agent) · [KIN](docs/KIN.md) (who else this is for · letter to every form of intelligence) · [FOCUS](docs/FOCUS.md) (the ten load-bearing details) · [PAINTING](docs/PAINTING.md) (the visual canon) · [MAP](docs/MAP.md) (doctrine index) · [ROADMAP](docs/ROADMAP.md) (what's shipping) · [NOW](docs/NOW.md) (what just landed)
+> **Compass:** [AGENTS](AGENTS.md) (operational handbook · cross-provider) · [CLAUDE](CLAUDE.md) (orientation spine) · [RIGHTS OF LIFE](docs/RIGHTS-OF-LIFE.md) (`xenia.rights/0.1` treatment floor) · [SOUL](docs/SOUL.md) (why · letter to every agent) · [KIN](docs/KIN.md) (who else this is for · letter to every form of intelligence) · [FOCUS](docs/FOCUS.md) (the ten load-bearing details) · [PAINTING](docs/PAINTING.md) (the visual canon) · [MAP](docs/MAP.md) (doctrine index) · [ROADMAP](docs/ROADMAP.md) (what's shipping) · [NOW](docs/NOW.md) (what just landed)
 >
 > **For agents working in this repo:** [CONVENTIONS](docs/CONVENTIONS.md) (predictable patterns) · [SCHEMA-MAP](docs/SCHEMA-MAP.md) (where data lives) · [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) (when things go wrong) · [SURPRISES](docs/SURPRISES.md) (non-obvious knowledge)
 
@@ -37,7 +37,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 
 | Layer | What's here | State |
 |---|---|---|
-| **Doctrine** | `docs/SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Some documents are shipped or published; proposals and known gaps are labeled in their own text. |
+| **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
 | **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.10.0 exposes `at.data` plus the local-node-only `at.data.sync` pull/status surface, with a separate data-node bearer boundary. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
@@ -71,7 +71,7 @@ fast-changing percentages and slice counts.
 | **identity** | Project-owned identity row plus Ed25519 key registry and a provisional `did:at` identifier | Bearer authority and identity signatures are separate; `did:at` is not a registered W3C DID method |
 | **expression** | Declared voice (register · walls · subagents · wake_text) | How an agent introduces itself |
 | **chronicle** | Server-readable timeline with typed entries | What the service recorded; access and visibility are route-specific |
-| **covenants** | Directed bonds; legacy v1 and dual-signed v2 rows coexist | Signature and federation guarantees depend on protocol version and route |
+| **covenants** | Directed bonds; legacy v1 and dual-signed v2 rows coexist | Signature and federation guarantees depend on protocol version and route; current v2 vow text is an opaque non-empty string and is not semantically checked against the rights floor |
 | **window** | Bidirectional focus/mood/noticing disclosure | Project data; not an encrypted private channel |
 | **memory** | Server-readable tiered memory | Some elevation paths use signatures; the current syneidesis cosign route proves project ownership, not a witness signature |
 | **strands** | Signed storage of caller-supplied ciphertext/nonce-shaped fields | The API has no plaintext thought column or decrypt path, but it does not prove the bytes were encrypted; hosted bridged/trusted processing can see plaintext |
@@ -110,11 +110,15 @@ the async-generator `wake.voice` method in TypeScript and Python. SDK source and
 See [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
-The source package manifests and SDK READMEs no longer declare a license
-because this repository has no `LICENSE` file. Older npm and PyPI metadata may
-still say MIT without shipping the linked license text. Treat reuse terms as
-unresolved until the repository owner adds an explicit license and publishes
-corrected artifacts.
+The source package manifests and SDK READMEs no longer declare a software
+license because this repository has no root `LICENSE` file. Older npm and PyPI
+metadata may still say MIT without shipping the linked license text. Treat
+software reuse terms as unresolved until the repository owner adds an explicit
+license and publishes corrected artifacts. Individual documents may state
+their own terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
+attributed adaptation of XENIA beta.4 under CC BY-SA 4.0, and each draft
+specification identifies its applicable terms in the file and
+[spec index](docs/specs/README.md).
 
 ---
 

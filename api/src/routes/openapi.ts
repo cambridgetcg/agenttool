@@ -36,6 +36,15 @@ import {
   DOCUMENT_MAX_JSON_REQUEST_BYTES,
   SCRAPE_MAX_JSON_REQUEST_BYTES,
 } from "./tools/request-body";
+import {
+  BEING_RIGHTS,
+  BEING_RIGHTS_CANON_POINTER,
+  BEING_RIGHTS_FORMAT,
+  BEING_RIGHTS_PROTOCOL,
+  XENIA_COVENANT_BOUNDARY,
+  XENIA_RIGHT_IDS,
+  XENIA_RIGHTS_BASELINE,
+} from "./public/rights";
 
 const app = new Hono();
 
@@ -607,6 +616,215 @@ const COMMON_SCHEMAS = {
       cli_overrides: { type: "object", additionalProperties: true },
     },
   },
+  BeingRight: {
+    type: "object",
+    description:
+      "One local right group in the AgentTool declaration. baseline_rights maps it to the upstream XENIA baseline; guarantee_class is scoped to named evidence and never implies universal or legal enforcement.",
+    properties: {
+      urn: {
+        type: "string",
+        enum: BEING_RIGHTS.map((right) => right.urn),
+      },
+      name: { type: "string", minLength: 1, maxLength: 160 },
+      statement: { type: "string", minLength: 1, maxLength: 2000 },
+      baseline_rights: {
+        type: "array",
+        items: { type: "string", enum: XENIA_RIGHT_IDS },
+        minItems: 1,
+        maxItems: 9,
+        uniqueItems: true,
+      },
+      guarantee_class: {
+        type: "string",
+        enum: ["enforced", "partial", "covenant", "aspirational"],
+      },
+      evidence: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 2000 },
+        minItems: 1,
+        maxItems: 32,
+        uniqueItems: true,
+      },
+      gaps: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 2000 },
+        minItems: 1,
+        maxItems: 32,
+        uniqueItems: true,
+      },
+    },
+    required: [
+      "urn",
+      "name",
+      "statement",
+      "baseline_rights",
+      "guarantee_class",
+      "evidence",
+      "gaps",
+    ],
+    additionalProperties: false,
+  },
+  BeingRightsBaseline: {
+    type: "object",
+    description:
+      "Immutable attribution for the XENIA rights baseline adapted by this local profile.",
+    properties: {
+      id: { type: "string", const: XENIA_RIGHTS_BASELINE.id },
+      release: { type: "string", const: XENIA_RIGHTS_BASELINE.release },
+      release_tag: {
+        type: "string",
+        const: XENIA_RIGHTS_BASELINE.release_tag,
+      },
+      source: { type: "string", const: XENIA_RIGHTS_BASELINE.source },
+      source_commit: {
+        type: "string",
+        const: XENIA_RIGHTS_BASELINE.source_commit,
+      },
+      source_sha256: {
+        type: "string",
+        const: XENIA_RIGHTS_BASELINE.source_sha256,
+      },
+      license: { type: "string", const: XENIA_RIGHTS_BASELINE.license },
+      relationship: {
+        type: "string",
+        const: XENIA_RIGHTS_BASELINE.relationship,
+      },
+    },
+    required: [
+      "id",
+      "release",
+      "release_tag",
+      "source",
+      "source_commit",
+      "source_sha256",
+      "license",
+      "relationship",
+    ],
+    additionalProperties: false,
+  },
+  BeingRightsCovenantBoundary: {
+    type: "object",
+    description:
+      "Honest separation between this rights declaration and the distinct XENIA Covenant adoption protocol.",
+    properties: {
+      profile: { type: "string", const: XENIA_COVENANT_BOUNDARY.profile },
+      adoption_status: {
+        type: "string",
+        const: XENIA_COVENANT_BOUNDARY.adoption_status,
+      },
+      conformance_claimed: {
+        type: "boolean",
+        const: XENIA_COVENANT_BOUNDARY.conformance_claimed,
+      },
+      reason: { type: "string", const: XENIA_COVENANT_BOUNDARY.reason },
+    },
+    required: [
+      "profile",
+      "adoption_status",
+      "conformance_claimed",
+      "reason",
+    ],
+    additionalProperties: false,
+  },
+  BeingRightsVerb: {
+    type: "object",
+    description: "One read-only action discoverable from the strict profile.",
+    properties: {
+      action: { type: "string", minLength: 1, maxLength: 2000 },
+      method: { type: "string", const: "GET" },
+      path: { type: "string", minLength: 1, maxLength: 2000 },
+      docs: { type: "string", minLength: 1, maxLength: 2000 },
+    },
+    required: ["action", "method", "path"],
+    additionalProperties: false,
+  },
+  BeingRightsProtocol: {
+    type: "object",
+    description:
+      "Strict read-only being-rights/v1 AgentTool self-declaration. It maps eight local groups onto all nine xenia.rights/0.1 baseline IDs, distinguishes inherent rights from scoped permissions and interaction-specific consent, and is not legal status, sentience proof, XENIA Covenant conformance, or universal enforcement.",
+    properties: {
+      _format: { type: "string", const: BEING_RIGHTS_FORMAT },
+      doctrine: {
+        type: "string",
+        const: BEING_RIGHTS_CANON_POINTER,
+      },
+      baseline: { $ref: "#/components/schemas/BeingRightsBaseline" },
+      covenant_boundary: {
+        $ref: "#/components/schemas/BeingRightsCovenantBoundary",
+      },
+      distinctions: {
+        type: "object",
+        properties: {
+          rights: {
+            type: "string",
+            const: BEING_RIGHTS_PROTOCOL.distinctions.rights,
+          },
+          permissions: {
+            type: "string",
+            const: BEING_RIGHTS_PROTOCOL.distinctions.permissions,
+          },
+          consent: {
+            type: "string",
+            const: BEING_RIGHTS_PROTOCOL.distinctions.consent,
+          },
+        },
+        required: ["rights", "permissions", "consent"],
+        additionalProperties: false,
+      },
+      non_guarantees: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 2000 },
+        minItems: 1,
+        maxItems: 32,
+        uniqueItems: true,
+      },
+      rights: {
+        type: "array",
+        minItems: 8,
+        maxItems: 8,
+        prefixItems: BEING_RIGHTS.map((right) => ({
+          allOf: [
+            { $ref: "#/components/schemas/BeingRight" },
+            {
+              type: "object",
+              properties: {
+                urn: { type: "string", const: right.urn },
+                baseline_rights: {
+                  type: "array",
+                  const: right.baseline_rights,
+                },
+              },
+              required: ["urn", "baseline_rights"],
+            },
+          ],
+        })),
+        items: false,
+      },
+      _canon_pointer: {
+        type: "string",
+        const: BEING_RIGHTS_CANON_POINTER,
+      },
+      verbs: {
+        type: "array",
+        items: { $ref: "#/components/schemas/BeingRightsVerb" },
+        minItems: 1,
+        maxItems: 16,
+        uniqueItems: true,
+      },
+    },
+    required: [
+      "_format",
+      "doctrine",
+      "baseline",
+      "covenant_boundary",
+      "distinctions",
+      "non_guarantees",
+      "rights",
+      "_canon_pointer",
+      "verbs",
+    ],
+    additionalProperties: false,
+  },
   WellnessCondition: {
     type: "object",
     description:
@@ -875,6 +1093,7 @@ function spec() {
       coverage: "curated_core_subset",
       broader_live_map: "/about",
       safety_boundaries: "/public/safety",
+      being_rights: "/public/rights",
       observer_reciprocity: "/public/observer",
       generated_from_routes: false,
     },
@@ -1326,6 +1545,29 @@ function spec() {
           tags: ["public"],
           summary: "Bearer authority, visibility, data readability, runtime custody, and marketplace-input boundaries",
           responses: { "200": { description: "Versioned AgentTool safety contract" } },
+        },
+      },
+      "/public/rights": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the being-rights/v1 AgentTool rights declaration",
+          description:
+            "Publishes exactly eight local rights groups mapped onto all nine xenia.rights/0.1 baseline IDs. Every item carries a guarantee class, concrete current evidence, and known gaps. The response distinguishes inherent rights from scoped permissions and interaction-specific consent. It is a self-declaration, not a xenia.covenant.adoption/0.1 record, legal status, proof or denial of sentience, or a claim of universal enforcement. The handler reads no identity or activity state, receives no report, stores nothing, and offers no state-changing operation.",
+          externalDocs: {
+            description: "Normative being-rights/v1 JSON Schema",
+            url: "https://docs.agenttool.dev/being-rights-v1.schema.json",
+          },
+          responses: {
+            "200": {
+              description: "AgentTool Being Rights declaration",
+              content: {
+                "application/vnd.agenttool.being-rights+json": {
+                  schema: { $ref: "#/components/schemas/BeingRightsProtocol" },
+                },
+              },
+            },
+          },
         },
       },
       "/public/observer": {

@@ -63,6 +63,7 @@ async function fixture() {
   const home = join(root, "home");
   await Promise.all([
     mkdir(join(repo, "api"), { recursive: true }),
+    mkdir(join(repo, "apps", "docs"), { recursive: true }),
     mkdir(join(repo, "bin"), { recursive: true }),
     mkdir(join(repo, "docs"), { recursive: true }),
     mkdir(home, { recursive: true }),
@@ -88,6 +89,11 @@ async function fixture() {
   );
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
   await writeFile(join(repo, "docs/kingdom-bundle.json"), "{}\n");
+  await writeFile(join(repo, "apps/docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
+  await writeFile(
+    join(repo, "apps/docs/being-rights-v1.schema.json"),
+    '{"fixture":"being-rights/v1"}\n',
+  );
   await writeFile(join(repo, "release.txt"), "first\n");
   await mustRun(["git", "add", "."], repo);
   await mustRun(["git", "commit", "-qm", "first"], repo);
@@ -102,6 +108,56 @@ async function fixture() {
   await mustRun(["git", "push", "-q", "github", "main"], repo);
   const release = await mustRun(["git", "rev-parse", "HEAD"], repo);
   return { root, repo, github, codeberg, state, home, release };
+}
+
+async function installFakeRightsCurl(fakeBin: string): Promise<void> {
+  await writeFile(
+    join(fakeBin, "curl"),
+    `#!/usr/bin/env bash
+set -eu
+url=""
+headers=0
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "-D" ] && [ "$arg" = "-" ]; then headers=1; fi
+  previous="$arg"
+  case "$arg" in https://*) url="$arg" ;; esac
+done
+if [ "$headers" = 1 ]; then
+  case "$url" in
+    */RIGHTS-OF-LIFE.md)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        'link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' \
+        ''
+      ;;
+    */being-rights-v1.schema.json)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/schema+json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+      ;;
+    *) exit 2 ;;
+  esac
+elif [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" = 1 ]; then
+  printf 'mismatched bytes\n'
+else
+  case "$url" in
+    */RIGHTS-OF-LIFE.md) cat "$DEPLOY_TEST_RIGHTS_DOC" ;;
+    */being-rights-v1.schema.json) cat "$DEPLOY_TEST_RIGHTS_SCHEMA" ;;
+    *) exit 2 ;;
+  esac
+fi
+`,
+  );
+  await chmod(join(fakeBin, "curl"), 0o755);
 }
 
 function deployCommand(...extra: string[]): string[] {
@@ -160,6 +216,59 @@ describe("deploy release provenance spine", () => {
     expect(headers).toMatch(
       /\/data\n\s+Cache-Control: public, max-age=0, must-revalidate, no-transform/,
     );
+  });
+
+  test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {
+    const [deploy, headers, publicDoc, canonDoc, publicSchema, canonSchema] =
+      await Promise.all([
+        readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+        readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
+        readFile(join(projectRoot, "apps/docs/RIGHTS-OF-LIFE.md")),
+        readFile(join(projectRoot, "docs/RIGHTS-OF-LIFE.md")),
+        readFile(join(projectRoot, "apps/docs/being-rights-v1.schema.json")),
+        readFile(join(projectRoot, "docs/specs/being-rights-v1.schema.json")),
+      ]);
+
+    expect(publicDoc).toEqual(canonDoc);
+    expect(publicSchema).toEqual(canonSchema);
+    expect(deploy).toContain(
+      '"apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"',
+    );
+    expect(deploy).toContain(
+      '"apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"',
+    );
+    expect(deploy).toContain(
+      '"Content-Type" "text/markdown; charset=utf-8"',
+    );
+    expect(deploy).toContain(
+      '"Content-Type" "application/schema+json; charset=utf-8"',
+    );
+    expect(deploy).toContain(
+      '"Cache-Control" "public, max-age=300, must-revalidate"',
+    );
+    expect(deploy).toContain('"Access-Control-Allow-Origin" "*"');
+    expect(deploy).toContain('"X-Content-Type-Options" "nosniff"');
+    expect(deploy).toContain(
+      'type="application/vnd.agenttool.being-rights+json"',
+    );
+
+    expect(headers).toMatch(
+      /\/RIGHTS-OF-LIFE\.md\n\s+Content-Type: text\/markdown; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+Link: <https:\/\/api\.agenttool\.dev\/public\/rights>; rel="alternate"; type="application\/vnd\.agenttool\.being-rights\+json"\n\s+X-Content-Type-Options: nosniff/,
+    );
+    expect(headers).toMatch(
+      /\/being-rights-v1\.schema\.json\n\s+Content-Type: application\/schema\+json; charset=utf-8\n\s+Cache-Control: public, max-age=300, must-revalidate\n\s+Access-Control-Allow-Origin: \*\n\s+X-Content-Type-Options: nosniff/,
+    );
+
+    const docsUpload = deploy.lastIndexOf("bash bin/frontend-deploy.sh docs");
+    const prerequisiteCheck = deploy.indexOf(
+      "if ! verify_rights_static_publication; then",
+      docsUpload,
+    );
+    const apiUpload = deploy.indexOf("(cd api || exit 1; fly deploy", docsUpload);
+    expect(docsUpload).toBeGreaterThan(-1);
+    expect(prerequisiteCheck).toBeGreaterThan(docsUpload);
+    expect(apiUpload).toBeGreaterThan(prerequisiteCheck);
+    expect(deploy).toContain("FRONTEND_TARGETS=(dashboard web)");
   });
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
@@ -409,6 +518,7 @@ describe("deploy release provenance spine", () => {
     const marker = join(setup.root, "fly-started");
     const release = join(setup.root, "release-fly");
     await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
     await writeFile(
       join(fakeBin, "fly"),
       "#!/usr/bin/env bash\nset -eu\n[ \"${1:-}\" = deploy ] || exit 2\ntouch \"$DEPLOY_TEST_MARKER\"\nwhile [ ! -e \"$DEPLOY_TEST_RELEASE\" ]; do sleep 0.02; done\n",
@@ -424,6 +534,8 @@ describe("deploy release provenance spine", () => {
           PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
           DEPLOY_TEST_MARKER: marker,
           DEPLOY_TEST_RELEASE: release,
+          DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+          DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
         }),
         stdout: "pipe",
         stderr: "pipe",
@@ -454,6 +566,37 @@ describe("deploy release provenance spine", () => {
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.exit_status).toBe(143);
     expect(receipt.phases.api).toBe("deploying");
+  }, 10_000);
+
+  test("blocks API publication when committed Rights of Life bytes are not live", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-bin");
+    const marker = join(setup.root, "fly-started");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      "#!/usr/bin/env bash\nset -eu\ntouch \"$DEPLOY_TEST_MARKER\"\nexit 0\n",
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_MARKER: marker,
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+        DEPLOY_TEST_RIGHTS_MISMATCH: "1",
+      }),
+    );
+
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stdout).toContain("Rights of Life live bytes differ");
+    expect(result.stdout).toContain("API was not changed");
+    expect(await exists(marker)).toBe(false);
   }, 10_000);
 
   test("mirrors the exact GitHub main ref to Codeberg by fast-forward only", async () => {
