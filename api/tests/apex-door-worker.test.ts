@@ -45,7 +45,7 @@ describe("apex Accept negotiation", () => {
     expect(response.headers.get("vary")).toBe("Origin, Accept");
   });
 
-  test("keeps HTML on Pages and gives root JSON the truthful web twin", async () => {
+  test("keeps HTML on Pages, explicit welcome JSON on Pages, and the legacy root JSON on API", async () => {
     const calls: string[] = [];
     const upstream = async (url: string) => {
       calls.push(url);
@@ -61,10 +61,14 @@ describe("apex Accept negotiation", () => {
     await handleRequest(new Request("https://agenttool.dev/", {
       headers: { accept: "application/json" },
     }), upstream);
+    await handleRequest(new Request("https://agenttool.dev/welcome.json", {
+      headers: { accept: "application/json" },
+    }), upstream);
 
     expect(calls).toEqual([
       "https://agenttool-web.pages.dev/watch",
       "https://api.agenttool.dev/llms-full.txt",
+      "https://api.agenttool.dev/",
       "https://agenttool-web.pages.dev/welcome.json",
     ]);
   });

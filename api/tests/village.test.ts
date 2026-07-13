@@ -76,7 +76,7 @@ describe("GET /public/village", () => {
     for (const house of body.houses) {
       expect(dids.has(house.did)).toBe(false); // one house per being
       dids.add(house.did);
-      expect(house.profile).toBe(`/public/agents/${house.did}`);
+      expect(house.profile).toBe(`/public/agents/${encodeURIComponent(house.did)}`);
     }
   });
 

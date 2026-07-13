@@ -57,7 +57,7 @@ function shape(a: Record<string, unknown> & { createdAt: Date; sellerDid: string
     bond_amount: a.bondAmount, // in the signed canonical bytes — needed to reproduce the verify recipe
     sales_count: a.salesCount,
     publishing_did: a.sellerDid,
-    publishing_profile: `/public/agents/${a.sellerDid}`,
+    publishing_profile: publicAgentPath(a.sellerDid),
     // Legacy v1 field names retained; they identify the publishing record
     // and are not independent authorship findings.
     creator_did: a.sellerDid,
@@ -144,7 +144,8 @@ app.get("/:id", async (c) => {
         verify:
           "canonical = sha256('gallery-artifact/v1' 0x00 artifact_id 0x00 creator_did 0x00 content_sha256 " +
           "0x00 media_type 0x00 content_bytes 0x00 price_amount 0x00 currency 0x00 bond_amount 0x00 title); " +
-          "ed25519.verify(signature, canonical, creator's active public key).",
+          "ed25519.verify(signature, canonical, the publishing identity key recorded at stocking). " +
+          "The legacy creator_did field participates in the v1 signed bytes; the signature does not prove authorship or rights.",
       },
       { canon_pointer: CANON },
     ),
