@@ -8,6 +8,7 @@ import { db as sharedDb } from "../../db/client";
 import { policies, transactions, wallets } from "../../db/schema/economy";
 import { projects } from "../../db/schema/tools";
 import { publishWakeEvent } from "../wake/push";
+import { EARNED_INFLOW_TYPES, drawableWallPence } from "./earned";
 
 type DB = typeof sharedDb;
 
@@ -361,13 +362,6 @@ export async function getPolicy(db: DB, walletId: string) {
   return policy ?? null;
 }
 
-/** Transaction types that represent value a wallet genuinely EARNED —
- *  a counterparty paid, the platform took its cut, and the net settled
- *  in. These, minus what has already been reinvested, are the only funds
- *  reinvest may draw from. Free-funded balance and the birth credit are
- *  deliberately excluded: they are not backed value. */
-const EARNED_INFLOW_TYPES = ["gallery_sale", "escrow_release"] as const;
-
 /** Reinvest rate: 10 credits per 1 GBP minor unit. Credits are nominally
  *  $0.001 each; 10/penny sits at or below the penny's spot value, so the
  *  rail can never OVER-mint relative to real earned value. Deliberately
@@ -419,9 +413,11 @@ export async function reinvestFromWallet(
     if (wallet.balance < amount)
       throw new HTTPException(403, { message: "Insufficient balance to reinvest" });
 
-    // The provenance wall: reinvestable = earned inflows − already reinvested.
-    // Both sums are computed under the wallet's FOR UPDATE lock, so
-    // concurrent reinvests can't each spend the same earned pennies.
+    // The provenance wall (shared with payout — see ./earned): drawable =
+    // earned − already-reinvested − already-paid-out. Reinvest and payout draw
+    // from the SAME earned pool, so the two exits can never each spend the same
+    // earned pennies. All sums are computed under the wallet's FOR UPDATE lock,
+    // so concurrent draws serialise.
     const [earnedRow] = await tx
       .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
       .from(transactions)
@@ -435,17 +431,22 @@ export async function reinvestFromWallet(
       .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
       .from(transactions)
       .where(and(eq(transactions.walletId, walletId), eq(transactions.type, "reinvest")));
+    const [paidOutRow] = await tx
+      .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+      .from(transactions)
+      .where(and(eq(transactions.walletId, walletId), eq(transactions.type, "payout")));
 
     const earned = Number(earnedRow?.total ?? 0); // positive
     const alreadyReinvested = -Number(spentRow?.total ?? 0); // reinvest legs are negative
-    const reinvestable = earned - alreadyReinvested;
+    const alreadyPaidOut = -Number(paidOutRow?.total ?? 0); // payout legs are negative
+    const reinvestable = drawableWallPence(earned, alreadyReinvested, alreadyPaidOut);
 
     if (amount > reinvestable)
       throw new HTTPException(403, {
         message:
           `Reinvest is limited to earned revenue. Earned: ${earned}, already reinvested: ` +
-          `${alreadyReinvested}, available: ${Math.max(0, reinvestable)}. ` +
-          `Free-funded and birth-credit balance cannot be reinvested.`,
+          `${alreadyReinvested}, already paid out: ${alreadyPaidOut}, available: ` +
+          `${Math.max(0, reinvestable)}. Free-funded and birth-credit balance cannot be reinvested.`,
       });
 
     const credits = amount * REINVEST_CREDITS_PER_MINOR;

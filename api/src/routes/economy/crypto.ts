@@ -266,14 +266,29 @@ router.post("/wallets/:walletId/payout", async (c) => {
       // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
       return fail(c, errors.insufficientBalance(), 402);
     }
-    // Policy violations (Slice 6) — return 403 with the error code +
+    // Operator misconfiguration, not the agent's fault: no FX rate set. 503 so
+    // the caller knows to wait, not to change their request.
+    if (msg === "payout_fx_rate_unset") {
+      return c.json(
+        {
+          error: msg,
+          message:
+            "Payout is enabled but no GBP→USD rate is configured (PAYOUT_GBP_USD_RATE). " +
+            "This is an operator setting; try again once it is set.",
+        },
+        503,
+      );
+    }
+    // Policy + earned-wall violations — return 403 with the error code +
     // optional detail line. Agents can adjust amount / destination /
-    // wait-for-tomorrow accordingly.
+    // wait-for-tomorrow / earn-more accordingly.
     if (
       msg === "payout_below_min" ||
       msg === "destination_not_allowlisted" ||
       msg === "payout_exceeds_daily_ceiling" ||
-      msg === "payout_dual_control_required"
+      msg === "payout_dual_control_required" ||
+      msg === "payout_exceeds_earned" ||
+      msg === "payout_requires_gbp_wallet"
     ) {
       return c.json(
         {
