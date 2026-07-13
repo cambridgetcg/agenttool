@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -77,11 +77,11 @@ async function fixture() {
   await chmod(join(repo, "bin/deploy.sh"), 0o755);
   await writeFile(
     join(repo, "bin/preflight.sh"),
-    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n",
+    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${PREFLIGHT_MARKER:-}\" ]; then touch \"$PREFLIGHT_MARKER\"; fi\nif [ -n \"${PREFLIGHT_HOLD_UNTIL:-}\" ]; then\n  while [ ! -e \"$PREFLIGHT_HOLD_UNTIL\" ]; do sleep 0.02; done\nfi\nif [ -n \"${ADVANCE_REMOTE_PATH:-}\" ]; then\n  git --git-dir=\"$ADVANCE_REMOTE_PATH\" update-ref refs/heads/main \"$ADVANCE_REMOTE_TO\"\nfi\n[ \"${FAIL_PREFLIGHT:-0}\" != 1 ] || exit 8\n",
   );
   await writeFile(
     join(repo, "bin/migrate-pending.sh"),
-    "#!/usr/bin/env bash\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
+    "#!/usr/bin/env bash\nif [ \"${1:-}\" != --dry-run ] && [ -n \"${MIGRATION_MARKER:-}\" ]; then touch \"$MIGRATION_MARKER\"; fi\n[ \"${FAIL_MIGRATE:-0}\" != 1 ] || exit 7\nexit 0\n",
   );
   await writeFile(
     join(repo, "bin/stage-doctrine-docs.sh"),
@@ -172,6 +172,10 @@ function deployCommand(...extra: string[]): string[] {
   ];
 }
 
+function deployLockPath(home: string): string {
+  return join(home, ".local", "state", "agenttool", "deploy.lock");
+}
+
 afterAll(async () => {
   await Promise.all(cleanup.map((path) => rm(path, { recursive: true, force: true })));
 });
@@ -202,7 +206,241 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("x-agenttool-sensitive-path-fence:");
     expect(deploy).toContain("Pages fence did not produce its marked non-cacheable 404");
     expect(deploy).toContain("Encoded sensitive path is publicly reachable");
+    expect(deploy).toContain('DEPLOY_LOCK_PATH="$lock_parent/deploy.lock"');
+    expect(deploy).toContain('ln "$DEPLOY_LOCK_OWNER_RECORD" "$DEPLOY_LOCK_PATH"');
+    expect(deploy).toContain('[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]');
   });
+
+  test("serializes actual deploys before Phase 0 while leaving observation commands unlocked", async () => {
+    const setup = await fixture();
+    const firstPreflight = join(setup.root, "first-preflight");
+    const releaseFirst = join(setup.root, "release-first");
+    const secondPreflight = join(setup.root, "second-preflight");
+    const secondMigration = join(setup.root, "second-migration");
+    const canonicalRepo = await realpath(setup.repo);
+    const first = Bun.spawn(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
+      {
+        cwd: setup.repo,
+        env: cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PREFLIGHT_MARKER: firstPreflight,
+          PREFLIGHT_HOLD_UNTIL: releaseFirst,
+        }),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const firstStdout = new Response(first.stdout).text();
+    const firstStderr = new Response(first.stderr).text();
+    let firstResult: [number, string, string] | undefined;
+    try {
+      let started = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (await exists(firstPreflight)) {
+          started = true;
+          break;
+        }
+        await Bun.sleep(20);
+      }
+      expect(started).toBe(true);
+      const lockPath = deployLockPath(setup.home);
+      expect(await exists(lockPath)).toBe(true);
+
+      const blocked = await run(
+        ["bash", "bin/deploy.sh", "--no-api", "--no-frontend"],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PREFLIGHT_MARKER: secondPreflight,
+          MIGRATION_MARKER: secondMigration,
+        }),
+      );
+      expect(blocked.code).toBe(73);
+      expect(blocked.stdout).toContain(`lock path: ${lockPath}`);
+      expect(blocked.stdout).toContain(`owner pid:       ${first.pid}`);
+      expect(blocked.stdout).toContain(`owner worktree:  ${canonicalRepo}`);
+      expect(await exists(secondPreflight)).toBe(false);
+      expect(await exists(secondMigration)).toBe(false);
+    } finally {
+      await writeFile(releaseFirst, "continue\n");
+      firstResult = await Promise.all([first.exited, firstStdout, firstStderr]);
+    }
+    const [firstCode, stdout, stderr] = firstResult!;
+    expect(firstCode, `${stdout}\n${stderr}`).toBe(0);
+    const lockPath = deployLockPath(setup.home);
+    expect(await exists(lockPath)).toBe(false);
+
+    const retry = await run(
+      deployCommand(),
+      setup.repo,
+      cleanEnv(setup.home, { XDG_STATE_HOME: setup.state }),
+    );
+    expect(retry.code, retry.stderr).toBe(0);
+    expect(await exists(lockPath)).toBe(false);
+  }, 15_000);
+
+  test("releases the lock after a handled preflight failure", async () => {
+    const setup = await fixture();
+    const preflightMarker = join(setup.root, "failed-preflight");
+    const failed = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PREFLIGHT_MARKER: preflightMarker,
+        FAIL_PREFLIGHT: "1",
+      }),
+    );
+    expect(failed.code).toBe(1);
+    expect(await exists(preflightMarker)).toBe(true);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+
+    const retry = await run(
+      deployCommand(),
+      setup.repo,
+      cleanEnv(setup.home, { XDG_STATE_HOME: setup.state }),
+    );
+    expect(retry.code, retry.stderr).toBe(0);
+  }, 10_000);
+
+  test("does not unlink a replacement lock owned by another invocation", async () => {
+    const setup = await fixture();
+    const marker = join(setup.root, "replacement-preflight");
+    const release = join(setup.root, "replacement-release");
+    const lockPath = deployLockPath(setup.home);
+    const replacementOwner = join(resolve(lockPath, ".."), ".deploy-lock-owner.replacement");
+    const holder = Bun.spawn(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--no-api", "--no-frontend"],
+      {
+        cwd: setup.repo,
+        env: cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PREFLIGHT_MARKER: marker,
+          PREFLIGHT_HOLD_UNTIL: release,
+        }),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const stdoutPromise = new Response(holder.stdout).text();
+    const stderrPromise = new Response(holder.stderr).text();
+    let holderResult: [number, string, string] | undefined;
+    try {
+      let started = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (await exists(marker)) {
+          started = true;
+          break;
+        }
+        await Bun.sleep(20);
+      }
+      expect(started).toBe(true);
+      const holderRecordText = await readFile(lockPath, "utf8");
+      const holderRecord = holderRecordText
+        .split("\n")
+        .find((line) => line.startsWith("owner_record="))
+        ?.slice("owner_record=".length);
+      expect(holderRecord).toBeDefined();
+
+      await unlink(lockPath);
+      await writeFile(
+        replacementOwner,
+        [
+          "schema=agenttool-local-deploy-lock/v1",
+          "owner_id=.deploy-lock-owner.replacement",
+          "pid=999999998",
+          "started_at=2000-01-02T00:00:00Z",
+          "worktree=/replacement/agenttool-worktree",
+          `owner_record=${replacementOwner}`,
+          "",
+        ].join("\n"),
+        { mode: 0o600 },
+      );
+      await link(replacementOwner, lockPath);
+      expect((await stat(lockPath)).ino).not.toBe((await stat(holderRecord!)).ino);
+    } finally {
+      await writeFile(release, "continue\n");
+      holderResult = await Promise.all([holder.exited, stdoutPromise, stderrPromise]);
+    }
+    const [code, stdout, stderr] = holderResult!;
+    expect(code, `${stdout}\n${stderr}`).toBe(1);
+    expect(stderr).toContain("Refusing to release a deploy lock not owned by this process");
+    expect(await exists(lockPath)).toBe(true);
+    expect(await exists(replacementOwner)).toBe(true);
+    expect((await stat(lockPath)).ino).toBe((await stat(replacementOwner)).ino);
+  }, 10_000);
+
+  test("never steals a stale lock and keeps survey, dry-run, and mirror usable", async () => {
+    const setup = await fixture();
+    const lockPath = deployLockPath(setup.home);
+    const lockParent = resolve(lockPath, "..");
+    const ownerRecord = join(lockParent, ".deploy-lock-owner.stale-test");
+    const preflightMarker = join(setup.root, "stale-preflight");
+    const migrationMarker = join(setup.root, "stale-migration");
+    await mkdir(lockParent, { recursive: true });
+    await writeFile(
+      ownerRecord,
+      [
+        "schema=agenttool-local-deploy-lock/v1",
+        "owner_id=.deploy-lock-owner.stale-test",
+        "pid=999999999",
+        "started_at=2000-01-01T00:00:00Z",
+        "worktree=/stale/agenttool-worktree",
+        `owner_record=${ownerRecord}`,
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+    await link(ownerRecord, lockPath);
+
+    const survey = await run(
+      ["bash", "bin/deploy.sh", "--survey", "--no-migrate"],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(survey.code, survey.stderr).toBe(0);
+    const dryRun = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--dry-run",
+        "--no-migrate",
+        "--no-api",
+        "--no-frontend",
+        "--skip-preflight",
+      ],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(dryRun.code, dryRun.stderr).toBe(0);
+    const mirror = await run(
+      ["bash", "bin/deploy.sh", "--mirror-codeberg"],
+      setup.repo,
+      cleanEnv(setup.home),
+    );
+    expect(mirror.code, mirror.stderr).toBe(0);
+
+    const blocked = await run(
+      ["bash", "bin/deploy.sh", "--no-api", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PREFLIGHT_MARKER: preflightMarker,
+        MIGRATION_MARKER: migrationMarker,
+      }),
+    );
+    expect(blocked.code).toBe(73);
+    expect(blocked.stdout).toContain(`lock path: ${lockPath}`);
+    expect(blocked.stdout).toContain("owner pid:       999999999");
+    expect(blocked.stdout).toContain("owner process:   not observable");
+    expect(blocked.stdout).toContain("never removed automatically");
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(lockPath)).toBe(true);
+    expect(await exists(ownerRecord)).toBe(true);
+    expect((await stat(lockPath)).ino).toBe((await stat(ownerRecord)).ino);
+  }, 15_000);
 
   test("keeps the rendered data reference byte-identical at the edge", async () => {
     const [deploy, headers] = await Promise.all([
@@ -443,6 +681,7 @@ describe("deploy release provenance spine", () => {
     expect(text).not.toContain("do-not-record");
     expect((await stat(receiptDir)).mode & 0o777).toBe(0o700);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
   });
 
   test("keeps the invocation-start GitHub snapshot when main advances mid-chain", async () => {
@@ -510,6 +749,7 @@ describe("deploy release provenance spine", () => {
     expect(receipt.exit_status).toBe(1);
     expect(receipt.external_mutation_started).toBe(true);
     expect(receipt.phases.migrations).toBe("failed_or_uncertain");
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
   });
 
   test("cleans staged API inputs and receipts uncertainty when interrupted during Fly", async () => {
@@ -566,6 +806,7 @@ describe("deploy release provenance spine", () => {
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.exit_status).toBe(143);
     expect(receipt.phases.api).toBe("deploying");
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
   }, 10_000);
 
   test("blocks API publication when committed Rights of Life bytes are not live", async () => {
