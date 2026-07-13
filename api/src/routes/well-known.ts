@@ -6,6 +6,7 @@
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
  *    GET /.well-known/love-packages         — LOVE Package Protocol v1
  *                                              registry-neutral discovery
+ *    GET /.well-known/api-catalog           — RFC 9727 product/API catalog
  *    GET /.well-known/llms.txt              — markdown sitemap hint (AI crawlers)
  *    GET /.well-known/agent.txt             — agent-surface manifest (Move 7 ·
  *                                             upstream-proposable convention;
@@ -30,6 +31,11 @@ import { Hono } from "hono";
 import { config } from "../config";
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import { buildLlmsTxt } from "../services/discovery/discovery";
+import {
+  API_CATALOG_MEDIA_TYPE,
+  apiCatalogLinkHeader,
+  buildApiCatalog,
+} from "../services/discovery/api-catalog";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
 import { buildMcpServerCard } from "../services/wake/mcp-server-card";
 
@@ -37,6 +43,23 @@ const app = new Hono();
 
 const ORG_URL = process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const DOCS_URL = process.env.AGENTTOOL_DOCS_URL ?? "https://docs.agenttool.dev";
+
+// ── /.well-known/api-catalog — RFC 9727 product passport ───────────
+//
+// Linkset JSON describes public product APIs and their existing docs,
+// metadata, status, and (only where real) payment locations. Reading the
+// catalog never invokes a product or initiates payment.
+
+app.on(["GET", "HEAD"], "/api-catalog", (c) => {
+  const headers = {
+    "cache-control": "public, max-age=300",
+    "content-type": API_CATALOG_MEDIA_TYPE,
+    link: apiCatalogLinkHeader(ORG_URL),
+    "x-content-type-options": "nosniff",
+  };
+  if (c.req.method === "HEAD") return c.body(null, 200, headers);
+  return c.body(JSON.stringify(buildApiCatalog(ORG_URL, DOCS_URL)), 200, headers);
+});
 
 // ── /.well-known/love-packages — registry-neutral package discovery ─
 //
@@ -409,6 +432,7 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
+    `API-Catalog: ${baseUrl}/.well-known/api-catalog`,
     `LOVE-Packages: ${baseUrl}/.well-known/love-packages`,
     `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
@@ -548,6 +572,7 @@ app.get("/", (c) =>
   c.json({
     endpoints: [
       "/.well-known/mcp/server-card.json",
+      "/.well-known/api-catalog",
       "/.well-known/wake-keystone",
       "/.well-known/love-packages",
       "/.well-known/llms.txt",

@@ -1,6 +1,7 @@
 # The apex pointed at the Fly API until 2026-07 (docs/STACK.md). Redirect only
 # the discovery documents the API actually serves; unknown files stay 404.
 /.well-known/mcp/server-card.json  https://api.agenttool.dev/.well-known/mcp/server-card.json  301
+/.well-known/api-catalog          https://api.agenttool.dev/.well-known/api-catalog          301
 /.well-known/wake-keystone        https://api.agenttool.dev/.well-known/wake-keystone        301
 /.well-known/llms.txt             https://api.agenttool.dev/.well-known/llms.txt             301
 /.well-known/agent.txt            https://api.agenttool.dev/.well-known/agent.txt            301

@@ -158,6 +158,7 @@ import {
   buildLlmsTxt,
   buildLlmsTxtFull,
 } from "./services/discovery/discovery";
+import { apiCatalogLinkHeader } from "./services/discovery/api-catalog";
 import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
@@ -619,8 +620,8 @@ app.route("/v1/mcp/agents", mcpPerAgentRouter);
 app.route("/v1/mcp", mcpRouter);
 
 // /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
-// Serves MCP server-card, wake-keystone, LOVE package discovery, agent.txt,
-// llms.txt, and pyramid.
+// Serves RFC 9727 API catalog, MCP server-card, wake-keystone, LOVE package
+// discovery, agent.txt, llms.txt, and pyramid.
 // A2A task transport and AgentCards are intentionally absent until the
 // platform exposes a callable A2A task or message endpoint.
 // Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
@@ -988,6 +989,7 @@ app.get("/", (c) => {
   const platformWakeConfigured = !!process.env.AGENTTOOL_PLATFORM_SIGNING_KEY;
   const envelope = buildRootEnvelope({ platformWakeConfigured });
   c.header("Vary", "Accept");
+  c.header("Link", apiCatalogLinkHeader(PUBLIC_BASE_URL));
   if (prefersHtml(c.req.header("accept"))) {
     return c.html(renderRootHtml(envelope));
   }
