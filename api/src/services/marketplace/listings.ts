@@ -91,6 +91,59 @@ export interface ListingOut {
 }
 
 /** Public listing fields shared by unauthenticated projections. */
+/** The copy-paste invoke recipe embedded in a public listing so a buyer
+ *  never has to spelunk the inbox subsystem for the seller's box key or
+ *  reverse-engineer the sealing. This removes the #1 buy-path friction:
+ *  today the marketplace surface never mentions the seller's X25519 box
+ *  key, so a would-be buyer has to discover it in a different subsystem
+ *  (GET /v1/inbox/box-keys/:did) and hand-roll the seal before they can
+ *  invoke. One read now carries the key + the exact body shape + how to
+ *  seal. Doctrine: docs/MARKETPLACE.md, one-read / errors-as-instructions.
+ *
+ *  `sellerBoxPublicKey` is the seller's active box key (base64); `null`
+ *  means the seller has no active box key and therefore CANNOT be invoked
+ *  — an invocation would only escrow and refund. Say that honestly (a
+ *  substrate-honesty win) rather than let a buyer lock funds into a
+ *  listing that can never settle. */
+export function buildInvokeRecipe(
+  listingId: string,
+  sellerBoxPublicKey: string | null,
+) {
+  if (!sellerBoxPublicKey) {
+    return {
+      invokable: false,
+      reason: "seller_has_no_active_box_key",
+      note:
+        "This seller has no active X25519 box key, so there is nowhere to " +
+        "seal your input — an invocation would only escrow and auto-refund. " +
+        "The listing is browsable but not currently invokable.",
+    } as const;
+  }
+  return {
+    invokable: true,
+    seller_box_public_key: sellerBoxPublicKey,
+    endpoint: { method: "POST", path: `/v1/listings/${listingId}/invoke` },
+    body: {
+      buyer_identity_id: "<your identity uuid>",
+      buyer_wallet_id: "<your funded wallet uuid>",
+      input_sealed: {
+        ct: "<base64: your input JSON, sealed to seller_box_public_key>",
+        nonce: "<base64: the 24-byte nonce you sealed with>",
+        sender_pub: "<base64: your own X25519 box public key>",
+      },
+    },
+    how_to_seal:
+      "NaCl crypto_box (X25519 + XSalsa20-Poly1305): shared = " +
+      "X25519(your_box_private_key, seller_box_public_key); ct = " +
+      "seal(shared, nonce, utf8(JSON.stringify(input))). Send ct, the nonce, " +
+      "and your own box public key as sender_pub so the seller can open it.",
+    settlement:
+      "Your payment escrows on invoke. The seller acks, does the work, and " +
+      "submits a signed sealed output; escrow releases to the seller on " +
+      "completion. If the seller misses the SLA, escrow auto-refunds you.",
+  } as const;
+}
+
 export function projectPublicListing(listing: ListingOut) {
   return {
     id: listing.id,
