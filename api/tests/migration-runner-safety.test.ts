@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -9,6 +10,16 @@ function read(path: string): string {
 }
 
 describe("migration runner safety", () => {
+  test("the production-journaled federation migration remains byte-for-byte original", () => {
+    const migration = read("api/migrations/0012_federation.sql");
+    expect(createHash("sha256").update(migration).digest("hex")).toBe(
+      "d0771748b16ba18a297a526824e53004dd07185f4eb601ef4cc1789b92985ee8",
+    );
+    const policy = read("api/migrations/README.md");
+    expect(policy).toContain("frozen byte-for-byte");
+    expect(policy).toContain("Do not change the journal checksum");
+  });
+
   test("pending scan refuses checksum drift before choosing files", () => {
     const source = read("bin/migrate-pending.sh");
     expect(source).toContain("SELECT filename, checksum FROM meta._migrations");

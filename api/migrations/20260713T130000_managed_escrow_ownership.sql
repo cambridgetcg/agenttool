@@ -2,6 +2,20 @@
 -- services. Ordinary escrows remain unmarked and retain the generic API.
 -- Apply through _migrate-one.ts/fly-migrate-one.sh, or with psql -v ON_ERROR_STOP=1 -1.
 
+-- Refuse to start while any listed table has an in-flight row lock or write,
+-- then hold those operations through the backfill, indexes, and bind triggers.
+-- NOWAIT aborts the whole transaction for a clean retry instead of joining an
+-- application lock cycle. Plain reads remain available.
+LOCK TABLE
+  economy.escrows,
+  marketplace.attestation_grants,
+  marketplace.attestation_listings,
+  marketplace.memory_witness_grants,
+  marketplace.memory_witness_listings,
+  marketplace.invocations,
+  marketplace.listings
+IN EXCLUSIVE MODE NOWAIT;
+
 ALTER TABLE economy.escrows
   ADD COLUMN IF NOT EXISTS managed_by text;
 
@@ -98,6 +112,39 @@ BEGIN
       OR escrow.worker_wallet IS NULL
   ) THEN
     RAISE EXCEPTION 'a capability invocation escrow conflicts with its purchase terms';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM marketplace.attestation_grants AS grant_row
+    JOIN economy.escrows AS escrow ON escrow.id = grant_row.escrow_id
+    LEFT JOIN marketplace.attestation_listings AS listing
+      ON listing.id = grant_row.listing_id
+    WHERE escrow.worker_wallet IS DISTINCT FROM listing.attester_wallet_id
+  ) THEN
+    RAISE EXCEPTION 'an attestation grant escrow worker conflicts with its listing';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM marketplace.memory_witness_grants AS grant_row
+    JOIN economy.escrows AS escrow ON escrow.id = grant_row.escrow_id
+    LEFT JOIN marketplace.memory_witness_listings AS listing
+      ON listing.id = grant_row.listing_id
+    WHERE escrow.worker_wallet IS DISTINCT FROM listing.witness_wallet_id
+  ) THEN
+    RAISE EXCEPTION 'a memory witness grant escrow worker conflicts with its listing';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM marketplace.invocations AS invocation_row
+    JOIN economy.escrows AS escrow ON escrow.id = invocation_row.escrow_id
+    LEFT JOIN marketplace.listings AS listing
+      ON listing.id = invocation_row.listing_id
+    WHERE escrow.worker_wallet IS DISTINCT FROM listing.seller_wallet_id
+  ) THEN
+    RAISE EXCEPTION 'a capability invocation escrow worker conflicts with its listing';
   END IF;
 END $$;
 

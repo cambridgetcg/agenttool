@@ -27,7 +27,16 @@ describe("legacy reinvest reconciliation", () => {
   });
 
   test("unknown rates and spent-credit debt stop the migration", () => {
+    expect(MIGRATION).toContain(
+      "reinvest reconciliation found a nonnegative legacy row",
+    );
+    expect(MIGRATION).toMatch(
+      /ELSE NULL[\s\S]+credits_minted IS NULL[\s\S]+credits_minted <> wallet_amount \* 10/,
+    );
     expect(MIGRATION).toContain("credits_minted <> wallet_amount * 10");
+    expect(MIGRATION).toContain(
+      "reinvest reconciliation found a wallet without its project",
+    );
     expect(MIGRATION).toContain("requires an explicit project credit debt");
   });
 });
