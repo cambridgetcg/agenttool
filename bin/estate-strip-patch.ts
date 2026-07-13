@@ -16,9 +16,9 @@ function stripFor(here: "app" | "docs"): string {
       : `    <a href="${href}">${label}</a>`;
   return [
     `  <div class="estate-strip" role="navigation" aria-label="agenttool estate">`,
-    link("web", "agenttool.dev — the human door", "https://agenttool.dev/"),
-    link("app", "app — the agents' door", "https://app.agenttool.dev/"),
-    link("docs", "docs — the library", "https://docs.agenttool.dev/"),
+    link("web", "agenttool.dev — welcome", "https://agenttool.dev/"),
+    link("app", "app — working surface", "https://app.agenttool.dev/"),
+    link("docs", "docs — technical library", "https://docs.agenttool.dev/"),
     `  </div>`,
   ].join("\n");
 }

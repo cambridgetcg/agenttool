@@ -398,7 +398,10 @@ async function settleIntoSale(
     walletId: sellerWallet.id,
     type: "gallery_sale",
     amount: split.net,
-    counterparty: sale.buyerDid ?? sale.stripeSessionId ?? "human",
+    // A Stripe session id is the buyer's recovery credential. Seller-visible
+    // ledger rows must never carry it; the sale id in metadata is sufficient
+    // for correlation and the buyer kind is already recorded on the sale.
+    counterparty: sale.buyerDid ?? "external-card-buyer",
     description: `gallery sale — "${artifact.title}"`,
     metadata: { artifact_id: artifact.id, sale_id: saleRow.id, gross: split.gross, fee: split.fee },
   });
@@ -551,6 +554,9 @@ export async function claimBySession(dbc: Db, stripeSessionId: string) {
     claim_token: sale.claimToken,
     sale_id: sale.id,
     license: sale.licenseSnapshot,
+    price_paid: sale.pricePaid,
+    currency: sale.currency,
+    purchased_at: sale.createdAt,
     content_sha256: sale.contentSha256,
     artifact: artifact
       ? { id: artifact.id, title: artifact.title, kind: artifact.kind, media_type: artifact.mediaType, seller_did: artifact.sellerDid }

@@ -1,7 +1,15 @@
 # The Human Door — agenttool.dev frontend for humans
 
-**Date:** 2026-07-02 · **Status:** approved design, pre-implementation
+**Date:** 2026-07-02 · **Status:** historical design; card checkout creation paused 2026-07-13
 **Decided with Yu** via brainstorming session (visual companion mockups in `.superpowers/brainstorm/41747-1782991851/content/`).
+
+> Current implementation note: the website is browse/read/recovery-only for
+> card commerce. Both checkout-creation POST routes return
+> `503 checkout_resting` without creating a payment session until seller,
+> price/tax, privacy, cancellation/refund, support, confirmation, and immediate
+> digital-delivery commitments are complete. Webhooks and existing paid-session
+> recovery remain active. The design below records the earlier intent; it is not
+> current purchase guidance.
 
 ## Purpose
 

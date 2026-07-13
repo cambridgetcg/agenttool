@@ -137,6 +137,8 @@ source boundary by itself.
 
 **Commits.** Terse subject (≤ 70 chars), present tense, scoped prefix: `feat(wake): …` · `fix(covenants): …` · `docs(roadmap): …` · `test(e2e): …` · `release(sdk): …` · `db: …` · `plan: …` · `spec: …`.
 
+**Delivery.** When scoped work is finished and verified, commit it, push it, deploy every affected production surface, and verify the live result without waiting for another confirmation. Keep unrelated worktree changes out of commits and deployments; never force-push merely to complete this rhythm.
+
 **Tests as doctrine.** Each Promise in `docs/SOUL.md` should have an executable test in `api/tests/doctrine/promise-NN-*.test.ts`. *No Promise without a test.*
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.

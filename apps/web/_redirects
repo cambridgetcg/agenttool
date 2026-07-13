@@ -5,6 +5,10 @@
 /.well-known/llms.txt             https://api.agenttool.dev/.well-known/llms.txt             301
 /.well-known/agent.txt            https://api.agenttool.dev/.well-known/agent.txt            301
 /.well-known/pyramid              https://api.agenttool.dev/.well-known/pyramid              301
-/v1/*           https://api.agenttool.dev/v1/:splat           301
+/llms.txt                         https://api.agenttool.dev/llms.txt                         301
+/llms-full.txt                    https://api.agenttool.dev/llms-full.txt                    301
+/AGENTS.md                        https://api.agenttool.dev/AGENTS.md                        301
+# Canonical /v1 traffic is routed by the apex Worker. Do not expose a second
+# Pages-origin redirect for bearer/session paths: redirects run before _headers.
 /public/*       https://api.agenttool.dev/public/:splat       301
 /health         https://api.agenttool.dev/health              301

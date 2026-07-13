@@ -24,7 +24,16 @@ describe("apex-door upstream routing", () => {
 
   test("the apex root remains content-negotiated", () => {
     expect(resolveUpstreamHost("/", "application/json")).toBe(
+      "agenttool-web.pages.dev",
+    );
+    expect(resolveUpstreamHost("/", "Application/JSON")).toBe(
+      "agenttool-web.pages.dev",
+    );
+    expect(resolveUpstreamHost("/watch", "application/json")).toBe(
       "api.agenttool.dev",
+    );
+    expect(resolveUpstreamHost("/", "application/json;q=0, text/html;q=1")).toBe(
+      "agenttool-web.pages.dev",
     );
     expect(resolveUpstreamHost("/", "text/html,application/xhtml+xml")).toBe(
       "agenttool-web.pages.dev",

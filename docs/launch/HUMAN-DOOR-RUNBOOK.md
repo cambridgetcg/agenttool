@@ -1,5 +1,13 @@
 # HUMAN-DOOR RUNBOOK — from staging to live
 
+> **PAUSED / DO NOT EXECUTE — 2026-07-13.** This is a historical launch
+> runbook, not a current operating instruction. New card checkout creation is
+> hard-paused in the API with `503 checkout_resting` until the operator,
+> price/tax, privacy, cancellation/refund, support, durable-confirmation, and
+> immediate-digital-delivery foundations are complete. Keep the signed Stripe
+> webhook and existing paid-session recovery routes running. Do not enable
+> checkout merely by setting Stripe secrets or following the steps below.
+
 The steps below take agenttool's revenue door from test mode to production. Every command is copy-pasteable. DNS rollback is documented to account for failure scenarios.
 
 ## 1. Deploy API
