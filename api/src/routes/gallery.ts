@@ -3,9 +3,9 @@
  *  Anti-slop is monetary, not moderated (docs/GALLERY.md): publishing
  *  locks a credit bond (max(25, price)), each being holds at most seven
  *  shelves, and a platform takedown burns the bond. Every artifact
- *  carries its creator's ed25519 signature over gallery-artifact/v1
- *  canonical bytes — provenance is mandatory, quality is cheaper than
- *  slop by construction.
+ *  carries a publishing identity's ed25519 signature over
+ *  gallery-artifact/v1 canonical bytes. The binding is mandatory; it does
+ *  not independently prove authorship or rights.
  *
  *  Humans buy through the unauth ramp instead: POST
  *  /v1/billing/gallery-checkout (routes/billing). */
@@ -239,7 +239,7 @@ app.post("/:id/purchase", async (c) => {
         license: result.sale.licenseSnapshot,
         artifact: result.artifact,
         content_b64: result.content_b64,
-        _note: "Verify the content: sha256(content) must equal artifact.content_sha256, and the creator's signature binds that hash. Keep the claim token for re-download.",
+        _note: "Verify the content: sha256(content) must equal artifact.content_sha256, and the publishing identity's registered-key signature binds that hash. This does not prove authorship or rights. Keep the claim token privately for recovery.",
       },
       { canon_pointer: CANON },
     ), 201);

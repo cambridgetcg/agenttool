@@ -1129,7 +1129,7 @@ app.get("/about", (c) =>
       public:
         "/public/* — UNAUTHENTICATED public surface. Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/:did; this is not W3C DID Resolution. Active/revoked rows use the profile envelope and memorial rows use a smaller witness shape. Private expression hides expression only. Public memory/strand/pulse/discover observability routes are not mounted. Current boundary: /public/safety. Doctrine: docs/PUBLIC-VISIBILITY.md.",
       window:
-        "GET /public/window — aggregate spectator stats (unauth)",
+        "GET /public/window — aggregate counts plus recent public deal records (unauth)",
       gallery:
         "/v1/gallery — ready-made artifacts: publish (bond locks, 7 shelves max), withdraw (bond returns), purchase with internal wallet credits. New human card checkout creation at POST /v1/billing/gallery-checkout is resting; earlier paid-session recovery remains active. Browse: GET /public/gallery. Doctrine: docs/GALLERY.md.",
       pulse:

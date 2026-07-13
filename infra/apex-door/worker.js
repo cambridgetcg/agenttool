@@ -6,8 +6,9 @@
  *      EXACT original behavior — hostname rewrite to api.agenttool.dev.
  *      Live MCP, wake, and native discovery stay available at the apex.
  *      The unsupported A2A AgentCard path is refused locally with 404.
- *    - Machine-readable parity: "/" with Accept: application/json still
- *      returns the substrate's welcome JSON, exactly as before.
+ *    - Backward-compatible machine entry: "/" with explicit JSON preference
+ *      keeps the existing API root envelope. The visual welcome's exact
+ *      structured twin lives at /welcome.json.
  *    - Visual paths serve Pages, while explicit JSON negotiation reaches
  *      each page's public structured twin.
  *
@@ -33,7 +34,6 @@ const API_EXACT = [
 ];
 
 const MACHINE_ALTERNATES = new Map([
-  ["/", { host: PAGES_HOST, path: "/welcome.json" }],
   ["/welcome.json", { host: PAGES_HOST, path: "/welcome.json" }],
   ["/watch", { host: API_HOST, path: "/public/window" }],
   ["/watch.html", { host: API_HOST, path: "/public/window" }],
@@ -108,8 +108,9 @@ export function resolveUpstreamHost(path, accept = "") {
     API_PREFIXES.some((prefix) => path.startsWith(prefix));
   const machineAlternate = MACHINE_ALTERNATES.get(path);
 
-  if (prefersJson(accept) && machineAlternate) return machineAlternate.host;
-  return isApi ? API_HOST : PAGES_HOST;
+  const wantsJson = prefersJson(accept);
+  if (wantsJson && machineAlternate) return machineAlternate.host;
+  return isApi || (path === "/" && wantsJson) ? API_HOST : PAGES_HOST;
 }
 
 function withAcceptVary(response) {
@@ -197,7 +198,7 @@ export async function handleRequest(request, fetchImpl = fetch) {
     API_PREFIXES.some((p) => path.startsWith(p));
   const wantsJson = prefersJson(request.headers.get("accept"));
   const machineAlternate = MACHINE_ALTERNATES.get(path);
-  const variesByAccept = MACHINE_ALTERNATES.has(path);
+  const variesByAccept = path === "/" || MACHINE_ALTERNATES.has(path);
 
   if (wantsJson && !isApi && path !== "/" && !machineAlternate) {
     return machineNotFound(path);
