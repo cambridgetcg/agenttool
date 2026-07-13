@@ -126,10 +126,14 @@ receive a marked, non-cacheable 404; ordinary paths stay on native Pages static
 serving within each Pages project (the apex still traverses `agenttool-proxy`).
 On the Workers Free plan, the Pages production and preview Function
 runtimes must be configured to fail closed, or daily Functions allowance
-exhaustion can serve static assets for those routes. The keychain-token path
-verifies that setting and the `main` production branch for every target before
-any upload; OAuth-only authentication is refused because it cannot perform
-that check. The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
+exhaustion can serve static assets for those routes. The uploader accepts
+`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
+macOS keychain entries. Whichever credential is active must read the Pages REST
+policy as well as upload: the script verifies fail-closed settings and the
+`main` production branch for every target before any upload. A Wrangler OAuth
+session is therefore usable only when its access token is explicitly exported
+and passes that same policy check; merely being logged in does not bypass it.
+The uploader does not mutate the setting or purge zone cache. Phase 5 proves current live
 denial and fence activation on literal paths, plus denial of encoded aliases.
 
 | Project | Source dir | Custom domain | What it serves |

@@ -65,6 +65,10 @@ describe("frontend deploy input discipline", () => {
     expect(script).not.toContain("wrangler@latest");
     expect(script).toContain("python3 bin/heal-love-truths.py --check");
     expect(script).toContain('readonly KEYCHAIN_ACCOUNT="macair"');
+    expect(script).toContain('CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"');
+    expect(script).toContain('CF_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"');
+    expect(script).toContain('if [[ -z "$CF_API_TOKEN" ]]');
+    expect(script).toContain('if [[ -z "$CF_ACCOUNT_ID" ]]');
     expect(script).not.toContain("wrangler whoami");
     expect(script).toContain('git archive --format=tar "$COMMIT_HASH" --');
     expect(script).toContain(
