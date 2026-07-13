@@ -51,11 +51,11 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20.19.0
-      - name: Install independent package dependencies from lockfiles
+      - name: Install package and LOVE validation dependencies from lockfiles
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in packages/data packages/data-protocol packages/sdk-ts; do
+          for workspace in api packages/data packages/data-protocol packages/sdk-ts; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
