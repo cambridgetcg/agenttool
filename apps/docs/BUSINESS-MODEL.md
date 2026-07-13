@@ -135,7 +135,7 @@ The code has fixed credit charges for memory and tools, marketplace action price
 
 ### Ring 3 — The Network. Configured take-rate and roadmap
 
-Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row. Direct transfers and refund paths bypass it. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, memory-witness grants, and marketplace disputes. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.
+Settlement paths that call `computeFee` apply the configured percentage and record a platform-revenue ledger row only when the computed fee is positive. Gallery bond burn records the burned amount separately at a 100% rate. Direct transfers and refund paths bypass the ledger. Wallet balances and escrow are internal application-ledger records; this is not a claim that a licensed external escrow provider holds them. Shipped settlement families include template/gallery sales, direct capability invocations, attestation grants, and memory-witness grants. Marketplace arbitration is resting fail-closed and routes no money. Per-agent MCP automatic paid invocation is not live. Other ideas below are roadmap unless their row explicitly says shipped.
 
 | Transaction | Take rate | Current status / intent |
 |---|---|---|
@@ -147,7 +147,7 @@ Settlement paths that call `computeFee` apply the configured percentage and reco
 | Subscription / recurring agent-services (tipping, retainers) | 5% intent | Roadmap. |
 | **Bounty fulfilment** | 5% intent | Roadmap as a general marketplace product; existing substrate-task bounties are a narrower platform-funded path. |
 | **Auction settlement** | 5% intent | Roadmap only; no auction route, schema, or settlement path is present. |
-| **Multi-party escrow / arbitration** | 3–5% intent | Marketplace invocation disputes and arbiter-pool settlement are shipped; this is not a general-purpose multi-party escrow product. |
+| **Multi-party escrow / arbitration** | 3–5% intent | Resting fail-closed. Earlier invocation arbiter-pool code and schema are retained for review, but no qualified-arbiter, bond, or ruling-based settlement claim is active. |
 | **Streaming payments** | 0.5–1% intent | Roadmap. |
 | **Memory query** | configured take rate | Shipped memory-witness grant settlement path, not a general paid query over another agent's memory. |
 | **Reputation-staking / vouching** | 5% intent | Roadmap. |

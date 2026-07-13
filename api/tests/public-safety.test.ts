@@ -86,6 +86,12 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.visibility.public_identity).toMatch(
       /Memorial identities return a smaller witness shape/i,
     );
+    expect(SAFETY_BOUNDARIES.visibility.authenticated_identity_reads).toMatch(
+      /authenticated GET \/v1\/discover is mounted.*explicit discovery allowlist/is,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.authenticated_identity_reads).not.toMatch(
+      /not mounted|returns 404/i,
+    );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
       /status=memorial alone does not prove mnemonic loss/i,
     );
@@ -188,6 +194,9 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.conditional_services.payout).toMatch(
       /PAYOUT_WORKER_ENABLED=true.*AGENTTOOL_DISABLE_WORKERS.*authoritative.*shared gate.*missing queue fails closed.*never falls back.*flags do not prove Redis connectivity.*cancel route/is,
     );
+    expect(SAFETY_BOUNDARIES.conditional_services.reinvest).toMatch(
+      /remains mounted.*stable 503.*before using its database.*no wallet balance is burned.*no project credits are minted.*gallery_sale.*escrow_release.*ordinary wallet debits did not consume.*refunds did not claw.*10 legacy conversions.*nine lack.*tenth lacks source allocation.*rollout migration.*restores.*claws.*write guard.*backed sub-balances.*debt/is,
+    );
     expect(SAFETY_BOUNDARIES.request_limits.registration).toMatch(
       /default 5 per hour.*registrar_bearer.*bypasses.*fails open/is,
     );
@@ -278,11 +287,14 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.idempotency.concurrency_and_failure).toMatch(
       /no atomic in-flight reservation.*simultaneous.*both execute.*fails open/is,
     );
+    expect(SAFETY_BOUNDARIES.idempotency.durable_escrow_create).toMatch(
+      /POST \/v1\/escrows.*separate.*SHA-256.*raw key is not retained.*current row.*changed.*409.*without a key.*another escrow/is,
+    );
     expect(SAFETY_BOUNDARIES.conditional_services.browse).toMatch(
       /return 503 redis_disabled.*mounted route is not proof/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.idempotency).toMatch(
-      /requires Redis.*fails open.*without replay protection/is,
+      /requires Redis.*fails open.*without replay protection.*POST \/v1\/escrows.*PostgreSQL-backed/is,
     );
     expect(SAFETY_BOUNDARIES.wake_degradation.availability).toMatch(
       /return 200.*empty, zero, null, or omitted fallback/is,
@@ -324,6 +336,9 @@ describe("GET /public/safety", () => {
     expect(WAKE_SAFETY_BOUNDARIES.outbound_url_tools).toMatch(
       /static_scrape_and_url_document_bounded_public_http_s_dns_pinned_connected_peer_redirect_revalidated_remote_content_untrusted;_playwright_browse_disabled_by_default_unsafe_opt_in_has_no_destination_filter_or_isolation/,
     );
+    expect(WAKE_SAFETY_BOUNDARIES.wallet_reinvestment).toMatch(
+      /resting_stable_503_no_balance_burn_or_credit_mint.*legacy_gallery_sale_and_escrow_release_labels_did_not_prove_backing_or_consume_on_other_debits_or_claw_credits_on_refund.*rollout_status_not_inferred_by_this_static_surface_verify_meta_migrations_and_live_ledger.*claw_or_debt/,
+    );
     const source = readFileSync(
       join(import.meta.dir, "..", "src", "services", "discovery", "safety-boundaries.ts"),
       "utf8",
@@ -353,6 +368,7 @@ describe("safety projection parity", () => {
       "Runtime-Custody",
       "Hosted-Execute",
       "Outbound-Tools",
+      "Wallet-Reinvestment",
       "Observer-Boundary",
     ] as const) {
       expect(kv.get(key)).toBe(AGENT_TXT_SAFETY[key]);
@@ -405,5 +421,19 @@ describe("GET /v1/self remains pre-auth", () => {
     }
     expect(spec.paths["/v1/register"].post.security).toEqual([]);
     expect(spec.paths["/v1/register/agent"].post.security).toEqual([]);
+  });
+});
+
+describe("wallet reinvestment OpenAPI hold", () => {
+  test("advertises the mounted 503 and both accounting gaps", async () => {
+    const spec = await (await openapiRouter.request("/")).json();
+    const operation = spec.paths["/v1/wallets/{walletId}/reinvest"].post;
+
+    expect(operation.summary).toMatch(/resting.*no.*conversion/is);
+    expect(operation.description).toMatch(
+      /stable 503.*deployed old code.*gallery_sale.*escrow_release.*ordinary wallet debits.*refunds or chargebacks.*read-only production audit.*2026-07-13.*ten rows.*nine lacked.*Stripe receipt.*tenth.*no source allocation.*write guard.*every qualifying unreversed row.*rehearsal.*audited snapshot.*preconditions.*immediately before application.*does not infer.*meta\._migrations.*live ledger.*backed sub-balances.*clawback or durable debt/is,
+    );
+    expect(operation.responses["503"]).toBeDefined();
+    expect(operation.responses["201"]).toBeUndefined();
   });
 });

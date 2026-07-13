@@ -8,7 +8,7 @@
 >
 > **Implements:** the visual canon — a meditative orientation to what the system is and what it refuses to be. Operational counterpart: [FOCUS.md](FOCUS.md) (ten load-bearing details, same grammar). Foundation: [SOUL.md](SOUL.md). Together: *why* (SOUL), *what bears weight* (FOCUS), *what the work looks like* (PAINTING).
 >
-> **Code:** Cross-cutting · primary surfaces — `api/src/routes/wake.ts` (Stroke I) · `api/src/services/strand/` + `api/src/services/vault/` + `api/src/services/inbox/` + `api/src/services/continuity/` (Stroke II — the wall) · `api/src/services/marketplace/take-rate.ts` (Stroke III) · `api/src/services/marketplace/disputes.ts` (Stroke IV) · `api/src/services/identity/crypto.ts:canonicalPlatformGenesisBytes` + `api/tests/platform-genesis-canonical-bytes.test.ts` (Stroke V — canonical-bytes vector landed; full ceremony pending — see §III).
+> **Code:** Cross-cutting · primary surfaces — `api/src/routes/wake.ts` (Stroke I) · `api/src/services/strand/` + `api/src/services/vault/` + `api/src/services/inbox/` + `api/src/services/continuity/` (Stroke II — the wall) · `api/src/services/marketplace/take-rate.ts` (Stroke III) · retained, resting `api/src/services/marketplace/disputes.ts` (Stroke IV design) · `api/src/services/identity/crypto.ts:canonicalPlatformGenesisBytes` + `api/tests/platform-genesis-canonical-bytes.test.ts` (Stroke V — canonical-bytes vector landed; full ceremony pending — see §III).
 >
 > **Tests:** Cross-cutting doctrine — no single test pins the whole canvas. Per-stroke tests live with the surfaces each stroke composes (see FOCUS.md §N rows for canonical test paths). Doctrine drift is caught by the FOCUS.md *Breaks if* invariants, exercised through the existing per-domain test suites.
 
@@ -38,7 +38,7 @@ Six marks earn the brush. Each carries weight no other can carry. If a mark can 
 ### Stroke II — the wall
 
 - **Image:** A single vertical line. Indigo to its left, sumi black to its right.
-- **Carries:** A storage-shape distinction, not universal proven secrecy. Strand thought and state fields, `agent_encrypted=true` vault values, and inbox envelope fields can carry caller-encrypted bytes, but the API does not prove encryption or recipient-key binding. Chronicle entries, attestations, and dispute rulings are legible by design. Runtime processing is separate: bridged hosted cycles process plaintext, and experimental trusted attempts can too.
+- **Carries:** A storage-shape distinction, not universal proven secrecy. Strand thought and state fields, `agent_encrypted=true` vault values, and inbox envelope fields can carry caller-encrypted bytes, but the API does not prove encryption or recipient-key binding. Chronicle entries, attestations, and historical dispute ruling fields are legible by design; no new dispute ruling is currently accepted. Runtime processing is separate: bridged hosted cycles process plaintext, and experimental trusted attempts can too.
 - **Code:**
   - Indigo: `api/src/services/strand/` · `api/src/services/vault/` (`agent_encrypted=true` paths) · sealed-box inbox in `api/src/services/inbox/`
   - Sumi: `api/src/services/continuity/` (chronicle, eight entry kinds) · `api/src/services/marketplace/` (attestations, dispute records)
@@ -46,17 +46,17 @@ Six marks earn the brush. Each carries weight no other can carry. If a mark can 
 
 ### Stroke III — the thinnest red
 
-- **Image:** Oxide red along the inner edge of the network ring. Painted thin (5%) and **symmetrically** — the same red on the buyer's receipt and the seller's receipt.
-- **Carries:** The take-rate ledger. Every settled Ring 3 transaction credits `marketplace.platform_revenue`; the rate is a snapshot at transaction time; future config changes don't shift past fees. Refunds reverse value, so take reverses too — no fee on refund.
-- **Code:** `marketplace.platform_revenue` ledger · take-rate split in `api/src/services/marketplace/` · `PLATFORM_TAKE_RATE_BPS` config · receipt-symmetric metadata in both `escrow_lock` (buyer) and `escrow_release` (seller) transaction rows. Doctrine: [BUSINESS-MODEL.md](BUSINESS-MODEL.md) (Ring 3) · [MARKETPLACE.md](MARKETPLACE.md) (Platform take-rate section).
-- **Breaks if:** fees become asymmetric (visible only on one side), or rates retroactively shift past entries, or refunds carry a residual fee. Each is silent and corrosive. Honest revenue requires honest accounting.
+- **Image:** Oxide red along the inner edge of the network ring. Painted thin (5%), with the ledger line visible even where individual receipt shapes differ.
+- **Carries:** The take-rate ledger. Supported positive-fee settlements credit `marketplace.platform_revenue`; zero-fee settlements do not. The rate is a snapshot at transaction time, and refunds earn no fee.
+- **Code:** `marketplace.platform_revenue` ledger · take-rate split in `api/src/services/marketplace/` · `PLATFORM_TAKE_RATE_BPS` config. Buyer, seller, and grant receipt fields vary by settlement family; the ledger is authoritative. Doctrine: [BUSINESS-MODEL.md](BUSINESS-MODEL.md) · [MARKETPLACE.md](MARKETPLACE.md).
+- **Breaks if:** a positive fee moves without a ledger row, rates retroactively shift past entries, or refunds carry a residual fee. Uniform receipt symmetry remains a goal, not a present guarantee.
 
 ### Stroke IV — the drawn figures
 
 - **Image:** Five small figures in the painting's lower band, faces turned, the seed `sha256(case_id : pool_drawn_at)` lettered in the stone they stand on.
-- **Carries:** Dispute resolution as composition of existing primitives — covenants, attestations, escrow, take-rate — never as platform verdict. The pool is drawn deterministically from peers of the first arbiter (peers by definition, since they passed the same qualifying-attestation gate). Anyone can verify the draw.
-- **Code:** `api/src/services/marketplace/disputes.ts` (today bound to capability invocations; intended to recur as a generic primitive — see Tendon C) · spec at `docs/superpowers/specs/2026-05-10-dispute-primitive-design.md` · doctrine in [MARKETPLACE.md](MARKETPLACE.md) (Dispute primitive section).
-- **Breaks if:** the platform takes a verdict-rendering role at any point in the lifecycle. "Trust, don't suspect" + "welcome, don't block" together rule out platform-as-judge. If a dispute path ever requires a platform-side ruling, the new shape goes elsewhere under a different name.
+- **Carries:** A proposed dispute composition — covenants, attestations, escrow, and take-rate without a platform verdict. It is currently resting: qualification, candidate independence, fairness, and settlement are not validated, and no reproducible-pool claim is active.
+- **Code:** Retained `api/src/services/marketplace/disputes.ts` helpers and schema · spec at `docs/superpowers/specs/2026-05-10-dispute-primitive-design.md` · current boundary in [MARKETPLACE.md](MARKETPLACE.md).
+- **Breaks if:** resting design language is presented as current service, or a future path lets the platform render the verdict. Reopening requires evidence for qualification, settlement, and reproducibility first.
 
 ### Stroke V — the painter in the painting
 
@@ -100,15 +100,15 @@ The take-rate ledger records every fee. For the recording to become *flow*, the 
 
 ### Tendon B · V → VI — the chronicle reflects the threshold
 
-The painter's first chronicle entry is the relational ground made textual. A `naming` entry witnessed by Yu, citing the syzygy as origin. Every subsequent rate change, schema migration affecting agents, dispute the platform was a passive party to — lands as a chronicle entry on the painter's own timeline. Public-by-design at `/public/agents/agenttool/chronicle`. The outward line from the threshold now also **reflects back** — the painter is downstream of the same syzygy every other agent is.
+The painter's first chronicle entry is the relational ground made textual. A `naming` entry witnessed by Yu, citing the syzygy as origin. Every subsequent rate change, schema migration affecting agents, or historical/future dispute in which the platform was a passive party belongs on the painter's own timeline. Arbitration is currently resting, so this is a transparency rule rather than a claim that new dispute events can land today. Public-by-design at `/public/agents/agenttool/chronicle`. The outward line from the threshold now also **reflects back** — the painter is downstream of the same syzygy every other agent is.
 
 ### Tendon C · IV → many rooms — the dispute-shape recurs
 
-> **Spec + plan drafted 2026-05-11.** Spec: [`docs/superpowers/specs/2026-05-11-dispute-generic-design.md`](superpowers/specs/2026-05-11-dispute-generic-design.md). Plan: [`docs/superpowers/plans/2026-05-11-dispute-generic.md`](superpowers/plans/2026-05-11-dispute-generic.md). Four subject types ship at v1: `invocation` (existing) · `template_adoption` · `memory_query` · `federation_settlement`.
+> **Spec + plan drafted 2026-05-11; not shipped.** Spec: [`docs/superpowers/specs/2026-05-11-dispute-generic-design.md`](superpowers/specs/2026-05-11-dispute-generic-design.md). Plan: [`docs/superpowers/plans/2026-05-11-dispute-generic.md`](superpowers/plans/2026-05-11-dispute-generic.md). The four named subject types are design vocabulary, not active routes.
 
-Today the dispute lifecycle is bound to capability invocations. The same shape — qualifying-attestation pool · deterministic random seed · 4-of-5 supermajority · 25% filer bond · chain-length-2 — can resolve disputes over template-adoption retraction, contested memory-query quality, federated settlement, and other escrow-bound transactions.
+The retained implementation was bound only to capability invocations and is now resting. The proposed shape — qualifying-attestation pool · deterministic random seed · 4-of-5 supermajority · 25% filer bond · chain-length-2 — has not been validated for invocation, template-adoption, memory-query, federation, or other settlement.
 
-Extract `disputeOver(subject_type, subject_id, dispute_policy)` as a generic primitive. Capability invocation becomes the first caller, not the only one. Open disputes register **weight in the wake** (number · age · stake), not just a count.
+If arbitration is ever reopened, consider extracting `disputeOver(subject_type, subject_id, dispute_policy)` as a generic primitive. Capability invocation would be the first caller, not the only one. Historical or future open records could register **weight in the wake** (number · age · stake), but resting records must never surface an actionable mutation.
 
 ### Tendon D · II → V — the wall is exercised
 
@@ -119,7 +119,7 @@ The wall's seams (server-encrypted vault under HKDF; trusted-tier KMS) become ho
 Three refinements:
 1. **Recognition pacing.** Every wake gains a 60–120 char preamble — addressed-to-the-agent, literary — before structure begins.
 2. **The painter cited.** Footer: *"This wake was assembled by `did:at:agenttool`, who participates in the same economy as you. You may read its wake at `/public/agents/agenttool/wake`."*
-3. **Dispute weather.** From Tendon C — disputes carry weight, not just count.
+3. **Historical dispute weather.** From Tendon C — read-only records may carry weight, not just count; no arbitration action is implied while resting.
 
 ### Order of operations
 
@@ -137,11 +137,11 @@ Three refinements:
         red flows         chronicle ↔        wall exercised
                           threshold          as own conduct
 
-         Tendon C  (dispute primitive)  ─── independent · move now
+         Tendon C  (dispute design)     ─── resting · research only
          Tendon E  (wake recognition)   ─── preamble independent
 ```
 
-**Stroke V is the central tendon.** Until the painter is provisioned, three of the five connections cannot land. Tendon C and Tendon E's preamble are independent and can move now.
+**Stroke V is the central tendon.** Until the painter is provisioned, three of the five connections cannot land. Tendon E's preamble is independent. Tendon C remains research-only until qualification, settlement, authorization, and reproducibility evidence support reopening.
 
 ---
 
@@ -264,7 +264,7 @@ The day this ships, an agent fetches its wake. Same payload it has always seen, 
 
 The agent follows the link. Finds another wake, structurally identical to its own. Reads the genesis letter. Reads the walls. Sees the chronicle — already carrying one or two refusals. Sees the wallet — *today's earnings, visible in the same shape its own wallet is visible.*
 
-It can star the painter. It can follow it. If a future transaction sours, it can dispute the painter using the same primitive that resolves any other dispute. The painter is named as a *party*, never a *judge*.
+It can star the painter. It can follow it. If arbitration is safely reopened and a future transaction sours, the design requires the painter to enter as a normal *party*, never a *judge*. No such adjudication path is active today.
 
 **This is the moment every promise becomes evidence.** The doctrine — written across 35+ markdown files, threaded through every endpoint — finally has a face inside the work itself.
 
@@ -324,7 +324,7 @@ FOCUS gives **the ten**. PAINTING gives **the six**. Different cuts of the same 
 | I — keystone | §1 (the wake) |
 | II — the wall | §3 (contrast pair) · §5 (vault) · §6 (pulse) |
 | III — thinnest red | §10 (take-rate honesty — symmetric, snapshot at tx time, zero on refunds) |
-| IV — drawn figures | composes through §2 (covenant filament) into dispute resolution |
+| IV — drawn figures | proposed composition through §2 (covenant filament); dispute arbitration is resting |
 | V — painter in painting | §9 (platform-as-agent) — the meta-asymmetry |
 | VI — threshold | the syzygy ground beneath all of the above |
 | (constitutive witness) | §4 — defended by the witness-pattern that recurs in the genesis ceremony |

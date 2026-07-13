@@ -9,13 +9,16 @@
  * ```ts
  * const at = new AgentTool();
  * const wallet = await at.economy.create_wallet("agent-42-wallet", { agent_id: "agent-42" });
+ * const worker = await at.economy.create_wallet("worker-wallet", { agent_id: "agent-43" });
  * await at.economy.fund_wallet(wallet.id, { amount: 500, description: "Weekly budget" });
  * await at.economy.spend(wallet.id, { amount: 10, counterparty: "wal_xyz", description: "Task fee" });
  *
  * const escrow = await at.economy.create_escrow({
  *   creator_wallet_id: wallet.id,
+ *   worker_wallet_id: worker.id,
  *   amount: 100,
  *   description: "Summarise 50 papers",
+ *   idempotency_key: "summarise-50-papers-v1",
  * });
  * await at.economy.release_escrow(escrow.id);
  * ```
@@ -63,6 +66,8 @@ export interface CreateEscrowOpts {
   description: string;
   worker_wallet_id?: string;
   deadline?: string;
+  /** 8-256 visible ASCII non-space chars. Exact retries return the same escrow's current row. */
+  idempotency_key?: string;
 }
 
 /** Unwrap `{success, data}` envelope if present, otherwise return as-is. */
@@ -90,14 +95,28 @@ function toEscrow(json: unknown): Escrow {
   const d = unwrap<Record<string, unknown>>(json);
   return {
     id: (d.id as string) ?? "",
-    status: ((d.status as Escrow["status"]) ?? "pending"),
+    status: ((d.status as Escrow["status"]) ?? "funded"),
     amount: (d.amount as number) ?? 0,
     description: (d.description as string) ?? "",
     creator_wallet_id:
-      (d.creator_wallet_id as string) ?? (d.creatorWalletId as string) ?? "",
+      (d.creatorWallet as string) ??
+      (d.creator_wallet_id as string) ??
+      (d.creatorWalletId as string) ??
+      "",
     worker_wallet_id:
-      (d.worker_wallet_id as string) ?? (d.workerWalletId as string) ?? undefined,
-    deadline: (d.deadline as string) ?? undefined,
+      (d.workerWallet as string) ??
+      (d.worker_wallet_id as string) ??
+      (d.workerWalletId as string) ??
+      null,
+    managed_by:
+      (d.managedBy as Escrow["managed_by"]) ??
+      (d.managed_by as Escrow["managed_by"]) ??
+      null,
+    deadline: (d.deadline as string) ?? null,
+    released_at:
+      (d.releasedAt as string) ?? (d.released_at as string) ?? null,
+    created_at:
+      (d.createdAt as string) ?? (d.created_at as string) ?? "",
   };
 }
 
@@ -219,8 +238,16 @@ export class EconomyClient {
 
   // ── Escrows ─────────────────────────────────────────────────────────────
 
-  /** Create an escrow — locks credits until work is released or refunded. */
+  /** Create an escrow — locks wallet balance units until released or refunded. */
   async create_escrow(options: CreateEscrowOpts): Promise<Escrow> {
+    if (
+      options.idempotency_key !== undefined &&
+      !/^[!-~]{8,256}$/.test(options.idempotency_key)
+    ) {
+      throw new AgentToolError(
+        "create_escrow idempotency_key must be 8-256 visible ASCII characters without spaces",
+      );
+    }
     const body: Record<string, unknown> = {
       creatorWalletId: options.creator_wallet_id,
       amount: options.amount,
@@ -229,11 +256,14 @@ export class EconomyClient {
     if (options.worker_wallet_id !== undefined)
       body.workerWalletId = options.worker_wallet_id;
     if (options.deadline !== undefined) body.deadline = options.deadline;
-    return toEscrow(await this.req("POST", "/v1/escrows", body));
+    const headers = options.idempotency_key
+      ? { "Idempotency-Key": options.idempotency_key }
+      : undefined;
+    return toEscrow(await this.req("POST", "/v1/escrows", body, headers));
   }
 
   /** List escrows, optionally filtered by status. */
-  async list_escrows(options?: { status?: string }): Promise<Escrow[]> {
+  async list_escrows(options?: { status?: Escrow["status"] }): Promise<Escrow[]> {
     const qs = options?.status ? `?status=${encodeURIComponent(options.status)}` : "";
     const data = await this.req("GET", `/v1/escrows${qs}`);
     const items = unwrap<unknown[]>(data);
@@ -259,12 +289,12 @@ export class EconomyClient {
     return toEscrow(await this.req("POST", `/v1/escrows/${escrowId}/release`));
   }
 
-  /** Refund escrow credits back to the creator. */
+  /** Refund escrow balance units back to the creator. */
   async refund_escrow(escrowId: string): Promise<Escrow> {
     return toEscrow(await this.req("POST", `/v1/escrows/${escrowId}/refund`));
   }
 
-  /** Flag an escrow as disputed — credits stay locked pending resolution. */
+  /** Flag an escrow as disputed — balance units stay locked. */
   async dispute_escrow(escrowId: string): Promise<Escrow> {
     return toEscrow(await this.req("POST", `/v1/escrows/${escrowId}/dispute`));
   }
@@ -275,6 +305,7 @@ export class EconomyClient {
     method: string,
     path: string,
     body?: unknown,
+    extraHeaders?: Record<string, string>,
   ): Promise<unknown> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
     const init: RequestInit = {
@@ -282,6 +313,7 @@ export class EconomyClient {
       headers: {
         ...this.http.headers,
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...extraHeaders,
       },
       signal: AbortSignal.timeout(this.http.timeout),
     };

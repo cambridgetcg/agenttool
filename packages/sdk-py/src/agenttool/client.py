@@ -49,7 +49,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.10.0"
+SDK_VERSION = "0.11.0"
 
 
 class AgentTool:

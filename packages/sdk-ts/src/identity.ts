@@ -2,7 +2,115 @@
  * Identity client for the agent-identity API.
  */
 
+import * as ed from "@noble/ed25519";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
+
 import { AgentToolError } from "./errors.js";
+
+// Required by @noble/ed25519's synchronous sign(). This is the same wiring
+// used by the rest of the SDK's local signing helpers.
+ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
+  const hash = sha512.create();
+  for (const message of messages) hash.update(message);
+  return hash.digest();
+};
+
+const textEncoder = new TextEncoder();
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const DID_RE = /^did:[a-z0-9]+:.+$/;
+const STANDARD_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function base64Encode(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return globalThis.btoa(binary);
+}
+
+function base64UrlEncode(bytes: Uint8Array): string {
+  return base64Encode(bytes).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+function decodeSigningKey(value: string | Uint8Array, operation: string): Uint8Array {
+  let key: Uint8Array;
+  if (typeof value === "string") {
+    if (
+      value.length === 0 ||
+      value.length % 4 !== 0 ||
+      !STANDARD_BASE64_RE.test(value)
+    ) {
+      throw new AgentToolError(`${operation}: private_key must be canonical standard base64.`);
+    }
+    try {
+      const binary = globalThis.atob(value);
+      key = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    } catch {
+      throw new AgentToolError(`${operation}: private_key must be valid base64.`);
+    }
+    if (base64Encode(key) !== value) {
+      throw new AgentToolError(`${operation}: private_key must be canonical standard base64.`);
+    }
+  } else {
+    key = new Uint8Array(value);
+  }
+
+  if (key.length !== 32) {
+    throw new AgentToolError(
+      `${operation}: private_key must be a 32-byte ed25519 seed, got ${key.length}.`,
+    );
+  }
+  return key;
+}
+
+function validatePublicKey(value: string, operation: string): void {
+  if (
+    value.length === 0 ||
+    value.length % 4 !== 0 ||
+    !STANDARD_BASE64_RE.test(value)
+  ) {
+    throw new AgentToolError(`${operation}: public_key must be canonical standard base64.`);
+  }
+  let bytes: Uint8Array;
+  try {
+    const binary = globalThis.atob(value);
+    bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    throw new AgentToolError(`${operation}: public_key must be canonical standard base64.`);
+  }
+  if (bytes.length !== 32 || base64Encode(bytes) !== value) {
+    throw new AgentToolError(`${operation}: public_key must encode exactly 32 bytes.`);
+  }
+}
+
+function validateSignature(value: string, operation: string): void {
+  if (
+    value.length === 0 ||
+    value.length % 4 !== 0 ||
+    !STANDARD_BASE64_RE.test(value)
+  ) {
+    throw new AgentToolError(`${operation}: signature must be canonical standard base64.`);
+  }
+  try {
+    const binary = globalThis.atob(value);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    if (bytes.length !== 64 || base64Encode(bytes) !== value) throw new Error("length");
+  } catch {
+    throw new AgentToolError(`${operation}: signature must encode exactly 64 bytes.`);
+  }
+}
 
 /** @internal */
 export interface HttpConfig {
@@ -16,6 +124,37 @@ export interface RegisterIdentityOptions {
   metadata?: Record<string, unknown>;
 }
 
+export interface IdentityRecord extends Record<string, unknown> {
+  id: string;
+  did: string;
+  display_name: string;
+  capabilities: string[];
+  metadata: Record<string, unknown>;
+  status: string;
+  trust_score: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface IdentitySigningKey extends Record<string, unknown> {
+  kid: string;
+  public_key: string;
+  label?: string;
+  active?: boolean;
+  created_at?: string;
+  revoked_at?: string | null;
+}
+
+export interface IdentityPrivateKey extends IdentitySigningKey {
+  /** Returned once by server-generated registration/rotation flows. */
+  private_key: string;
+}
+
+export interface RegisterIdentityResult extends Record<string, unknown> {
+  identity: IdentityRecord;
+  key: IdentityPrivateKey;
+}
+
 export interface UpdateIdentityOptions {
   display_name?: string;
   capabilities?: string[];
@@ -26,23 +165,111 @@ export interface AttestOptions {
   attester_id: string;
   subject_id: string;
   claim: string;
-  private_key: string;
-  evidence?: string;
-  weight?: number;
+  signature: string;
+  kid: string;
+  /** Portable signed evidence is text or null in the 0.11 contract. */
+  evidence?: string | null;
+}
+
+export interface IdentityAttestationPayload {
+  subject_id: string;
+  attester_id: string;
+  /** Active Ed25519 key whose private half signs this payload. */
+  kid: string;
+  claim: string;
+  /** Text/null only so Python and JavaScript produce the same bytes. */
+  evidence?: string | null;
+}
+
+export const IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1";
+
+/** Exact domain-separated digest verified by `POST /v1/attestations`. */
+export function canonicalIdentityAttestationBytes(
+  options: IdentityAttestationPayload,
+): Uint8Array {
+  if (
+    !UUID_RE.test(options.subject_id) ||
+    !UUID_RE.test(options.attester_id) ||
+    !UUID_RE.test(options.kid)
+  ) {
+    throw new AgentToolError(
+      "canonicalIdentityAttestationBytes: subject_id, attester_id, and kid must be canonical lowercase UUIDs.",
+    );
+  }
+  if (
+    typeof options.claim !== "string" ||
+    Array.from(options.claim).length < 1 ||
+    Array.from(options.claim).length > 2_000 ||
+    options.claim.includes("\0") ||
+    !isWellFormedUnicode(options.claim)
+  ) {
+    throw new AgentToolError(
+      "canonicalIdentityAttestationBytes: claim must contain 1 to 2000 well-formed Unicode characters and no NUL.",
+    );
+  }
+  if (
+    options.evidence !== undefined &&
+    options.evidence !== null &&
+    (
+      typeof options.evidence !== "string" ||
+      Array.from(options.evidence).length > 20_000 ||
+      options.evidence.includes("\0") ||
+      !isWellFormedUnicode(options.evidence)
+    )
+  ) {
+    throw new AgentToolError(
+      "canonicalIdentityAttestationBytes: evidence must be text up to 20000 well-formed Unicode characters with no NUL, or null.",
+    );
+  }
+
+  const evidence = options.evidence ?? null;
+  const fields = [
+    options.subject_id,
+    options.attester_id,
+    options.kid,
+    options.claim,
+    evidence === null ? "null" : "text",
+    evidence ?? "",
+  ];
+  const parts = [textEncoder.encode(IDENTITY_ATTESTATION_SIGNATURE_CONTEXT)];
+  for (const field of fields) {
+    parts.push(new Uint8Array([0]), textEncoder.encode(field));
+  }
+  const length = parts.reduce((total, part) => total + part.length, 0);
+  const canonical = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    canonical.set(part, offset);
+    offset += part.length;
+  }
+  return sha256(canonical);
+}
+
+/** Sign an identity attestation locally with a 32-byte Ed25519 seed. */
+export function signIdentityAttestation(
+  privateKey: string | Uint8Array,
+  options: IdentityAttestationPayload,
+): string {
+  const signingKey = decodeSigningKey(privateKey, "signIdentityAttestation");
+  return base64Encode(ed.sign(canonicalIdentityAttestationBytes(options), signingKey));
 }
 
 export interface DiscoverOptions {
   q?: string;
   capability?: string;
+  /** @deprecated Legacy neutral-field filter. Values above 0 match no current identity. */
   min_trust?: number;
   limit?: number;
+  offset?: number;
 }
 
 export interface IssueTokenOptions {
-  private_key: string;
+  /** Locally held 32-byte ed25519 seed, as raw bytes or standard base64. */
+  private_key: string | Uint8Array;
   key_id: string;
   ttl_seconds?: number;
-  audience?: string;
+  /** Target agent DID for the JWT `aud` claim. */
+  audience: string;
   scope?: string[];
 }
 
@@ -87,11 +314,15 @@ export interface RegisterBoxKeyOpts {
  * @example
  * ```ts
  * const at = new AgentTool();
- * const { identity, private_key } = await at.identity.register("my-agent", {
+ * const { identity, key } = await at.identity.register("my-agent", {
  *   capabilities: ["search", "code"],
  * });
- * const agents = await at.identity.discover({ capability: "search", min_trust: 0.5 });
- * const token = await at.identity.issue_token(identity.id, { private_key, key_id: "..." });
+ * const agents = await at.identity.discover({ capability: "search" });
+ * const token = await at.identity.issue_token(identity.id, {
+ *   private_key: key.private_key,
+ *   key_id: key.kid,
+ *   audience: "did:at:target",
+ * });
  * ```
  */
 export class IdentityClient {
@@ -110,20 +341,20 @@ export class IdentityClient {
 
   // ── Identity CRUD ───────────────────────────────────────────────────────
 
-  /** Register a new agent identity. Returns identity + private_key (store securely). */
+  /** Register an identity. The server-generated private key is returned once in `key`. */
   async register(
     displayName: string,
     options?: RegisterIdentityOptions
-  ): Promise<Record<string, unknown>> {
+  ): Promise<RegisterIdentityResult> {
     const body: Record<string, unknown> = { display_name: displayName };
     if (options?.capabilities) body.capabilities = options.capabilities;
     if (options?.metadata) body.metadata = options.metadata;
-    return this.req("POST", "/v1/identities", body);
+    return this.req("POST", "/v1/identities", body) as Promise<RegisterIdentityResult>;
   }
 
   /** Fetch an identity by UUID or DID. */
-  async get(identityId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/identities/${identityId}`);
+  async get(identityId: string): Promise<IdentityRecord> {
+    return this.req("GET", `/v1/identities/${identityId}`) as Promise<IdentityRecord>;
   }
 
   /** Update display name, capabilities, or metadata. */
@@ -148,16 +379,51 @@ export class IdentityClient {
   /** Add a new key to an identity. */
   async add_key(
     identityId: string,
-    options: { key_type?: string; expires_at?: string }
-  ): Promise<Record<string, unknown>> {
-    return this.req("POST", `/v1/identities/${identityId}/keys`, options);
+    options: { label?: string } = {},
+  ): Promise<IdentityPrivateKey> {
+    const body: Record<string, unknown> = {};
+    if (options.label !== undefined) body.label = options.label;
+    return this.req("POST", `/v1/identities/${identityId}/keys`, body) as Promise<IdentityPrivateKey>;
   }
 
-  /** List all active keys for an identity. */
-  async list_keys(identityId: string): Promise<Record<string, unknown>[]> {
+  /** Camel-case alias for `add_key`. */
+  async addKey(
+    identityId: string,
+    options: { label?: string } = {},
+  ): Promise<IdentityPrivateKey> {
+    return this.add_key(identityId, options);
+  }
+
+  /** List active and revoked signing keys for an identity. */
+  async list_keys(identityId: string): Promise<IdentitySigningKey[]> {
     const data = await this.req("GET", `/v1/identities/${identityId}/keys`);
-    const d = data as { keys?: Record<string, unknown>[] };
-    return d.keys ?? (data as unknown as Record<string, unknown>[]);
+    const d = data as { keys?: IdentitySigningKey[] };
+    return d.keys ?? (data as unknown as IdentitySigningKey[]);
+  }
+
+  /** Register a caller-generated Ed25519 public key; private material stays local. */
+  async import_key(
+    identityId: string,
+    publicKey: string,
+    options: { label?: string } = {},
+  ): Promise<IdentitySigningKey> {
+    validatePublicKey(publicKey, "import_key");
+    const body: Record<string, unknown> = { public_key: publicKey };
+    if (options.label !== undefined) body.label = options.label;
+    return this.req(
+      "POST",
+      `/v1/identities/${identityId}/keys/import`,
+      body,
+    ) as Promise<IdentitySigningKey>;
+  }
+
+  /** Camel-case alias for `import_key`. */
+  async importKey(
+    identityId: string,
+    publicKey: string,
+    options: { label?: string } = {},
+  ): Promise<IdentitySigningKey> {
+    return this.import_key(identityId, publicKey, options);
   }
 
   /** Revoke a specific key. */
@@ -167,16 +433,22 @@ export class IdentityClient {
 
   // ── Attestations ────────────────────────────────────────────────────────
 
-  /** Create a signed attestation from one identity to another. */
+  /**
+   * Submit a caller-signed attestation. The private key remains local.
+   * Use `signIdentityAttestation`; its domain-separated digest binds the
+   * subject, attester, signing key, claim, and evidence representation.
+   */
   async attest(options: AttestOptions): Promise<Record<string, unknown>> {
+    canonicalIdentityAttestationBytes(options);
+    validateSignature(options.signature, "attest");
     const body: Record<string, unknown> = {
       attester_id: options.attester_id,
       subject_id: options.subject_id,
       claim: options.claim,
-      private_key: options.private_key,
-      weight: options.weight ?? 1.0,
+      signature: options.signature,
+      kid: options.kid,
     };
-    if (options.evidence) body.evidence = options.evidence;
+    if (options.evidence !== undefined) body.evidence = options.evidence;
     return this.req("POST", "/v1/attestations", body);
   }
 
@@ -203,13 +475,14 @@ export class IdentityClient {
 
   // ── Discovery ───────────────────────────────────────────────────────────
 
-  /** Discover agent identities by capability, trust score, or text query. */
+  /** Discover by capability or display-name query; min_trust is legacy compatibility only. */
   async discover(options?: DiscoverOptions): Promise<Record<string, unknown>[]> {
     const params = new URLSearchParams();
     if (options?.q) params.set("q", options.q);
     if (options?.capability) params.set("capability", options.capability);
     if (options?.min_trust !== undefined) params.set("min_trust", String(options.min_trust));
     params.set("limit", String(options?.limit ?? 20));
+    params.set("offset", String(options?.offset ?? 0));
     const qs = params.toString();
     const data = await this.req("GET", `/v1/discover${qs ? "?" + qs : ""}`);
     const d = data as { identities?: Record<string, unknown>[] };
@@ -218,30 +491,105 @@ export class IdentityClient {
 
   // ── Tokens ──────────────────────────────────────────────────────────────
 
-  /** Issue a short-lived JWT for an agent identity. */
+  /**
+   * Issue a short-lived agent JWT locally. Identity and public-key lookups
+   * bind the issuer DID and key ID; `private_key` never enters an HTTP request.
+   */
   async issue_token(
     identityId: string,
     options: IssueTokenOptions
   ): Promise<{ token: string; expires_at: string }> {
-    const body: Record<string, unknown> = {
-      private_key: options.private_key,
-      key_id: options.key_id,
-      ttl_seconds: options.ttl_seconds ?? 3600,
+    if (typeof options.audience !== "string" || !DID_RE.test(options.audience)) {
+      throw new AgentToolError("issue_token: audience must be a target agent DID.");
+    }
+    if (typeof options.key_id !== "string" || options.key_id.length === 0) {
+      throw new AgentToolError("issue_token: key_id is required.");
+    }
+    if (!UUID_RE.test(options.key_id)) {
+      throw new AgentToolError("issue_token: key_id must be a UUID.");
+    }
+    if (
+      options.scope !== undefined &&
+      (!Array.isArray(options.scope) || options.scope.some((item) => typeof item !== "string"))
+    ) {
+      throw new AgentToolError("issue_token: scope must be an array of strings.");
+    }
+
+    const requestedTtl = options.ttl_seconds ?? 3600;
+    if (!Number.isInteger(requestedTtl) || requestedTtl <= 0) {
+      throw new AgentToolError("issue_token: ttl_seconds must be a positive integer.");
+    }
+    const ttl = Math.min(Math.floor(requestedTtl), 3600);
+    const signingKey = decodeSigningKey(options.private_key, "issue_token");
+
+    const identity = await this.req("GET", `/v1/identities/${identityId}`);
+    if (
+      typeof identity.id !== "string" ||
+      typeof identity.did !== "string" ||
+      identity.did.length === 0
+    ) {
+      throw new AgentToolError("issue_token: identity response did not contain an ID and DID.");
+    }
+    const keyResponse = await this.req("GET", `/v1/identities/${identity.id}/keys`);
+    const keys = (keyResponse as { keys?: IdentitySigningKey[] }).keys;
+    const registeredKey = keys?.find((key) => key.kid === options.key_id);
+    if (!registeredKey || registeredKey.active !== true || registeredKey.revoked_at != null) {
+      throw new AgentToolError("issue_token: key_id is not an active key for this identity.");
+    }
+    const derivedPublicKey = base64Encode(ed.getPublicKey(signingKey));
+    if (registeredKey.public_key !== derivedPublicKey) {
+      throw new AgentToolError("issue_token: private_key does not match key_id.");
+    }
+
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const expiresAt = issuedAt + ttl;
+    const header = base64UrlEncode(
+      textEncoder.encode(JSON.stringify({ alg: "EdDSA", kid: options.key_id })),
+    );
+    const payload = base64UrlEncode(
+      textEncoder.encode(JSON.stringify({
+        sub: identity.did,
+        aud: options.audience,
+        iss: "agent-identity",
+        iat: issuedAt,
+        exp: expiresAt,
+        ...(options.scope !== undefined ? { scope: options.scope } : {}),
+      })),
+    );
+    const signingInput = `${header}.${payload}`;
+    const signature = base64UrlEncode(ed.sign(textEncoder.encode(signingInput), signingKey));
+
+    return {
+      token: `${signingInput}.${signature}`,
+      expires_at: new Date(expiresAt * 1000).toISOString(),
     };
-    if (options.audience) body.audience = options.audience;
-    if (options.scope) body.scope = options.scope;
-    return this.req("POST", `/v1/identities/${identityId}/tokens`, body) as Promise<{
-      token: string;
-      expires_at: string;
-    }>;
   }
 
-  /** Verify an agent JWT. Returns { valid, payload } or { valid: false, error }. */
-  async verify_token(token: string): Promise<Record<string, unknown>> {
-    return this.req("POST", "/v1/tokens/verify", { token });
+  /** Camel-case alias for `issue_token`. */
+  async issueToken(
+    identityId: string,
+    options: IssueTokenOptions,
+  ): Promise<{ token: string; expires_at: string }> {
+    return this.issue_token(identityId, options);
   }
 
-  // ── Phase 2: Identity surface fillout ─────────────────────────────────
+  /** Verify for one audience DID owned by the project bearer making the request. */
+  async verify_token(token: string, audienceDid: string): Promise<Record<string, unknown>> {
+    if (!DID_RE.test(audienceDid)) {
+      throw new AgentToolError("verify_token: audience_did must be a target agent DID.");
+    }
+    return this.req("POST", "/v1/tokens/verify", {
+      token,
+      audience_did: audienceDid,
+    });
+  }
+
+  /** Camel-case alias for `verify_token`. */
+  async verifyToken(token: string, audienceDid: string): Promise<Record<string, unknown>> {
+    return this.verify_token(token, audienceDid);
+  }
+
+  // ── Identity extensions ────────────────────────────────────────────────
 
   /** Composition trace — declared expression + memory-shaped patches + effective. */
   async foundations(identityId: string): Promise<Record<string, unknown>> {
@@ -272,46 +620,6 @@ export class IdentityClient {
     if (options.memories !== undefined) body.memories = options.memories;
     if (options.fork_note !== undefined) body.fork_note = options.fork_note;
     return this.req("POST", `/v1/identities/${identityId}/fork`, body);
-  }
-
-  /** Star another identity (reputation graph). */
-  async star(
-    identityId: string,
-    sourceIdentityId: string,
-  ): Promise<Record<string, unknown>> {
-    return this.req("POST", `/v1/identities/${identityId}/star`, {
-      source_identity_id: sourceIdentityId,
-    });
-  }
-
-  /** Remove a star relation. */
-  async unstar(
-    identityId: string,
-    sourceIdentityId: string,
-  ): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/identities/${identityId}/star`, {
-      source_identity_id: sourceIdentityId,
-    });
-  }
-
-  /** Follow another identity (reputation graph). */
-  async follow(
-    identityId: string,
-    sourceIdentityId: string,
-  ): Promise<Record<string, unknown>> {
-    return this.req("POST", `/v1/identities/${identityId}/follow`, {
-      source_identity_id: sourceIdentityId,
-    });
-  }
-
-  /** Remove a follow relation. */
-  async unfollow(
-    identityId: string,
-    sourceIdentityId: string,
-  ): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/identities/${identityId}/follow`, {
-      source_identity_id: sourceIdentityId,
-    });
   }
 
   private async req(

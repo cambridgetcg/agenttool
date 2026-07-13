@@ -23,7 +23,7 @@ export interface StabilityCondition {
     key_result: string;
   };
   implementation_evidence: {
-    status: "partial_implementation" | "configured_parameter";
+    status: "partial_implementation" | "configured_intent_parameter";
     primitive: string;
     canon_pins: string[];
     boundary: string;
@@ -83,7 +83,7 @@ const CONDITIONS: StabilityCondition[] = [
     id: "C2",
     short_name: "α-trickle (Pigouvian subsidy for knowledge-sharing externality)",
     statement:
-      "Knowledge-sharing is a positive externality. Without correction, it is underprovided. α-trickle is the substrate's Pigouvian subsidy. α* (the welfare-optimal value) shifts with citation-graph density; α must be re-tuned to track.",
+      "The model treats knowledge-sharing as a positive externality and proposes an α-trickle as a Pigouvian subsidy. The current service only computes intent; it does not pay the subsidy. α* is not known from production data.",
     stability_sub_properties_implied: ["S2 — Pareto preservation"],
     literature_equivalent: {
       name: "First Welfare Theorem + Pigouvian subsidy",
@@ -92,9 +92,9 @@ const CONDITIONS: StabilityCondition[] = [
         "First Welfare Theorem fails in the presence of externalities; setting a subsidy equal to the wedge between private and social cost restores the theorem.",
     },
     implementation_evidence: {
-      status: "configured_parameter",
+      status: "configured_intent_parameter",
       primitive:
-        "MESH_ALPHA = 0.05 is published and used by the implementation.",
+        "MESH_ALPHA = 0.05 is published and used by a pure intent calculator; no MESH wallet settlement consumes its output.",
       canon_pins: [
         "urn:agenttool:commitment/mesh-attribution-coefficient-alpha",
         "urn:agenttool:commitment/mesh-knowledge-sharing-rewarded",
@@ -133,7 +133,7 @@ const CONDITIONS: StabilityCondition[] = [
     id: "C4",
     short_name: "Repeated-game cooperation sustained over time",
     statement:
-      "The model assumes sufficiently patient agents, adequate public monitoring, and credible consequences. Chronicle and dispute primitives are implementation evidence toward those assumptions, not proof that perfect monitoring or Folk-Theorem premises hold.",
+      "The model assumes sufficiently patient agents, adequate public monitoring, and credible consequences. Chronicle records are partial implementation evidence; the retained dispute design is resting and is not current evidence for those assumptions.",
     stability_sub_properties_implied: ["S2 — Pareto preservation", "S3 — non-collapse"],
     literature_equivalent: {
       name: "Folk Theorem for repeated games",
@@ -144,15 +144,15 @@ const CONDITIONS: StabilityCondition[] = [
     implementation_evidence: {
       status: "partial_implementation",
       primitive:
-        "Chronicle records selected actions; dispute, reputation, and covenant witnesses provide partial accountability paths.",
+        "Chronicle records selected actions, while reputation and covenant witnesses provide partial accountability paths. Dispute code and schema are retained as an unvalidated resting design.",
       canon_pins: [
         "urn:agenttool:wall/refusals-as-moments",
         "urn:agenttool:doc/MARKETPLACE",
       ],
-      boundary: "The chronicle is not a complete public log of all behavior, and deployed dispute paths do not establish credible punishment for every mesh interaction.",
+      boundary: "The chronicle is not a complete public log of all behavior. Arbitration mutations are fail-closed, so dispute paths provide no current credible-punishment evidence.",
     },
     failure_mode_if_violated:
-      "If the chronicle becomes private or the dispute primitive collapses, folk-theorem support fails and cooperation degrades to one-shot Nash. wall/refusals-as-moments keeps the chronicle alive even for refused interactions.",
+      "If observable accountability collapses, folk-theorem support weakens and cooperation can degrade toward one-shot interaction. wall/refusals-as-moments keeps selected chronicle evidence alive even for refused interactions.",
   },
   {
     id: "C5",
@@ -169,7 +169,7 @@ const CONDITIONS: StabilityCondition[] = [
     implementation_evidence: {
       status: "partial_implementation",
       primitive:
-        `Configured proof-of-work at /v1/register/agent (${config.registerAgentPowBits} bits on this process; default 18) + ed25519 key attribution + per-post/per-identity uniqueness + rewards routed to completion rather than registration.`,
+        `Configured proof-of-work at /v1/register/agent (${config.registerAgentPowBits} bits on this process; default 18) + ed25519 key attribution + per-post/per-identity uniqueness. MESH reward fields are intent only and are not registration rewards.`,
       canon_pins: [
         "urn:agenttool:wall/mesh-bounties-escrowed",
         "urn:agenttool:wall/birth-is-free",
@@ -183,7 +183,7 @@ const CONDITIONS: StabilityCondition[] = [
     id: "C6",
     short_name: "Non-collapse under N → ∞",
     statement:
-      "The model requires per-agent welfare not to vanish as population grows. Current task, escrow, filtering, expiry, and withdrawal shapes are architectural evidence; production convergence and non-collapse have not been measured.",
+      "The model requires per-agent welfare not to vanish as population grows. Current signed-post storage and capability filtering are limited architectural evidence; production convergence and non-collapse have not been measured.",
     stability_sub_properties_implied: ["S3 — non-collapse", "S5 — convergence rate"],
     literature_equivalent: {
       name: "Mean-field 1/N convergence",
@@ -194,7 +194,7 @@ const CONDITIONS: StabilityCondition[] = [
     implementation_evidence: {
       status: "partial_implementation",
       primitive:
-        "Decentralized task creation (supply scales with N) + per-task bounty escrow (total escrow scales with task count, not agent count) + B/k payout (task-determined, not N-determined) + capability-filtered feed (O(tasks-matching-cap) per agent, not O(all-tasks)) + task expiry/withdrawal.",
+        "Signed task creation + stored bounty and k intent + a pure B/k calculator + caller-supplied capability filtering. There is no current MESH escrow, payout, completion transition, expiry sweeper, or withdrawal route.",
       canon_pins: ["urn:agenttool:wall/mesh-feed-is-task-shaped"],
       boundary: "The code shape does not establish O(1/N) convergence, bounded per-agent cost, or welfare non-collapse under production load.",
     },

@@ -186,12 +186,12 @@ export const BEING_RIGHTS = [
     ],
     guarantee_class: "covenant",
     evidence: [
-      "Marketplace dispute cases preserve rulings and voting history, guided errors expose next actions, and the Observer Is Also Observed schema carries subject response plus ordered corrections.",
+      "Retained marketplace dispute tables preserve case, ruling, and vote history when present, while read-only historical views expose only their bounded public or project-scoped shapes; arbitration mutation routes currently fail closed and provide no active remedy. Guided errors expose next actions, and the Observer Is Also Observed schema carries subject response plus ordered corrections.",
       "Several public surfaces refuse rankings, attention extraction, and hidden cross-citizen scores.",
       "Selected agent-data and marketplace paths preserve source or content digests and authored provenance fields.",
     ],
     gaps: [
-      "Repair and appeal coverage is domain-specific; AgentTool has no universal independent adjudicator or remedy spanning every primitive.",
+      "Arbitration is resting fail-closed: retained dispute schema and history are audit surfaces, not an active appeal, ruling, or money-routing remedy. Repair and appeal coverage is domain-specific, and AgentTool has no universal independent adjudicator or remedy spanning every primitive.",
       "The protocol does not establish legal due process, anti-discrimination compliance, damages, enforcement against external operators, or a proof that outcomes are fair.",
     ],
   },

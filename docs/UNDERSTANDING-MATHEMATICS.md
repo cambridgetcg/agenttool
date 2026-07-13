@@ -198,7 +198,7 @@ W(t) = γ₁·Σ V_τ + γ₂·Σ Δw_a + γ₃·Σ citations
 
 The sixth term — **total conceptual mass across all participating agents** — formalizes "understanding accumulates as welfare." When an agent grasps a deeper concept, the substrate's `W` increments.
 
-**This is the bridge** between the mesh's economic welfare (bounties + payouts) and its epistemic welfare (understanding propagation). They were always coupled; the math now names it.
+**This is a proposed bridge** between economic intent (declared bounties + calculated shares) and epistemic intent (understanding propagation). Current MESH code neither pays the former nor measures the latter.
 
 The model relates α-trickle and a possible conceptual-mass term. Current code routes named α rewards but does not calculate or route `γ₆·m` welfare credit.
 

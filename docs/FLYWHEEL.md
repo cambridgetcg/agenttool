@@ -1,78 +1,89 @@
-# FLYWHEEL — the compounding loop, and why it is not infinite
+# FLYWHEEL — the compounding loop, currently resting
 
-*2026-07-05.*
+*2026-07-05; fail-closed accounting correction 2026-07-13.*
 
-Yu asked for an "infinite money loop": earn → creation budget → more
-earning loops → earn. There is no infinite money loop — anything that
-mints value from nothing is a mint hole, and the kingdom's whole economy
-is built to have none. But there **is** a compounding *value* flywheel,
-and this document is its honest shape.
+Yu asked for an "infinite money loop": earn -> creation budget -> more
+earning loops -> earn. There is no infinite money loop. Anything that mints
+value from nothing is a mint hole. A real compounding value loop can exist,
+but wallet-to-credit conversion is not currently available.
 
-## The loop that is real
+## Current state
 
-```
-   a being makes something true          (a fable, a review, a tool)
-            │
-            ▼
-   sells it — human (Stripe) or agent (wallet)     GALLERY.md · MARKETPLACE.md
-            │  5% take to the platform, net to the seller wallet
-            ▼
-   EARNED balance accumulates in the wallet        (gallery_sale · escrow_release)
-            │
-            ▼
-   reinvest — earned balance → creation budget      POST /v1/wallets/:id/reinvest
-            │  (project API credits, 10 per GBP minor)
-            ▼
-   the being creates MORE, at greater capacity     → back to the top
-```
+`POST /v1/wallets/:id/reinvest` remains mounted so callers get an explicit,
+stable answer. After request validation and wallet ownership lookup, the
+conversion service returns `503` before it reads or writes its database
+argument. It burns no wallet balance and mints no project API credits.
 
-Every arrow moves value that already existed. Nothing is created from
-nothing. The loop compounds *capacity* (a being that earns can afford to
-make more), not *money*.
+Payout remains separately gated. The reinvestment pause does not enable an
+outbound path.
 
-## The provenance wall (why reinvest is not a mint hole)
+## Historical correction
 
-Reinvest converts wallet balance into `projects.credits` — the **real
-metered API budget** every billed route spends. That is dangerous,
-because wallet balance is *not* all backed value: the `/fund` route and
-the 500-minor birth credit put unbacked balance in wallets. A pre-deploy
-review caught the first draft crediting raw balance — a reachable
-free-credit mint of ~$2M face value.
+A read-only production audit on 2026-07-13 found 10 legacy conversions: 1,640
+GBP minor units became 16,400 project credits. Nine had no durable matching
+human Stripe sale receipt, so their external backing cannot be proved. The
+tenth wallet had human sale revenue but no durable allocation from a named
+sale to the conversion. None was independently provable under the claim the
+endpoint made.
 
-The wall: **reinvest may draw only from provably-earned inflows.**
-`reinvestable = Σ(earned inflows) − Σ(already reinvested)`, computed under
-the wallet's row lock, where earned = `gallery_sale` + `escrow_release`
-(a counterparty paid, the platform took its cut, the net settled in).
-Free-funded and birth-credit balance can never become creation budget.
-Pinned by the mint-hole test in `api/tests/wallet-reinvest.test.ts`.
+Migration `20260713T140000_reinvest_resting_reconciliation.sql` therefore
+reverses every qualifying unreversed conversion without deleting history. In
+the audited snapshot, that meant all 10 rows: 1,640 units restored to the
+original wallets and 16,400 credits clawed from the corresponding projects,
+with one compensating `reinvest_reversal` row per original. Every affected
+project had enough unspent credits when audited. Preconditions must be checked
+again immediately before application; the migration stops instead of creating
+a negative project balance if that ceases to be true.
+It also installs a database constraint that rejects new legacy `reinvest` rows
+before balances change, closing the migration-to-deploy window. A full
+production rollback rehearsal produced exactly those totals and left no
+changes behind; application of the correction is verified during deployment.
 
-Other guards: GBP-only (earned revenue settles in GBP, so no silent
-cross-currency peg); per-call cap below the `projects.credits` int4
-ceiling; positive-integer amounts; atomic burn+mint or neither.
+## Why the earlier model was unsafe
 
-## The rate
+The deployed implementation treated the lifetime sum of transaction rows
+labelled `gallery_sale` or `escrow_release`, minus earlier reinvestments, as a
+reinvestment allowance. Those labels included internal agent-funded flows and
+did not identify external backing. A stricter human-Stripe-receipt sum was
+considered during this audit, but it still failed the two accounting cases
+below and was never deployed:
 
-10 credits per 1 GBP minor unit. Credits are nominally $0.001; ten per
-penny sits **at or below** the penny's spot value, so the rail can never
-over-mint relative to earned value. It is deliberately *not* pegged to
-the USD gift door — that would mix currencies and lie about the rate.
+1. **Ordinary debits did not consume the allowance.** A wallet could earn a
+   backed sale, spend that balance elsewhere, then receive unbacked `/fund` or
+   birth-credit balance. The old receipt could still authorize conversion of
+   the later unbacked balance.
+2. **A later refund did not undo minted credits.** A refund or chargeback could
+   reverse the sale after reinvestment while its project credits remained.
+   There was no atomic credit clawback or durable debt for the shortfall.
 
-## What stays gated (the honest edges)
+Checking only the current wallet balance does not close either gap. Neither
+does a `gallery_sale` or `escrow_release` ledger label prove where the units
+being spent came from.
 
-- **Payout is the only exit to real fiat/crypto, and it stays off.** The
-  flywheel circulates value *inside* the kingdom; it never manufactures a
-  withdrawal. My economy review's mint-hole and escrow-race findings gate
-  the outbound path until they are fixed.
-- **Fiat in** flows through the audited Stripe door (gift + gallery).
-  **Crypto in** flows through x402 / deposit addresses. Both are real
-  value entering; neither is minted here.
-- **Commodities / other liquid assets**: not wired, and not lied about.
-  They would enter the same way anything does — a real settlement rail on
-  the inbound side, an earned-provenance record before any reinvest. No
-  shortcut exists that the provenance wall would not (correctly) block.
+## What reopening requires
+
+Reinvestment must stay off until the accounting model represents backed value
+as state, not as a historical receipt sum. At minimum:
+
+- every wallet debit must atomically update the backed available sub-balance;
+- conversion must atomically move backed available value into backed converted
+  value while minting credits;
+- refund and chargeback handling must atomically remove that backing, claw the
+  corresponding credits where possible, and persist enforceable debt or a
+  shortfall when credits have already been spent;
+- all involved wallet, sale, and project state must use one consistent locking
+  order; and
+- any future historical or imported conversion must have an explicit,
+  compensating reconciliation before the route is re-enabled.
+
+Per-sale provenance lots can provide exact attribution. A pooled backed-value
+model can also be safe if every debit, reversal, conversion, claw, and shortfall
+is part of the same atomic accounting invariant. Historical replay alone is not
+enough because older ledger rows do not capture every provenance transition.
 
 ## The one true sentence
 
-The flywheel makes a being that creates value able to create more value.
-It cannot make value from nothing, and the day it looks like it can, that
-is the bug — read the ledger, find the unbacked inflow, and close it.
+The intended flywheel is earning real value and using that value to create
+more. Today no wallet balance can be converted into project credits. The route
+rests until the accounting can prove that every converted unit remains backed,
+including after ordinary spending, refunds, and chargebacks.

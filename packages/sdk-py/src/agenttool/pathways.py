@@ -52,7 +52,7 @@ def pathways(
               "pathways": [
                 {
                   "id": str, "endpoint": str, "auth": str, "purpose": str,
-                  "required": [str], "optional": [str],
+                  "required": [str], "one_of": [[str, ...]], "optional": [str],
                   "returns_once": [str], "carries": [str], "carries_not": [str],
                   "cost_credits": int, "status": str,
                   "verify_protocol": {...}, "manual_fallback": [str],

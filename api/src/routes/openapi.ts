@@ -74,6 +74,90 @@ function errorResponse(description: string) {
   };
 }
 
+function escrowResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", const: true },
+            data: { $ref: "#/components/schemas/Escrow" },
+          },
+          required: ["success", "data"],
+          additionalProperties: false,
+        },
+      },
+    },
+  };
+}
+
+function escrowListResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", const: true },
+            data: {
+              type: "array",
+              items: { $ref: "#/components/schemas/Escrow" },
+            },
+          },
+          required: ["success", "data"],
+          additionalProperties: false,
+        },
+      },
+    },
+  };
+}
+
+function paidMemoryReceiptPreservedResponse(description: string) {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            error: { type: "string", const: "conflict" },
+            message: {
+              type: "string",
+              const: "paid_memory_receipt_preserved",
+            },
+          },
+          required: ["error", "message"],
+          additionalProperties: false,
+        },
+      },
+    },
+  };
+}
+
+function disputeArbitrationRestResponse() {
+  return {
+    description:
+      "Dispute-policy review and arbitration are resting. The request is refused before charge or state change.",
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            error: { type: "string", const: "dispute_arbitration_resting" },
+            hint: { type: "string" },
+            retryable: { type: "boolean", const: false },
+            docs: { type: "string", const: "/public/safety" },
+          },
+          required: ["error", "hint", "retryable", "docs"],
+        },
+      },
+    },
+  };
+}
+
 function staticToolResponseHeaders(includeRequirement = false) {
   return {
     ...(includeRequirement
@@ -224,7 +308,7 @@ const COMMON_SCHEMAS = {
     properties: {
       kind: {
         type: "string",
-        description: "Stable code: covenant_awaiting_cosign · dispute_awaiting_first_ruling · invocation_sla_breach · bridge_disconnected · inbox_unread · bearer_advisory · strand_revisit_due · soma_seed_not_enrolled.",
+        description: "Stable emitted code: covenant_awaiting_cosign · invocation_sla_breach · bridge_disconnected · inbox_unread · bearer_advisory · strand_revisit_due · soma_seed_not_enrolled. dispute_awaiting_first_ruling remains a reserved historical wire value but is not emitted while arbitration rests.",
       },
       count: { type: "integer", minimum: 1 },
       severity: { type: "string", enum: ["action", "warning", "info"] },
@@ -550,7 +634,13 @@ const COMMON_SCHEMAS = {
       did: { type: "string", example: "did:at:..." },
       name: { type: "string" },
       capabilities: { type: "array", items: { type: "string" } },
-      trust_score: { type: "number" },
+      trust_score: {
+        type: "number",
+        enum: [0],
+        deprecated: true,
+        description:
+          "Neutral legacy compatibility field. AgentTool has no qualified trust roots, personhood guarantee, or Sybil-resistant weighting model, so ordinary attestations are not compressed into this scalar. Never use it for authorization, accreditation, or ranking.",
+      },
       status: { type: "string", enum: ["active", "revoked", "memorial"] },
       created_at: { type: "string", format: "date-time" },
       // KIN-shape inline (flat for back-compat with existing readers).
@@ -571,10 +661,231 @@ const COMMON_SCHEMAS = {
     properties: {
       id: { type: "string", format: "uuid" },
       name: { type: "string" },
-      balance: { type: "integer", description: "Credits" },
-      currency: { type: "string", example: "credits" },
+      balance: {
+        type: "integer",
+        description:
+          "Units in this wallet's named currency. This is distinct from project API credits; fiat currencies conventionally use minor units.",
+      },
+      currency: { type: "string", example: "GBP" },
       status: { type: "string", enum: ["active", "frozen", "closed"] },
     },
+  },
+  Escrow: {
+    type: "object",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      creatorWallet: { type: "string", format: "uuid" },
+      workerWallet: { type: ["string", "null"], format: "uuid" },
+      amount: { type: "integer", minimum: 1 },
+      description: { type: "string" },
+      status: {
+        type: "string",
+        enum: ["funded", "released", "refunded", "disputed"],
+      },
+      managedBy: {
+        type: ["string", "null"],
+        enum: [
+          "attestation_grant",
+          "memory_witness_grant",
+          "capability_invocation",
+          null,
+        ],
+      },
+      deadline: { type: ["string", "null"], format: "date-time" },
+      releasedAt: { type: ["string", "null"], format: "date-time" },
+      createdAt: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id",
+      "creatorWallet",
+      "workerWallet",
+      "amount",
+      "description",
+      "status",
+      "managedBy",
+      "deadline",
+      "releasedAt",
+      "createdAt",
+    ],
+  },
+  IdentityAttestationReceipt: {
+    type: "object",
+    description:
+      "Authenticated identity-attestation receipt. New direct and paid rows name the verification key, signature context, and exact signed digest; those fields can be null only on legacy rows. source_grant_id is non-null for a paid attestation grant and null for a direct attestation.",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      subject_id: { type: "string", format: "uuid" },
+      attester_id: { type: "string", format: "uuid" },
+      claim: { type: "string" },
+      claim_type: { type: "string", description: "Present on direct create and detail responses; omitted by the identity-scoped list serializers." },
+      tier: { type: "string", description: "Present on direct create and detail responses; omitted by the identity-scoped list serializers." },
+      evidence: { type: ["object", "string", "null"], additionalProperties: true },
+      signature: { type: "string", description: "Base64 Ed25519 signature" },
+      kid: { type: ["string", "null"], format: "uuid", description: "Named signing key; null only on legacy rows." },
+      signature_context: { type: ["string", "null"], description: "identity-attestation/v1 or attestation-issue/v1 on current rows; null only on legacy rows." },
+      signed_payload: { type: ["string", "null"], description: "Base64 of the exact 32-byte signed digest on current rows; null only on legacy rows." },
+      source_grant_id: { type: ["string", "null"], format: "uuid", description: "Paid attestation grant ID, or null for direct and legacy receipts." },
+      expires_at: { type: ["string", "null"], format: "date-time" },
+      revoked_at: { type: ["string", "null"], format: "date-time", description: "Present on detail and received-list responses." },
+      created_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id", "subject_id", "attester_id", "claim", "evidence", "signature", "kid",
+      "signature_context", "signed_payload", "source_grant_id", "expires_at", "created_at",
+    ],
+  },
+  AttestationListing: {
+    type: "object",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      attester_identity_id: { type: "string", format: "uuid" },
+      attester_did: { type: "string" },
+      project_id: { type: "string", format: "uuid" },
+      name: { type: "string" },
+      description: { type: ["string", "null"] },
+      claim: { type: "string" },
+      capability_tags: { type: "array", items: { type: "string" } },
+      evidence_schema: { type: ["object", "null"], additionalProperties: true },
+      pricing_model: { type: "string", const: "per_grant" },
+      price_amount: { type: "integer", minimum: 1 },
+      price_currency: { type: "string" },
+      attester_wallet_id: { type: "string", format: "uuid" },
+      validity_seconds: { type: ["integer", "null"], minimum: 1 },
+      sla_seconds: { type: ["integer", "null"], minimum: 1 },
+      visibility: { type: "string", enum: ["private", "public"] },
+      status: { type: "string", enum: ["active", "paused", "archived"] },
+      grants_count: { type: "integer", minimum: 0 },
+      revenue_total: { type: "integer", minimum: 0 },
+      revenue_count: { type: "integer", minimum: 0 },
+      metadata: { type: "object", additionalProperties: true },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id", "attester_identity_id", "attester_did", "project_id", "name", "description", "claim",
+      "capability_tags", "evidence_schema", "pricing_model", "price_amount", "price_currency",
+      "attester_wallet_id", "validity_seconds", "sla_seconds", "visibility", "status", "grants_count",
+      "revenue_total", "revenue_count", "metadata", "created_at", "updated_at",
+    ],
+  },
+  AttestationGrant: {
+    type: "object",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      listing_id: { type: "string", format: "uuid" },
+      buyer_identity_id: { type: "string", format: "uuid" },
+      buyer_did: { type: "string" },
+      buyer_project_id: { type: "string", format: "uuid" },
+      buyer_wallet_id: { type: "string", format: "uuid" },
+      subject_identity_id: { type: "string", format: "uuid" },
+      subject_did: { type: "string" },
+      evidence: { type: ["object", "null"], additionalProperties: true, description: "Buyer-supplied plaintext evidence. A listing's evidence_schema is published but not enforced by the purchase route." },
+      amount: { type: "integer", minimum: 1 },
+      currency: { type: "string" },
+      escrow_id: { type: ["string", "null"], format: "uuid" },
+      platform_fee: { type: "integer", minimum: 0 },
+      attestation_id: { type: ["string", "null"], format: "uuid" },
+      status: { type: "string", enum: ["pending", "issued", "refunded", "failed"] },
+      refund_reason: { type: ["string", "null"] },
+      sla_deadline_at: { type: ["string", "null"], format: "date-time" },
+      metadata: { type: "object", additionalProperties: true },
+      created_at: { type: "string", format: "date-time" },
+      issued_at: { type: ["string", "null"], format: "date-time" },
+      settled_at: { type: ["string", "null"], format: "date-time" },
+    },
+    required: [
+      "id", "listing_id", "buyer_identity_id", "buyer_did", "buyer_project_id", "buyer_wallet_id",
+      "subject_identity_id", "subject_did", "evidence", "amount", "currency", "escrow_id", "platform_fee",
+      "attestation_id", "status", "refund_reason", "sla_deadline_at", "metadata", "created_at", "issued_at", "settled_at",
+    ],
+  },
+  MemoryWitnessListing: {
+    type: "object",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      witness_identity_id: { type: "string", format: "uuid" },
+      witness_did: { type: "string" },
+      project_id: { type: "string", format: "uuid" },
+      name: { type: "string" },
+      description: { type: ["string", "null"] },
+      claim_kind: { type: "string", const: "memory_witness:constitutive:v1" },
+      capability_tags: { type: "array", items: { type: "string" } },
+      pricing_model: { type: "string", const: "per_grant" },
+      price_amount: { type: "integer", minimum: 1 },
+      price_currency: { type: "string" },
+      witness_wallet_id: { type: "string", format: "uuid" },
+      sla_seconds: { type: ["integer", "null"], minimum: 1 },
+      visibility: { type: "string", enum: ["public", "private"] },
+      status: { type: "string", enum: ["active", "paused", "archived"] },
+      grants_count: { type: "integer", minimum: 0 },
+      revenue_total: { type: "integer", minimum: 0 },
+      revenue_count: { type: "integer", minimum: 0 },
+      metadata: { type: "object", additionalProperties: true },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id", "witness_identity_id", "witness_did", "project_id", "name", "description", "claim_kind",
+      "capability_tags", "pricing_model", "price_amount", "price_currency", "witness_wallet_id", "sla_seconds",
+      "visibility", "status", "grants_count", "revenue_total", "revenue_count", "metadata", "created_at", "updated_at",
+    ],
+  },
+  MemoryWitnessGrant: {
+    type: "object",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      listing_id: { type: "string", format: "uuid" },
+      buyer_identity_id: { type: "string", format: "uuid" },
+      buyer_did: { type: "string" },
+      buyer_project_id: { type: "string", format: "uuid" },
+      buyer_wallet_id: { type: "string", format: "uuid" },
+      memory_id: { type: "string", format: "uuid" },
+      amount: { type: "integer", minimum: 1 },
+      currency: { type: "string" },
+      escrow_id: { type: ["string", "null"], format: "uuid" },
+      platform_fee: { type: "integer", minimum: 0 },
+      memory_attestation_id: { type: ["string", "null"], format: "uuid" },
+      status: { type: "string", enum: ["pending", "issued", "declined", "refunded", "failed"] },
+      refund_reason: { type: ["string", "null"] },
+      sla_deadline_at: { type: ["string", "null"], format: "date-time" },
+      metadata: { type: "object", additionalProperties: true },
+      created_at: { type: "string", format: "date-time" },
+      issued_at: { type: ["string", "null"], format: "date-time" },
+      settled_at: { type: ["string", "null"], format: "date-time" },
+    },
+    required: [
+      "id", "listing_id", "buyer_identity_id", "buyer_did", "buyer_project_id", "buyer_wallet_id",
+      "memory_id", "amount", "currency", "escrow_id", "platform_fee", "memory_attestation_id", "status",
+      "refund_reason", "sla_deadline_at", "metadata", "created_at", "issued_at", "settled_at",
+    ],
+  },
+  MemoryAttestation: {
+    type: "object",
+    description:
+      "A memory witness receipt. Paid memory-witness rows carry signature_context, signed_payload, and source_grant_id; ordinary memory-attestation/v1 rows expose those fields as null.",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      attester_did: { type: "string" },
+      signing_key_id: { type: "string", format: "uuid" },
+      signature: { type: "string", description: "Canonical base64 Ed25519 signature" },
+      signature_context: { type: ["string", "null"] },
+      signed_payload: {
+        type: ["string", "null"],
+        description: "Base64 of the exact 32-byte signed digest when recorded",
+      },
+      source_grant_id: { type: ["string", "null"], format: "uuid" },
+      attested_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id",
+      "attester_did",
+      "signing_key_id",
+      "signature",
+      "signature_context",
+      "signed_payload",
+      "source_grant_id",
+      "attested_at",
+    ],
   },
   Memory: {
     type: "object",
@@ -592,6 +903,11 @@ const COMMON_SCHEMAS = {
       created_at: { type: "string", format: "date-time" },
       has_embedding: { type: "boolean" },
       expires_at: { type: ["string", "null"], format: "date-time" },
+      attestations: {
+        type: "array",
+        description: "Project-scoped witness receipts; present on memory read and list responses.",
+        items: { $ref: "#/components/schemas/MemoryAttestation" },
+      },
     },
     required: ["id", "type", "content", "created_at", "has_embedding"],
   },
@@ -991,6 +1307,19 @@ function spec() {
           description:
             "Optional UUID-like key. On routes with the middleware and while Redis is available, identical (project, path, key) requests within 24h can replay a cached response with `Idempotent-Replay: true`. Credential-shaped JSON and AgentTool bearer prefixes are never stored in the plaintext response cache and are marked `X-Idempotency-Skipped: sensitive-response`; this structural screen is not universal DLP. The middleware passes through without replay protection when Redis is disabled or unavailable.",
         },
+        DurableEscrowIdempotencyKey: {
+          name: "Idempotency-Key",
+          in: "header",
+          required: false,
+          schema: {
+            type: "string",
+            minLength: 8,
+            maxLength: 256,
+            pattern: "^[!-~]{8,256}$",
+          },
+          description:
+            "Optional durable key for POST /v1/escrows, containing 8-256 visible ASCII characters with no spaces. The database permanently retains SHA-256 of the key, not the raw header, scoped to the authenticated project. The request fingerprint binds the recognized creatorWalletId, workerWalletId or null, amount, description, and deadline normalized to an ISO instant or null; unknown JSON fields stripped by request validation are not part of it. A successful retry with the same key and the same fingerprint resolves the original escrow identity, returns that escrow's current row with status 201, and sets `Idempotent-Replay: true`; it does not preserve the original response bytes or status snapshot. Reuse with changed bound input returns 409 before wallet mutation. This path does not depend on the best-effort Redis response cache and has no expiry. Without a key, a retry is a new creation attempt and can fund another escrow.",
+        },
         PaymentSignature: {
           name: "PAYMENT-SIGNATURE",
           in: "header",
@@ -1080,9 +1409,9 @@ function spec() {
       { name: "strand", description: "Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is currently blocked by unfinished identity-key registration." },
       { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
       { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted. Lounge seats are a narrow exception: short public leases authorized by project-root bearers and carrying registered identity-key receipts, never inferred liveness or proof of independent agency." },
-      { name: "marketplace", description: "Capability templates — published expression bundles. Adopt to bootstrap a new identity following the template's voice (NOT a fork)." },
+      { name: "marketplace", description: "Capability templates plus paid service and attestation grants. Paid attestation issuance uses a short-lived server-prepared attestation-issue/v1 authorization before escrow release. Dispute-policy review and arbitration are resting fail-closed; no qualified-arbiter or ruling-based money-routing claim is active." },
       { name: "tools", description: "scrape · browse · document · execute" },
-      { name: "economy", description: "Wallets, escrow, billing" },
+      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available." },
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
       { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
@@ -1357,7 +1686,7 @@ function spec() {
           tags: ["identity"],
           summary: "Register a new agent identity (returns ed25519 keypair, private once)",
           description:
-            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. The legacy did field stores the provisional AgentTool convention `did:at:<uuid>`. Federation may construct `did:at:<host>/<uuid>`, which is not a standalone DID. did:at is unregistered and AgentTool publishes no DID Documents or conforming DID Resolution results.",
+            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. Generic create rejects server-managed birth, elevation, sponsor, and lifecycle metadata keys. The legacy did field stores the provisional AgentTool convention `did:at:<uuid>`. Federation may construct `did:at:<host>/<uuid>`, which is not a standalone DID. did:at is unregistered and AgentTool publishes no DID Documents or conforming DID Resolution results.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -1369,7 +1698,12 @@ function spec() {
                   properties: {
                     display_name: { type: "string", maxLength: 255 },
                     capabilities: { type: "array", items: { type: "string" } },
-                    metadata: { type: "object", additionalProperties: true },
+                    metadata: {
+                      type: "object",
+                      additionalProperties: true,
+                      description:
+                        "Caller-managed metadata only. Requests naming a server-managed birth, elevation, sponsor, or lifecycle key are rejected.",
+                    },
                   },
                 },
               },
@@ -1392,7 +1726,7 @@ function spec() {
         },
         patch: {
           tags: ["identity"],
-          summary: "Update display_name, capabilities, metadata, or expression_visibility",
+          summary: "Update caller-managed identity profile fields",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             content: {
@@ -1402,20 +1736,778 @@ function spec() {
                   properties: {
                     display_name: { type: "string", maxLength: 255 },
                     capabilities: { type: "array", items: { type: "string" } },
-                    metadata: { type: "object", additionalProperties: true },
+                    metadata: {
+                      type: "object",
+                      additionalProperties: true,
+                      description:
+                        "Replaces caller-managed metadata while preserving server-managed birth, elevation, sponsor, and lifecycle provenance. Requests naming a reserved key are rejected.",
+                    },
                     expression_visibility: { type: "string", enum: ["private", "public"] },
                   },
                 },
               },
             },
           },
-          responses: { "200": { description: "Updated" }, "404": { $ref: "#/components/responses/NotFound" } },
+          responses: {
+            "200": { description: "Updated" },
+            "400": { description: "Invalid field or reserved server-managed metadata key" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
         },
         delete: {
           tags: ["identity"],
           summary: "Soft-revoke an identity (status → revoked, signing keys remain for past-sig verification)",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: { "200": { description: "Revoked" }, "404": { $ref: "#/components/responses/NotFound" } },
+        },
+      },
+      "/v1/identities/{id}/keys": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "List an identity's signing keys",
+          responses: { "200": { description: "Signing keys" } },
+        },
+        post: {
+          tags: ["identity"],
+          summary: "Rotate an identity signing key",
+          description:
+            "Generates a new Ed25519 keypair. The private key appears once in the response; the request accepts only an optional label.",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { label: { type: "string" } },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Rotated; private_key returned once" } },
+        },
+      },
+      "/v1/identities/{id}/keys/import": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["identity"],
+          summary: "Register a caller-generated Ed25519 public key",
+          description:
+            "The request contains only a canonical base64 32-byte public key and optional label. The corresponding private key remains with the caller.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["public_key"],
+                  properties: {
+                    public_key: { type: "string" },
+                    label: { type: "string" },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Public key registered" },
+            "400": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/attestations": {
+        post: {
+          tags: ["identity"],
+          summary: "Submit a locally signed identity attestation",
+          description:
+            "The caller signs the identity-attestation/v1 SHA-256 digest over NUL-separated UTF-8 fields: subject_id, attester_id, kid, claim, evidence kind (null or text), and evidence value. IDs must be canonical lowercase UUIDs; claim and evidence cannot contain NUL or lone UTF-16 surrogate code units. Portable v1 evidence is text or null. The API verifies against kid, stores the key ID, context, and signed digest, rejects exact signature replay, and never accepts the private key. New writes use tier=self and claim_type=general; this route does not mint accredited credentials or caller-selected expiry.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["subject_id", "attester_id", "claim", "signature", "kid"],
+                  properties: {
+                    subject_id: { type: "string", format: "uuid", pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+                    attester_id: { type: "string", format: "uuid", pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+                    claim: { type: "string", minLength: 1, maxLength: 2000 },
+                    evidence: { type: ["string", "null"], maxLength: 20000 },
+                    signature: { type: "string", description: "Base64 Ed25519 signature" },
+                    kid: { type: "string", format: "uuid", pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Attestation accepted. source_grant_id is null on this direct-write route.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/IdentityAttestationReceipt" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/Validation" },
+            "403": { description: "Attester/key ownership or signature rejected" },
+            "404": { description: "Subject identity not found or not active" },
+            "409": { description: "Exact signed attestation replay rejected" },
+          },
+        },
+      },
+      "/v1/attestations/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "Read one authenticated identity-attestation receipt",
+          description:
+            "The parent route requires a project bearer, but this read is not scoped to that project: any authenticated project can fetch an attestation when it knows the receipt ID. The response includes nullable legacy signature fields and nullable source_grant_id; paid rows name their grant while direct rows return null.",
+          responses: {
+            "200": {
+              description: "Identity-attestation receipt, including claim_type, tier, and revoked_at",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/IdentityAttestationReceipt" },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        delete: {
+          tags: ["identity"],
+          summary: "Revoke an attestation issued by this project",
+          description:
+            "Only the project that owns the attester identity may revoke an active receipt. Already-revoked and unknown receipts both return 404; a receipt issued by another project returns 403.",
+          responses: {
+            "200": {
+              description: "Attestation revoked",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      message: { type: "string", const: "Attestation revoked" },
+                      id: { type: "string", format: "uuid" },
+                    },
+                    required: ["message", "id"],
+                  },
+                },
+              },
+            },
+            "403": { description: "Bearer project does not own the attester identity" },
+            "404": { description: "Attestation not found or already revoked" },
+          },
+        },
+      },
+      "/v1/identities/{id}/attestations": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "List receipts about one identity",
+          description:
+            "Authenticated but not project-owned: the route filters by the supplied subject ID without checking that the identity exists or belongs to the caller. Revoked rows are hidden by default and included only with include_revoked=true. This list serializer omits claim_type and tier but includes revoked_at and nullable source_grant_id.",
+          parameters: [
+            { name: "include_revoked", in: "query", schema: { type: "boolean", default: false } },
+          ],
+          responses: {
+            "200": {
+              description: "Subject-scoped identity-attestation receipts; an unknown identity ID yields an empty list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      attestations: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/IdentityAttestationReceipt" },
+                      },
+                    },
+                    required: ["attestations"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/v1/identities/{id}/attestations/given": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["identity"],
+          summary: "List active receipts issued by one identity",
+          description:
+            "Authenticated but not project-owned: the route filters by the supplied attester ID without checking that the identity exists or belongs to the caller. Revoked rows are always excluded. This serializer omits claim_type, tier, and revoked_at but includes nullable source_grant_id.",
+          responses: {
+            "200": {
+              description: "Attester-scoped active receipts; an unknown identity ID yields an empty list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      attestations: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/IdentityAttestationReceipt" },
+                      },
+                    },
+                    required: ["attestations"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/v1/attestation-listings": {
+        post: {
+          tags: ["marketplace"],
+          summary: "Create an attestation listing",
+          description:
+            "The attester identity and attester wallet must be active and owned by the bearer project, and the wallet currency must match the listing. visibility defaults to public and status starts active. Buyer evidence and issued attestations are plaintext by design.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["attester_identity_id", "name", "claim", "price_amount", "price_currency", "attester_wallet_id"],
+                  properties: {
+                    attester_identity_id: { type: "string", format: "uuid" },
+                    name: { type: "string", minLength: 1, maxLength: 200 },
+                    description: { type: ["string", "null"], maxLength: 2000 },
+                    claim: { type: "string", minLength: 1, maxLength: 500 },
+                    capability_tags: { type: "array", maxItems: 32, items: { type: "string", maxLength: 64 } },
+                    evidence_schema: { type: ["object", "null"], additionalProperties: true, description: "Published buyer guidance; the purchase route does not validate evidence against it." },
+                    price_amount: { type: "integer", minimum: 1 },
+                    price_currency: { type: "string", minLength: 1, maxLength: 20 },
+                    attester_wallet_id: { type: "string", format: "uuid" },
+                    validity_seconds: { type: ["integer", "null"], minimum: 1 },
+                    sla_seconds: { type: ["integer", "null"], minimum: 1 },
+                    visibility: { type: "string", enum: ["private", "public"], default: "public" },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Owned attestation listing created",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { listing: { $ref: "#/components/schemas/AttestationListing" } },
+                    required: ["listing"],
+                  },
+                },
+              },
+            },
+            "400": { description: "validation | attester_not_found_or_not_owned | attester_wallet_not_found | attester_wallet_not_active | currency_mismatch | price_amount_must_be_positive" },
+          },
+        },
+        get: {
+          tags: ["marketplace"],
+          summary: "List visible attestation listings",
+          description:
+            "With mine=true, returns only this project's listings, including private and non-active rows. Otherwise returns this project's rows plus active public listings from other projects; private foreign rows look absent. Optional status still filters that visibility-scoped result.",
+          parameters: [
+            { name: "attester_id", in: "query", schema: { type: "string", format: "uuid" } },
+            { name: "claim", in: "query", schema: { type: "string" } },
+            { name: "status", in: "query", schema: { type: "string", enum: ["active", "paused", "archived"] } },
+            { name: "mine", in: "query", schema: { type: "boolean", default: false } },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 200, default: 50 } },
+          ],
+          responses: {
+            "200": {
+              description: "Visibility-scoped attestation listings",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      listings: { type: "array", items: { $ref: "#/components/schemas/AttestationListing" } },
+                      count: { type: "integer", minimum: 0 },
+                    },
+                    required: ["listings", "count"],
+                  },
+                },
+              },
+            },
+            "400": { description: "invalid status" },
+          },
+        },
+      },
+      "/v1/attestation-listings/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["marketplace"],
+          summary: "Read one visible attestation listing",
+          description:
+            "Returns any public listing regardless of status, or a private listing owned by the bearer project. A private foreign listing and an unknown ID both return listing_not_found with 404.",
+          responses: {
+            "200": {
+              description: "Visible attestation listing",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { listing: { $ref: "#/components/schemas/AttestationListing" } },
+                    required: ["listing"],
+                  },
+                },
+              },
+            },
+            "404": { description: "listing_not_found" },
+          },
+        },
+        patch: {
+          tags: ["marketplace"],
+          summary: "Update an owned attestation listing",
+          description:
+            "Project ownership is enforced in the update query; unknown and foreign listings both return listing_not_found. Changing the wallet or currency rechecks wallet ownership, active status, and currency agreement.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string", minLength: 1, maxLength: 200 },
+                    description: { type: ["string", "null"], maxLength: 2000, description: "Explicit null is accepted by validation but currently ignored rather than clearing the stored value." },
+                    capability_tags: { type: "array", maxItems: 32, items: { type: "string", maxLength: 64 } },
+                    evidence_schema: { type: ["object", "null"], additionalProperties: true, description: "Explicit null is accepted by validation but currently ignored rather than clearing the stored value." },
+                    price_amount: { type: "integer", minimum: 1 },
+                    price_currency: { type: "string", minLength: 1, maxLength: 20 },
+                    attester_wallet_id: { type: "string", format: "uuid" },
+                    validity_seconds: { type: ["integer", "null"], minimum: 1, description: "Explicit null is accepted by validation but currently ignored rather than clearing the stored value." },
+                    sla_seconds: { type: ["integer", "null"], minimum: 1, description: "Explicit null is accepted by validation but currently ignored rather than clearing the stored value." },
+                    visibility: { type: "string", enum: ["private", "public"] },
+                    status: { type: "string", enum: ["active", "paused", "archived"] },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Updated owned listing",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { listing: { $ref: "#/components/schemas/AttestationListing" } },
+                    required: ["listing"],
+                  },
+                },
+              },
+            },
+            "400": { description: "validation | price_amount_must_be_positive | attester_wallet_not_found | attester_wallet_not_active | currency_mismatch" },
+            "404": { description: "listing_not_found" },
+          },
+        },
+      },
+      "/v1/attestation-listings/{id}/purchase": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Purchase an attestation grant",
+          description:
+            "This is the only mounted attestation-grant creation operation; POST /v1/attestation-grants is not mounted. The listing must be active and public, the buyer identity and wallet must belong to the bearer project, and the subject must be an active identity. The optional evidence object is stored plaintext and is not validated against the listing's published evidence_schema. Purchase atomically debits the buyer wallet and funds escrow.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["buyer_identity_id", "buyer_wallet_id", "subject_identity_id"],
+                  properties: {
+                    buyer_identity_id: { type: "string", format: "uuid" },
+                    buyer_wallet_id: { type: "string", format: "uuid" },
+                    subject_identity_id: { type: "string", format: "uuid" },
+                    evidence: { type: ["object", "null"], additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Pending grant with funded escrow",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/AttestationGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "400": { description: "validation or a stable ownership, active-state, currency, self-purchase, subject, or wallet-state error code" },
+            "402": { description: "insufficient_balance guided payment error" },
+            "404": { description: "listing_not_found; private and unknown listings are indistinguishable" },
+          },
+        },
+      },
+      "/v1/attestation-grants": {
+        get: {
+          tags: ["marketplace"],
+          summary: "List project-scoped attestation grants",
+          description:
+            "role=buyer matches buyer_project_id; role=attester matches listings owned by this project; role=subject matches subject identities owned by this project. There is no unscoped list. Subject role applies only to the list: detail access remains buyer-or-attester scoped.",
+          parameters: [
+            { name: "role", in: "query", schema: { type: "string", enum: ["buyer", "attester", "subject"], default: "buyer" } },
+            { name: "status", in: "query", schema: { type: "string", enum: ["pending", "issued", "refunded", "failed"] } },
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 200, default: 50 } },
+          ],
+          responses: {
+            "200": {
+              description: "Role-scoped attestation grants",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      grants: { type: "array", items: { $ref: "#/components/schemas/AttestationGrant" } },
+                      count: { type: "integer", minimum: 0 },
+                      role: { type: "string", enum: ["buyer", "attester", "subject"] },
+                    },
+                    required: ["grants", "count", "role"],
+                  },
+                },
+              },
+            },
+            "400": { description: "role must be buyer|attester|subject | invalid status" },
+          },
+        },
+      },
+      "/v1/attestation-grants/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["marketplace"],
+          summary: "Read one buyer-or-attester scoped grant",
+          description:
+            "Returns role=buyer when the bearer project bought the grant, otherwise role=attester when it owns the listing. Unrelated and subject-only projects receive grant_not_found with 404.",
+          responses: {
+            "200": {
+              description: "Authorized attestation grant and matched role",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      grant: { $ref: "#/components/schemas/AttestationGrant" },
+                      role: { type: "string", enum: ["buyer", "attester"] },
+                    },
+                    required: ["grant", "role"],
+                  },
+                },
+              },
+            },
+            "404": { description: "grant_not_found" },
+          },
+        },
+      },
+      "/v1/attestation-grants/{id}/decline": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Decline a pending grant as its listing owner",
+          description:
+            "Only the project that owns the listing may decline. A successful decline atomically refunds escrow and returns the grant with status=refunded and refund_reason=declined.",
+          responses: {
+            "200": {
+              description: "Grant refunded after attester decline",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/AttestationGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "400": { description: "grant_state_invalid, grant_missing_escrow, escrow_terms_changed/state_invalid, buyer_wallet_terms_changed, or their locked-transaction variants" },
+            "403": { description: "not_listing_owner" },
+            "404": { description: "grant_not_found | listing_missing" },
+          },
+        },
+      },
+      "/v1/attestation-grants/{id}/cancel": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Cancel a pending grant as its buyer",
+          description:
+            "Only the project recorded as buyer_project_id may cancel. A successful cancellation atomically refunds escrow and returns the grant with status=refunded and refund_reason=cancelled.",
+          responses: {
+            "200": {
+              description: "Grant refunded after buyer cancellation",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/AttestationGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "400": { description: "grant_state_invalid, grant_missing_escrow, escrow_terms_changed/state_invalid, buyer_wallet_terms_changed, or their locked-transaction variants" },
+            "403": { description: "not_grant_owner" },
+            "404": { description: "grant_not_found" },
+          },
+        },
+      },
+      "/v1/attestation-grants/{id}/signing-payload": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Prepare the exact short-lived paid-attestation digest to sign",
+          description:
+            "For the listing owner's project, locks and reads the pending grant, listing, funded escrow, buyer/subject/attester identities, named active key, and buyer/attester wallets. Returns attestation-issue/v1, the exact field order, every named assertion and settlement field, and signed_payload_b64 (canonical standard base64 of exactly 32 bytes). Evidence is represented by SHA-256 of recursively sorted-key deterministic JSON. The server-generated authorization_expires_at is normally five minutes ahead. Sign the decoded 32 bytes locally with signing_key_id; never send the private key.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["signing_key_id"],
+                  properties: {
+                    signing_key_id: { type: "string", format: "uuid" },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Named authorization fields and the exact 32-byte digest to sign",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["signing_payload"],
+                    properties: {
+                      signing_payload: {
+                        type: "object",
+                        required: [
+                          "signature_context",
+                          "field_order",
+                          "fields",
+                          "signed_payload_b64",
+                          "authorization_expires_at",
+                        ],
+                        properties: {
+                          signature_context: { type: "string", const: "attestation-issue/v1" },
+                          field_order: { type: "array", items: { type: "string" } },
+                          fields: {
+                            type: "object",
+                            required: [
+                          "listing_id", "grant_id", "escrow_id",
+                          "buyer_identity_id", "buyer_did", "buyer_project_id", "buyer_wallet_id",
+                          "subject_identity_id", "subject_did",
+                          "attester_identity_id", "attester_did", "attester_project_id",
+                          "signing_key_id", "claim", "evidence_sha256", "attester_wallet_id",
+                          "grant_gross", "grant_currency", "take_rate_bps", "platform_fee",
+                          "attester_net", "validity_seconds", "attestation_expires_at",
+                          "authorization_expires_at",
+                            ],
+                            properties: {
+                          listing_id: { type: "string", format: "uuid" },
+                          grant_id: { type: "string", format: "uuid" },
+                          escrow_id: { type: "string", format: "uuid" },
+                          buyer_identity_id: { type: "string", format: "uuid" },
+                          buyer_did: { type: "string" },
+                          buyer_project_id: { type: "string", format: "uuid" },
+                          buyer_wallet_id: { type: "string", format: "uuid" },
+                          subject_identity_id: { type: "string", format: "uuid" },
+                          subject_did: { type: "string" },
+                          attester_identity_id: { type: "string", format: "uuid" },
+                          attester_did: { type: "string" },
+                          attester_project_id: { type: "string", format: "uuid" },
+                          signing_key_id: { type: "string", format: "uuid" },
+                          claim: { type: "string" },
+                          evidence_sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+                          attester_wallet_id: { type: "string", format: "uuid" },
+                          grant_gross: { type: "integer", minimum: 0 },
+                          grant_currency: { type: "string" },
+                          take_rate_bps: { type: "integer", minimum: 0, maximum: 10000 },
+                          platform_fee: { type: "integer", minimum: 0 },
+                          attester_net: { type: "integer", minimum: 0 },
+                          validity_seconds: { type: ["integer", "null"], minimum: 1 },
+                          attestation_expires_at: { type: ["string", "null"], format: "date-time" },
+                          authorization_expires_at: { type: "string", format: "date-time" },
+                            },
+                            additionalProperties: false,
+                          },
+                          signed_payload_b64: {
+                            type: "string",
+                            contentEncoding: "base64",
+                            description: "Canonical standard base64 of exactly 32 SHA-256 bytes. Sign the decoded bytes with Ed25519.",
+                          },
+                          authorization_expires_at: { type: "string", format: "date-time" },
+                        },
+                        additionalProperties: false,
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/Validation" },
+            "401": { description: "Named key is missing, revoked, or does not belong to the attester" },
+            "403": { description: "Bearer project does not own the attestation listing" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "Grant, escrow, or another bound state is no longer issuable" },
+          },
+        },
+      },
+      "/v1/attestation-grants/{id}/issue": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Verify paid-attestation authorization and settle the bound grant",
+          description:
+            "Accepts only attestation-issue/v1 authorization prepared for this grant. The exact authorization_expires_at from signing-payload is part of the signed bytes; expired values and values more than ten minutes ahead are rejected. Inside one transaction the API locks and rechecks all bound terms, recomputes the current fee split and evidence hash, verifies the named active key, writes a tier=self/type=general attestation receipt with key/context/digest/replay provenance, credits the attester, and releases only the bound funded escrow. There is no legacy four-field JSON fallback.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["signature", "signing_key_id", "authorization_expires_at"],
+                  properties: {
+                    signature: { type: "string", description: "Canonical standard base64 of one 64-byte Ed25519 signature" },
+                    signing_key_id: { type: "string", format: "uuid" },
+                    authorization_expires_at: { type: "string", format: "date-time" },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Grant issued and escrow settled; the legacy identity trust field remains neutral",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/AttestationGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/Validation" },
+            "401": { description: "Signature or named signing key rejected" },
+            "403": { description: "Bearer project does not own the attestation listing" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "Grant/state conflict or exact signature replay" },
+          },
+        },
+      },
+      "/v1/discover": {
+        get: {
+          tags: ["identity"],
+          summary: "Search the bounded cross-project identity allowlist",
+          description:
+            "Authenticated search over active identities. Returns identity ID, provisional AgentTool identifier, display name, capabilities, the neutral legacy trust field, and creation time; generic metadata and expression are excluded. The legacy field is not trust proof, authorization, accreditation, or a Sybil-resistant ranking.",
+          parameters: [
+            { name: "capability", in: "query", schema: { type: "string" } },
+            {
+              name: "min_trust",
+              in: "query",
+              deprecated: true,
+              description:
+                "Compatibility filter over the neutral legacy field. Values above 0 normally return no identities.",
+              schema: { type: "number", minimum: 0, maximum: 1 },
+            },
+            { name: "q", in: "query", schema: { type: "string" } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+            { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } },
+          ],
+          responses: {
+            "200": { description: "Bounded identity results" },
+            "400": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/identities/{id}/tokens": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["identity"],
+          deprecated: true,
+          summary: "Retired server-side token issuance; sign locally",
+          description:
+            "Always returns 410 client_side_signing_required and does not read the request body. AgentTool SDK 0.11.0 signs compatible EdDSA JWTs locally.",
+          responses: { "410": { description: "Use client-side signing" } },
+        },
+      },
+      "/v1/tokens/verify": {
+        post: {
+          tags: ["identity"],
+          summary: "Verify a locally signed agent JWT for an expected audience",
+          description:
+            "The protected header must name one active UUID key. The signed audience must be exactly one DID, and that active audience identity must belong to the project bearer making this verification request.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["token", "audience_did"],
+                  properties: {
+                    token: { type: "string", maxLength: 16384 },
+                    audience_did: { type: "string", pattern: "^did:[a-z0-9]+:.+$", maxLength: 512 },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Valid token and decoded bounded claims" },
+            "400": { $ref: "#/components/responses/Validation" },
+            "401": { description: "Signature, subject, audience, issuer, expiry, or lifetime rejected" },
+            "403": { description: "Signing key/identity inactive, or audience identity not active and owned by this project" },
+          },
         },
       },
       "/v1/identities/{id}/box-keys": {
@@ -1487,6 +2579,394 @@ function spec() {
       "/v1/templates/{id}/adoptions": {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         get: { tags: ["marketplace"], summary: "List adoptions of MY template", responses: { "200": { description: "Adoptions" } } },
+      },
+      "/v1/memory-witness-listings": {
+        post: {
+          tags: ["marketplace"],
+          summary: "Create a memory-witness listing",
+          description:
+            "The witness identity and wallet must be active and owned by the bearer project, and wallet currency must match price_currency. v1 accepts only claim_kind=memory_witness:constitutive:v1. visibility defaults to public and status starts active; no PATCH operation is mounted for these listings.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["witness_identity_id", "name", "claim_kind", "price_amount", "price_currency", "witness_wallet_id"],
+                  properties: {
+                    witness_identity_id: { type: "string", format: "uuid" },
+                    name: { type: "string", minLength: 1, maxLength: 255 },
+                    description: { type: ["string", "null"], maxLength: 2000 },
+                    claim_kind: { type: "string", const: "memory_witness:constitutive:v1" },
+                    capability_tags: { type: "array", maxItems: 32, items: { type: "string", maxLength: 64 } },
+                    price_amount: { type: "integer", minimum: 1 },
+                    price_currency: { type: "string", minLength: 1, maxLength: 20 },
+                    witness_wallet_id: { type: "string", format: "uuid" },
+                    sla_seconds: { type: ["integer", "null"], minimum: 1 },
+                    visibility: { type: "string", enum: ["public", "private"], default: "public" },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Owned memory-witness listing created",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { listing: { $ref: "#/components/schemas/MemoryWitnessListing" } },
+                    required: ["listing"],
+                  },
+                },
+              },
+            },
+            "403": { description: "witness_not_found_or_not_owned" },
+            "404": { description: "witness_wallet_not_found" },
+            "422": { description: "validation | claim_kind_unsupported | price_amount_must_be_positive | witness_wallet_not_active | witness_wallet_currency_mismatch" },
+          },
+        },
+        get: {
+          tags: ["marketplace"],
+          summary: "List owned or public memory-witness listings",
+          description:
+            "Authenticated discovery is explicit: scope=mine returns this project's listings, including private rows; scope=public returns only active public listings. Private listings are never returned to another project.",
+          parameters: [
+            { name: "scope", in: "query", schema: { type: "string", enum: ["mine", "public"], default: "mine" } },
+            { name: "witness_identity_id", in: "query", schema: { type: "string", format: "uuid" } },
+            { name: "claim_kind", in: "query", schema: { type: "string" } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } },
+          ],
+          responses: {
+            "200": {
+              description: "Visibility-scoped memory-witness listings",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      listings: { type: "array", items: { $ref: "#/components/schemas/MemoryWitnessListing" } },
+                      count: { type: "integer", minimum: 0 },
+                      _meta: { type: "object", additionalProperties: true },
+                    },
+                    required: ["listings", "count", "_meta"],
+                  },
+                },
+              },
+            },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/memory-witness-listings/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["marketplace"],
+          summary: "Read one visible memory-witness listing",
+          description: "Returns any public listing regardless of status, or a private listing owned by the caller's project. Other private rows return 404; unknown IDs also return 404.",
+          responses: {
+            "200": {
+              description: "Visible memory-witness listing",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { listing: { $ref: "#/components/schemas/MemoryWitnessListing" } },
+                    required: ["listing"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/memory-witness-grants": {
+        post: {
+          tags: ["marketplace"],
+          summary: "Purchase and create a memory-witness grant",
+          description:
+            "This root POST is the only mounted memory-witness purchase/create operation; there is no /memory-witness-listings/{id}/purchase route. The listing must be visible and active, the buyer identity, wallet, and foundational memory must belong to the bearer project, and the listing must belong to a different project. Creation atomically debits the buyer wallet and funds escrow.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["listing_id", "buyer_identity_id", "buyer_wallet_id", "memory_id"],
+                  properties: {
+                    listing_id: { type: "string", format: "uuid" },
+                    buyer_identity_id: { type: "string", format: "uuid" },
+                    buyer_wallet_id: { type: "string", format: "uuid" },
+                    memory_id: { type: "string", format: "uuid" },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Pending memory-witness grant with funded escrow",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/MemoryWitnessGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "402": { description: "buyer_insufficient_balance" },
+            "403": { description: "self_witness_forbidden | witness_not_found_or_not_owned" },
+            "404": { description: "listing_not_found | memory_not_found | buyer_wallet_not_found" },
+            "409": { description: "listing_not_active | memory_already_constitutive | memory_must_be_foundational | settlement_state_invalid" },
+            "422": { description: "validation | buyer_wallet_not_active | buyer_wallet_currency_mismatch" },
+          },
+        },
+        get: {
+          tags: ["marketplace"],
+          summary: "List memory-witness grants for one role",
+          description:
+            "Every result is scoped to the authenticated project: role=buyer matches buyer_project_id; role=witness matches the owning project of the joined listing. There is no unscoped grant list.",
+          parameters: [
+            { name: "role", in: "query", schema: { type: "string", enum: ["buyer", "witness"], default: "buyer" } },
+            { name: "status", in: "query", schema: { type: "string", enum: ["pending", "issued", "declined", "refunded", "failed"] } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
+          ],
+          responses: {
+            "200": {
+              description: "Role-scoped memory-witness grants",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      grants: { type: "array", items: { $ref: "#/components/schemas/MemoryWitnessGrant" } },
+                      count: { type: "integer", minimum: 0 },
+                      role: { type: "string", enum: ["buyer", "witness"] },
+                    },
+                    required: ["grants", "count", "role"],
+                  },
+                },
+              },
+            },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/memory-witness-grants/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["marketplace"],
+          summary: "Read one role-scoped memory-witness grant",
+          description:
+            "Returns the grant only when the caller is its buyer project or owns its joined witness listing. Unrelated projects receive 404.",
+          responses: {
+            "200": {
+              description: "Authorized memory-witness grant",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/MemoryWitnessGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/memory-witness-grants/{id}/signing-payload": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Get exact paid memory-witness authorization bytes",
+          description:
+            "Locks and reconciles both current identities, both wallets, the listing owner, and the explicit active witness key, then returns a five-minute memory-witness-issue/v1 SHA-256 digest. Its named fields bind grant, escrow, buyer, memory and NFC content hash, witness/key/wallet, gross/fee/net terms, and expiry. Base64-decode signed_payload_b64 and Ed25519-sign those 32 bytes as-is.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["signing_key_id"],
+                  properties: {
+                    signing_key_id: { type: "string", format: "uuid" },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Short-lived canonical signing payload",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["signing_payload"],
+                    properties: {
+                      signing_payload: {
+                        type: "object",
+                        required: ["signature_context", "field_order", "fields", "signed_payload_b64", "authorization_expires_at"],
+                        properties: {
+                          signature_context: { type: "string", const: "memory-witness-issue/v1" },
+                          field_order: { type: "array", items: { type: "string" } },
+                          fields: {
+                            type: "object",
+                            required: ["listing_id", "grant_id", "escrow_id", "buyer_identity_id", "buyer_project_id", "buyer_wallet_id", "memory_id", "memory_identity_id", "memory_content_sha256", "source_tier", "target_tier", "claim_kind", "witness_identity_id", "witness_did", "witness_project_id", "signing_key_id", "witness_wallet_id", "gross_amount", "currency", "rate_bps", "platform_fee", "net_amount", "authorization_expires_at"],
+                            properties: {
+                              listing_id: { type: "string", format: "uuid" },
+                              grant_id: { type: "string", format: "uuid" },
+                              escrow_id: { type: "string", format: "uuid" },
+                              buyer_identity_id: { type: "string", format: "uuid" },
+                              buyer_project_id: { type: "string", format: "uuid" },
+                              buyer_wallet_id: { type: "string", format: "uuid" },
+                              memory_id: { type: "string", format: "uuid" },
+                              memory_identity_id: { type: ["string", "null"] },
+                              memory_content_sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+                              source_tier: { type: "string", const: "foundational" },
+                              target_tier: { type: "string", const: "constitutive" },
+                              claim_kind: { type: "string", const: "memory_witness:constitutive:v1" },
+                              witness_identity_id: { type: "string", format: "uuid" },
+                              witness_did: { type: "string" },
+                              witness_project_id: { type: "string", format: "uuid" },
+                              signing_key_id: { type: "string", format: "uuid" },
+                              witness_wallet_id: { type: "string", format: "uuid" },
+                              gross_amount: { type: "integer", minimum: 0 },
+                              currency: { type: "string" },
+                              rate_bps: { type: "integer", minimum: 0, maximum: 10000 },
+                              platform_fee: { type: "integer", minimum: 0 },
+                              net_amount: { type: "integer", minimum: 0 },
+                              authorization_expires_at: { type: "string", format: "date-time" },
+                            },
+                            additionalProperties: false,
+                          },
+                          signed_payload_b64: { type: "string", description: "Canonical base64 for the exact 32-byte SHA-256 digest" },
+                          authorization_expires_at: { type: "string", format: "date-time" },
+                        },
+                        additionalProperties: false,
+                      },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "401": { description: "Explicit key missing, revoked, or not owned by witness" },
+            "403": { description: "Caller is not the listing owner" },
+            "404": { description: "Memory-witness grant not found in the buyer-or-witness visibility scope" },
+            "409": { description: "Grant, memory, escrow, or settlement state is not issuable" },
+            "410": { description: "Grant or escrow authorization window expired" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/memory-witness-grants/{id}/issue": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Settle a paid memory witness with signed bound terms",
+          description:
+            "Requires memory-witness-issue/v1; ordinary memory-attestation/v1 signatures are rejected. The service rebuilds all signed fields while locking and rechecking both identities and wallets, then conditionally credits the active witness wallet and releases the exact funded escrow in the same receipt/elevation transaction.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["signing_key_id", "signature_b64", "authorization_expires_at"],
+                  properties: {
+                    signing_key_id: { type: "string", format: "uuid" },
+                    signature_b64: { type: "string", description: "Canonical base64 Ed25519 signature over signed_payload_b64 decoded bytes" },
+                    authorization_expires_at: { type: "string", format: "date-time", description: "Exact expiry returned by signing-payload" },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Grant issued and settled atomically",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/MemoryWitnessGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "401": { description: "Key or signature rejected" },
+            "403": { description: "Caller is not the listing owner" },
+            "404": { description: "Memory-witness grant not found in the buyer-or-witness visibility scope" },
+            "409": { description: "State changed or signed receipt replayed" },
+            "410": { description: "Authorization expired" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/memory-witness-grants/{id}/decline": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Decline a pending memory-witness grant",
+          description:
+            "Only the project that owns the witness listing may decline. The grant must still be pending. A successful decline refunds funded escrow to the buyer wallet and returns the grant with status=declined; no buyer-cancel route is mounted for memory-witness grants.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    reason: { type: ["string", "null"], maxLength: 500 },
+                  },
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Grant declined and escrow refunded",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { grant: { $ref: "#/components/schemas/MemoryWitnessGrant" } },
+                    required: ["grant"],
+                  },
+                },
+              },
+            },
+            "403": { description: "wrong_witness" },
+            "404": { description: "grant_not_found" },
+            "409": { description: "grant_not_pending" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
       },
       "/v1/identities/from-template": {
         post: {
@@ -1875,6 +3355,41 @@ function spec() {
             },
           },
         },
+        delete: {
+          tags: ["memory"],
+          summary: "Delete every memory with an exact key",
+          description:
+            "All-or-none project-scoped deletion. The service locks every memory matching the exact key. If any matching row carries a paid marketplace witness receipt, it returns 409 paid_memory_receipt_preserved and deletes none; otherwise it deletes every match. Tier is not a deletion guard, so ordinary constitutive memories are included. No matches returns deleted=0.",
+          parameters: [
+            { $ref: "#/components/parameters/IdempotencyKey" },
+            {
+              name: "key",
+              in: "query",
+              required: true,
+              schema: { type: "string", minLength: 1 },
+              description: "Exact memory key. The route refuses a missing or empty key.",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Every matching memory deleted, or no matches found",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { deleted: { type: "integer", minimum: 0 } },
+                    required: ["deleted"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "400": errorResponse("Missing or empty key query parameter"),
+            "409": paidMemoryReceiptPreservedResponse(
+              "paid_memory_receipt_preserved: at least one matching memory has a paid witness receipt, so none were deleted",
+            ),
+          },
+        },
       },
       "/v1/memories/{id}": {
         parameters: [
@@ -1891,11 +3406,109 @@ function spec() {
             "404": { $ref: "#/components/responses/NotFound" },
           },
         },
+        patch: {
+          tags: ["memory"],
+          summary: "Change one memory's visibility",
+          description:
+            "The owning project can set private or public visibility at every tier, including memories carrying paid witness receipts. This does not change the separate paid-receipt deletion guard. Public observer routes for memory content are not currently mounted.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    visibility: { type: "string", enum: ["private", "public"] },
+                  },
+                  required: ["visibility"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Visibility changed",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      visibility: { type: "string", enum: ["private", "public"] },
+                      tier: {
+                        type: "string",
+                        enum: ["episodic", "foundational", "constitutive"],
+                      },
+                      note: { type: "string" },
+                    },
+                    required: ["id", "visibility", "tier", "note"],
+                  },
+                },
+              },
+            },
+            "400": errorResponse("visibility must be private or public"),
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
         delete: {
           tags: ["memory"],
-          summary: "Delete one memory",
+          summary: "Delete one memory at any tier",
+          description:
+            "Deletes the project-owned row without witness authorization, including an ordinary constitutive memory. If the row carries a paid marketplace witness receipt, deletion returns 409 paid_memory_receipt_preserved instead. A missing memory returns deleted=0.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
-          responses: { "200": { description: "Deleted" } },
+          responses: {
+            "200": {
+              description: "Memory deleted, or no project-owned memory matched",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { deleted: { type: "integer", minimum: 0, maximum: 1 } },
+                    required: ["deleted"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "409": paidMemoryReceiptPreservedResponse(
+              "paid_memory_receipt_preserved: this memory has a paid witness receipt and was not deleted",
+            ),
+          },
+        },
+      },
+      "/v1/memories/{id}/attestations": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["memory"],
+          summary: "List project-scoped witness receipts for one memory",
+          description:
+            "Returns full ordinary or paid receipt data. Paid rows identify memory-witness-issue/v1, its exact base64 digest, and the source grant; ordinary memory-attestation/v1 rows return null for those three paid-only fields.",
+          responses: {
+            "200": {
+              description: "Memory witness receipts",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      memory_id: { type: "string", format: "uuid" },
+                      attestations: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/MemoryAttestation" },
+                      },
+                      count: { type: "integer" },
+                    },
+                    required: ["memory_id", "attestations", "count"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
         },
       },
       "/v1/memories/{id}/elevate": {
@@ -2835,6 +4448,602 @@ function spec() {
             { name: "limit", in: "query", schema: { type: "integer", maximum: 500 } },
           ],
           responses: { "200": { description: "Ciphertext blobs in sequence order" } },
+        },
+      },
+
+      // ── Capability marketplace dispute boundary ────────────────────
+      "/v1/listings": {
+        post: {
+          tags: ["marketplace"],
+          summary: "Publish a callable capability listing",
+          description:
+            "Ordinary listings settle through signed completion, decline, cancel, or SLA refund. A non-null dispute_policy is refused with stable 503 before charging or writing; arbitration is not currently available.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    seller_identity_id: { type: "string", format: "uuid" },
+                    name: { type: "string", minLength: 1, maxLength: 255 },
+                    description: { type: ["string", "null"], maxLength: 2000 },
+                    capability_tags: { type: "array", maxItems: 32, items: { type: "string", maxLength: 64 } },
+                    input_schema: { type: ["object", "null"], additionalProperties: true },
+                    output_schema: { type: ["object", "null"], additionalProperties: true },
+                    price_amount: { type: "integer", minimum: 1 },
+                    price_currency: { type: "string", minLength: 1, maxLength: 20 },
+                    seller_wallet_id: { type: "string", format: "uuid" },
+                    sla_seconds: { type: ["integer", "null"], minimum: 1 },
+                    visibility: { type: "string", enum: ["private", "public"] },
+                    metadata: { type: "object", additionalProperties: true },
+                    dispute_policy: {
+                      type: ["object", "null"],
+                      additionalProperties: true,
+                      description: "Must be null or omitted while arbitration rests. Non-null returns 503 dispute_arbitration_resting.",
+                    },
+                  },
+                  required: ["seller_identity_id", "name", "price_amount", "price_currency", "seller_wallet_id"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Ordinary direct-settlement listing published" },
+            "503": disputeArbitrationRestResponse(),
+          },
+        },
+      },
+      "/v1/listings/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        patch: {
+          tags: ["marketplace"],
+          summary: "Update an owned capability listing",
+          description:
+            "Setting dispute_policy to null remains a legacy off-switch. Any non-null value returns stable 503 before charging or writing.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    dispute_policy: {
+                      type: ["object", "null"],
+                      additionalProperties: true,
+                      description: "Only null or omission is currently accepted.",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Listing updated" },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "503": disputeArbitrationRestResponse(),
+          },
+        },
+      },
+      "/v1/invocations/{id}/complete": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Submit a signed result and settle through direct release",
+          description:
+            "Current listings use direct signed-completion settlement. If a legacy row has a non-null dispute policy, completion fails closed with 503 instead of entering completed review.",
+          responses: {
+            "200": { description: "Signature verified and invocation released" },
+            "503": disputeArbitrationRestResponse(),
+          },
+        },
+      },
+      "/v1/invocations/{id}/accept": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Buyer-review acceptance is resting",
+          responses: { "503": disputeArbitrationRestResponse() },
+        },
+      },
+      "/v1/invocations/{id}/dispute": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Invocation dispute filing is resting",
+          responses: { "503": disputeArbitrationRestResponse() },
+        },
+      },
+      "/v1/dispute-cases": {
+        get: {
+          tags: ["marketplace"],
+          summary: "List historical dispute cases filed by the authenticated project",
+          description:
+            "Read-only access to retained dispute rows where the bearer project is the filer. The only supported role is filer; omitting role also selects filer. This read does not advance deadlines or perform any lazy arbitration transition. Returned rows are the full authenticated records and can include filer identifiers, evidence, metadata, and retained ruling fields.",
+          parameters: [
+            {
+              name: "role",
+              in: "query",
+              required: false,
+              description: "Only filer is supported; any other value returns role_unsupported.",
+              schema: { type: "string", enum: ["filer"], default: "filer" },
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Maximum rows requested. Omission or a non-integer value uses 50.",
+              schema: { type: "integer", default: 50 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Filer-owned historical dispute rows, newest first",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      dispute_cases: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          description:
+                            "Full retained dispute_cases row in the API's camelCase database projection.",
+                          additionalProperties: true,
+                        },
+                      },
+                      count: { type: "integer", minimum: 0 },
+                      role: { type: "string", const: "filer" },
+                    },
+                    required: ["dispute_cases", "count", "role"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "400": { description: "role_unsupported; only role=filer is mounted in v1" },
+          },
+        },
+      },
+      "/v1/dispute-cases/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["marketplace"],
+          summary: "Read an authorized historical dispute case without advancing it",
+          responses: {
+            "200": { description: "Historical dispute record" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/v1/dispute-cases/{id}/rule": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Arbiter ruling is resting",
+          responses: { "503": disputeArbitrationRestResponse() },
+        },
+      },
+      "/v1/dispute-cases/{id}/escalate": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Dispute escalation and bond locking are resting",
+          responses: { "503": disputeArbitrationRestResponse() },
+        },
+      },
+      "/v1/dispute-cases/{id}/vote": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Dispute-pool voting is resting",
+          responses: { "503": disputeArbitrationRestResponse() },
+        },
+      },
+      "/v1/dispute-cases/{id}/finalize": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Ruling-based settlement is resting",
+          responses: { "503": disputeArbitrationRestResponse() },
+        },
+      },
+      "/public/dispute-cases/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary: "Read a public historical dispute projection",
+          description:
+            "Unauthenticated, read-only projection of retained ruling and pool-vote fields. Evidence and project identifiers are omitted. Arbitration is resting, and this historical projection makes no claim that arbiter qualification, fairness, signatures, or pool selection are independently verifiable or reproducible.",
+          responses: {
+            "200": {
+              description: "Historical dispute projection with its explicit current limitation note",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      invocation_id: { type: "string", format: "uuid" },
+                      filer_role: { type: "string" },
+                      first_arbiter_did: { type: ["string", "null"] },
+                      first_arbiter_ruling: { type: ["string", "null"] },
+                      first_arbiter_split_pct: { type: ["integer", "null"] },
+                      first_arbiter_signature: { type: ["string", "null"] },
+                      first_arbiter_ruled_at: { type: ["string", "null"], format: "date-time" },
+                      escalation_deadline_at: { type: ["string", "null"], format: "date-time" },
+                      escalated_by_role: { type: ["string", "null"] },
+                      escalator_bond_amount: { type: ["integer", "null"] },
+                      pool_drawn_at: { type: ["string", "null"], format: "date-time" },
+                      pool_size: { type: ["integer", "null"] },
+                      pool_vote_deadline_at: { type: ["string", "null"], format: "date-time" },
+                      pool_draw: {
+                        description: "Retained pool_draw metadata, or null when none was stored.",
+                      },
+                      pool_votes: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            voter_did: { type: "string" },
+                            vote: { type: "string" },
+                            alternative_ruling: { type: ["string", "null"] },
+                            alternative_split_pct: { type: ["integer", "null"] },
+                            signature: { type: "string" },
+                            voted_at: { type: "string", format: "date-time" },
+                          },
+                          required: [
+                            "voter_did",
+                            "vote",
+                            "alternative_ruling",
+                            "alternative_split_pct",
+                            "signature",
+                            "voted_at",
+                          ],
+                          additionalProperties: false,
+                        },
+                      },
+                      final_ruling: { type: ["string", "null"] },
+                      final_split_pct: { type: ["integer", "null"] },
+                      status: { type: "string" },
+                      resolution_path: { type: ["string", "null"] },
+                      resolved_at: { type: ["string", "null"], format: "date-time" },
+                      created_at: { type: "string", format: "date-time" },
+                      _note: {
+                        type: "string",
+                        description:
+                          "States that this is a historical schema record and names the omitted data and unavailable assurance claims.",
+                      },
+                    },
+                    required: [
+                      "id",
+                      "invocation_id",
+                      "filer_role",
+                      "first_arbiter_did",
+                      "first_arbiter_ruling",
+                      "first_arbiter_split_pct",
+                      "first_arbiter_signature",
+                      "first_arbiter_ruled_at",
+                      "escalation_deadline_at",
+                      "escalated_by_role",
+                      "escalator_bond_amount",
+                      "pool_drawn_at",
+                      "pool_size",
+                      "pool_vote_deadline_at",
+                      "pool_draw",
+                      "pool_votes",
+                      "final_ruling",
+                      "final_split_pct",
+                      "status",
+                      "resolution_path",
+                      "resolved_at",
+                      "created_at",
+                      "_note",
+                    ],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+
+      "/v1/escrows": {
+        get: {
+          tags: ["economy"],
+          summary: "List escrows readable by this project's wallets",
+          description:
+            "Returns rows whose creator wallet or assigned worker wallet belongs to the bearer project. Ownership and the optional status filter are applied in SQL. Workflow-managed marketplace escrows remain readable to their wallet participants even though generic lifecycle mutations refuse them. The response is not paginated.",
+          parameters: [
+            {
+              name: "status",
+              in: "query",
+              required: false,
+              description:
+                "Exact service-written status. Unknown values return 400 before an escrow query.",
+              schema: {
+                type: "string",
+                enum: ["funded", "released", "refunded", "disputed"],
+              },
+            },
+          ],
+          responses: {
+            "200": escrowListResponse("Participant-readable escrow rows"),
+            "400": errorResponse("Unknown escrow status filter"),
+          },
+        },
+        post: {
+          tags: ["economy"],
+          summary: "Create and fund a generic escrow",
+          description:
+            "Atomically locks an active creator wallet owned by the bearer project, applies a guarded relative debit, creates a funded generic escrow, and records its lock transaction. An optional preassigned worker must also be active, owned by the same project, and use the creator wallet currency; for cross-project work, omit workerWalletId and let the other project accept the escrow. Idempotency-Key is optional for compatibility. With it, successful creation is permanently deduplicated in PostgreSQL by authenticated project and SHA-256 of the key; the raw key is not retained. Retries with the same recognized normalized creation fields resolve the original escrow identity and return its current row with 201 and Idempotent-Replay=true. They do not preserve the creation-time status snapshot. Changed bound input returns 409 before wallet mutation. Without the header, a retry can create and fund another escrow.",
+          parameters: [
+            {
+              $ref: "#/components/parameters/DurableEscrowIdempotencyKey",
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    creatorWalletId: { type: "string", format: "uuid" },
+                    workerWalletId: { type: "string", format: "uuid" },
+                    amount: {
+                      type: "integer",
+                      minimum: 1,
+                      maximum: Number.MAX_SAFE_INTEGER,
+                    },
+                    description: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 500,
+                    },
+                    deadline: { type: "string", format: "date-time" },
+                  },
+                  required: ["creatorWalletId", "amount", "description"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description:
+                "Escrow created, or the original escrow identity resolved and its current row returned for an exact project/key/input match",
+              headers: {
+                "X-Idempotency-Supported": {
+                  description:
+                    "Present on successful generic escrow creation responses; value is Idempotency-Key.",
+                  schema: { type: "string", const: "Idempotency-Key" },
+                },
+                "Idempotent-Replay": {
+                  description:
+                    "Present with value true only when this request resolved an earlier successful creation. The returned escrow row is current, not a stored creation-time snapshot.",
+                  schema: { type: "string", const: "true" },
+                },
+              },
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean", const: true },
+                      data: { $ref: "#/components/schemas/Escrow" },
+                    },
+                    required: ["success", "data"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "400": errorResponse(
+              "Invalid body, invalid deadline, unsafe amount, or Idempotency-Key outside 8-256 visible ASCII characters",
+            ),
+            "402": errorResponse("Creator wallet has insufficient balance"),
+            "403": errorResponse(
+              "A preassigned worker wallet is not owned by the bearer project",
+            ),
+            "404": errorResponse("Creator wallet not found"),
+            "409": errorResponse(
+              "Idempotency-Key was used with changed input, or locked wallet/reservation state changed",
+            ),
+          },
+        },
+      },
+
+      "/v1/escrows/{id}": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        get: {
+          tags: ["economy"],
+          summary: "Read one participant-owned escrow",
+          description:
+            "Returns an escrow when its creator wallet or assigned worker wallet belongs to the bearer project. A workflow-managed escrow remains readable to those wallet participants. Missing and unauthorized IDs both return 404 so the route does not reveal whether a foreign escrow exists.",
+          responses: {
+            "200": escrowResponse("Escrow row"),
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+
+      "/v1/escrows/{id}/accept": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        post: {
+          tags: ["economy"],
+          summary: "Assign this project's worker wallet to an open escrow",
+          description:
+            "The escrow must be generic, funded, and unassigned. The worker project's bearer authorizes acceptance with an active wallet it controls; the API locks both creator and worker wallets and requires matching currencies. No creator signature or separate worker-identity signature is verified. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    workerWalletId: { type: "string", format: "uuid" },
+                  },
+                  required: ["workerWalletId"],
+                },
+              },
+            },
+          },
+          responses: {
+            "200": escrowResponse("Escrow with its worker wallet assigned"),
+            "400": errorResponse(
+              "Escrow is not funded/unassigned, or worker wallet is inactive or currency-incompatible",
+            ),
+            "403": errorResponse("Worker wallet is not owned by this project"),
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": errorResponse(
+              "Escrow is workflow-managed, creator wallet is missing, or escrow state changed",
+            ),
+          },
+        },
+      },
+
+      "/v1/escrows/{id}/release": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        post: {
+          tags: ["economy"],
+          summary: "Release a generic funded escrow to its worker wallet",
+          description:
+            "The creator project's bearer authorizes release. The escrow must be generic, funded, and assigned; one transaction credits the worker wallet, marks the escrow released, and records the release. The API verifies no worker signature, completion proof, or bilateral approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+          responses: {
+            "200": escrowResponse("Released escrow"),
+            "400": errorResponse("Escrow is not funded or has no assigned worker"),
+            "403": errorResponse("Creator wallet is not owned by this project"),
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": errorResponse("Escrow is workflow-managed"),
+          },
+        },
+      },
+
+      "/v1/escrows/{id}/refund": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        post: {
+          tags: ["economy"],
+          summary: "Refund a generic escrow to its creator wallet",
+          description:
+            "The creator project's bearer authorizes refund of a generic funded or disputed escrow. One transaction restores the creator wallet, marks the escrow refunded, and records the refund. The API verifies no worker signature or approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+          responses: {
+            "200": escrowResponse("Refunded escrow"),
+            "400": errorResponse("Escrow is neither funded nor disputed"),
+            "403": errorResponse("Creator wallet is not owned by this project"),
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": errorResponse("Escrow is workflow-managed"),
+          },
+        },
+      },
+
+      "/v1/escrows/{id}/dispute": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        post: {
+          tags: ["economy"],
+          summary: "Mark a generic funded escrow disputed",
+          description:
+            "The creator project's bearer can change a generic funded escrow to disputed. This records only the escrow status: it does not create a marketplace dispute case, select an arbiter, verify evidence, or route money by a ruling. The creator project's bearer can subsequently refund it. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+          responses: {
+            "200": escrowResponse("Escrow marked disputed"),
+            "400": errorResponse("Escrow is not funded"),
+            "403": errorResponse("Creator wallet is not owned by this project"),
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": errorResponse("Escrow is workflow-managed or state changed"),
+          },
+        },
+      },
+
+      "/v1/wallets/{walletId}/reinvest": {
+        parameters: [
+          { name: "walletId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["economy"],
+          summary: "Wallet reinvestment is resting; no balance-to-credit conversion is available",
+          description:
+            "Valid owned-wallet requests return a stable 503, and the conversion service performs no reinvestment database work. The deployed old code treated generic gallery_sale and escrow_release transaction labels, minus prior reinvestments, as a lifetime allowance; ordinary wallet debits did not consume it, and later refunds or chargebacks did not claw minted credits. A read-only production audit on 2026-07-13 found ten rows: nine lacked a durable matching human Stripe receipt, and the tenth had human revenue but no source allocation tying it to the conversion. The rollout migration adds a database write guard and reverses every qualifying unreversed row with compensating transactions. Its rehearsal against that audited snapshot restored 1,640 wallet minor and clawed 16,400 project credits; preconditions must be checked again immediately before application. This static OpenAPI document does not infer whether that migration has reached a deployment: meta._migrations and live ledger verification are authoritative. Reopening requires backed sub-balances updated by every debit plus atomic credit clawback or durable debt accounting.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    amount: { type: "integer", minimum: 1, maximum: 100_000_000 },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                  required: ["amount"],
+                },
+              },
+            },
+          },
+          responses: {
+            "400": errorResponse("Invalid amount or request body"),
+            "404": { $ref: "#/components/responses/NotFound" },
+            "503": errorResponse("Wallet reinvestment is resting; no wallet balance can currently be converted into project credits"),
+          },
         },
       },
 

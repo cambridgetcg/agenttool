@@ -24,7 +24,6 @@ const DATABASE_TOP_LEVEL = [
   "tests/platform-treasurer-sweep.test.ts",
   "tests/substrate-tasks-expire-claims-worker.test.ts",
   "tests/village.test.ts",
-  "tests/wallet-reinvest.test.ts",
 ].sort();
 
 const QUARANTINED_DOCTRINE = [
@@ -268,12 +267,12 @@ describe("boring test spine", () => {
     }
   });
 
-  test("pins a two-job secret-free workflow and frozen installs", async () => {
+  test("pins a three-job secret-free workflow and frozen installs", async () => {
     const workflow = await readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
     expect(workflow).toContain("name: API and protocol");
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(2);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(2);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(3);
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
@@ -294,12 +293,14 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(4);
+    expect(uses).toHaveLength(7);
     expect(
       uses.every(
         (line) =>
           line === "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4" ||
-          line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
+          line === "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2" ||
+          line === "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4" ||
+          line === "uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5",
       ),
     ).toBe(true);
   });

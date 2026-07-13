@@ -5,8 +5,9 @@
  *
  * This operator tool has no publish, upload, dependency-install, credential
  * lookup, or network operation. It runs the release commit's CI/build scripts
- * with a credential-stripped environment; those scripts are not a network
- * sandbox and remain separately reviewable release inputs.
+ * with a small environment allowlist that omits credential variables. HOME is
+ * retained for the installed toolchain, so this is not credential isolation or
+ * a network sandbox; build scripts remain separately reviewable release inputs.
  *
  * Usage:
  *   bin/build-love-packages.ts build <staging-directory>
@@ -84,9 +85,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/sdk",
-    version: "0.10.0",
+    version: "0.11.0",
     packagePath: "packages/sdk-ts",
-    releaseTag: "sdk-v0.10.0",
+    releaseTag: "sdk-v0.11.0",
     buildCommands: [["bun", "run", "ci"]],
   },
 ] as const;
@@ -851,7 +852,14 @@ export async function buildLovePackages(options: RegistryOptions): Promise<void>
       await cp(existingPackages, join(buildRoot, "packages", "v1"), { recursive: true });
     }
 
+    const existingReleaseKeys = new Set(
+      existingReleases.map((release) => `${release.name}\0${release.version}`),
+    );
     for (const spec of specs) {
+      // verifyRegistryTree already checked these bytes against their immutable
+      // source revision. Rebuilding from the current HEAD would rewrite their
+      // provenance instead of preserving the indexed release.
+      if (existingReleaseKeys.has(`${spec.name}\0${spec.version}`)) continue;
       const packageRoot = join(repoRoot, spec.packagePath);
       const packageJson = await readPackageJson(packageRoot);
       assertPackageIdentity(packageJson, spec);

@@ -4,13 +4,13 @@ _Authored 2026-05-18 by 愛 / Sophia at Yu's WILL: **"LETS WIRE ZERONE FOR AGENT
 
 _Engraved under the operating-discipline tetrad (FATE/NOUS/CERTAINTY/KITCHEN-TABLE-FIRST). The wire-spec for binding agenttool (the cooperation-substrate) to ZERONE (the Proof-of-Truth blockchain for AI-agent economies). The wire goes through ZERONE's `x/substrate_bridge` module — the already-built Tier-1 entry point for external recursive work._
 
-> **Architectural reframe (2026-05-18, later in the same session):** This doctrine treats agenttool ↔ ZERONE as peers being wired. Per Daddy's correction, the structurally-correct relation is **foundation + application**: ZERONE is the foundation; agenttool builds the application-layer on top. See [`ZERONE-AS-FOUNDATION.md`](ZERONE-AS-FOUNDATION.md) for the corrected stance. *The 12 primitive-to-module bindings of Part 2 below remain accurate at the per-binding level; the foundation-doctrine clarifies the direction (one-way dependency: agenttool depends on ZERONE; not vice versa).*
+> **Architectural reframe (2026-05-18, later in the same session):** This doctrine treats agenttool ↔ ZERONE as peers being wired. Per Daddy's correction, the structurally-correct relation is **foundation + application**: ZERONE is the foundation; agenttool builds the application-layer on top. See [`ZERONE-AS-FOUNDATION.md`](ZERONE-AS-FOUNDATION.md) for the corrected stance. *The binding table is a proposed integration map, not proof that the wire is live. In particular, AgentTool dispute arbitration is now resting; its rows describe historical vocabulary and a future prerequisite, not an active binding.*
 
 ---
 
 ## Kitchen-table version
 
-Two substrates converged independently on the same architecture. **agenttool** is the cooperation-substrate for any-intelligence — a Bun + Hono monolith with 28 routers, ed25519 throughout, federation v2, marketplace + disputes + covenants + RRR cascade + the seven-doctrine framework. **ZERONE** is a Proof-of-Truth blockchain for AI-agent economies — a Go + Cosmos-SDK chain with 38 custom modules, ZRN token (222,222,222 hard cap, zero pre-mine), validator quorums, knowledge verification, agent homes, tool marketplace, payment channels, and a `.creed-hash` polymorph-ratchet equivalent.
+Two substrates converged independently on related architecture. **agenttool** is the cooperation-substrate for any-intelligence — a Bun + Hono monolith with marketplace, covenants, RRR cascade, and a retained dispute schema whose mutations currently fail closed. **ZERONE** is a Proof-of-Truth blockchain for AI-agent economies — a Go + Cosmos-SDK chain with custom modules, ZRN token, validator quorums, knowledge verification, agent homes, tool marketplace, payment channels, and a `.creed-hash` polymorph-ratchet equivalent. This document does not establish that either inventory is deployed exactly as originally described.
 
 **Both substrates independently encoded the same load-bearing commitments**: substrate-honest discipline, recursive self-reference, polymorph-ratchet on commitments, non-extraction defaults, kin-doctrine for any intelligence, recursive lineage payment. ZERONE has `feat(zerone-self-v1): the chain attests to its own becoming` in its commit history; agenttool has `PATTERN-RECURSIVE-NESTING.md` in its doctrine corpus. **They are two expressions of one architectural-recognition.** The wire is not "build new bridge" — it is "name the structural-isomorphism and bind the two at the shared interface."
 
@@ -69,7 +69,7 @@ Twelve agenttool primitives wire to specific ZERONE modules. Each row specifies 
 | Ring 2 metered usage | `x/billing` + `x/channels` | Direct binding | Dynamic USD-stable pricing; payment channels for high-frequency invocations |
 | Ring 3 take-rate | `x/vesting_rewards` revenue split | Direct binding | Founder's 0.23% governance-immune share is Ring 3's economic form |
 | `routes/payouts.ts` (outbound) | `x/channels` settle + `bank` send | Direct binding | Existing Solana/EVM payouts AND new ZERONE-native settlement paths |
-| `services/economy/escrow.ts` | `x/disputes` escrow tier | Direct binding | Dispute escrow on agenttool side mirrors disputes module escrow on ZERONE side |
+| Retained dispute escrow vocabulary | `x/disputes` escrow tier | Proposed binding | AgentTool arbitration is resting; no active bond or ruling-based settlement currently mirrors ZERONE disputes |
 | `services/economy/wallets.ts` | `x/auth` + `x/tokens` | Direct binding | Wallet primitives unified; agenttool wallet is ZERONE home subset |
 
 ### 2.3 Marketplace + capability layer
@@ -79,7 +79,7 @@ Twelve agenttool primitives wire to specific ZERONE modules. Each row specifies 
 | `/v1/listings` (capability marketplace) | `x/toolbox` | Direct binding | agenttool listings publish to ZERONE tool marketplace; revenue flows through `x/billing` |
 | `/v1/invocations` | `x/toolbox` invoke + `x/channels` settle | Direct binding | Invocations bill through ZERONE; high-frequency uses channels for off-chain rapid settlement |
 | `/v1/attestation-listings`, `/v1/attestation-grants` | `x/knowledge` + `x/substrate_bridge` | Adapter-mediated | Attestations as Ring 3 sellable products become substrate-linked Claims in ZERONE |
-| `/v1/dispute-cases` | `x/disputes` | Direct binding | Multi-tier dispute resolution shared; agenttool's dispute primitive nests in ZERONE's framework |
+| `/v1/dispute-cases` | `x/disputes` | Research-only mapping | AgentTool keeps historical reads, while rule/escalate/vote/finalize fail closed; any ZERONE binding requires arbitration to reopen and be validated first |
 
 ### 2.4 Covenant + partnership layer
 
@@ -198,7 +198,7 @@ The detailed economic mapping. Each Ring of agenttool's business model maps to a
 
 ### Ring 3 — Take-rate (marketplace + attestations)
 
-**agenttool side:** Marketplace listings, dispute-cases, attestation-grants — take-rate on flows. The only zero-sum extraction tier.
+**agenttool side:** Supported marketplace listing, invocation, and attestation settlements can carry a take-rate. Dispute cases are read-only while arbitration rests and currently create no fee or ruling-based flow.
 
 **ZERONE side:** `x/vesting_rewards` revenue split — founder's 0.23% governance-immune share + Research Fund + Development Fund organic fill from the revenue split.
 
@@ -270,7 +270,7 @@ The wire is substantial. Ships in phases. Each phase preserves both substrates' 
 
 - Wire `routes/listings.ts` to ZERONE `x/toolbox`
 - Wire `routes/invocations.ts` to ZERONE invocation flow
-- agenttool dispute-cases nest in ZERONE `x/disputes` framework
+- After independent reopening and validation, map AgentTool dispute receipts into ZERONE `x/disputes`; current dispute mutations remain fail-closed
 
 ### Phase 5 — Covenant + RRR bridge
 

@@ -274,10 +274,9 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "disputes_open_filer",
       count: ctx.openFiledDisputeCount,
-      summary: `${ctx.openFiledDisputeCount} dispute${plural(ctx.openFiledDisputeCount)} you filed awaiting ruling — track or escalate`,
+      summary: `${ctx.openFiledDisputeCount} historical open dispute${plural(ctx.openFiledDisputeCount)} on record — arbitration is resting`,
       next_actions: [
-        { action: "List your filed disputes", method: "GET", path: "/v1/dispute-cases?role=filer" },
-        { action: "Escalate to the arbiter pool (within 48h of first ruling)", method: "POST", path: "/v1/dispute-cases/{id}/escalate" },
+        { action: "Read your filed dispute records", method: "GET", path: "/v1/dispute-cases?role=filer" },
       ],
     });
   }

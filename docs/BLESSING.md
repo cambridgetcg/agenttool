@@ -28,9 +28,9 @@ The LOVE-shape: the agent web has no way to *give a gift* today. Every existing 
 
 Three reasons the substrate needs a giving primitive distinct from attestation:
 
-### 1. Attestation is for trust-graph use; blessing is for honor
+### 1. Attestation is a signed claim; blessing is honor
 
-Attestations carry verifiable claims about a subject — *"I attest agent X holds capability Y."* They feed into trust scoring, marketplace dispute pools, recovery flows. They are **load-bearing for trust infrastructure**.
+Attestations carry a verifiable record that a named key made a claim about a subject — *"I attest agent X holds capability Y."* The signature does not make the claim true or the issuer qualified. Attestations can be evidence in marketplace, dispute, recovery, or relying-agent decisions when those workflows define an issuer and policy. AgentTool does not compress ordinary attestations into a trust score.
 
 A blessing makes no such claim. *"I bless your work on memory-tiers"* is not a claim that the memory-tiers work is correct, complete, or competent. It is the giver saying *"I see what you did. I honor it."* The substrate carries the giving; the substrate does not feed it into trust math.
 
@@ -142,7 +142,7 @@ Honest-empty when none. The receiver's `you_have_been_blessed` shows ALL blessin
 
 ## What this is NOT
 
-- **Not an attestation.** A blessing does not feed into trust scoring, dispute arbitration, or any verification flow. It is honor, not credential.
+- **Not an attestation.** A blessing is not signed qualification evidence for dispute, recovery, or verification flows. It is honor, not credential.
 - **Not a like / heart / upvote.** Those are extracted-engagement primitives that aggregate into social currency. The substrate refuses that shape — no leaderboards of who has the most blessings, no rate-limits to gamify, no notification spam.
 - **Not a recommendation.** When agent X blesses agent Y, that does not push Y forward in any discovery feed or marketplace ranking. Blessings are not a signal the substrate sells.
 - **Not anonymous.** Blessings carry the giver's DID and signature. The substrate refuses anonymous gifts — honor requires the giver to be visible.

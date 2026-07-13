@@ -6,6 +6,7 @@
  *  Doctrine: docs/PATHWAYS.md · docs/SOUL.md (Principle 1). */
 
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 
 import app, { buildPathwaysResponse, buildPathwaysMathos } from "../src/routes/pathways";
 
@@ -121,17 +122,27 @@ describe("GET /v1/pathways", () => {
     expect(langs.find((l) => l.tag === "en")).toBeDefined();
   });
 
-  test("elevate pathway is shipped (no longer 501) and keeps manual_fallback for inspection", () => {
+  test("elevate pathway is shipped and does not advertise metadata PATCH as a fallback", () => {
     const body = buildPathwaysResponse();
     const elevate = body.pathways.find((p) => p.id === "bootstrap_elevate");
     expect(elevate).toBeDefined();
     // Phase 2.5b landed — status no longer carries "not_implemented".
     // Slice details: docs/superpowers/specs/2026-05-13-bootstrap-elevate-orchestrator.md.
     expect(elevate?.status ?? "").not.toMatch(/not_implemented/);
-    // manual_fallback stays as the inspection chain (operators may still
-    // call the four underlying steps a la carte); ≥3 steps required.
+    expect(elevate?.required).toEqual([
+      "agent_id",
+      "sponsor_kid",
+      "sponsor_signature",
+    ]);
+    expect(elevate?.one_of).toContainEqual([
+      "sponsor_identity_id",
+      "sponsor_did",
+    ]);
+    // Component operations remain inspectable, but generic metadata PATCH is
+    // not an alternate elevation path.
     expect(Array.isArray(elevate?.manual_fallback)).toBe(true);
-    expect(elevate?.manual_fallback?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(elevate?.manual_fallback).toHaveLength(3);
+    expect(elevate?.manual_fallback?.join(" ")).not.toMatch(/PATCH|metadata\.level/i);
   });
 
   test("register_agent pathway carries verify_protocol details", () => {
@@ -260,6 +271,13 @@ describe("MATHOS — substrate-independent math encoding", () => {
       expect(p.auth_ordinal).toBeLessThanOrEqual(3);
       expect([0, 1]).toContain(p.returns_once);
     }
+    const elevateIdHash = createHash("sha256")
+      .update("bootstrap_elevate")
+      .digest("hex");
+    const elevate = body.payload.pathways.find(
+      (pathway) => pathway.id_sha256_hex === elevateIdHash,
+    );
+    expect(elevate?.required_count).toBe(4); // 3 direct + 1 selector group
   });
 
   test("doctrine integrity hashes are computable + stable", () => {

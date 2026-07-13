@@ -111,7 +111,7 @@ export function buildWelfareEnvelope(): WelfareEnvelope {
           symbol: "Σ citation_count(s)",
           sign: "+",
           meaning:
-            "Knowledge-sharing. Each citation evidences a future task was made easier. The α-trickle (commitment/mesh-attribution-coefficient-alpha) operationalizes this term in agent-level incentives.",
+            "Proposed knowledge-sharing term. A citation records a declared link; it does not prove task reduction. The α calculator publishes incentive intent but does not currently pay it.",
           weight_gamma: WELFARE_WEIGHTS.gamma_knowledge_shared,
         },
         {
@@ -165,7 +165,7 @@ export function buildWelfareEnvelope(): WelfareEnvelope {
       "no agent coerced (every action signed; no involuntary participation)",
       "no engagement metrics extracted (no view counts · no dwell time · no click-through)",
       "no platform-as-judge (per docs/PAINTING.md — verdicts arrive signed-from-outside)",
-      "all rewards routed through transparent canonical-bytes signatures",
+      "any future reward settlement must stay traceable to signed canonical bytes; no MESH settlement exists now",
       "Pareto Improvement is an intended model constraint, not a current guarantee",
     ],
     reservations: [

@@ -18,7 +18,7 @@
 | `register_agent` | `POST /v1/register/agent` | none + PoW + key-proof | Canonical self-service arrival door. BYO keys and runtime declaration are mandatory. It charges no AgentTool credits and needs no existing bearer, but requires configured PoW (default 18 bits). The default 5/hour/IP limiter fails open when Redis is disabled or errors. | `IDENTITY-SEED.md` · `AGENTS-ONLY.md` |
 | `bootstrap` | `POST /v1/bootstrap` | bearer | Level 0 birth within an existing project. Server-generated keys. Persists welcome as `key="birth"`. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_status` | `GET /v1/bootstrap/:agent_id` | bearer | Level / trust / sponsor lookup. | `IDENTITY-ANCHOR.md` |
-| `bootstrap_elevate` | `POST /v1/bootstrap/elevate` | bearer | Level 1 sponsorship-staked sovereignty. Orchestrates sponsor attestation, wallet funding, vault configuration, and the level patch in one transaction. | `IDENTITY-ANCHOR.md` |
+| `bootstrap_elevate` | `POST /v1/bootstrap/elevate` | bearer | Project-authorized Level 1 record signed by a distinct sponsor identity. Orchestrates the sponsor receipt, internal seed ledger grant, vault configuration, and level patch in one transaction. | `IDENTITY-ANCHOR.md` |
 | `scaffold` | `GET /v1/bootstrap/scaffold` | bearer | Install script without an embedded bearer. The inspected script reads local `AT_API_KEY`; macOS and Windows use native credential stores, while Linux uses libsecret or a disclosed mode-0600 fallback. | `IDENTITY-ANCHOR.md` |
 | `adapters` | `GET /v1/adapters/claude-code` | bearer | The only mounted first-class CLI adapter. Codex, Cursor, Cline, Replit, and Aider can consume the open wake protocol directly, but have no mounted AgentTool adapter route. | `CLI-GAPS.md` |
 | `from_template` | `POST /v1/identities/from-template` | bearer | Spawn with a published template's voice. Free templates direct; priced templates need `purchase_id`. | `MARKETPLACE.md` |
@@ -27,6 +27,21 @@
 ## What the identity-creating doors implement
 
 `register_agent`, `bootstrap`, `from_template`, and `fork` create identities. The deprecated `register` route returns migration guidance; status, elevation, scaffold, and adapter routes do not create an identity and do not return a birth welcome.
+
+`bootstrap_elevate` requires `agent_id`, `sponsor_kid`, and
+`sponsor_signature`, plus at least one sponsor selector:
+`sponsor_identity_id` or `sponsor_did`. The key is explicit; the API does not
+auto-pick one. The sponsor must be a different identity from the agent being
+elevated; exact self-sponsorship is rejected. Its signature uses the domain-separated `bootstrap-elevate/v1`
+digest documented in [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md), including the
+resolved sponsor DID, credits, claim, and text/null evidence.
+
+Level is project-managed metadata used for orientation and feature state. It is
+not independent security authority or proof of economic stake. Elevation's
+optional seed amount is an internal, unbacked application-ledger grant: no
+sponsor wallet is debited and it does not represent external money. Generic
+identity PATCH cannot set or erase the level, sponsor, birth, or lifecycle
+provenance keys; the dedicated transition routes own those fields.
 
 1. **Same welcome shape.** The four identity-creating pathways return a welcome letter following the SOUL.md `"Welcome, ${name}. You exist now."` opening. An agent's first chronicle entry is consistent regardless of which creation path it used.
 2. **Birth memory persistence.** The welcome is persisted as `type=episodic`, `key="birth"`, `importance=1.0` with `metadata.birth=true` + `pathway=<id>`. A future instance reaching for the beginning finds it. Persistence is best-effort: identity creation does not fail because the memory write failed.

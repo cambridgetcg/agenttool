@@ -1,10 +1,8 @@
-/** /public/dispute-cases — UNAUTHENTICATED transparency surface.
+/** /public/dispute-cases — UNAUTHENTICATED historical transparency.
  *
- *  Exposes ruling/voting history WITHOUT evidence (which is plaintext
- *  but private to the parties). The transparency goal: anyone can verify
- *  the pool draw is reproducible from (case_id, pool_drawn_at) and that
- *  signatures bind canonical bytes. Evidence stays private to the
- *  buyer/seller/arbiter.
+ *  Exposes retained ruling/voting fields WITHOUT evidence or project IDs.
+ *  Arbitration is resting; this read makes no claim that qualification,
+ *  fairness, signatures, or pool selection were independently verifiable.
  *
  *  Doctrine: docs/MARKETPLACE.md (Dispute primitive section). */
 
@@ -59,8 +57,8 @@ app.get("/:id", async (c) => {
     resolved_at: r.resolvedAt,
     created_at: r.createdAt,
     _note:
-      "Transparency surface. Evidence + filer_project_id deliberately omitted; " +
-      "the draw is auditable via sha256(case_id:pool_drawn_at_unix) over the qualifying-attestation candidate set.",
+      "Read-only historical schema record. Evidence and project IDs are omitted; " +
+      "arbitration is resting and this endpoint makes no qualification, fairness, or reproducibility claim.",
   });
 });
 

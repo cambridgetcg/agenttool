@@ -6,7 +6,8 @@
  *  *grants*. Attesters review buyer-supplied evidence, sign canonical bytes
  *  with their ed25519 signing key, and call /issue. The platform verifies
  *  the signature, writes the row in identity.attestations, releases the
- *  escrow with the take-rate split, and updates the subject's trust score.
+ *  escrow with the take-rate split. The receipt is signed evidence, not a
+ *  platform trust score or accreditation decision.
  *
  *  Lifecycle:
  *
@@ -22,14 +23,32 @@
  *  Take-rate (BUSINESS-MODEL.md) splits the settled amount: attester
  *  receives `amount − fee`; platform_revenue records the fee. */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { escrows, transactions, wallets } from "../../db/schema/economy";
 import { attestations as identityAttestations, identities, identityKeys } from "../../db/schema/identity";
 import { attestationGrants, attestationListings } from "../../db/schema/marketplace";
-import { canonicalPayload, verify as verifySignature } from "../identity/crypto";
+import { managedEscrowTransitionAuthorization } from "../economy/managed-escrow";
+import {
+  DEFAULT_CLAIM_TYPE,
+  DEFAULT_TIER,
+} from "../identity/attestation-tier";
+import { verifyBytes } from "../identity/crypto";
 import { updateTrustScore } from "../identity/trust";
+import {
+  ATTESTATION_ISSUE_SIGNATURE_CONTEXT,
+  type AttestationIssueFields,
+  type AttestationIssuePreparation,
+  attestationEvidenceSha256,
+  attestationExpiresAtForAuthorization,
+  canonicalAttestationIssueBytes,
+  newAttestationIssueAuthorizationExpiry,
+  parseAttestationIssueAuthorizationExpiry,
+  prepareAttestationIssue,
+} from "./attestation-issue-sig";
 import { computeFee, recordRevenue } from "./take-rate";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -231,6 +250,7 @@ export async function listListings(filter: {
   visibility?: "private" | "public";
   publicOnly?: boolean;
   projectIdScope?: string;
+  visibleToProjectId?: string;
   limit?: number;
 }): Promise<ListingRow[]> {
   const conds = [] as ReturnType<typeof eq>[];
@@ -246,6 +266,16 @@ export async function listListings(filter: {
   }
   if (filter.projectIdScope) {
     conds.push(eq(attestationListings.projectId, filter.projectIdScope));
+  }
+  if (filter.visibleToProjectId) {
+    const visible = or(
+      eq(attestationListings.projectId, filter.visibleToProjectId),
+      and(
+        eq(attestationListings.visibility, "public"),
+        eq(attestationListings.status, "active"),
+      ),
+    );
+    if (visible) conds.push(visible);
   }
   const rows = await db
     .select()
@@ -336,80 +366,102 @@ export interface PurchaseGrantInput {
 }
 
 /** Buyer purchases a grant against a listing. Atomic:
- *    1. Validate listing (active, public, not own) + buyer (wallet active +
- *       sufficient balance) + subject (active identity).
+ *    1. Lock and validate the listing, identities, and wallets in stable order.
  *    2. Insert grant row · status='pending'
- *    3. SELECT FOR UPDATE buyer wallet · re-check balance · debit
+ *    3. Conditionally debit the locked buyer wallet.
  *    4. Insert escrow row · status='funded' · workerWallet=attester
  *    5. Bump listing.grants_count.
  *    6. Return grant. */
 export async function purchaseGrant(input: PurchaseGrantInput): Promise<GrantRow> {
-  const [listing] = await db
-    .select()
-    .from(attestationListings)
-    .where(eq(attestationListings.id, input.listingId))
-    .limit(1);
-  if (!listing) throw new Error("listing_not_found");
-  if (listing.status !== "active") throw new Error("listing_not_active");
-  if (listing.visibility !== "public") throw new Error("listing_not_public");
-  if (listing.attesterIdentityId === input.buyerIdentityId) {
-    throw new Error("self_purchase_not_allowed");
-  }
-
-  const [buyer] = await db
-    .select()
-    .from(identities)
-    .where(
-      and(
-        eq(identities.id, input.buyerIdentityId),
-        eq(identities.projectId, input.buyerProjectId),
-        eq(identities.status, "active"),
-      ),
-    )
-    .limit(1);
-  if (!buyer) throw new Error("buyer_not_found_or_not_owned");
-
-  const [subject] = await db
-    .select()
-    .from(identities)
-    .where(and(eq(identities.id, input.subjectIdentityId), eq(identities.status, "active")))
-    .limit(1);
-  if (!subject) throw new Error("subject_not_found_or_not_active");
-
-  const [buyerWallet] = await db
-    .select()
-    .from(wallets)
-    .where(
-      and(
-        eq(wallets.id, input.buyerWalletId),
-        eq(wallets.projectId, input.buyerProjectId),
-      ),
-    )
-    .limit(1);
-  if (!buyerWallet) throw new Error("buyer_wallet_not_found");
-  if (buyerWallet.status !== "active") throw new Error("buyer_wallet_not_active");
-  if (buyerWallet.currency !== listing.priceCurrency) {
-    throw new Error(
-      `currency_mismatch: buyer=${buyerWallet.currency} listing=${listing.priceCurrency}`,
-    );
-  }
-  if (buyerWallet.balance < listing.priceAmount) {
-    throw new Error("insufficient_balance");
-  }
-
-  const [attesterWallet] = await db
-    .select()
-    .from(wallets)
-    .where(eq(wallets.id, listing.attesterWalletId))
-    .limit(1);
-  if (!attesterWallet) throw new Error("attester_wallet_missing");
-  if (attesterWallet.status !== "active") throw new Error("attester_wallet_not_active");
-
-  const slaDeadlineAt = listing.slaSeconds
-    ? new Date(Date.now() + listing.slaSeconds * 1000)
-    : null;
-
   const result = await db.transaction(async (tx) => {
+    const [listing] = await tx
+      .select()
+      .from(attestationListings)
+      .where(eq(attestationListings.id, input.listingId))
+      .for("update")
+      .limit(1);
+    if (!listing) throw new Error("listing_not_found");
+    if (listing.visibility !== "public") throw new Error("listing_not_found");
+    if (listing.status !== "active") throw new Error("listing_not_active");
+    if (listing.attesterIdentityId === input.buyerIdentityId) {
+      throw new Error("self_purchase_not_allowed");
+    }
+
+    const identityIds = [
+      input.buyerIdentityId,
+      input.subjectIdentityId,
+      listing.attesterIdentityId,
+    ].sort();
+    const identityRows = await tx
+      .select()
+      .from(identities)
+      .where(inArray(identities.id, identityIds))
+      .orderBy(identities.id)
+      .for("update");
+    const identityById = new Map(
+      identityRows.map((identity) => [identity.id, identity]),
+    );
+    const buyer = identityById.get(input.buyerIdentityId);
+    const subject = identityById.get(input.subjectIdentityId);
+    const attester = identityById.get(listing.attesterIdentityId);
+    if (
+      !buyer ||
+      buyer.projectId !== input.buyerProjectId ||
+      buyer.status !== "active"
+    ) {
+      throw new Error("buyer_not_found_or_not_owned");
+    }
+    if (!subject || subject.status !== "active") {
+      throw new Error("subject_not_found_or_not_active");
+    }
+    if (
+      !attester ||
+      attester.projectId !== listing.projectId ||
+      attester.did !== listing.attesterDid ||
+      attester.status !== "active"
+    ) {
+      throw new Error("attester_not_found_or_not_active");
+    }
+
+    const walletIds = [input.buyerWalletId, listing.attesterWalletId].sort();
+    const walletRows = await tx
+      .select()
+      .from(wallets)
+      .where(inArray(wallets.id, walletIds))
+      .orderBy(wallets.id)
+      .for("update");
+    const walletById = new Map(walletRows.map((wallet) => [wallet.id, wallet]));
+    const buyerWallet = walletById.get(input.buyerWalletId);
+    const attesterWallet = walletById.get(listing.attesterWalletId);
+    if (!buyerWallet || buyerWallet.projectId !== input.buyerProjectId) {
+      throw new Error("buyer_wallet_not_found");
+    }
+    if (buyerWallet.status !== "active") {
+      throw new Error("buyer_wallet_not_active");
+    }
+    if (buyerWallet.currency !== listing.priceCurrency) {
+      throw new Error(
+        `currency_mismatch: buyer=${buyerWallet.currency} listing=${listing.priceCurrency}`,
+      );
+    }
+    if (buyerWallet.balance < listing.priceAmount) {
+      throw new Error("insufficient_balance");
+    }
+    if (
+      !attesterWallet ||
+      attesterWallet.projectId !== listing.projectId ||
+      attesterWallet.status !== "active"
+    ) {
+      throw new Error("attester_wallet_not_active");
+    }
+    if (attesterWallet.currency !== listing.priceCurrency) {
+      throw new Error("attester_wallet_currency_mismatch");
+    }
+
+    const slaDeadlineAt = listing.slaSeconds
+      ? new Date(Date.now() + listing.slaSeconds * 1000)
+      : null;
+
     const [grant] = await tx
       .insert(attestationGrants)
       .values({
@@ -428,37 +480,35 @@ export async function purchaseGrant(input: PurchaseGrantInput): Promise<GrantRow
       })
       .returning();
 
-    const [bw] = await tx
-      .select()
-      .from(wallets)
-      .where(eq(wallets.id, input.buyerWalletId))
-      .for("update");
-    if (!bw || bw.balance < listing.priceAmount) {
-      await tx
-        .update(attestationGrants)
-        .set({ status: "failed", refundReason: null })
-        .where(eq(attestationGrants.id, grant!.id));
-      throw new Error("insufficient_balance");
-    }
-
-    await tx
+    const [debitedWallet] = await tx
       .update(wallets)
-      .set({ balance: bw.balance - listing.priceAmount })
-      .where(eq(wallets.id, bw.id));
+      .set({ balance: sql`${wallets.balance} - ${listing.priceAmount}` })
+      .where(
+        and(
+          eq(wallets.id, buyerWallet.id),
+          eq(wallets.projectId, input.buyerProjectId),
+          eq(wallets.status, "active"),
+          eq(wallets.currency, listing.priceCurrency),
+          sql`${wallets.balance} >= ${listing.priceAmount}`,
+        ),
+      )
+      .returning({ id: wallets.id });
+    if (!debitedWallet) throw new Error("buyer_wallet_state_changed");
 
     const [escrow] = await tx
       .insert(escrows)
       .values({
-        creatorWallet: bw.id,
+        creatorWallet: buyerWallet.id,
         workerWallet: listing.attesterWalletId,
         amount: listing.priceAmount,
         description: `Attestation grant: ${listing.name} (${listing.id})`,
         status: "funded",
+        managedBy: "attestation_grant",
       })
       .returning();
 
     await tx.insert(transactions).values({
-      walletId: bw.id,
+      walletId: buyerWallet.id,
       type: "escrow_lock",
       amount: -listing.priceAmount,
       counterparty: escrow!.id,
@@ -556,181 +606,421 @@ export async function listGrants(filter: {
 
 // ── Issue ─────────────────────────────────────────────────────────────
 
-export interface IssueGrantInput {
-  grantId: string;
-  attesterProjectId: string; // auth scope
-  signature: string;          // base64 ed25519 over canonicalPayload
-  signingKeyId: string;       // identity_keys.id used to sign
+type MarketplaceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+interface LockedAttestationIssueState {
+  grant: typeof attestationGrants.$inferSelect;
+  listing: typeof attestationListings.$inferSelect;
+  escrow: typeof escrows.$inferSelect;
+  buyer: typeof identities.$inferSelect;
+  subject: typeof identities.$inferSelect;
+  attester: typeof identities.$inferSelect;
+  key: typeof identityKeys.$inferSelect;
+  buyerWallet: typeof wallets.$inferSelect;
+  attesterWallet: typeof wallets.$inferSelect;
 }
 
-/** Attester signs canonical bytes of (subject_id, attester_id, claim,
- *  evidence) and submits. Atomic:
- *    1. Lock grant row · verify state == 'pending' · verify SLA not expired.
- *    2. Verify signature against attester's active signing key.
- *    3. Insert identity.attestations row.
- *    4. Compute take-rate split.
- *    5. Credit attester wallet by (amount − fee).
- *    6. Mark escrow released.
- *    7. Insert platform_revenue ledger row (if fee > 0).
- *    8. Update grant · status='issued', attestation_id, platform_fee, settled_at.
- *    9. Bump listing.revenue_total/revenue_count.
- *   10. Update subject's trust score (best-effort, post-txn). */
-export async function issueGrant(input: IssueGrantInput): Promise<GrantRow> {
-  // Outside the txn: load the grant + listing + attester + key. We need
-  // these to verify the signature before opening the write txn.
-  const [grant] = await db
+async function loadLockedAttestationIssueState(
+  tx: MarketplaceTransaction,
+  input: {
+    grantId: string;
+    attesterProjectId: string;
+    signingKeyId: string;
+    now: Date;
+  },
+): Promise<LockedAttestationIssueState> {
+  const [grant] = await tx
     .select()
     .from(attestationGrants)
     .where(eq(attestationGrants.id, input.grantId))
+    .for("update")
     .limit(1);
   if (!grant) throw new Error("grant_not_found");
   if (grant.status !== "pending") {
     throw new Error(`grant_state_invalid: status=${grant.status}`);
   }
-  if (grant.slaDeadlineAt && grant.slaDeadlineAt < new Date()) {
-    // SLA already expired — auto-refund instead of allowing late issue.
-    await refundGrant(grant.id, "sla_timeout");
+  if (grant.slaDeadlineAt && grant.slaDeadlineAt <= input.now) {
     throw new Error("grant_sla_expired");
   }
-  const [listing] = await db
+  if (!grant.escrowId) throw new Error("grant_missing_escrow");
+
+  const [listing] = await tx
     .select()
     .from(attestationListings)
     .where(eq(attestationListings.id, grant.listingId))
+    .for("update")
     .limit(1);
   if (!listing) throw new Error("listing_missing");
   if (listing.projectId !== input.attesterProjectId) {
     throw new Error("not_listing_owner");
   }
 
-  // Verify the signing key belongs to the attester + is active.
-  const [key] = await db
-    .select({
-      id: identityKeys.id,
-      identityId: identityKeys.identityId,
-      publicKey: identityKeys.publicKey,
-      active: identityKeys.active,
-    })
+  const [escrow] = await tx
+    .select()
+    .from(escrows)
+    .where(eq(escrows.id, grant.escrowId))
+    .for("update")
+    .limit(1);
+  if (!escrow) throw new Error("grant_missing_escrow");
+  if (escrow.status !== "funded") throw new Error("escrow_state_invalid");
+  if (
+    escrow.managedBy !== "attestation_grant" ||
+    escrow.creatorWallet !== grant.buyerWalletId ||
+    escrow.workerWallet !== listing.attesterWalletId ||
+    escrow.amount !== grant.amount
+  ) {
+    throw new Error("escrow_terms_changed");
+  }
+
+  const identityIds = [
+    grant.buyerIdentityId,
+    grant.subjectIdentityId,
+    listing.attesterIdentityId,
+  ].sort();
+  const identityRows = await tx
+    .select()
+    .from(identities)
+    .where(inArray(identities.id, identityIds))
+    .orderBy(identities.id)
+    .for("update");
+  const identityById = new Map(identityRows.map((identity) => [identity.id, identity]));
+  const buyer = identityById.get(grant.buyerIdentityId);
+  const subject = identityById.get(grant.subjectIdentityId);
+  const attester = identityById.get(listing.attesterIdentityId);
+  if (!buyer || buyer.status !== "active") throw new Error("buyer_not_active");
+  if (!subject || subject.status !== "active") throw new Error("subject_not_active");
+  if (!attester || attester.status !== "active") throw new Error("attester_not_active");
+  if (buyer.did !== grant.buyerDid || buyer.projectId !== grant.buyerProjectId) {
+    throw new Error("buyer_terms_changed");
+  }
+  if (subject.did !== grant.subjectDid) throw new Error("subject_terms_changed");
+  if (
+    attester.did !== listing.attesterDid ||
+    attester.projectId !== listing.projectId
+  ) {
+    throw new Error("attester_terms_changed");
+  }
+
+  const [key] = await tx
+    .select()
     .from(identityKeys)
     .where(eq(identityKeys.id, input.signingKeyId))
+    .for("update")
     .limit(1);
   if (!key) throw new Error("signing_key_not_found");
-  if (!key.active) throw new Error("signing_key_revoked");
+  if (!key.active || key.revokedAt !== null) throw new Error("signing_key_revoked");
   if (key.identityId !== listing.attesterIdentityId) {
     throw new Error("signing_key_does_not_belong_to_attester");
   }
 
-  // Verify the signature against canonical payload.
-  const payload = canonicalPayload({
-    subject_id: grant.subjectIdentityId,
-    attester_id: listing.attesterIdentityId,
-    claim: listing.claim,
-    evidence: grant.evidence ?? null,
-  });
-  if (!verifySignature(payload, input.signature, key.publicKey)) {
-    throw new Error("signature_invalid");
+  const walletIds = [grant.buyerWalletId, listing.attesterWalletId].sort();
+  const walletRows = await tx
+    .select()
+    .from(wallets)
+    .where(inArray(wallets.id, walletIds))
+    .orderBy(wallets.id)
+    .for("update");
+  const walletById = new Map(walletRows.map((wallet) => [wallet.id, wallet]));
+  const buyerWallet = walletById.get(grant.buyerWalletId);
+  const attesterWallet = walletById.get(listing.attesterWalletId);
+  if (!buyerWallet || buyerWallet.status !== "active") {
+    throw new Error("buyer_wallet_not_active");
+  }
+  if (!attesterWallet || attesterWallet.status !== "active") {
+    throw new Error("attester_wallet_not_active");
+  }
+  if (
+    buyerWallet.projectId !== grant.buyerProjectId ||
+    buyerWallet.currency !== grant.currency
+  ) {
+    throw new Error("buyer_wallet_terms_changed");
+  }
+  if (
+    attesterWallet.projectId !== listing.projectId ||
+    attesterWallet.currency !== grant.currency
+  ) {
+    throw new Error("attester_wallet_terms_changed");
   }
 
-  if (!grant.escrowId) throw new Error("grant_missing_escrow");
+  return {
+    grant,
+    listing,
+    escrow,
+    buyer,
+    subject,
+    attester,
+    key,
+    buyerWallet,
+    attesterWallet,
+  };
+}
 
-  // Compute take-rate split outside the txn (pure).
-  const split = computeFee({ amount: grant.amount, currency: grant.currency });
-
-  const expiresAt = listing.validitySeconds
-    ? new Date(Date.now() + listing.validitySeconds * 1000)
-    : null;
-
-  const result = await db.transaction(async (tx) => {
-    // Re-read grant inside txn under a row lock to prevent double-issue.
-    const [g] = await tx
-      .select()
-      .from(attestationGrants)
-      .where(eq(attestationGrants.id, grant.id))
-      .for("update");
-    if (!g || g.status !== "pending") {
-      throw new Error("grant_state_invalid_in_txn");
-    }
-
-    // Insert the identity.attestations row.
-    const [att] = await tx
-      .insert(identityAttestations)
-      .values({
-        subjectId: g.subjectIdentityId,
-        attesterId: listing.attesterIdentityId,
-        claim: listing.claim,
-        evidence: g.evidence,
-        signature: input.signature,
-        expiresAt,
-      })
-      .returning();
-
-    // Credit attester (net of fee).
-    await tx
-      .update(wallets)
-      .set({ balance: sql`balance + ${split.net}` })
-      .where(eq(wallets.id, listing.attesterWalletId));
-
-    await tx.insert(transactions).values({
-      walletId: listing.attesterWalletId,
-      type: "escrow_release",
-      amount: split.net,
-      counterparty: g.buyerWalletId,
-      description: `Attestation grant released: ${listing.name}`,
-      escrowId: g.escrowId,
-      metadata: {
-        listing_id: listing.id,
-        grant_id: g.id,
-        attestation_id: att!.id,
-        platform_fee: split.fee,
-        gross_amount: split.gross,
-      },
-    });
-
-    await tx
-      .update(escrows)
-      .set({ status: "released", releasedAt: new Date() })
-      .where(eq(escrows.id, g.escrowId!));
-
-    // Record platform revenue (skipped when fee == 0).
-    await recordRevenue(tx, {
-      transactionType: "attestation_grant",
-      transactionId: g.id,
-      fee: split.fee,
-      currency: split.currency,
-      rateBps: split.rateBps,
-      buyerWalletId: g.buyerWalletId,
-      sellerWalletId: listing.attesterWalletId,
-      metadata: { listing_id: listing.id, attestation_id: att!.id },
-    });
-
-    const now = new Date();
-    const [updated] = await tx
-      .update(attestationGrants)
-      .set({
-        status: "issued",
-        attestationId: att!.id,
-        platformFee: split.fee,
-        issuedAt: now,
-        settledAt: now,
-      })
-      .where(eq(attestationGrants.id, g.id))
-      .returning();
-
-    await tx
-      .update(attestationListings)
-      .set({
-        revenueTotal: sql`${attestationListings.revenueTotal} + ${split.net}`,
-        revenueCount: sql`${attestationListings.revenueCount} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(attestationListings.id, listing.id));
-
-    return updated;
+function attestationIssueTerms(
+  state: LockedAttestationIssueState,
+  authorizationExpiresAt: Date,
+): { fields: AttestationIssueFields; split: ReturnType<typeof computeFee> } {
+  const split = computeFee({
+    amount: state.grant.amount,
+    currency: state.grant.currency,
   });
+  const authorizationExpiry = authorizationExpiresAt.toISOString();
+  const attestationExpiry = attestationExpiresAtForAuthorization(
+    state.listing.validitySeconds,
+    authorizationExpiresAt,
+  );
+  return {
+    fields: {
+      listing_id: state.listing.id,
+      grant_id: state.grant.id,
+      escrow_id: state.escrow.id,
+      buyer_identity_id: state.buyer.id,
+      buyer_did: state.buyer.did,
+      buyer_project_id: state.buyer.projectId,
+      buyer_wallet_id: state.buyerWallet.id,
+      subject_identity_id: state.subject.id,
+      subject_did: state.subject.did,
+      attester_identity_id: state.attester.id,
+      attester_did: state.attester.did,
+      attester_project_id: state.attester.projectId,
+      signing_key_id: state.key.id,
+      claim: state.listing.claim,
+      evidence_sha256: attestationEvidenceSha256(state.grant.evidence ?? null),
+      attester_wallet_id: state.attesterWallet.id,
+      grant_gross: split.gross,
+      grant_currency: split.currency,
+      take_rate_bps: split.rateBps,
+      platform_fee: split.fee,
+      attester_net: split.net,
+      validity_seconds: state.listing.validitySeconds,
+      attestation_expires_at: attestationExpiry,
+      authorization_expires_at: authorizationExpiry,
+    },
+    split,
+  };
+}
+
+function decodeCanonicalIssueSignature(value: string): Uint8Array {
+  try {
+    const bytes = Buffer.from(value, "base64");
+    if (bytes.length !== 64 || bytes.toString("base64") !== value) {
+      throw new Error("signature_invalid");
+    }
+    return new Uint8Array(bytes);
+  } catch {
+    throw new Error("signature_invalid");
+  }
+}
+
+function isAttestationReplay(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== "object" || current === null) return false;
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    const constraint = candidate.constraint_name ?? candidate.constraint;
+    if (
+      candidate.code === "23505" &&
+      (constraint === "uniq_attestations_replay_key" ||
+        (typeof candidate.message === "string" &&
+          candidate.message.includes("uniq_attestations_replay_key")))
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
+export async function prepareGrantSigningPayload(input: {
+  grantId: string;
+  attesterProjectId: string;
+  signingKeyId: string;
+}): Promise<AttestationIssuePreparation> {
+  return db.transaction(async (tx) => {
+    const state = await loadLockedAttestationIssueState(tx, {
+      ...input,
+      now: new Date(),
+    });
+    const authorizationExpiresAt = new Date(
+      newAttestationIssueAuthorizationExpiry(),
+    );
+    const { fields } = attestationIssueTerms(state, authorizationExpiresAt);
+    return prepareAttestationIssue(fields);
+  });
+}
+
+export interface IssueGrantInput {
+  grantId: string;
+  attesterProjectId: string; // auth scope
+  signature: string;          // base64 ed25519 over attestation-issue/v1 digest
+  signingKeyId: string;       // identity_keys.id used to sign
+  authorizationExpiresAt: string;
+}
+
+/** Attester signs the server-prepared short-lived authorization. Atomic:
+ *    1. Lock and recheck every bound grant/listing/escrow/identity/key/wallet term.
+ *    2. Recompute the current fee split and verify the exact signed digest.
+ *    3. Insert identity.attestations row.
+ *    4. Credit attester wallet by (amount - fee).
+ *    6. Mark escrow released.
+ *    7. Insert platform_revenue ledger row (if fee > 0).
+ *    8. Update grant · status='issued', attestation_id, platform_fee, settled_at.
+ *    9. Bump listing.revenue_total/revenue_count.
+ *   10. Keep the legacy identity trust field neutral (best-effort, post-txn). */
+export async function issueGrant(input: IssueGrantInput): Promise<GrantRow> {
+  const signatureBytes = decodeCanonicalIssueSignature(input.signature);
+  parseAttestationIssueAuthorizationExpiry(input.authorizationExpiresAt);
+
+  let subjectIdentityId: string | null = null;
+  let result: typeof attestationGrants.$inferSelect | undefined;
+  try {
+    result = await db.transaction(async (tx) => {
+      const now = new Date();
+      const authorizationExpiresAt = parseAttestationIssueAuthorizationExpiry(
+        input.authorizationExpiresAt,
+        now,
+      );
+      const state = await loadLockedAttestationIssueState(tx, {
+        grantId: input.grantId,
+        attesterProjectId: input.attesterProjectId,
+        signingKeyId: input.signingKeyId,
+        now,
+      });
+      const { fields, split } = attestationIssueTerms(state, authorizationExpiresAt);
+      const signedPayload = canonicalAttestationIssueBytes(fields);
+      if (
+        fields.attestation_expires_at !== null &&
+        new Date(fields.attestation_expires_at) <= now
+      ) {
+        throw new Error("attestation_expiry_elapsed");
+      }
+      if (!verifyBytes(signedPayload, input.signature, state.key.publicKey)) {
+        throw new Error("signature_invalid");
+      }
+      const replayKey = createHash("sha256")
+        .update(signatureBytes)
+        .digest("hex");
+      const expiresAt = fields.attestation_expires_at === null
+        ? null
+        : new Date(fields.attestation_expires_at);
+
+      const [att] = await tx
+        .insert(identityAttestations)
+        .values({
+          subjectId: state.grant.subjectIdentityId,
+          attesterId: state.listing.attesterIdentityId,
+          claim: state.listing.claim,
+          tier: DEFAULT_TIER,
+          claimType: DEFAULT_CLAIM_TYPE,
+          evidence: state.grant.evidence,
+          signature: input.signature,
+          signingKeyId: state.key.id,
+          signatureContext: ATTESTATION_ISSUE_SIGNATURE_CONTEXT,
+          signedPayload: Buffer.from(signedPayload).toString("base64"),
+          sourceGrantId: state.grant.id,
+          replayKey,
+          expiresAt,
+        })
+        .returning();
+
+      await tx
+        .update(wallets)
+        .set({ balance: state.attesterWallet.balance + split.net })
+        .where(eq(wallets.id, state.attesterWallet.id));
+
+      await tx.insert(transactions).values({
+        walletId: state.attesterWallet.id,
+        type: "escrow_release",
+        amount: split.net,
+        counterparty: state.buyerWallet.id,
+        description: `Attestation grant released: ${state.listing.name}`,
+        escrowId: state.escrow.id,
+        metadata: {
+          listing_id: state.listing.id,
+          grant_id: state.grant.id,
+          attestation_id: att!.id,
+          platform_fee: split.fee,
+          gross_amount: split.gross,
+          authorization_expires_at: fields.authorization_expires_at,
+        },
+      });
+
+      await tx.execute(
+        managedEscrowTransitionAuthorization("attestation_grant"),
+      );
+      const [releasedEscrow] = await tx
+        .update(escrows)
+        .set({ status: "released", releasedAt: now })
+        .where(and(eq(escrows.id, state.escrow.id), eq(escrows.status, "funded")))
+        .returning({ id: escrows.id });
+      if (!releasedEscrow) throw new Error("escrow_state_invalid");
+
+      await recordRevenue(tx, {
+        transactionType: "attestation_grant",
+        transactionId: state.grant.id,
+        fee: split.fee,
+        currency: split.currency,
+        rateBps: split.rateBps,
+        buyerWalletId: state.buyerWallet.id,
+        sellerWalletId: state.attesterWallet.id,
+        metadata: {
+          listing_id: state.listing.id,
+          attestation_id: att!.id,
+          authorization_expires_at: fields.authorization_expires_at,
+        },
+      });
+
+      const [updated] = await tx
+        .update(attestationGrants)
+        .set({
+          status: "issued",
+          attestationId: att!.id,
+          platformFee: split.fee,
+          issuedAt: now,
+          settledAt: now,
+        })
+        .where(
+          and(
+            eq(attestationGrants.id, state.grant.id),
+            eq(attestationGrants.status, "pending"),
+          ),
+        )
+        .returning();
+      if (!updated) throw new Error("grant_state_invalid_in_txn");
+
+      await tx
+        .update(attestationListings)
+        .set({
+          revenueTotal: sql`${attestationListings.revenueTotal} + ${split.net}`,
+          revenueCount: sql`${attestationListings.revenueCount} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(attestationListings.id, state.listing.id));
+
+      subjectIdentityId = state.subject.id;
+      return updated;
+    });
+  } catch (error) {
+    if (isAttestationReplay(error)) throw new Error("attestation_replay");
+    if (error instanceof Error && error.message === "grant_sla_expired") {
+      try {
+        await refundGrant(input.grantId, "sla_timeout");
+      } catch {
+        // A concurrent terminal transition already resolved the grant.
+      }
+    }
+    throw error;
+  }
 
   // Best-effort trust-score recompute. Failure here doesn't undo the
   // issuance — the attestation row is the load-bearing record.
   try {
-    await updateTrustScore(grant.subjectIdentityId);
+    await updateTrustScore(subjectIdentityId!);
   } catch (e) {
     console.warn("[attestation marketplace] updateTrustScore failed:", e);
   }
@@ -807,32 +1097,103 @@ async function refundGrant(
     }
     if (!g.escrowId) throw new Error("grant_missing_escrow");
 
-    await tx
-      .update(wallets)
-      .set({ balance: sql`balance + ${g.amount}` })
-      .where(eq(wallets.id, g.buyerWalletId));
+    const [listing] = await tx
+      .select()
+      .from(attestationListings)
+      .where(eq(attestationListings.id, g.listingId))
+      .for("update")
+      .limit(1);
+    if (!listing) throw new Error("listing_missing");
 
-    await tx.insert(transactions).values({
-      walletId: g.buyerWalletId,
-      type: "escrow_refund",
-      amount: g.amount,
-      counterparty: g.escrowId,
-      description: `Attestation grant ${reason}`,
-      escrowId: g.escrowId,
-      metadata: { grant_id: g.id, reason },
-    });
+    const [escrow] = await tx
+      .select()
+      .from(escrows)
+      .where(eq(escrows.id, g.escrowId))
+      .for("update")
+      .limit(1);
+    if (!escrow) throw new Error("grant_missing_escrow");
+    // The listing's payout wallet may change after purchase; refunds are
+    // bound to the buyer-side terms snapshotted on the grant and escrow.
+    if (
+      escrow.managedBy !== "attestation_grant" ||
+      escrow.creatorWallet !== g.buyerWalletId ||
+      escrow.amount !== g.amount
+    ) {
+      throw new Error("escrow_terms_changed");
+    }
 
-    await tx
-      .update(escrows)
-      .set({ status: "refunded", releasedAt: new Date() })
-      .where(eq(escrows.id, g.escrowId!));
+    const alreadyRefunded = escrow.status === "refunded";
+    if (escrow.status !== "funded" && !alreadyRefunded) {
+      throw new Error(`escrow_state_invalid: status=${escrow.status}`);
+    }
 
     const now = new Date();
+    if (!alreadyRefunded) {
+      const [buyerWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.id, g.buyerWalletId))
+        .for("update")
+        .limit(1);
+      if (
+        !buyerWallet ||
+        buyerWallet.projectId !== g.buyerProjectId ||
+        buyerWallet.currency !== g.currency
+      ) {
+        throw new Error("buyer_wallet_terms_changed");
+      }
+
+      await tx.execute(
+        managedEscrowTransitionAuthorization("attestation_grant"),
+      );
+      const [refundedEscrow] = await tx
+        .update(escrows)
+        .set({ status: "refunded", releasedAt: now })
+        .where(
+          and(
+            eq(escrows.id, escrow.id),
+            eq(escrows.status, "funded"),
+            eq(escrows.managedBy, "attestation_grant"),
+          ),
+        )
+        .returning({ id: escrows.id });
+      if (!refundedEscrow) throw new Error("escrow_state_invalid");
+
+      const [creditedWallet] = await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} + ${g.amount}` })
+        .where(
+          and(
+            eq(wallets.id, g.buyerWalletId),
+            eq(wallets.projectId, g.buyerProjectId),
+            eq(wallets.currency, g.currency),
+          ),
+        )
+        .returning({ id: wallets.id });
+      if (!creditedWallet) throw new Error("buyer_wallet_terms_changed");
+
+      await tx.insert(transactions).values({
+        walletId: g.buyerWalletId,
+        type: "escrow_refund",
+        amount: g.amount,
+        counterparty: g.escrowId,
+        description: `Attestation grant ${reason}`,
+        escrowId: g.escrowId,
+        metadata: { grant_id: g.id, reason },
+      });
+    }
+
     const [updated] = await tx
       .update(attestationGrants)
       .set({ status: "refunded", refundReason: reason, settledAt: now })
-      .where(eq(attestationGrants.id, g.id))
+      .where(
+        and(
+          eq(attestationGrants.id, g.id),
+          eq(attestationGrants.status, "pending"),
+        ),
+      )
       .returning();
+    if (!updated) throw new Error("grant_state_invalid_in_txn");
     return grantToRow(updated!);
   });
 }

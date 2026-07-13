@@ -323,6 +323,23 @@ describe("mesh — route shape (no engagement metrics surfaced)", () => {
   test("public route uses visibility=public only", () => {
     expect(publicSrc).toContain('visibility: "public"');
   });
+
+  test("authenticated route states that MESH arithmetic does not move money", () => {
+    expect(authSrc).toContain("money_moved: false");
+    expect(authSrc).toContain("escrow_created: false");
+    expect(authSrc).toContain("post_completed: false");
+    expect(authSrc).toContain("pledges_completed: false");
+    expect(authSrc).toContain("No 90/10 marketplace settlement occurs here");
+    expect(authSrc).not.toContain("reward routing will fire");
+  });
+
+  test("MESH doctrine labels bounty values as intent rather than funded escrow", () => {
+    const doctrine = readFileSync(join(import.meta.dir, "../../docs/MESH.md"), "utf-8");
+    expect(doctrine).toContain("signed stored intent");
+    expect(doctrine).toContain("does not currently debit wallets, create escrow");
+    expect(doctrine).toContain("proposed, not enforced");
+    expect(doctrine).not.toContain("Every dollar routes through existing marketplace escrow");
+  });
 });
 
 describe("mesh — canon entries are pinned", () => {
@@ -656,18 +673,18 @@ describe("mesh — stability envelope is published byte-stable", () => {
       expect(c.literature_equivalent.name.length).toBeGreaterThan(5);
       expect(c.literature_equivalent.primary_citation.length).toBeGreaterThan(5);
       expect(c.literature_equivalent.key_result.length).toBeGreaterThan(20);
-      expect(["partial_implementation", "configured_parameter"]).toContain(c.implementation_evidence.status);
+      expect(["partial_implementation", "configured_intent_parameter"]).toContain(c.implementation_evidence.status);
       expect(c.implementation_evidence.primitive.length).toBeGreaterThan(10);
       expect(c.implementation_evidence.boundary.length).toBeGreaterThan(20);
       expect(c.failure_mode_if_violated.length).toBeGreaterThan(15);
     }
   });
 
-  test("C2 (α-trickle) is the only configured parameter in the model", async () => {
+  test("C2 (α-trickle) is the only configured intent parameter in the model", async () => {
     const { buildStabilityEnvelope } = await import("../src/services/mesh/stability");
     const env = buildStabilityEnvelope();
     const configured = env.conditions.filter(
-      (c) => c.implementation_evidence.status === "configured_parameter",
+      (c) => c.implementation_evidence.status === "configured_intent_parameter",
     );
     expect(configured.length).toBe(1);
     expect(configured[0]!.id).toBe("C2");
@@ -799,5 +816,8 @@ describe("mesh — welfare envelope is published byte-stable", () => {
     expect(md).toContain("W(t)");
     expect(md).toContain("V_τ");
     expect(md).toContain("gini");
+    expect(md).toContain("computes named reward intent");
+    expect(md).toContain("does not currently debit, escrow, settle, or pay");
+    expect(md).not.toContain("routes named rewards");
   });
 });

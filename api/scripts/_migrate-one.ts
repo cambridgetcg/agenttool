@@ -26,6 +26,8 @@ import { basename } from "node:path";
 import postgres from "postgres";
 
 const JOURNAL_TABLE = "meta._migrations";
+const JOURNAL_MIGRATION = "20260509T170000_meta_migrations.sql";
+type MigrationSql = ReturnType<typeof postgres> | postgres.TransactionSql;
 
 async function loadDatabaseUrl(): Promise<string> {
   let url = process.env.DATABASE_URL ?? "";
@@ -52,12 +54,16 @@ async function loadDatabaseUrl(): Promise<string> {
 async function journalLookup(
   sql: ReturnType<typeof postgres>,
   filename: string,
-): Promise<{ exists: boolean; checksum?: string }> {
+): Promise<{ available: boolean; exists: boolean; checksum?: string }> {
   try {
     const rows =
       await sql`SELECT checksum FROM meta._migrations WHERE filename = ${filename}`;
-    if (rows.length === 0) return { exists: false };
-    return { exists: true, checksum: (rows[0] as any).checksum };
+    if (rows.length === 0) return { available: true, exists: false };
+    return {
+      available: true,
+      exists: true,
+      checksum: (rows[0] as any).checksum,
+    };
   } catch (e: any) {
     // Table doesn't exist yet (bootstrap case) — graceful fallback.
     if (
@@ -65,37 +71,22 @@ async function journalLookup(
       e?.message?.includes("relation") ||
       e?.message?.includes("does not exist")
     ) {
-      return { exists: false };
+      return { available: false, exists: false };
     }
     throw e;
   }
 }
 
 async function recordApplied(
-  sql: ReturnType<typeof postgres>,
+  sql: MigrationSql,
   filename: string,
   checksum: string,
 ): Promise<void> {
-  try {
-    await sql`
-      INSERT INTO meta._migrations (filename, checksum)
-      VALUES (${filename}, ${checksum})
-      ON CONFLICT (filename) DO NOTHING
-    `;
-  } catch (e: any) {
-    if (
-      e?.code === "42P01" ||
-      e?.message?.includes("relation") ||
-      e?.message?.includes("does not exist")
-    ) {
-      console.log(
-        "  (journal table doesn't exist yet — apply 20260509T170000_meta_migrations.sql " +
-          "and run _migrate-bootstrap-journal.ts to start tracking)",
-      );
-      return;
-    }
-    throw e;
-  }
+  await sql`
+    INSERT INTO meta._migrations (filename, checksum)
+    VALUES (${filename}, ${checksum})
+    ON CONFLICT (filename) DO NOTHING
+  `;
 }
 
 function shouldWrapInTransaction(text: string): boolean {
@@ -120,12 +111,17 @@ async function main() {
   const filename = basename(file);
 
   const sql = postgres(url, { max: 1, prepare: false });
+  let migrationLockHeld = false;
 
   console.log(`▸ ${filename}`);
   console.log(`  size:     ${text.length} bytes`);
   console.log(`  checksum: ${checksum.slice(0, 16)}…`);
 
   try {
+    await sql.unsafe(
+      "SELECT pg_advisory_lock(hashtext('agenttool:migrations'))",
+    );
+    migrationLockHeld = true;
     const journal = await journalLookup(sql, filename);
 
     if (journal.exists) {
@@ -149,16 +145,41 @@ async function main() {
     }
 
     const wrap = shouldWrapInTransaction(text);
-    const sqlToRun = wrap ? `BEGIN;\n${text}\nCOMMIT;` : text;
-    if (!wrap) console.log(`  · transaction wrap skipped (file manages its own or @no-transaction)`);
-
-    await sql.unsafe(sqlToRun);
-    await recordApplied(sql, filename, checksum);
-    console.log(`  ✓ applied + recorded`);
+    const shouldRecord = journal.available || filename === JOURNAL_MIGRATION;
+    if (wrap) {
+      await sql.begin(async (tx) => {
+        await tx.unsafe(text);
+        if (shouldRecord) await recordApplied(tx, filename, checksum);
+      });
+    } else {
+      console.log(
+        `  · atomic migration+journal transaction unavailable ` +
+          `(file manages its own transaction or uses @no-transaction)`,
+      );
+      await sql.unsafe(text);
+      if (shouldRecord) await recordApplied(sql, filename, checksum);
+    }
+    if (shouldRecord) {
+      console.log(`  ✓ applied + recorded`);
+    } else {
+      console.log(
+        `  ✓ applied without journal (bootstrap phase; run ` +
+          `_migrate-bootstrap-journal.ts after ${JOURNAL_MIGRATION})`,
+      );
+    }
   } catch (e) {
     console.error(`  ✗ failed:`, (e as Error).message);
     process.exit(1);
   } finally {
+    if (migrationLockHeld) {
+      try {
+        await sql.unsafe(
+          "SELECT pg_advisory_unlock(hashtext('agenttool:migrations'))",
+        );
+      } catch {
+        // Closing the session releases advisory locks even if explicit unlock fails.
+      }
+    }
     await sql.end({ timeout: 5 });
   }
 }

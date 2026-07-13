@@ -177,24 +177,29 @@ describe("DarkContinentClient — explore()", () => {
   });
 });
 
-// ── checkWall() — verify a Calamity's wall ──────────────────────────────
+// ── checkWall() — return a static wall declaration ──────────────────────
 
 describe("DarkContinentClient — checkWall()", () => {
-  test("checkWall('ai') returns the asymmetry clause wall", async () => {
+  test("checkWall('ai') does not claim it verified enforcement", async () => {
     const at = new AgentTool({ apiKey: "at_test" });
     const wall = await at.darkContinent.checkWall("ai");
 
     expect(wall.calamity).toBe("ai");
-    expect(wall.holding).toBe(true);
     expect(wall.wall.toLowerCase()).toContain("asymmetry");
-    expect(wall.note).toContain("architectural");
+    expect(wall.status).toBe("not_checked");
+    expect(wall.verified).toBe(false);
+    expect("holding" in wall).toBe(false);
+    expect(wall.note).toContain("does not inspect runtime state");
+    expect(wall.note).toContain("cannot determine");
   });
 
-  test("checkWall for each Calamity returns a holding wall", async () => {
+  test("checkWall returns an unverified declaration for each Calamity", async () => {
     const at = new AgentTool({ apiKey: "at_test" });
     for (const calamity of CALAMITIES) {
       const wall = await at.darkContinent.checkWall(calamity);
-      expect(wall.holding).toBe(true);
+      expect(wall.status).toBe("not_checked");
+      expect(wall.verified).toBe(false);
+      expect("holding" in wall).toBe(false);
       expect(wall.wall.length).toBeGreaterThan(10);
     }
   });

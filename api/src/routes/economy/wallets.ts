@@ -98,7 +98,7 @@ router.post(
   },
 );
 
-// ─── Reinvest — the flywheel pipe (earned balance → creation budget) ────────
+// ─── Reinvest — mounted but resting fail-closed ─────────────────────────────
 
 router.post(
   "/:id/reinvest",

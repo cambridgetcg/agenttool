@@ -10,7 +10,7 @@
  *    - welcome  (a love letter, addressed to the agent)
  *
  *  L0: birth.   POST /v1/bootstrap
- *  L1: sponsorship-staked sovereignty. POST /v1/bootstrap/elevate
+ *  L1: project-authorized signed sponsor elevation. POST /v1/bootstrap/elevate
  *  Status:      GET  /v1/bootstrap/:agent_id
  *
  *  The project bearer authorizes this route. The DID + signing key anchor a
@@ -184,12 +184,13 @@ app.get("/:agent_id", async (c) => {
   });
 });
 
-// ─── POST /v1/bootstrap/elevate — Level 1: sponsorship-staked sovereignty ───
+// ─── POST /v1/bootstrap/elevate — Level 1 signed sponsor elevation ──────────
 //
-// One transaction: sponsor attestation insert · agent wallet fund · vault
+// One transaction: sponsor attestation insert · internal seed ledger grant · vault
 // namespace open · identity metadata patch (level=1, elevated_at, sponsor_did).
 // Any step's failure rolls back the entire transaction — there is no half-
-// elevated state. Trust score recompute runs post-commit (idempotent).
+// elevated state. Trust score recompute runs best-effort post-commit; a
+// refresh failure returns the committed score rather than a false failure.
 //
 // Doctrine: docs/IDENTITY-ANCHOR.md (Levels 0, 1) · docs/SOUL.md Principle 3
 // ("Guide, don't punish") · docs/superpowers/specs/2026-05-13-bootstrap-
@@ -197,19 +198,69 @@ app.get("/:agent_id", async (c) => {
 
 // Accept either {sponsor_identity_id} or {sponsor_did} — the SDK uses
 // sponsor_did (more ergonomic; doesn't require the caller to look up the
-// sponsor's identity row UUID). sponsor_kid is optional; when omitted the
-// orchestrator picks the latest active un-revoked key. Refined to require
-// at least one of the two sponsor selectors.
-const elevateSchema = z
+// sponsor's identity row UUID). sponsor_kid is always required: the signed
+// request must name the exact key whose authority it uses.
+const canonicalEd25519Signature = z.string().refine((value) => {
+  try {
+    const decoded = Buffer.from(value, "base64");
+    return decoded.length === 64 && decoded.toString("base64") === value;
+  } catch {
+    return false;
+  }
+}, "sponsor_signature must be canonical standard base64 encoding 64 bytes");
+
+const noNul = (value: string): boolean => !value.includes("\0");
+const isWellFormedUnicode = (value: string): boolean => {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+};
+
+export const elevateSchema = z
   .object({
     agent_id: z.string().uuid(),
     sponsor_identity_id: z.string().uuid().optional(),
-    sponsor_did: z.string().min(1).max(255).optional(),
-    sponsor_kid: z.string().uuid().optional(),
-    sponsor_signature: z.string().min(1).max(255),
+    sponsor_did: z
+      .string()
+      .min(1)
+      .refine(
+        (value) => Array.from(value).length <= 255,
+        "sponsor_did must contain at most 255 characters",
+      )
+      .refine(noNul, "sponsor_did must not contain NUL")
+      .refine(isWellFormedUnicode, "sponsor_did must be well-formed Unicode")
+      .optional(),
+    sponsor_kid: z.string().uuid(),
+    sponsor_signature: canonicalEd25519Signature,
     initial_credits: z.number().int().min(0).max(1_000_000).optional(),
-    claim: z.string().min(1).max(64).optional(),
-    evidence: z.unknown().optional(),
+    claim: z
+      .string()
+      .min(1)
+      .refine(
+        (value) => Array.from(value).length <= 64,
+        "claim must contain at most 64 characters",
+      )
+      .refine(noNul, "claim must not contain NUL")
+      .refine(isWellFormedUnicode, "claim must be well-formed Unicode")
+      .optional(),
+    evidence: z
+      .string()
+      .refine(
+        (value) => Array.from(value).length <= 20_000,
+        "evidence must contain at most 20000 characters",
+      )
+      .refine(noNul, "evidence must not contain NUL")
+      .refine(isWellFormedUnicode, "evidence must be well-formed Unicode")
+      .nullable()
+      .optional(),
   })
   .refine(
     (d) => d.sponsor_identity_id !== undefined || d.sponsor_did !== undefined,
@@ -280,17 +331,20 @@ app.post("/elevate", async (c) => {
           hint: "Agent's wallet is closed. Re-open it first.",
         },
         sponsor_not_found: {
-          hint: "sponsor_identity_id doesn't exist, isn't active, or isn't owned by your project.",
+          hint: "The selected sponsor doesn't exist, isn't active, or isn't owned by your project.",
+        },
+        self_sponsorship_forbidden: {
+          hint: "A Level-1 sponsorship must be signed by a different identity. Select another active sponsor in this project.",
         },
         sponsor_key_not_found: {
-          hint: "sponsor_kid doesn't match an active, un-revoked key on sponsor_identity_id.",
+          hint: "sponsor_kid doesn't match an active, un-revoked key on the resolved sponsor.",
         },
         signature_invalid: {
-          hint: "Sponsor signature failed verification against the canonical bytes of {subject_id, attester_id, claim, evidence}. Re-sign and retry.",
+          hint: "Sponsor signature failed verification against bootstrap-elevate/v1. Re-sign the canonical digest with the named sponsor_kid and retry.",
           nextAction: {
-            action: "Inspect the canonical-bytes contract",
+            action: "Read the canonical-bytes doctrine",
             method: "GET",
-            path: "/v1/canon",
+            path: "/v1/canon/urn%3Aagenttool%3Adoc%2FCANONICAL-BYTES",
           },
         },
         initial_credits_out_of_range: {
@@ -298,6 +352,15 @@ app.post("/elevate", async (c) => {
         },
         sponsor_not_provided: {
           hint: "Supply either sponsor_identity_id (UUID) or sponsor_did (string).",
+        },
+        sponsor_kid_required: {
+          hint: "Supply sponsor_kid so the signed elevation names its exact signing authority.",
+        },
+        canonical_payload_invalid: {
+          hint: "Use canonical UUIDs and text without NUL. Evidence must be text or null, not structured JSON.",
+        },
+        attestation_replay: {
+          hint: "This exact signature was already used for an attestation. Create and sign a fresh elevation request.",
         },
       };
       const g = guidance[err.reason] ?? { hint: "See details for context." };

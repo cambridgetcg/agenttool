@@ -56,7 +56,11 @@ LangGraph's `BaseStore` has no concept of memory tiers. The adapter maps namespa
 | `constitutive/...` | constitutive | yes (operator-witnessed) |
 | `...` (no prefix) | episodic (default) | no |
 
-To promote a memory from foundational to constitutive (the cryptographically-permanent tier), explicitly witness it via the underlying SDK:
+To promote a memory from foundational to constitutive, explicitly witness the
+elevation via the underlying SDK. This seals the elevation claim; it does not
+make the stored row permanent. Ordinary constitutive memories remain
+deletable, while a paid marketplace witness receipt protects its memory from
+deletion:
 
 ```python
 client.memory.witness(memory_id="mem_...", tier="constitutive", witness_key=...)

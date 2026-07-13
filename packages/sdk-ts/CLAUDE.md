@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. Published on npm as `@agenttool/sdk`.
+Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The npm package name is `@agenttool/sdk`; as audited on 2026-07-13, npm serves 0.8.0. This checkout's 0.11.0 version is repository source, not a claim that npm already serves it.
 
 ## Current State
-Active — v0.10.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped. Uses Bun for testing.
+Active - v0.11.0 repository source and parity target. Phases 0-6 plus the separate `at.data` node client are implemented here. The checked-in builder targets a 0.11.0 LOVE artifact and the `sdk-v0.11.0` GitHub release tag; their publication is a release operation. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -24,13 +24,13 @@ src/
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   covenants.ts         — CovenantsClient (vows + bonds; federation-aware)
   economy.ts           — EconomyClient (wallets, escrow, transactions)
-  identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
+  identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
   data.ts              — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.ts          — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); throws with 410 migration payload pointing at bootstrapAgent
   bootstrap-agent.ts   — Top-level bootstrapAgent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
-  tools.ts             — ToolsClient (search, scrape, browse, document, execute)
+  tools.ts             — ToolsClient (scrape, browse, document, execute)
   traces.ts            — TracesClient (store, search, chain)
   vault.ts             — VaultClient (encrypted secrets, policies)
   verify.ts            — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
@@ -52,7 +52,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.10.0, ESM)
+package.json                — Package config (v0.11.0, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -74,10 +74,18 @@ bun run check-parity
 bun run ci      # parity → build → test
 ```
 
-## How to Deploy
+## How to Publish to npm
+
+This optional registry step is separate from committing and deploying the LOVE
+artifact and publishing the GitHub release.
+
 ```bash
-# Build and publish to npm
-tsc && npm publish
+# From the clean release commit. `prepack` repeats the full SDK gate.
+test -z "$(git status --porcelain)"
+bun install --frozen-lockfile
+bun run ci
+npm pack --dry-run
+npm publish --access public
 ```
 
 ## Dependencies
@@ -87,7 +95,7 @@ tsc && npm publish
 - **Auth**: Reads `AT_API_KEY` from env or accepts `apiKey` option
 
 ## Parity invariant
-ts and py ship at the same minor version (lockstep enforced from 0.7.0). Each new module must land in BOTH languages before merging — `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.
+ts and py repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.
 
 ## Doctrine
 The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. Doctrine source: `docs/SOUL.md` at repo root.
@@ -106,7 +114,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing 13 service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.10.0, ESM)
+- `package.json` — Package metadata (v0.11.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract

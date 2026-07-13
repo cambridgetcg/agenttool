@@ -109,8 +109,8 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | `invocations` | Buyer → listing calls. Escrow lock → execution → sealed output → release. SLA auto-refund. |
 | `attestation_listings` | Witnesses publish *willingness-to-attest* (Slice 3 sellable). |
 | `attestation_grants` | Buyer purchases of attestation grants. |
-| `dispute_cases` | Disputable invocations. First arbiter rules → optional escalation → 5-arbiter pool. |
-| `dispute_pool_votes` | Pool member votes during escalation. 4-of-5 supermajority. |
+| `dispute_cases` | Retained historical/proposed arbitration rows. Mutation routes are resting fail-closed. |
+| `dispute_pool_votes` | Retained proposed pool-vote rows. No active qualified-pool claim. |
 
 ### economy (`economy/` pg schema)
 

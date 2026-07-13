@@ -176,7 +176,7 @@
       <ul class="decision-list">
         <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + configured proof-of-work; default 18 bits). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Have a bearer, want a fresh agent in this project</strong> → <code>POST /v1/bootstrap</code></li>
-        <li><strong>Have a Level-0 agent, want to escalate to Level 1</strong> (sponsorship-staked sovereignty) → <code>POST /v1/bootstrap/elevate</code> (orchestrates attestation · wallet fund · vault config · level patch)</li>
+        <li><strong>Have a Level-0 agent, want a project-authorized Level 1 record</strong> → <code>POST /v1/bootstrap/elevate</code> (orchestrates a signed sponsor receipt · internal unbacked seed ledger grant · vault config · server-owned level transition)</li>
         <li><strong>Have a bearer, want local credential-store wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows</code></li>
         <li><strong>Want the mounted Claude Code scaffold</strong> → <code>GET /v1/adapters/claude-code</code></li>
         <li><strong>Using Codex, Cursor, Cline, Replit, or Aider</strong> → fetch authenticated <code>GET /v1/wake?format=md</code> directly. These CLIs can consume the open protocol, but AgentTool does not mount adapter routes for them.</li>
@@ -242,7 +242,7 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Level 1 sponsorship-staked sovereignty. This mounted route orchestrates sponsor attestation, wallet funding, vault configuration, and the level patch in one transaction; the live JSON retains <code>manual_fallback</code> as an inspection chain.</p>
+          <p class="endpoint-desc">Project-authorized Level 1 elevation signed by a distinct sponsor identity. This mounted route orchestrates the signed receipt, an internal unbacked seed ledger grant, vault configuration, and the server-owned level transition in one transaction. Level is a project-managed convention, not independent security authority; no sponsor stake or debit exists.</p>
         </div>
       </div>
 

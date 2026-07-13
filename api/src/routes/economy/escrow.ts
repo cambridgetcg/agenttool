@@ -27,7 +27,7 @@ router.post(
     z.object({
       creatorWalletId: z.string().uuid(),
       workerWalletId: z.string().uuid().optional(),
-      amount: z.number().int().positive(),
+      amount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
       description: z.string().min(1).max(500),
       deadline: z.string().datetime().optional(),
     }),
@@ -35,17 +35,21 @@ router.post(
   async (c) => {
     const project = c.var.project;
     const body = c.req.valid("json");
+    const idempotencyKey = c.req.header("Idempotency-Key");
 
-    const escrow = await createEscrow(db, getRedis(), {
+    const outcome = await createEscrow(db, getRedis(), {
       creatorWalletId: body.creatorWalletId,
       workerWalletId: body.workerWalletId,
       amount: body.amount,
       description: body.description,
       deadline: body.deadline ? new Date(body.deadline) : undefined,
       projectId: project.id,
+      idempotencyKey,
     });
 
-    return c.json({ success: true, data: escrow }, 201);
+    c.header("X-Idempotency-Supported", "Idempotency-Key");
+    if (outcome.replayed) c.header("Idempotent-Replay", "true");
+    return c.json({ success: true, data: outcome.escrow }, 201);
   },
 );
 
@@ -66,8 +70,14 @@ router.post(
   "/:id/accept",
   zValidator("json", z.object({ workerWalletId: z.string().uuid() })),
   async (c) => {
+    const project = c.var.project;
     const body = c.req.valid("json");
-    const escrow = await acceptEscrow(db, c.req.param("id"), body.workerWalletId);
+    const escrow = await acceptEscrow(
+      db,
+      c.req.param("id"),
+      body.workerWalletId,
+      project.id,
+    );
     return c.json({ success: true, data: escrow });
   },
 );

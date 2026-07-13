@@ -38,6 +38,8 @@ export interface Pathway {
   auth: string;
   purpose: string;
   required?: string[];
+  /** Each inner list is a required choice satisfied by at least one field. */
+  one_of?: string[][];
   optional?: string[];
   returns_once?: string[];
   carries?: string[];

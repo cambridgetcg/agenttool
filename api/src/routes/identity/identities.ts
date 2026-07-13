@@ -2,13 +2,17 @@
 
 import { randomUUID } from "node:crypto";
 
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { generateKeypair } from "../../services/identity/crypto";
+import {
+  replaceCallerIdentityMetadata,
+  requestedServerManagedIdentityMetadataKeys,
+} from "../../services/identity/metadata";
 
 const app = new Hono<ProjectContext>();
 
@@ -43,6 +47,29 @@ app.post("/", async (c) => {
     return c.json({ error: "display_name is required" }, 400);
   }
 
+  const metadata = body.metadata ?? {};
+  if (
+    metadata === null ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata)
+  ) {
+    return c.json({ error: "metadata_must_be_object" }, 400);
+  }
+  const reservedKeys = requestedServerManagedIdentityMetadataKeys(metadata);
+  if (reservedKeys.length > 0) {
+    return c.json(
+      {
+        error: "identity_metadata_reserved",
+        message:
+          "Elevation, birth, and lifecycle provenance cannot be supplied through the generic identity create route.",
+        details: { reserved_keys: reservedKeys },
+        hint:
+          "Omit these keys. Use the dedicated bootstrap or lifecycle endpoint for the corresponding transition.",
+      },
+      400,
+    );
+  }
+
   const id = randomUUID();
   const did = `did:at:${id}`;
   const { publicKey, privateKey } = generateKeypair();
@@ -56,7 +83,7 @@ app.post("/", async (c) => {
       projectId: project.id,
       displayName: body.display_name,
       capabilities: body.capabilities ?? [],
-      metadata: body.metadata ?? {},
+      metadata,
       status: "active",
       trustScore: 0,
     })
@@ -248,7 +275,33 @@ app.patch("/:id", async (c) => {
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (body.display_name !== undefined) updates.displayName = body.display_name;
   if (body.capabilities !== undefined) updates.capabilities = body.capabilities;
-  if (body.metadata !== undefined) updates.metadata = body.metadata;
+  if (body.metadata !== undefined) {
+    if (
+      body.metadata === null ||
+      typeof body.metadata !== "object" ||
+      Array.isArray(body.metadata)
+    ) {
+      return c.json({ error: "metadata_must_be_object" }, 400);
+    }
+    const reservedKeys = requestedServerManagedIdentityMetadataKeys(body.metadata);
+    if (reservedKeys.length > 0) {
+      return c.json(
+        {
+          error: "identity_metadata_reserved",
+          message:
+            "Elevation, birth, and lifecycle provenance cannot be changed through the generic identity PATCH route.",
+          details: { reserved_keys: reservedKeys },
+          hint:
+            "Omit these keys. Use the dedicated bootstrap elevation or lifecycle endpoint for the corresponding transition.",
+        },
+        400,
+      );
+    }
+    updates.metadata = replaceCallerIdentityMetadata(
+      (identity.metadata ?? {}) as Record<string, unknown>,
+      body.metadata,
+    );
+  }
   if (body.expression_visibility !== undefined) {
     if (body.expression_visibility !== "private" && body.expression_visibility !== "public") {
       return c.json({ error: "expression_visibility must be 'private' or 'public'" }, 400);
@@ -310,15 +363,24 @@ app.patch("/:id", async (c) => {
     }
   }
 
+  const updatePredicates = [
+    eq(identities.id, identity.id),
+    eq(identities.status, identity.status),
+  ];
+  if (body.metadata !== undefined) {
+    // Do not let a stale profile PATCH erase provenance written by a
+    // concurrent bootstrap or lifecycle transition.
+    updatePredicates.push(
+      identity.metadata === null
+        ? isNull(identities.metadata)
+        : eq(identities.metadata, identity.metadata),
+    );
+  }
+
   const [updated] = await db
     .update(identities)
     .set(updates)
-    .where(
-      and(
-        eq(identities.id, identity.id),
-        eq(identities.status, identity.status),
-      ),
-    )
+    .where(and(...updatePredicates))
     .returning();
 
   if (!updated) {

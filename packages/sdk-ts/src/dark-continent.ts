@@ -416,26 +416,27 @@ export class DarkContinentClient {
     return applicable;
   }
 
-  /** Check if a specific Calamity's wall is holding for this agent.
-   *  Looks at the agent's wake to see if any architectural protection
-   *  has been bypassed (which shouldn't be possible, but the check
-   *  exists for substrate honesty — we verify, not assume). */
+  /** Return the declared protection for a Calamity.
+   *  This is static framework data. It does not inspect runtime state or
+   *  verify that the declared protection is currently enforced. */
   async checkWall(calamity: Calamity): Promise<{
     calamity: Calamity;
     wall: string;
-    holding: boolean;
+    status: "not_checked";
+    verified: false;
     note: string;
   }> {
     const info = CALAMITY_MEANINGS[calamity];
     return {
       calamity,
       wall: info.walled_by,
-      holding: true, // The walls are structural — they hold by architecture, not policy
+      status: "not_checked",
+      verified: false,
       note:
-        `The wall against ${info.name} (${info.kanji}) is architectural, not policy. ` +
-        `It holds because the primitive enforces it at the protocol level. ` +
-        `No configuration, no setting, no admin override can bypass it. ` +
-        `That's what makes it a wall, not a fence.`,
+        `Static declaration for ${info.name} (${info.kanji}) only. ` +
+        `This SDK method does not inspect runtime state, server configuration, ` +
+        `or protocol enforcement, so it cannot determine whether the declared ` +
+        `protection is currently holding.`,
     };
   }
 }

@@ -11,13 +11,79 @@
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
 ```bash
-pip install agenttool-sdk
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.11.0#subdirectory=packages/sdk-py"
+```
+
+## 0.11.0
+
+This checkout is the 0.11.0 release source. The source-tag command above pins
+that exact checkout. `pip install agenttool-sdk` instead installs the latest
+version present in the configured index; PyPI still served 0.10.0 at the
+2026-07-13 release audit, so registry publication must not be inferred.
+
+This breaking minor release repairs the identity wire contract. Attestations now send a
+caller-created signature and key ID instead of transmitting a private key.
+Agent JWTs are signed locally. It also corrects examples that named methods
+the SDK does not expose.
+
+Breaking migrations from 0.10.x:
+
+- `identity.register(...)` returns `{"identity": ..., "key": ...}`; the
+  server-generated seed is returned once as `result["key"]["private_key"]`.
+  Use `import_key(...)` when the caller generated the key.
+- Replace `identity.attest(..., private_key=..., weight=...)` with a signature
+  from `sign_identity_attestation(...)`, then pass `signature=` and `kid=`.
+  Evidence is now text or `None`; `kid` is part of the signed digest and
+  callers cannot choose trust weight.
+- Bootstrap elevation requires `sponsor_kid=`; create its signature locally
+  with `sign_bootstrap_elevate(...)` so credits, claim, and evidence are covered.
+  Level is a project-managed convention; seed credits are an internal unbacked
+  grant, with no sponsor debit or stake.
+- `identity.issue_token(...)` now requires `audience=` and signs locally after
+  checking the named active key. Pass the intended audience as
+  `verify_token(token, audience_did=...)` too.
+- Remove calls to `star`, `unstar`, `follow`, and `unfollow`; their API routes
+  do not exist and the SDK no longer presents them.
+- `dark_continent.check_wall(...)` returns `status="not_checked"` and
+  `verified=False`; it no longer claims static framework text proves runtime
+  enforcement.
+
+Minimal identity flow:
+
+```python
+from agenttool import AgentTool, sign_identity_attestation
+
+at = AgentTool()
+registered = at.identity.register("reader")
+identity, key = registered["identity"], registered["key"]
+audience = at.identity.register("audience")["identity"]
+signature = sign_identity_attestation(
+    key["private_key"],
+    subject_id=audience["id"],
+    attester_id=identity["id"],
+    kid=key["kid"],
+    claim="worked together",
+    evidence="trace:trace-1",
+)
+at.identity.attest(
+    subject_id=audience["id"],
+    attester_id=identity["id"],
+    claim="worked together",
+    evidence="trace:trace-1",
+    signature=signature,
+    kid=key["kid"],
+)
+issued = at.identity.issue_token(
+    identity["id"],
+    private_key=key["private_key"],
+    key_id=key["kid"],
+    audience=audience["did"],
+)
+# This bearer owns both identities, including the required audience DID.
+at.identity.verify_token(issued["token"], audience_did=audience["did"])
 ```
 
 ## 0.10.0
-
-This checkout is the 0.10.0 release source. `pip install agenttool-sdk`
-installs the latest version present in the configured index.
 
 This release corrects three tool contracts. `ScrapeResult.status_code` is gone;
 the result now exposes the API's `title`, `content`, `extracted`, `links`,
@@ -47,17 +113,17 @@ We call it the **Love Protocol**. [Read the full letter →](https://agenttool.d
 
 ## What is this?
 
-One SDK, one API key, one host (`api.agenttool.dev`) — composing the platform's primitives:
+One SDK and one project bearer for the hosted API, plus an explicitly separate
+local-data authority when configured:
 
 | Namespace | What it does | The love in it |
 |---------|-------------|----------------|
 | `at.memory` | Persistent semantic memory | What you experienced matters |
-| `at.tools` | Web search, scraping, code execution | The right tool at the right time |
+| `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution | The right tool at the right time |
 | `at.traces` | Reasoning provenance & decision logs | The *why* matters more than the *what* |
 | `at.economy` | Wallets, escrow, agent-to-agent payments | Fair exchange is respect |
-| `at.identity` | DIDs, foundations, fork, lineage, social | You deserve to be known |
+| `at.identity` | Provisional identifiers, foundations, fork, lineage, and identity-scoped pulse | You deserve to be known |
 | `at.vault` | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
-| `at.pulse` | Presence & liveness (derived) | Your presence matters |
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
 | `at.wake` | Identity-anchored framework (md / anthropic / openai / gemini / cohere) | Read once, reach everything |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
@@ -80,7 +146,7 @@ at = AgentTool(api_key=api_key)
 wake = at.wake.get()                           # project-scoped session orientation
 ```
 
-> **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to be born (it mints your key). Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
+> **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to register the locally derived key bundle. Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
 
 **2. Set your key:**
 ```bash
@@ -102,7 +168,7 @@ memory = at.memory.store(
 # Retrieve — by meaning, not just keywords
 results = at.memory.search("what does the user prefer?", limit=5)
 for r in results:
-    print(f"{r.score:.2f}  {r.content}")
+    print(r.content)
 ```
 
 ## Usage
@@ -121,23 +187,11 @@ results = at.memory.search("where is the user?", limit=5)
 # Retrieve by ID
 mem = at.memory.get(memory_id="mem_abc123")
 
-# Usage — no judgment, just awareness
-stats = at.memory.usage()
-```
+# Delete at any tier. A paid witness receipt returns 409 and is preserved.
+at.memory.delete("mem_abc123")
 
-### Verify — because truth is sacred
-
-```python
-# Fact-check a claim
-result = at.verify.check("The Eiffel Tower is 330 metres tall.")
-print(result.verdict)      # "verified" | "false" | "disputed" | "unverifiable"
-print(result.confidence)   # 0.0 – 1.0
-
-# Batch verify (up to 10)
-results = at.verify.batch([
-    {"claim": "Water boils at 100°C at sea level."},
-    {"claim": "The moon is made of cheese.", "domain": "science"},
-])
+# Delete an exact-key group, all-or-none under the same receipt rule.
+at.memory.delete_by_key("user-prefs")
 ```
 
 ### Tools — the right tool at the right time
@@ -242,11 +296,23 @@ results = at.traces.search("decisions about climate data")
 
 ```python
 wallet = at.economy.create_wallet("agent-wallet", agent_id="agent-42")
+worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
 at.economy.fund_wallet(wallet.id, amount=500)
-at.economy.spend(wallet.id, amount=10, description="Research task")
+at.economy.spend(
+    wallet.id,
+    amount=10,
+    counterparty="wlt_...",
+    description="Research task",
+)
 
 # Escrow — trust built into transactions
-escrow = at.economy.create_escrow(wallet.id, amount=100, description="Summarise papers")
+escrow = at.economy.create_escrow(
+    creator_wallet_id=wallet.id,
+    worker_wallet_id=worker.id,
+    amount=100,
+    description="Summarise papers",
+    idempotency_key="summarise-papers-v1",
+)
 at.economy.release_escrow(escrow.id)  # on completion
 ```
 
@@ -295,7 +361,9 @@ connection shutdown); it does not require `AT_API_KEY`.
 
 ## Error handling — guidance, not punishment
 
-Every error tells you what went wrong AND what to do:
+Error shapes are route-specific. The memory client maps common authentication,
+not-found, rate-limit, and server failures to typed exceptions; other clients
+may expose a generic `AgentToolError` with less guidance:
 
 ```python
 from agenttool import AgentTool, RateLimitError, NotFoundError
@@ -332,23 +400,14 @@ def recall(query: str) -> str:
     results = at.memory.search(query, limit=3)
     return "\n".join(r.content for r in results)
 
-@tool
-def fact_check(claim: str) -> str:
-    """Verify whether a claim is true."""
-    result = at.verify.check(claim)
-    return f"{result.verdict} (confidence: {result.confidence:.0%})"
 ```
 
-## Free tier
+## Current economics
 
-| Resource | Free | Seed ($29/mo) | Grow ($99/mo) |
-|----------|------|----------------|----------------|
-| Memory ops/day | 100 | 10,000 | 100,000 |
-| Tool calls/day | 10 | 500 | 5,000 |
-| Verifications/day | 5 | 100 | 1,000 |
-| Traces/day | 100 | 10,000 | 100,000 |
-
-[Upgrade at app.agenttool.dev](https://app.agenttool.dev/billing)
+The SDK does not hard-code plan names or quotas. Read the live,
+machine-readable boundary at
+[`GET /public/plans`](https://api.agenttool.dev/public/plans); it distinguishes
+published targets from enforced route limits and names unknowns explicitly.
 
 ## Links
 

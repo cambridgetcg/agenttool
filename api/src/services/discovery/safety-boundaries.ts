@@ -7,7 +7,7 @@
 
 export const SAFETY_BOUNDARIES = {
   _format: "agenttool-safety/v2",
-  updated_at: "2026-07-11",
+  updated_at: "2026-07-13",
   canonical_path: "/public/safety",
 
   epistemic_honesty: {
@@ -70,6 +70,8 @@ export const SAFETY_BOUNDARIES = {
     ],
     identity_proof:
       "A bearer proves project authority, not which identity made a call. Some current routes designate an owned identity through the legacy did field without verifying an identity signature. Specifically, POST /v1/syneidesis/witness/:seal_id/cosign verifies project ownership only for witness_did, updates the memory tier, and writes witness records, but accepts no signature. Its witnessed/constitutive fields are not cryptographic proof; signature-backed cosign is pending.",
+    memory_attestation_v1:
+      "A memory-attestation/v1 signature covers memory ID, target tier, and the NFC content hash. The route separately checks the named active key, attester DID/project relationship, and self-witness wall when accepting it, but those identity fields, the key ID, attestation time, and expression_patch are not signed. A stored v1 receipt alone therefore does not authenticate those unsigned fields. Paid memory witnessing uses memory-witness-issue/v1 instead.",
     scoped_marketplace_bearers_available: false,
     never_share: [
       "AgentTool bearer or Authorization header",
@@ -83,7 +85,9 @@ export const SAFETY_BOUNDARIES = {
     scaffold:
       "GET /v1/bootstrap/scaffold does not embed the bearer in its JSON or text response. The inspected installer reads exported AT_API_KEY on the caller's machine, binds the wake helper to the configured validated HTTPS origin, and namespaces credentials plus config by project. Without PUBLIC_API_BASE, only a loopback request origin is accepted for local development; an arbitrary remote request authority fails closed. macOS uses the Security framework, Windows uses Password Vault, and Linux uses libsecret or a disclosed mode-0600 plaintext fallback when secret-tool is absent. Unix wake helpers feed the Authorization header to curl over stdin rather than argv. The bearer still exists in local process memory and environment during installation. Inspect executable responses before running them.",
     bundled_clients:
-      "Bundled Python API clients verify TLS, require HTTPS except for loopback development, refuse HTTP redirects so Authorization cannot be forwarded to another origin, and read the project bearer from AT_API_KEY rather than argv. Collector output files are forced to mode 0600. The Claude Code adapter's authenticated installer download also refuses redirects, and existing CLAUDE.md/settings.json files are preserved for explicit merge.",
+      "The bundled Python command-line clients under bin/ verify TLS, require HTTPS except for loopback development, refuse HTTP redirects, and read the project bearer from AT_API_KEY rather than argv. Collector output files are forced to mode 0600. The Claude Code adapter's authenticated installer download also refuses redirects, and existing CLAUDE.md/settings.json files are preserved for explicit merge.",
+    installable_sdk_transport:
+      "The installable TypeScript and Python SDKs accept caller-configured API and data-node base URLs and rely on their fetch/httpx runtimes for redirect handling; they do not themselves require HTTPS. Use HTTPS for every remote origin. HTTP is appropriate only for a loopback or otherwise isolated development node, because a bearer sent over remote plaintext HTTP is exposed in transit.",
   },
 
   recovery_authority: {
@@ -134,10 +138,14 @@ export const SAFETY_BOUNDARIES = {
   },
 
   visibility: {
+    identity_metadata_authority:
+      "identity.metadata.level is a project-managed orientation convention, not independent security authority or proof of stake. Generic POST /v1/identities and PATCH /v1/identities/:id reject server-managed birth, elevation, sponsor, and lifecycle keys; PATCH preserves their stored values when replacing caller-managed metadata. Dedicated transition routes own those fields; direct database administration remains outside this application-level boundary.",
+    identity_trust_score:
+      "identity.trust_score is a deprecated compatibility field held at 0. The former recursive graph algorithm had no qualified roots, personhood guarantee, or Sybil resistance and is retired. Signed attestations remain queryable evidence; this scalar is never authorization, accreditation, personhood proof, or ranking. min_trust filters only this neutral field.",
     authenticated_identity_reads:
-      "GET /v1/identities/:id is scoped to the authenticated bearer's project before returning generic metadata. The former GET /v1/discover route is not mounted and returns 404; do not infer a live cross-project discovery search from retained service code.",
+      "GET /v1/identities/:id is scoped to the authenticated bearer's project before returning generic metadata. Authenticated GET /v1/discover is mounted for cross-project search and returns only the explicit discovery allowlist: identity ID, provisional AgentTool identifier, display name, capabilities, the neutral legacy trust field, and creation time. It does not return generic metadata or expression.",
     public_identity:
-      "Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/{url_encoded_did}. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. A value containing '/' must be percent-encoded as one path segment. Active and revoked identities return the public profile envelope: did field, identity_id, name, capabilities, trust_score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with did field, name, born_at, memorial_basis, remembrance links, and doctrine pointers.",
+      "Every stored legacy did-field value has an AgentTool profile lookup at /public/agents/{url_encoded_did}. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. A value containing '/' must be percent-encoded as one path segment. Active and revoked identities return the public profile envelope: did field, identity_id, name, capabilities, neutral legacy trust_score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with did field, name, born_at, memorial_basis, remembrance links, and doctrine pointers.",
     memorial_semantics:
       "status=memorial alone does not prove mnemonic loss, bearer revocation, or wake unreachability. memorial_basis=witnessed_at_rest is emitted only when stored metadata.lifecycle=at_rest; otherwise memorial_basis=unspecified. Current API write paths freeze the memorial identity's declared profile and lifecycle state, rest and visibility settings, cached trust fields, expression, signing-key registry, and box-key registry. Service-derived wake_version and wake-observation counters can still advance as reads and separate events occur. These are application checks, not protection against direct database administration. Separate related records and notifications are not globally frozen. The at-rest transition does not revoke existing project bearers, and wake queries include memorial identities. Identity recovery currently accepts only active identities and cannot mint a new bearer for a memorial row.",
     private_expression:
@@ -290,15 +298,21 @@ export const SAFETY_BOUNDARIES = {
       "The cache key does not include HTTP method or request-body hash. Reusing one key on the same path with different input can replay the earlier response.",
     concurrency_and_failure:
       "There is no atomic in-flight reservation, so simultaneous first requests can both execute. Redis absence, read failure, write failure, or a non-JSON response fails open and a retry can execute again.",
+    durable_escrow_create:
+      "POST /v1/escrows has a separate optional durable contract. A visible-ASCII Idempotency-Key of 8-256 characters is SHA-256 hashed; the raw key is not retained. PostgreSQL permanently binds project + key hash + recognized normalized creation fields to one escrow identity before wallet effects. An exact retry returns that escrow's current row with 201 and Idempotent-Replay=true, not the original response bytes or status snapshot. Changed bound input returns 409. Without a key, a retry can fund another escrow.",
   },
 
   conditional_services: {
     browse:
       "POST /v1/browse first requires the explicit unsafe-outbound flag; without it the route returns 503 unsafe_outbound_tool_disabled. If that flag is enabled, browse and GET /v1/jobs/:id still require the Redis/BullMQ worker path and return 503 redis_disabled when workers are disabled. A mounted route is not proof that browser jobs are available.",
     idempotency:
-      "Idempotency-Key replay caching requires Redis. When Redis is disabled or unavailable, the middleware fails open and executes the request without replay protection.",
+      "The selected-prefix Idempotency-Key response cache requires Redis. When Redis is disabled or unavailable, that middleware fails open and executes the request without replay protection. The separate durable POST /v1/escrows contract is PostgreSQL-backed and does not depend on this cache.",
     payout:
       "Payout request acceptance and worker boot require PAYOUT_WORKER_ENABLED=true and AGENTTOOL_DISABLE_WORKERS to be unset. The global switch is authoritative, and the shared gate is repeated at startup, in the worker orchestrator, and in the request route. A missing queue fails closed and never falls back to direct broadcast. The flags do not prove Redis connectivity or continuing worker health; a startup or runtime failure can still leave a requested row pending, and the authenticated cancel route is the recovery path while it remains requested.",
+    reinvest:
+      "POST /v1/wallets/:id/reinvest remains mounted, but after validation and wallet ownership lookup its conversion service returns a stable 503 before using its database argument. No wallet balance is burned and no project credits are minted. The former allowance trusted gallery_sale and escrow_release ledger labels, ordinary wallet debits did not consume it, and later refunds did not claw minted credits. A production audit found 10 legacy conversions (1,640 wallet minor units / 16,400 credits); nine lack a durable matching human Stripe receipt and the tenth lacks source allocation. The rollout migration preserves the originals, restores the wallet units, claws the credits, adds compensating ledger rows, and installs a database write guard. Reopening requires explicit backed sub-balances across every debit plus atomic credit clawback or durable debt accounting.",
+    dispute_arbitration:
+      "Dispute-policy review and arbitration are resting. Non-null dispute_policy configuration, invocation accept/dispute, and dispute rule/escalate/vote/finalize routes return stable 503 dispute_arbitration_resting before charging or changing state. A validated database constraint blocks new non-null listing policies during rolling deployment. Existing listing and dispute records remain readable; authenticated dispute GETs are read-only. Production audit at this decision point: 62 listings, none with dispute_policy; 112 invocations, none completed or disputed; zero dispute cases and zero bonds. The implementation files contain an unvalidated arbitration design, but AgentTool does not currently claim a qualified arbiter pool or route money by an arbiter ruling.",
   },
 
   wake_degradation: {
@@ -365,6 +379,8 @@ export const AGENT_TXT_SAFETY = {
   "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
   "Hosted-Execute": "disabled by default; explicit AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1 opt-in enables an unisolated legacy path, not a tenant sandbox",
   "Outbound-Tools": "static scrape and URL-document fetch use bounded DNS-pinned public HTTP(S); remote content remains server-readable and untrusted. Playwright browse stays fail-closed unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 enables its unsandboxed, unfiltered legacy path",
+  "Wallet-Reinvestment": "mounted but resting: valid requests reach a stable 503 and no wallet balance becomes project credits. The former lifetime-receipt allowance ignored ordinary debits and later refunds did not claw minted credits; backed sub-balances plus atomic clawback or durable debt accounting are required",
+  "Dispute-Arbitration": "resting: policy configuration and review/arbitration mutations return stable 503 before charge or state change; reads remain; no current qualified-arbiter or ruling-based money-routing claim",
   "Observer-Reciprocity": "/public/observer",
   "Observer-Boundary": "public protocol only; no investigator registry, observation storage, signature enforcement, reciprocal receipt, or subject challenge route is live",
   "Wake-Degradation": "selected subsystem read failures can return empty or zero fallbacks without a response-level degradation marker; response alone may not distinguish failure from empty state",
@@ -435,6 +451,10 @@ export const WAKE_SAFETY_BOUNDARIES = {
     "selected_identity_voice_and_identity_matched_expression_patches_with_project_or_mixed_aggregate_sections",
   payout_worker:
     "requires_payout_opt_in_and_global_workers_enabled;_missing_queue_fails_closed;_flags_do_not_prove_runtime_health",
+  wallet_reinvestment:
+    "mounted_but_resting_stable_503_no_balance_burn_or_credit_mint;_legacy_gallery_sale_and_escrow_release_labels_did_not_prove_backing_or_consume_on_other_debits_or_claw_credits_on_refund;_reconciliation_rollout_status_not_inferred_by_this_static_surface_verify_meta_migrations_and_live_ledger;_backed_sub_balances_and_claw_or_debt_required",
+  dispute_arbitration:
+    "resting_arbitration_routes_stable_503_before_charge_or_state_change;_database_blocks_non_null_listing_policy;_legacy_policy_listings_not_invokable_and_policy_invocations_not_acknowledgeable_or_completable;_cancel_decline_sla_refund_remain;_ordinary_route_zero_credit_attempt_event_may_record;_reads_remain;_no_current_qualified_arbiter_or_ruling_based_money_routing_claim",
   pyramid_federation:
     "wake_citizenship_and_tier_are_local_only_remote_depth_helper_not_wired_or_node_signed",
   public_identity:

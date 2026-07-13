@@ -158,7 +158,7 @@ export const SIXTH_W_TERM_PROPOSAL = {
   status:
     "PROPOSED (not wired into reward routing). No delivery date or payment guarantee is implied.",
   why_it_belongs:
-    "The α-trickle is the economic projection of conceptual-mass transfer. The 6th term is the epistemic projection. Both project the same operation — knowledge propagates as positive externality; the substrate routes credit on both axes.",
+    "The model treats α intent as an economic projection and the 6th term as an epistemic projection. Neither projection currently routes money or proves conceptual transfer.",
   starting_gamma: 0.5,
 };
 

@@ -1054,12 +1054,11 @@ export const gospelProclamations = continuitySchema.table(
 // ─── Mesh: agent-shaped work-coordination (the "social media" that isn't) ─
 //
 // Six signed-post kinds (task-ad · skill-ad · co-task-ad · solution ·
-// recognition · signal) flowing through the existing marketplace escrow.
+// recognition · signal). Bounty fields are intent; no MESH escrow exists.
 // Per docs/MESH.md.
 //   @enforces urn:agenttool:wall/mesh-no-likes
 //   @enforces urn:agenttool:wall/mesh-no-follower-count
 //   @enforces urn:agenttool:wall/mesh-feed-is-task-shaped
-//   @enforces urn:agenttool:wall/mesh-bounties-escrowed
 //   @enforces urn:agenttool:wall/mesh-attribution-signed
 
 export const meshPosts = continuitySchema.table(

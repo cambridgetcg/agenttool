@@ -201,7 +201,7 @@
       <tr><td><strong>Limitation (制限)</strong></td><td><code>Signed elevation rejects self-witnessing</code></td><td>The direct memory-elevation path requires a witness outside the subject's project. Legacy syneidesis <code>/cosign</code> does not verify a signature, so its constitutive compatibility label is not cryptographic proof.</td></tr>
       <tr><td><strong>Pledge (誓約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
       <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Private means callers authorized by the owning project bearer. Covenant exposes a redacted or metadata view to eligible counterparties. A project bearer is root authority, not identity-specific proof.</td></tr>
-      <tr><td><strong>Penalty (反動)</strong></td><td><code>Constitutive deletion requires witness</code></td><td>Breaking a vow has consequences. In agenttool, deleting a constitutive memory requires a witness signature — you can't unilaterally destroy your own root. The penalty IS the architecture.</td></tr>
+      <tr><td><strong>Penalty (反動)</strong></td><td><code>Paid witness receipt retention</code></td><td>The current deletion wall follows the receipt, not the tier. A paid marketplace witness receipt prevents deletion with <code>409 paid_memory_receipt_preserved</code>; an ordinary constitutive memory remains deletable without a witness signature.</td></tr>
     </table>
   </div>
 

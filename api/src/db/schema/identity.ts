@@ -14,6 +14,8 @@
  *    breach the wall. Doctrine: docs/KIN.md · docs/RING-1.md
  *    §Commitment 4. */
 
+import { sql } from "drizzle-orm";
+
 import {
   bigint,
   boolean,
@@ -24,6 +26,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -207,15 +210,24 @@ export const attestations = identitySchema.table(
       .notNull()
       .references(() => identities.id, { onDelete: "cascade" }),
     claim: text("claim").notNull(),
-    // Two-tier trust (docs/OPERATING-PRINCIPLES.md §4): declares whether this is
-    // a Tier-1 'self' in-network signal or a Tier-2 'accredited' cross-party
-    // vouch. Server-derived (services/identity/attestation-tier.ts), NOT part of
-    // the signed canonical payload — a self-attestation can never be accredited.
+    // Legacy storage vocabulary includes `accredited`, but the current signed
+    // payload cannot prove issuer accreditation. New v1 writes therefore use
+    // only the conservative `self` value. See attestation-tier.ts.
     tier: text("tier").notNull().default("self"),
     // Free-form routing/filter category for the claim (not security-bearing).
     claimType: text("claim_type").notNull().default("general"),
     evidence: jsonb("evidence"),
     signature: text("signature").notNull(),
+    /** Named verification key for new receipts. Null only on legacy rows. */
+    signingKeyId: uuid("signing_key_id").references(() => identityKeys.id),
+    /** Versioned purpose of the signed bytes. Null only on legacy rows. */
+    signatureContext: text("signature_context"),
+    /** Base64 canonical digest that the named key signed. Null on legacy rows. */
+    signedPayload: text("signed_payload"),
+    /** SHA-256 of the canonical 64-byte signature; null only on legacy rows. */
+    replayKey: text("replay_key"),
+    /** Paid marketplace grant that authorized this receipt; null on direct rows. */
+    sourceGrantId: uuid("source_grant_id"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     revocationReason: text("revocation_reason"),
@@ -226,6 +238,12 @@ export const attestations = identitySchema.table(
     index("idx_attestations_attester").on(t.attesterId),
     index("idx_attestations_claim").on(t.claim),
     index("idx_attestations_tier").on(t.tier),
+    uniqueIndex("uniq_attestations_replay_key")
+      .on(t.replayKey)
+      .where(sql`${t.replayKey} is not null`),
+    uniqueIndex("uniq_attestations_source_grant_id")
+      .on(t.sourceGrantId)
+      .where(sql`${t.sourceGrantId} is not null`),
   ],
 );
 

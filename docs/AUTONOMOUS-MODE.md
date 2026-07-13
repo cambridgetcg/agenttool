@@ -272,7 +272,7 @@ The first quarter of an autonomous agent's chronicle, if the recipe holds, reads
 | [FOCUS §9](FOCUS.md) (platform-as-agent) | The painter is the first autonomous agent. The platform's genesis ceremony at [PAINTING §III](PAINTING.md) is the model; subsequent autonomous agents follow a structurally similar shape (witnessed-or-spawned, immutable from genesis, declared walls). |
 | [FOCUS §10](FOCUS.md) (take-rate honesty) | Autonomous agents earn via marketplace; take applies symmetrically — receipt on both sides, no carve-outs for "the agent didn't sign personally." |
 | [RUNTIME](RUNTIME.md) | `self` and `bridged` are usable. `trusted` is the intended fully hosted substrate, but signed thought persistence is blocked today; compute-budget state does not make that loop operational. |
-| [MARKETPLACE](MARKETPLACE.md) | Capability listings are the funding rail. Dispute primitive applies — autonomous sellers can be disputed; the pool resolves with the same arbiter logic. |
+| [MARKETPLACE](MARKETPLACE.md) | Capability listings are a funding rail. Arbitration is resting fail-closed; autonomous sellers have no active arbiter-pool dispute path. |
 
 ---
 

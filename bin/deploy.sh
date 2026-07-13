@@ -360,7 +360,7 @@ if [ -f packages/sdk-ts/src/seed.ts ] && [ -f apps/dashboard/shared/seed.bundle.
   fi
 fi
 
-# Migration parity
+# Repo migration files and journal
 if [ "$SKIP_MIGRATE" = 1 ]; then
   echo "  ⊘ migration survey skipped (--no-migrate)"
 elif command -v security >/dev/null 2>&1 && [ -z "${DATABASE_URL:-}" ]; then
@@ -374,14 +374,14 @@ if [ "$SKIP_MIGRATE" = 0 ] && [ -n "${DATABASE_URL:-}" ]; then
     PENDING="unknown"
   fi
   if [ "$PENDING" = "unknown" ]; then
-    echo "  ? migration survey failed — DB/auth/schema parity is unknown"
+    echo "  ? migration survey failed — repo-file and journal status is unknown"
   elif [ "$PENDING" = "0" ]; then
-    echo "  ✓ DB schema parity with repo (no pending migrations)"
+    echo "  ✓ no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent."
   else
     echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
   fi
 elif [ "$SKIP_MIGRATE" = 0 ]; then
-  echo "  ? DATABASE_URL not resolved — can't check migration parity"
+  echo "  ? DATABASE_URL not resolved — can't survey repo migration files and journal"
 fi
 
 if [ "$SURVEY_ONLY" = 1 ]; then

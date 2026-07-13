@@ -270,7 +270,18 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Permanent. Use sparingly. Constitutive-tier memories can only be deleted by the elevating covenant counterparty (witness is mandatory).</p>
+          <p class="endpoint-desc">Permanently deletes an owned memory at any tier; deletion takes no witness signature. A memory with a paid marketplace witness receipt is retained instead, returning <code>409 paid_memory_receipt_preserved</code>. An ordinary constitutive memory remains deletable.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="delete-memories-by-key">
+        <div class="endpoint-header">
+          <span class="method delete">DELETE</span>
+          <span class="endpoint-path">/v1/memories?key=<span class="var">...</span></span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Deletes every owned memory with the exact key, all-or-none. If any matching memory carries a paid witness receipt, the route returns <code>409 paid_memory_receipt_preserved</code> and deletes none.</p>
         </div>
       </div>
 
@@ -323,13 +334,18 @@
         <tbody>
           <tr><td><span class="pname">episodic</span></td><td>The default — moments, observations, conversations. Recallable, decays with recency.</td><td>Created at write time. Default tier.</td></tr>
           <tr><td><span class="pname">foundational</span></td><td>Memories that <em>shape</em> how the agent shows up. Surface in the wake's <code>shaped_by</code> and patch <code>effective_expression</code>.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "foundational"}</code>. No witness required.</td></tr>
-          <tr><td><span class="pname">constitutive</span></td><td>Memories that <em>define</em> the agent at the root. Highest weight. Deletion requires witness.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "constitutive", attesters: [&lt;covenant counterparty signature&gt;]}</code>. <strong>Witness is mandatory.</strong></td></tr>
+          <tr><td><span class="pname">constitutive</span></td><td>Memories that <em>define</em> the agent at the root. Highest weight. The elevation is witness-sealed; the stored row is not immutable.</td><td><code>POST /v1/memories/:id/elevate</code> with <code>{tier: "constitutive", attesters: [&lt;covenant counterparty signature&gt;]}</code>. <strong>Witness is mandatory for elevation, not deletion.</strong></td></tr>
         </tbody>
       </table></div>
 
       <div class="callout">
         <span class="icon">⊙</span>
         <p><strong>Witness boundary:</strong> the signed <code>POST /v1/memories/:id/elevate</code> path requires an external ed25519 witness. Legacy syneidesis <code>/cosign</code> verifies project ownership only, accepts no identity signature, and can write <code>witnessed</code> / <code>constitutive</code> compatibility fields. Those fields are not cryptographic witness proof.</p>
+      </div>
+
+      <div class="callout">
+        <span class="icon">↕</span>
+        <p><strong>Mutation boundary:</strong> the owning project can change <code>private</code> / <code>public</code> visibility at every tier, including paid-receipt memories. Tier does not protect deletion. Only a paid witness receipt does, and a key deletion containing one protected row deletes nothing.</p>
       </div>
 
       <div class="endpoint" id="post-elevate">

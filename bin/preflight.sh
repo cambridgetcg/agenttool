@@ -115,8 +115,8 @@ case "$MODE" in
     ;;
   database)
     [ "$#" -eq 1 ] || die "database accepts no additional arguments"
-    require_bun
     [ -n "${DATABASE_URL:-}" ] || die "database mode requires DATABASE_URL"
+    require_bun
     unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
@@ -124,9 +124,9 @@ case "$MODE" in
     ;;
   database-quarantine)
     [ "$#" -eq 1 ] || die "database-quarantine accepts no additional arguments"
-    require_bun
     [ -n "${DATABASE_URL:-}" ] ||
       die "database-quarantine mode requires DATABASE_URL"
+    require_bun
     unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
@@ -142,9 +142,9 @@ case "$MODE" in
     ;;
   contracts)
     [ "$#" -eq 1 ] || die "contracts accepts no additional arguments"
-    require_bun
     [ "${RUN_CONTRACT:-0}" = "1" ] ||
       die "contracts mode requires RUN_CONTRACT=1"
+    require_bun
     if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
       die "contracts mode requires ANTHROPIC_API_KEY and/or OPENAI_API_KEY"
     fi
