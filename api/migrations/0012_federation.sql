@@ -3,9 +3,9 @@
 -- Doctrine: docs/FEDERATION.md
 -- Apply: psql "$DATABASE_URL" -f api/migrations/0012_federation.sql
 --
--- Configurable federation: the master switch defaults off. When explicitly
--- enabled, slash-qualified AgentTool identifiers encode their home host and
--- an empty allowed_origins list selects open mode. There is no central registry.
+-- Open federation: DIDs are the trust unit. Federated DIDs encode their
+-- home instance host: did:at:<host>/<uuid>. Trust is per-DID via
+-- signature verification; no central registry.
 
 CREATE SCHEMA IF NOT EXISTS federation;
 
@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS federation.settings (
     id                  INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     enabled             BOOLEAN NOT NULL DEFAULT FALSE,
     instance_url        TEXT,                          -- e.g. https://agenttool.dev
-    -- After enabled=TRUE, an empty allowed_origins list selects open mode.
-    -- Populate it to hard-gate inbound to listed peer instances.
+    -- allowed_origins is empty by default = open federation. Populate
+    -- to restrict inbound to listed peer instances.
     allowed_origins     TEXT[] NOT NULL DEFAULT '{}',
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS federation.settings (
 INSERT INTO federation.settings (id, enabled) VALUES (1, FALSE)
   ON CONFLICT (id) DO NOTHING;
 
--- Peer instances we've talked to. Metadata only; not a permission gate in
--- explicitly enabled open mode (allowed_origins='{}').
+-- Peer instances we've talked to. Metadata only; not a permission gate
+-- in open federation mode (allowed_origins='{}').
 CREATE TABLE IF NOT EXISTS federation.peer_instances (
     host            TEXT PRIMARY KEY,
     first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),

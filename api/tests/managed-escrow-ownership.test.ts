@@ -28,6 +28,11 @@ function functionSlice(body: string, start: string, end: string): string {
 
 describe("managed escrow ownership", () => {
   test("database triggers close the migration-to-deploy window", () => {
+    const writeLock = migration.indexOf("LOCK TABLE");
+    const backfill = migration.indexOf("UPDATE economy.escrows AS escrow");
+    expect(writeLock).toBeGreaterThanOrEqual(0);
+    expect(writeLock).toBeLessThan(backfill);
+    expect(migration).toContain("IN EXCLUSIVE MODE NOWAIT");
     expect(migration).toContain("economy.bind_managed_escrow_owner()");
     expect(migration).toContain("bind_attestation_grant_escrow_owner");
     expect(migration).toContain("bind_memory_witness_grant_escrow_owner");
@@ -88,6 +93,9 @@ describe("managed escrow ownership", () => {
     expect(migration).toContain("FROM marketplace.attestation_grants");
     expect(migration).toContain("FROM marketplace.memory_witness_grants");
     expect(migration).toContain("FROM marketplace.invocations");
+    expect(migration).toContain("listing.attester_wallet_id");
+    expect(migration).toContain("listing.witness_wallet_id");
+    expect(migration).toContain("listing.seller_wallet_id");
     expect(migration).toContain("VALIDATE CONSTRAINT escrows_managed_by_check");
     for (const indexName of [
       "uniq_attestation_grants_escrow_id",

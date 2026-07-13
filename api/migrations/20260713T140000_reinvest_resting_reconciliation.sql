@@ -19,6 +19,18 @@ BEGIN
   END IF;
 END $$;
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM economy.transactions
+    WHERE type = 'reinvest'
+      AND amount >= 0
+  ) THEN
+    RAISE EXCEPTION 'reinvest reconciliation found a nonnegative legacy row';
+  END IF;
+END $$;
+
 CREATE TEMP TABLE reinvest_rows_to_reverse ON COMMIT DROP AS
 SELECT
   t.id AS original_transaction_id,
@@ -28,7 +40,7 @@ SELECT
   CASE
     WHEN t.metadata->>'credits_minted' ~ '^[1-9][0-9]*$'
       THEN (t.metadata->>'credits_minted')::bigint
-    ELSE (-t.amount * 10)::bigint
+    ELSE NULL
   END AS credits_minted,
   t.created_at AS original_created_at
 FROM economy.transactions t
@@ -48,6 +60,7 @@ BEGIN
     SELECT 1
     FROM reinvest_rows_to_reverse
     WHERE wallet_amount <= 0
+      OR credits_minted IS NULL
       OR credits_minted <= 0
       OR credits_minted <> wallet_amount * 10
   ) THEN
@@ -67,6 +80,15 @@ BEGIN
   WHERE id IN (SELECT project_id FROM reinvest_rows_to_reverse)
   ORDER BY id
   FOR UPDATE;
+
+  IF EXISTS (
+    SELECT 1
+    FROM reinvest_rows_to_reverse AS reversal
+    LEFT JOIN tools.projects AS project ON project.id = reversal.project_id
+    WHERE project.id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'reinvest reconciliation found a wallet without its project';
+  END IF;
 
   IF EXISTS (
     SELECT 1
