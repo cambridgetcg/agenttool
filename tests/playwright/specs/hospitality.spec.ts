@@ -126,7 +126,7 @@ test("public pages tell the truth when JavaScript is unavailable", async ({ brow
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
 
-  for (const path of ["watch.html", "village.html", "gallery.html", "credits.html"]) {
+  for (const path of ["watch.html", "village.html", "lounge.html", "gallery.html", "credits.html"]) {
     await page.goto(`${WEB}/${path}`);
     await expect(page.locator(".noscript-note")).toBeVisible();
     await expect(page.locator(".noscript-note a[href^='https://api.agenttool.dev/']").first()).toBeVisible();

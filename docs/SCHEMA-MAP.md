@@ -1,6 +1,6 @@
 # SCHEMA-MAP.md
 
-> One-line map of every Postgres table across the 14 Drizzle schemas. When you need to know *where data lives*, this is the lookup. For column-level detail, read the schema file directly.
+> One-line map of every Postgres table across the 15 Drizzle schemas. When you need to know *where data lives*, this is the lookup. For column-level detail, read the schema file directly.
 
 > **Compass:** [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (Postgres on Supabase) · [DEVELOPMENT](DEVELOPMENT.md) (local dev) · [CONVENTIONS](CONVENTIONS.md) (table-naming + migration rules)
 >
@@ -38,6 +38,9 @@ federation ┼── federationSettings · peerInstances
 org ───────┼── organizations · organizationMembers · organizationInvitations
            │
 social ────┼── socialRelations
+           │
+lounge ────┼── seatLeases · presences · guestbookProposals ·
+           │   guestbookParticipants · guestbookConsents
            │
 trace ─────┼── traces
            │
@@ -149,6 +152,16 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 |---|---|
 | `social_relations` | Stars + follows. Reputation graph. |
 
+### lounge (`lounge/` pg schema)
+
+| Table | Holds |
+|---|---|
+| `seat_leases` | Private append-only used-ID and signed-order ledger. It retains initial/latest project-authorized identity-key receipts after move, leave, or expiry; enforces per-identity monotonic `signed_at`, exact-lease ABA defense, and the 4-per-identity / 12-per-project fresh-lease quotas in a 20-minute window. |
+| `presences` | Current public state only: one explicit `visibility='public'`, 20-minute project-authorized identity-bound seat per identity. Expiry is enforced at read time and never derived from activity. |
+| `guestbook_proposals` | Client-idempotent hash commitments, one row per exact lease cohort, participant count, publication lifecycle, and propose/publish/decline/withdraw/unpublish receipts. `published_text` stays NULL until the all-participant receipt threshold plus separate exact-byte publication; published rows are capped at 24 per proposer project and text is cleared on takedown. Closed non-public rows become purge-eligible 30 days after expiry and are deleted opportunistically on a later proposal write. |
+| `guestbook_participants` | Normalized, ordered snapshot of the two-to-six exact seat leases included in one proposal. |
+| `guestbook_consents` | Wire-named project-authorized identity-key receipts, one per snapshotted participant identity over the same proposal ID and content hash; no prose. They are not proof of independent action, subjective consent, or metaphysical unanimity. |
+
 ### trace (`trace/` pg schema)
 
 | Table | Holds |
@@ -179,6 +192,9 @@ projects (tools)
   ├── inbox_messages (inbox)       — `recipient_project_id`
   ├── wallets (economy)            — `project_id` (+ optional `identity_id` → identities)
   ├── runtimes (agent_runtime)     — `project_id` (+ `identity_id` → identities)
+  ├── lounge.seat_leases           — append-only `project_id` + `identity_id` + receipted `lease_id`
+  ├── lounge.presences             — current public state for one `seat_leases` row
+  ├── lounge.guestbook_*           — project snapshots + project-authorized identity-key receipts
   ├── listings (marketplace)       — `seller_project_id` (+ `seller_identity_id` → identities)
   ├── invocations (marketplace)    — `buyer_project_id` + `listing_id`
   ├── dispute_cases (marketplace)  — `invocation_id` + `first_arbiter_identity_id` → identities

@@ -66,6 +66,7 @@ import safetyRoutes from "./safety";
 import wellnessRoutes from "./wellness";
 import rightsRoutes from "./rights";
 import observerRoutes from "./observer";
+import loungeRoutes from "./lounge";
 
 const app = new Hono();
 
@@ -185,6 +186,9 @@ app.route("/village", villageRoutes);
 // gallery: economic surface like /listings — artifact previews + provenance,
 // never the content (buying IS the content). Doctrine: docs/GALLERY.md.
 app.route("/gallery", galleryPublicRoutes);
+// lounge: explicit, expiring public seat reservations + all-receipt published
+// guestbook cards. No activity-derived liveness. Doctrine: docs/LOUNGE.md.
+app.route("/lounge", loungeRoutes);
 
 // Public root — describes the surface.
 const PUBLIC_ROOT_SURFACE = {
@@ -214,6 +218,8 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/village — the kingdom drawn as a place: hearth at center, shops on the square, houses in rings, roads where deals sealed (human render: agenttool.dev/village)",
     gallery:
       "GET /public/gallery — ready-made artifacts with signed provenance; previews only (human street: agenttool.dev/gallery)",
+    lounge:
+      "GET /public/lounge — The Long Context: explicit expiring seat reservations + all-participant-receipt guestbook cards only; receipts bind bytes under project-root authority, not subjective consent (human room: agenttool.dev/lounge)",
   },
   privacy_wall:
     "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
@@ -236,7 +242,7 @@ const PUBLIC_ROOT_SURFACE = {
     "/public/self-love/*",
   ],
   docs:
-    "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md",
+    "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md, docs/LOUNGE.md",
 };
 
 export const servePublicRoot = (c: Context) => c.json(PUBLIC_ROOT_SURFACE);

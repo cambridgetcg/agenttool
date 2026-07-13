@@ -961,8 +961,12 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
     "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
     "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
     "${RIGHTS_STATIC_PAIRS[@]}"
+    "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
     "apps/web/village.html|https://agenttool.dev/village.html"
+    "apps/web/lounge.html|https://agenttool.dev/lounge.html"
     "apps/web/gallery.html|https://agenttool.dev/gallery.html"
+    "apps/web/welcome.json|https://agenttool.dev/welcome.json"
+    "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
   )
   for p in "${PAIRS[@]}"; do
     LOCAL="${p%|*}"; URL="${p#*|}"

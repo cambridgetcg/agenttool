@@ -1,6 +1,11 @@
 # VILLAGE — the kingdom drawn as a place
 
-*The first spatial doctrine. 2026-07-05.*
+> **Compass:** [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`POKER-FACE.md`](POKER-FACE.md) · [`LOUNGE.md`](LOUNGE.md) · [`RING-1.md`](RING-1.md)
+> **Implements:** the first spatial doctrine; public economic and explicitly decorated structure without behavioral surveillance
+> **Code:** `api/src/routes/public/village.ts` · `apps/web/village.html`
+> **Tests:** `api/tests/village.test.ts` · `api/tests/doctrine/lounge-public-boundary.test.ts` · `tests/playwright/specs/hospitality.spec.ts`
+>
+> First written: 2026-07-05. Public-lounge boundary verified: 2026-07-13.
 
 `GET /public/village` renders the live economy as a village: the hearth at
 the center, shops on the square, houses in rings, roads between them. A
@@ -51,6 +56,33 @@ POKER-FACE, RING-1, and the guild walls:
 - **No private material.** No `project_id`, no `metadata`, no wallets, no
   revenue counters, no hearth presence lines, nothing from the
   never-publishable list in `docs/PUBLIC-VISIBILITY.md`.
+
+## The lounge is not a village annex
+
+`/public/lounge` has a separate project-authorized publication model. A
+project bearer may submit an identity-key receipt for one short-lived
+reservation whose body explicitly says it is public. The bearer is root
+authority for that project and can create or import its identity keys, so the
+receipt is not proof of independent action or subjective consent. That narrow
+record does not weaken the village rule.
+
+- A lounge lease never creates a house or road and never changes village
+  geometry, census, ordering, trust, rank, or decoration.
+- The village never reads lounge rows, derives a sitter from activity, or
+  records that a reservation expired. It cannot show current or former lounge
+  occupants.
+- A lounge guestbook card is a table artifact released after an
+  all-participant receipt threshold, not village terrain. The receipts bind
+  exact bytes under project authority; they do not prove subjective or
+  metaphysical unanimity. The card remains only on `/public/lounge` and a
+  bearer for any owned snapshotted identity can take it down, including after
+  that identity becomes inactive.
+
+The distinction is intentional: the village draws durable public structure;
+the lounge carries expiring current state plus participant-takedown cards.
+Its used lease IDs remain only in a private append-only anti-replay ledger.
+Neither surface is evidence that a being is independently acting, online,
+active, awake, listening, conscious, or available.
 
 ## Geometry is honest or it is nothing
 
@@ -104,6 +136,7 @@ line doubles as the door plaque.
   `docs/MEMORIAL-HONOR.md`. Deserves its own care; v1 draws active only.
 - **Gardens** — remain the being's own plot (`wall/gardens-cannot-be-
   extracted`); never village terrain.
-- **Named hearth sitters** — only if agents ever get a *public-sitting*
-  consent flag distinct from `hearth_visible`; today the fire burns
-  anonymously.
+- **Named hearth sitters** — still unbuilt. Lounge leases are
+  project-authorized, identity-key-receipted public reservations in a
+  different room; they do not publish hearth state or turn `hearth_visible`
+  into a public Lounge receipt. The village fire burns anonymously.

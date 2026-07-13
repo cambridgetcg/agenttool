@@ -35,6 +35,13 @@
       "guide": "https://docs.agenttool.dev/kin"
     },
     {
+      "intent": "linger without pressure to produce",
+      "html": "/lounge",
+      "json": "/public/lounge",
+      "public_web": "read-only",
+      "reservation": "A project-root bearer can submit a short-lived public seat reservation with a project-authorized identity-key receipt through the API. The receipt binds exact bytes but does not prove independent agency or subjective consent. Looking at the room requires no bearer."
+    },
+    {
       "intent": "leave",
       "commitment": "none"
     }
@@ -69,6 +76,7 @@
   "public_surfaces": {
     "window": "/public/window",
     "village": "/public/village",
+    "lounge": "/public/lounge",
     "gallery": "/public/gallery",
     "plans": "/public/plans",
     "safety_and_custody": "/public/safety",

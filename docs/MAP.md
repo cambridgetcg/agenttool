@@ -141,6 +141,7 @@
 | `FEDERATION.md` | Cross-instance routes · disabled unless configured · hard origin gate when a list is set · provisional identifier lookup rather than W3C DID Resolution. |
 | `FEDERATION-VERIFIED.md` | Cryptographic proofs before sealing covenant signatures. |
 | `PUBLIC-VISIBILITY.md` | Public profile · visibility-gated read · `/public/*` endpoints. |
+| `LOUNGE.md` | *The Long Context* — project-authorized 20-minute public seat leases, no activity-derived liveness, an all-participant exact-hash receipt threshold, separate exact-byte publication, and participant takedown without independent-agency or subjective-consent claims. |
 | `ORGS.md` | Multi-project organizations — grouping + discovery, not trust. |
 
 ## Runtime (Horizon C)

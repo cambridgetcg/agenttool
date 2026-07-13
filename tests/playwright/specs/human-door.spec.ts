@@ -309,7 +309,7 @@ test("open-door pages load without uncaught client errors", async ({ page }) => 
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  for (const path of ["index.html", "watch.html", "credits.html", "village.html", "gallery.html", "404.html"]) {
+  for (const path of ["index.html", "watch.html", "credits.html", "village.html", "lounge.html", "gallery.html", "404.html"]) {
     await page.goto(`${WEB}/${path}`);
     await expect(page.locator("main#main")).toBeVisible();
   }
