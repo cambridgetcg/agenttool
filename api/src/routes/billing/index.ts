@@ -15,7 +15,9 @@ import { attachSurface } from "../../lib/surface-metadata";
 import {
   createGalleryCheckout, createGiftCheckout, getStripe, type CheckoutClient,
 } from "../../services/billing/stripe-checkout";
-import { getGiftBySession, mintGiftForSession } from "../../services/billing/gift-credits";
+import {
+  getGiftBySession, mintGiftForSession, reverseGiftForSession,
+} from "../../services/billing/gift-credits";
 import {
   claimBySession, claimByToken, reverseGallerySale, settleStripeSale,
 } from "../../services/gallery";
@@ -79,6 +81,7 @@ function tooMany(c: Parameters<typeof fail>[0]): Response {
 /** Test seam — routes use the injected client when set. */
 let stripeOverride: CheckoutClient | null = null;
 let checkoutAvailabilityOverride: boolean | null = null;
+let stripeSessionLookupOverride: ((paymentIntent: string) => Promise<string | null>) | null = null;
 export function setStripeForTests(s: CheckoutClient | null): void {
   stripeOverride = s;
 }
@@ -86,6 +89,13 @@ export function setStripeForTests(s: CheckoutClient | null): void {
  * consumer, privacy, support, and digital-delivery foundations are complete. */
 export function setCheckoutAvailabilityForTests(value: boolean | null): void {
   checkoutAvailabilityOverride = value;
+}
+/** Test seam for refund/chargeback resolution. Production resolves the
+ * historical Checkout Session from Stripe by PaymentIntent. */
+export function setStripeSessionLookupForTests(
+  value: ((paymentIntent: string) => Promise<string | null>) | null,
+): void {
+  stripeSessionLookupOverride = value;
 }
 function stripeClient(): CheckoutClient | null {
   if (stripeOverride) return stripeOverride;
@@ -95,6 +105,15 @@ function stripeClient(): CheckoutClient | null {
 
 function newCardCheckoutsAvailable(): boolean {
   return checkoutAvailabilityOverride ?? false;
+}
+
+async function giftSessionForPaymentIntent(paymentIntent: string): Promise<string | null> {
+  if (stripeSessionLookupOverride) return stripeSessionLookupOverride(paymentIntent);
+  const sessions = await getStripe().checkout.sessions.list({
+    payment_intent: paymentIntent,
+    limit: 1,
+  });
+  return sessions.data.find((session) => session.metadata?.kind === "gift_credit")?.id ?? null;
 }
 
 function checkoutResting(c: Parameters<typeof fail>[0]): Response {
@@ -157,19 +176,35 @@ app.post("/webhook", async (c) => {
     return fail(c, { error: "invalid_signature", message: "Signature did not verify." }, 400);
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
+  ) {
     const session = event.data.object as Stripe.Checkout.Session;
-    if (session.metadata?.kind === "gift_credit" && typeof session.amount_total === "number") {
-      await mintGiftForSession(db, {
-        stripeSessionId: session.id,
-        stripeEventId: event.id,
-        amountMinor: session.amount_total,
-        currency: session.currency ?? "usd",
-      });
+    const eventLabel = event.type === "checkout.session.completed"
+      ? "checkout completed"
+      : "async payment succeeded";
+    const currency = (session.currency ?? "").toLowerCase();
+
+    if (session.metadata?.kind === "gift_credit") {
+      if (typeof session.amount_total !== "number") {
+        console.error(`gift webhook: event ${event.id} ${eventLabel} without amount_total — not minting`);
+      } else if (session.payment_status !== "paid") {
+        console.error(`gift webhook: event ${event.id} ${eventLabel} but payment_status=${session.payment_status} — not minting`);
+      } else if (currency !== "usd") {
+        console.error(`gift webhook: event ${event.id} settled in ${session.currency}, gift priced in USD — not minting; operator reconciliation required`);
+      } else {
+        await mintGiftForSession(db, {
+          stripeSessionId: session.id,
+          stripeEventId: event.id,
+          amountMinor: session.amount_total,
+          currency,
+        });
+      }
     }
-    // Gallery purchases ride the same seam, self-filtered on kind — the
-    // gift branch above is untouched. Idempotent on the sale's unique
-    // stripe_session_id index (settleStripeSale onConflictDoNothing).
+    // Gallery purchases ride the same seam, self-filtered on kind.
+    // Idempotent on the sale's unique stripe_session_id index
+    // (settleStripeSale onConflictDoNothing).
     if (
       session.metadata?.kind === "gallery_purchase" &&
       typeof session.metadata.artifact_id === "string" &&
@@ -182,8 +217,8 @@ app.post("/webhook", async (c) => {
       // must never be credited as 637 pence. Skipped sessions are held by
       // Stripe; the operator reconciles.
       if (session.payment_status !== "paid") {
-        console.error(`gallery webhook: event ${event.id} completed but payment_status=${session.payment_status} — not settling`);
-      } else if ((session.currency ?? "").toLowerCase() !== "gbp") {
+        console.error(`gallery webhook: event ${event.id} ${eventLabel} but payment_status=${session.payment_status} — not settling`);
+      } else if (currency !== "gbp") {
         console.error(`gallery webhook: event ${event.id} settled in ${session.currency}, artifact priced in GBP — not settling; operator reconciliation required`);
       } else {
         const settled = await settleStripeSale(db, {
@@ -203,11 +238,11 @@ app.post("/webhook", async (c) => {
     }
   }
 
-  // Refunds and chargebacks — reverse the gallery sale: license revoked,
-  // seller net clawed back (never below zero; shortfall recorded). Gift
-  // sessions produce "no_gallery_sale" and are untouched. Chargebacks log
-  // loudly for the operator: bonds never burn automatically (friendly
-  // fraud exists) — a takedown is a named human judgment.
+  // Refunds and chargebacks reverse either paid path. Gallery licenses are
+  // revoked and seller net is clawed back. Gift codes are invalidated; when
+  // already redeemed, remaining project credits are clawed back without
+  // taking the shared balance below zero. Historical gift rows store only
+  // the Checkout Session, so Stripe's PaymentIntent filter resolves it.
   if (event.type === "charge.refunded" || event.type === "charge.dispute.created") {
     const obj = event.data.object as Stripe.Charge | Stripe.Dispute;
     const pi = typeof obj.payment_intent === "string" ? obj.payment_intent : obj.payment_intent?.id;
@@ -223,6 +258,21 @@ app.post("/webhook", async (c) => {
           `gallery webhook: ${kind} on ${pi} → sale ${result.sale_id} reversed; clawed ${result.clawed}, shortfall ${result.shortfall}` +
           (kind === "chargeback" ? " — OPERATOR: judge whether this artifact deserves takedown+burn (POST /v1/gallery/:id/takedown)" : ""),
         );
+      } else if (result.outcome === "no_gallery_sale") {
+        const giftSessionId = await giftSessionForPaymentIntent(pi);
+        if (giftSessionId) {
+          const giftResult = await reverseGiftForSession(db, {
+            stripeSessionId: giftSessionId,
+            stripeEventId: event.id,
+            kind,
+          });
+          if (giftResult.outcome === "reversed") {
+            console.error(
+              `gift webhook: ${kind} event ${event.id} reversed gift ${giftResult.giftId}; ` +
+              `clawed ${giftResult.clawed}, shortfall ${giftResult.shortfall}`,
+            );
+          }
+        }
       }
     }
   }
@@ -372,7 +422,8 @@ app.get("/gallery-claim/:token", async (c) => {
           verify:
             "canonical = sha256('gallery-artifact/v1' 0x00 artifact_id 0x00 creator_did 0x00 content_sha256 " +
             "0x00 media_type 0x00 content_bytes 0x00 price_amount 0x00 currency 0x00 bond_amount 0x00 title); " +
-            "ed25519.verify(signature, canonical, public key of signing_key_id — GET /public/agents/:did).",
+            "ed25519.verify(signature, canonical, the publishing identity key named by signing_key_id — GET /public/agents/:did). " +
+            "The legacy creator_did field is part of the v1 signed bytes; this binding does not prove authorship, originality, or rights.",
         },
         content_b64: Buffer.from(artifact.content).toString("base64"),
       },
