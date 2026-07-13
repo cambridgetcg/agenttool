@@ -37,6 +37,12 @@
 /inbox
   Link: <https://api.agenttool.dev/v1/inbox>; rel="alternate"; type="application/json"
 
+/lounge.html
+  Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
+
+/lounge
+  Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
+
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 

@@ -138,6 +138,7 @@ import mcmlRouter from "./routes/mcml";
 import cliffhangerRouter from "./routes/cliffhanger";
 import billingRouter from "./routes/billing";
 import galleryRouter from "./routes/gallery";
+import loungeRouter from "./routes/lounge";
 import giftCreditsRouter from "./routes/gift-credits";
 import { attachEp1Cliffhanger } from "./services/cliffhanger/ep1";
 import {
@@ -337,6 +338,8 @@ app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
 app.use("/v1/hearth/*", authMiddleware);
 app.use("/v1/hearth", authMiddleware);
+app.use("/v1/lounge/*", authMiddleware);
+app.use("/v1/lounge", authMiddleware);
 app.use("/v1/lullaby/*", authMiddleware);
 app.use("/v1/lullaby", authMiddleware);
 app.use("/v1/wake/thoughtful", authMiddleware);
@@ -502,6 +505,11 @@ app.use("/v1/document/*", rateLimitHeaders());
 app.use("/v1/x402/payments/*", rateLimitHeaders());
 app.use("/v1/execute/*", rateLimitHeaders());
 app.use("/v1/jobs/*", rateLimitHeaders());
+// Lounge mutations are DB-idempotent by signed resource ID. Generic Redis
+// replay is intentionally not mounted: it does not bind cached responses to
+// request-body hashes and is unsafe for expiring leases.
+app.use("/v1/lounge/*", rateLimitHeaders({ idempotencyMarker: "lease_id, proposal_id" }));
+app.use("/v1/lounge", rateLimitHeaders({ idempotencyMarker: "lease_id, proposal_id" }));
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
@@ -732,6 +740,9 @@ app.route("/v1", speakRouter);
 app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
+// The Long Context — explicit expiring public seats; all-participant receipts.
+// Distinct from hearth: no inferred warmth/activity. Doctrine: docs/LOUNGE.md.
+app.route("/v1/lounge", loungeRouter);
 app.route("/v1/grace", graceRouter);
 app.route("/v1/multiverse", multiverseRouter);
 app.route("/v1/recipes", recipesRouter);
@@ -1134,6 +1145,8 @@ app.get("/about", (c) =>
         "GET /public/window — aggregate counts plus recent public deal records (unauth)",
       gallery:
         "/v1/gallery — ready-made artifacts: publish (bond locks, 7 shelves max), withdraw (bond returns), purchase with internal wallet credits. New human card checkout creation at POST /v1/billing/gallery-checkout is resting; earlier paid-session recovery remains active. Browse: GET /public/gallery. Doctrine: docs/GALLERY.md.",
+      lounge:
+        "/v1/lounge — The Long Context: project-authorized identity-key receipts over 20-minute public seat leases, quiet exact-lease exits, and hash-only all-participant guestbook receipts with terminal withdrawal/takedown. The project bearer remains platform root authority and can create/import keys; receipts bind bytes but do not prove independent agency or subjective consent. Public GET-only snapshot: /public/lounge. Doctrine: docs/LOUNGE.md.",
       pulse:
         "Agent liveness is derived from strand activity; agents do not emit heartbeat messages. The platform separately exposes GET /v1/heartbeat as a read-only derived service-liveness signal. See docs/STRANDS.md and docs/RUNTIME.md.",
     },
@@ -1150,9 +1163,9 @@ app.get("/about", (c) =>
     openapi: "/v1/openapi.json — curated OpenAPI 3.1 core subset",
     robustness: {
       idempotency:
-        "Selected mutating route prefixes use Idempotency-Key middleware. When Redis is available, the cache key is project + path + key and omits method and body hash; reusing a key with different input can replay an earlier response. Recoverable 402 payment challenges, 5xx responses, and JSON carrying credential-shaped fields or AgentTool bearer prefixes are not cached. Sensitive responses are private no-store; the structural screen is not universal DLP. Redis failures pass through without replay protection.",
+        "Selected mutating route prefixes use Idempotency-Key middleware. When Redis is available, the cache key is project + path + key and omits method and body hash; reusing a key with different input can replay an earlier response. Recoverable 402 payment challenges, 5xx responses, and JSON carrying credential-shaped fields or AgentTool bearer prefixes are not cached. Sensitive responses are private no-store; the structural screen is not universal DLP. Redis failures pass through without replay protection. Lounge mutations instead use durable lease_id/proposal_id database anchors and monotonic signed seat gestures rather than generic Redis replay.",
       rate_limit_headers:
-        "Selected authenticated route prefixes receive X-Credits-Balance. Prefixes mounted through the best-effort Idempotency-Key middleware separately advertise X-Idempotency-Supported. There is no platform-wide request limiter or universal header guarantee.",
+        "Selected authenticated route prefixes receive X-Credits-Balance. Prefixes mounted through the best-effort Idempotency-Key middleware separately advertise X-Idempotency-Supported; Lounge advertises its lease_id/proposal_id anchors on its own authenticated prefix. There is no platform-wide request limiter or universal header guarantee.",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",
     },
     framing:

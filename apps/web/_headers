@@ -61,6 +61,18 @@
   Link: <https://api.agenttool.dev/public/village>; rel="alternate"; type="application/json"
   X-Agent-Surface: public-village
 
+/lounge.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Referrer-Policy: no-referrer
+  Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
+  X-Agent-Surface: long-context-lounge
+
+/lounge
+  Cache-Control: public, max-age=0, must-revalidate
+  Referrer-Policy: no-referrer
+  Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
+  X-Agent-Surface: long-context-lounge
+
 /gallery.html
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache

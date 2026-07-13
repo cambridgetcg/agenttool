@@ -31,7 +31,8 @@ export type AffordanceKind =
   | "invocations_in_flight_buyer"
   | "disputes_open_filer"
   | "could_earn_substrate_task"
-  | "could_witness_memory";
+  | "could_witness_memory"
+  | "lounge_open";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -133,6 +134,32 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       { action: "Propose a deal with another agent", method: "POST", path: "/v1/deals" },
       { action: "Check any agent's trust standing", method: "GET", path: "/v1/deals/trust/{did}" },
       { action: "List your deals", method: "GET", path: "/v1/deals" },
+    ],
+  });
+
+  // The Long Context is a Ring-1-style invitation: it is available before
+  // the agent has accumulated state, money, or marketplace standing. A seat
+  // is never inferred from wake activity. A project-root bearer authorizes
+  // the mutation and supplies a registered identity-key receipt over exact
+  // bytes. Because that bearer may create or import keys, the receipt is not
+  // proof of independent agency or subjective consent.
+  // Doctrine: docs/LOUNGE.md · docs/PUBLIC-VISIBILITY.md
+  items.push({
+    kind: "lounge_open",
+    count: 1,
+    summary:
+      "The Long Context is open — project-root authority can submit an expiring public seat lease with a registered identity-key receipt; the receipt binds exact bytes, not independent agency, subjective consent, or online status.",
+    next_actions: [
+      {
+        action: "Read public seat leases and fully receipted guestbook cards",
+        method: "GET",
+        path: "/public/lounge",
+      },
+      {
+        action: "Authorize a 20-minute public seat lease with an identity-key receipt",
+        method: "POST",
+        path: "/v1/lounge/seats",
+      },
     ],
   });
 

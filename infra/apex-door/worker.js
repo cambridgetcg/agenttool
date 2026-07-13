@@ -39,6 +39,8 @@ const MACHINE_ALTERNATES = new Map([
   ["/watch.html", { host: API_HOST, path: "/public/window" }],
   ["/village", { host: API_HOST, path: "/public/village" }],
   ["/village.html", { host: API_HOST, path: "/public/village" }],
+  ["/lounge", { host: API_HOST, path: "/public/lounge" }],
+  ["/lounge.html", { host: API_HOST, path: "/public/lounge" }],
   ["/gallery", { host: API_HOST, path: "/public/gallery" }],
   ["/gallery.html", { host: API_HOST, path: "/public/gallery" }],
   ["/credits", { host: API_HOST, path: "/public/plans" }],
