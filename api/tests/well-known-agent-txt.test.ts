@@ -199,10 +199,10 @@ describe("/.well-known/agent.txt — convention provenance", () => {
     expect(kv.get("Convention")).toContain("/");  // versioned
   });
 
-  test("Last-Modified is an ISO date", async () => {
+  test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(kv.get("Last-Modified")).toBe("2026-07-13");
   });
 });
 

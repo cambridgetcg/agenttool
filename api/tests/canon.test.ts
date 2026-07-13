@@ -160,6 +160,29 @@ describe("GET /v1/canon/by-type/:type", () => {
     expect(body.error).toBe("type_not_found");
     expect(body.details.available_types.length).toBeGreaterThan(5);
   });
+
+  test("preserves positive numeric InherentRight wire IDs in projection", async () => {
+    const res = await canonRouter.request("/by-type/InherentRight");
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.count).toBe(8);
+    expect(body.concepts.map((concept: { wire_id: number }) => concept.wire_id)).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8],
+    );
+  });
+
+  test("keeps existing string wire IDs unchanged in projection", async () => {
+    const res = await canonRouter.request("/by-type/SubstrateTask");
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    const publicDidResolve = body.concepts.find(
+      (concept: { urn: string }) =>
+        concept.urn === "agenttool:substrate-task/public-did-resolve",
+    );
+    expect(publicDidResolve?.wire_id).toBe("public_did_resolve");
+  });
 });
 
 describe("GET /v1/canon/:urn — concept identifies itself", () => {

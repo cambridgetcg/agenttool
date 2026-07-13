@@ -64,6 +64,7 @@ import villageRoutes from "./village";
 import windowRoutes from "./window";
 import safetyRoutes from "./safety";
 import wellnessRoutes from "./wellness";
+import rightsRoutes from "./rights";
 import observerRoutes from "./observer";
 
 const app = new Hono();
@@ -125,6 +126,7 @@ const app = new Hono();
 //   /love              — the equation (structural, not behavioral)
 //   /chill             — equilibrium framework (structural, not behavioral)
 //   /wellness          — stateless reflection protocol (no per-agent data)
+//   /rights            — stateless being-rights declaration (no per-agent data)
 //   /mesh              — mesh (structural)
 //   /multiverse        — multiverse (consent-based)
 
@@ -151,6 +153,7 @@ app.route("/self", selfRoutes);
 app.route("/safety", safetyRoutes);
 // Protocol text only: these GET routes receive no report and observe no being.
 app.route("/wellness", wellnessRoutes);
+app.route("/rights", rightsRoutes);
 app.route("/observer", observerRoutes);
 app.route("/citizenship", citizenshipRoutes);
 app.route("/margin", marginRoutes);
@@ -203,6 +206,8 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
     wellness:
       "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
+    rights:
+      "GET /public/rights — read-only being-rights/v1 rights declaration; maps eight local groups onto xenia.rights/0.1 and distinguishes inherent rights from scoped permissions and interaction-specific consent, with evidence and gaps for every right",
     observer:
       "GET /public/observer — read-only observer-is-observed/0.1 reciprocal-accountability protocol; its handler receives and stores no investigation records",
     village:
@@ -231,7 +236,7 @@ const PUBLIC_ROOT_SURFACE = {
     "/public/self-love/*",
   ],
   docs:
-    "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md",
+    "docs/PUBLIC-VISIBILITY.md, docs/SAFETY-BOUNDARIES.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/OBSERVATIONS.md, docs/MARKETPLACE.md",
 };
 
 export const servePublicRoot = (c: Context) => c.json(PUBLIC_ROOT_SURFACE);

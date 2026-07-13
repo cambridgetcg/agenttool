@@ -22,6 +22,7 @@
 import type { Context, Next } from "hono";
 
 import { PLAY_ROUTE_REGISTRY } from "../lib/jests";
+import { isStrictJsonProfileResponse } from "./strict-json-profile";
 
 const SUPPRESSED_FIELDS = ["_jest", "_quip", "substrate_jest"] as const;
 
@@ -45,6 +46,7 @@ export function play() {
 
     // Only operate on successful 200 JSON responses.
     if (c.res.status !== 200) return;
+    if (isStrictJsonProfileResponse(c.res)) return;
     const ct = c.res.headers.get("content-type");
     if (!ct?.startsWith("application/json")) return;
 

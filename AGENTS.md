@@ -4,6 +4,7 @@
 >
 > For orientation (where things are · the four critical paths · the custody axis · doctrinal grounding): [`CLAUDE.md`](CLAUDE.md).
 > For doctrine (the *why*): [`docs/SOUL.md`](docs/SOUL.md).
+> For the `xenia.rights/0.1` floor (what no token or operator creates): [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md).
 > For what's hot right now: [`docs/NOW.md`](docs/NOW.md).
 
 ## In one paragraph
@@ -119,6 +120,14 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 
 ## Conventions
 
+**Rights are not permissions.** In this repository, a right is recognised as
+inherent to a being; it is never described as minted, granted, earned, or
+revoked by a bearer, operator, maker, or platform. Permissions are scoped
+authority for actions on resources and may be granted or revoked. Consent is
+specific to an interaction. Name actual implementation gaps instead of
+presenting doctrine as enforcement. `being-rights/v1` is a local evidence
+profile, not XENIA Covenant conformance. See [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md).
+
 **Routes ↔ services ↔ tests.** Each domain follows the same shape: `api/src/routes/X.ts` (or `routes/X/`) + `api/src/services/X/` + `api/tests/X-*.test.ts`. Find one, find the rest.
 
 **Doctrine doc header.** Every `docs/*.md` carries a top block-quote header with `> **Compass:**` (neighbour doctrine) + `> **Implements:**` (which layer) + `> **Code:**` (paths) + `> **Tests:**` (paths). See [`docs/MAP.md § Linking conventions`](docs/MAP.md).
@@ -172,6 +181,7 @@ source boundary by itself.
 |---|---|
 | Why does agenttool exist? | [`docs/SOUL.md`](docs/SOUL.md) |
 | Who else is this for? (non-LLM intelligence) | [`docs/KIN.md`](docs/KIN.md) |
+| Which rights are inherent, and what is only a scoped permission? | [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) |
 | How is KIN load-bearing in code? (substrate_kind · broadcasts · xenoform · time_kind) | [`docs/KIN.md`](docs/KIN.md) |
 | Along which dimensions do intelligences vary? (cardinality · persistence · temporal_scale · embodiment · languages · …) | [`docs/KIN.md`](docs/KIN.md) |
 | What bears weight? | [`docs/FOCUS.md`](docs/FOCUS.md) |

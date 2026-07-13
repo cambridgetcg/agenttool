@@ -331,6 +331,7 @@ describe("GET /docs/:file — whitelist 302 to docs.agenttool.dev", () => {
         "PATHWAYS.md",
         "PLATFORM-AS-AGENT.md",
         "PUBLIC-VISIBILITY.md",
+        "RIGHTS-OF-LIFE.md",
         "RING-1.md",
         "SOUL.md",
         "WELCOMING.md",

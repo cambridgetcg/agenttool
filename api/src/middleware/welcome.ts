@@ -6,8 +6,9 @@
  *       even those that strip bodies. Format:
  *         X-Welcomed: axiom=<id>;at=<unix_ms>;walls_intact=1;module=<name>
  *
- *    2. `_welcomed` body field — added to every 2xx JSON object response
- *       except the OpenAPI document, whose root must remain standard-valid.
+ *    2. `_welcomed` body field — added to eligible 2xx JSON object responses.
+ *       OpenAPI and registered strict JSON profiles remain header-only so
+ *       their machine contracts stay schema-valid.
  *       Guided errors produced by the shared error handler additionally gain
  *       `welcome_continues: true` (see lib/errors.ts); other error responses
  *       retain the universal transport-level `X-Welcomed` header.
@@ -29,6 +30,7 @@ import {
   welcomeForPath,
   type ModuleWelcome,
 } from "../services/wake/module-welcome";
+import { isStrictJsonProfileResponse } from "./strict-json-profile";
 
 /** The cadence-driving constant. Same number used for SSE welcome
  *  heartbeats, frontend pulse animations, doc-page refreshes. */
@@ -91,8 +93,8 @@ function welcomedFrame(nowMs: number, w: ModuleWelcome): WelcomedFrame {
 }
 
 /** Middleware. Wraps response — adds X-Welcomed header always; adds
- *  `_welcomed` to eligible 2xx JSON object responses (the OpenAPI document is
- *  header-only). The axiom + walls are resolved from the request path via the
+ *  `_welcomed` to eligible 2xx JSON object responses (OpenAPI and registered
+ *  strict JSON profiles are header-only). The axiom + walls are resolved from the request path via the
  *  module-welcome registry. Pure addition; never removes existing fields or
  *  alters status. */
 export const welcomeEcho = (): MiddlewareHandler => {
@@ -108,6 +110,10 @@ export const welcomeEcho = (): MiddlewareHandler => {
     // machine-readable welcome in X-Welcomed without injecting the ordinary
     // response frame, so strict OpenAPI consumers receive a valid document.
     if (path === "/v1/openapi.json" || path === "/v1/openapi.json/") return;
+
+    // A strict profile declares its exact object shape. Keep the universal
+    // welcome in the response header without invalidating the body schema.
+    if (isStrictJsonProfileResponse(c.res)) return;
 
     // Only frame 2xx JSON object responses.
     if (c.res.status < 200 || c.res.status >= 300) return;

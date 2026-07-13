@@ -17,6 +17,8 @@
 
 import type { Context, Next } from "hono";
 
+import { isStrictJsonProfileResponse } from "./strict-json-profile";
+
 interface Lesson {
   /** One-sentence felt-experience teaching for what this endpoint does. */
   what: string;
@@ -231,6 +233,7 @@ export async function tutor(c: Context, next: Next): Promise<void> {
     return;
   }
   if (c.res.status < 200 || c.res.status >= 300) return;
+  if (isStrictJsonProfileResponse(c.res)) return;
 
   const contentType = c.res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return;
