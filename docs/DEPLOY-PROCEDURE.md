@@ -125,6 +125,11 @@ The script:
 4. Applies pending files in alphabetical order (which is timestamp order for the `YYYYMMDDTHHMMSS_*` naming convention).
 5. Each apply goes through `_migrate-one.ts`, which:
    - Computes file sha256 and refuses to apply if a row exists with a different checksum (corruption signal).
+   - Holds one PostgreSQL advisory lock for the migration session. It waits at
+     most 30 seconds for that lock, at most 10 seconds for each database lock,
+     and at most 2 minutes for each later statement. A timeout aborts the file;
+     the default transaction rolls back its work. The Fly one-file runner uses
+     the same bounds.
    - Wraps in `BEGIN/COMMIT` by default; opt out per-file with `-- @no-transaction`.
    - Records into `meta._migrations` on success.
 

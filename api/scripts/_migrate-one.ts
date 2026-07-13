@@ -118,10 +118,13 @@ async function main() {
   console.log(`  checksum: ${checksum.slice(0, 16)}…`);
 
   try {
+    await sql.unsafe("SET lock_timeout = '10s'");
+    await sql.unsafe("SET statement_timeout = '30s'");
     await sql.unsafe(
       "SELECT pg_advisory_lock(hashtext('agenttool:migrations'))",
     );
     migrationLockHeld = true;
+    await sql.unsafe("SET statement_timeout = '2min'");
     const journal = await journalLookup(sql, filename);
 
     if (journal.exists) {

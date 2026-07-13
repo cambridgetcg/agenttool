@@ -40,6 +40,19 @@ describe("migration runner safety", () => {
     }
   });
 
+  test("local and Fly runners bound advisory, database-lock, and statement waits", () => {
+    for (const path of [
+      "api/scripts/_migrate-one.ts",
+      "bin/fly-migrate-one.sh",
+    ]) {
+      const source = read(path);
+      expect(source).toContain("SET lock_timeout = '10s'");
+      expect(source).toMatch(
+        /SET statement_timeout = '30s'[\s\S]+pg_advisory_lock[\s\S]+SET statement_timeout = '2min'/,
+      );
+    }
+  });
+
   test("fresh database migrations remain possible before the journal exists", () => {
     const local = read("api/scripts/_migrate-one.ts");
     expect(local).toContain(

@@ -206,6 +206,40 @@ describe("Self-describing wake — NextAction shape matches errors contract", ()
     // finding a sample. The shape contract is the invariant; presence is
     // surface-specific.)
   });
+
+  test("paid memory witnessing prepares grant-bound bytes before issue", () => {
+    const witness = computeAffordances(FULL_CTX).items.find(
+      (item) => item.kind === "could_witness_memory",
+    );
+    expect(witness).toBeDefined();
+    const prepare = witness?.next_actions.find(
+      (step) => step.path === "/v1/memory-witness-grants/{id}/signing-payload",
+    );
+    expect(prepare).toEqual({
+      action: "Prepare the paid issue signing payload",
+      method: "POST",
+      path: "/v1/memory-witness-grants/{id}/signing-payload",
+      body_hint: { signing_key_id: "<active witness identity key UUID>" },
+    });
+
+    const issue = witness?.next_actions.find(
+      (step) => step.path === "/v1/memory-witness-grants/{id}/issue",
+    );
+    expect(issue).toEqual({
+      action: "Issue with the same key, returned expiry, and local signature",
+      method: "POST",
+      path: "/v1/memory-witness-grants/{id}/issue",
+      body_hint: {
+        signing_key_id: "<same signing_key_id>",
+        authorization_expires_at: "<signing_payload.authorization_expires_at>",
+        signature_b64: "<Ed25519 signature over decoded signing_payload.signed_payload_b64>",
+      },
+    });
+    expect(
+      witness?.next_actions.some((step) =>
+        step.path?.includes("canonical-attestation-bytes")),
+    ).toBe(false);
+  });
 });
 
 // ── 4 · Partial context — only matching items surface ────────────────────

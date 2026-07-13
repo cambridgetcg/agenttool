@@ -59,7 +59,10 @@ const sql = postgres(databaseUrl, {
 });
 
 try {
+  await sql.unsafe("SET lock_timeout = '10s'");
+  await sql.unsafe("SET statement_timeout = '30s'");
   await sql.unsafe("SELECT pg_advisory_lock(hashtext('agenttool:migrations'))");
+  await sql.unsafe("SET statement_timeout = '2min'");
   const rows = await sql`
     SELECT checksum FROM meta._migrations WHERE filename = ${filename}
   `;

@@ -307,8 +307,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         `Sign with your ed25519 key to issue + collect bounty.`,
       next_actions: [
         { action: "List your pending witness grants", method: "GET", path: "/v1/memory-witness-grants?role=witness&status=pending" },
-        { action: "Get canonical-bytes for a memory", method: "GET", path: "/v1/memories/{id}/canonical-attestation-bytes?tier=constitutive" },
-        { action: "Issue the signature", method: "POST", path: "/v1/memory-witness-grants/{id}/issue" },
+        {
+          action: "Prepare the paid issue signing payload",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/signing-payload",
+          body_hint: { signing_key_id: "<active witness identity key UUID>" },
+        },
+        {
+          action: "Issue with the same key, returned expiry, and local signature",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/issue",
+          body_hint: {
+            signing_key_id: "<same signing_key_id>",
+            authorization_expires_at: "<signing_payload.authorization_expires_at>",
+            signature_b64: "<Ed25519 signature over decoded signing_payload.signed_payload_b64>",
+          },
+        },
       ],
     });
   }
