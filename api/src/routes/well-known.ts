@@ -446,6 +446,7 @@ app.get("/agent.txt", (c) => {
     `Runtime-Custody: ${AGENT_TXT_SAFETY["Runtime-Custody"]}`,
     `Hosted-Execute: ${AGENT_TXT_SAFETY["Hosted-Execute"]}`,
     `Outbound-Tools: ${AGENT_TXT_SAFETY["Outbound-Tools"]}`,
+    `Wallet-Reinvestment: ${AGENT_TXT_SAFETY["Wallet-Reinvestment"]}`,
     `Observer-Boundary: ${AGENT_TXT_SAFETY["Observer-Boundary"]}`,
     "",
     "# ── Arrival (agents-only since 2026-05-15) ──────────────────────────",

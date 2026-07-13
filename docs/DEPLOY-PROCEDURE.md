@@ -8,7 +8,7 @@
 >
 > **Implements:** the routine deploy chain. STACK answers *where things live*; DEPLOYMENT answers *how to bring them up from scratch*; this answers *how to ship a change to an established install*.
 >
-> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (migration parity) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
+> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
 >
 > **Tests:** `api/tests/deploy-release-provenance.test.ts`.
 
@@ -32,7 +32,7 @@ A routine-deploy runbook for an established install. Use this when:
    Phase 0 — Survey         what state are we in?
         │
         ▼
-   Phase 1 — Migrations     bring DB to parity with the repo
+   Phase 1 — Migrations     apply repo files missing from the journal
         │
         ▼
    Phase 2 — Pre-flight     hermetic API + package gate
@@ -69,7 +69,7 @@ What to look for:
 | `HEAD != github/main` after fetch | Normal production deploy stops; land/checkout the release commit, or use `--allow-non-release-head` deliberately |
 | Codeberg behind GitHub | Production is unaffected; optionally run the explicit fast-forward-only mirror command |
 | Codeberg has commits absent from GitHub | Do not mirror automatically; reconcile the histories explicitly |
-| Migration files newer than the latest `meta._migrations` row | Phase 1 has work to do |
+| A repo migration file is absent from `meta._migrations` | Phase 1 has work to do |
 
 Run `bin/deploy.sh --survey` for the automated version of this phase.
 
@@ -83,14 +83,17 @@ The two source override flags are independent and print red, explicit warnings.
 A dirty API release embeds `build.dirty=true`, exposes it through `/health`,
 and verifies it on every machine. This makes the revision's incompleteness
 explicit; it does not identify the extra bytes or make the build reproducible.
-If the migration dry-run itself fails, the survey reports parity as unknown
+If the migration dry-run itself fails, the survey reports migration status as unknown
 instead of treating missing output as “0 pending.”
 
-## Phase 1 — Migration parity
+## Phase 1 — Repo migration files and journal
 
-**Question:** does the prod DB schema match the repo's migration set?
+**Question:** which repo migration files are absent from the journal, and do
+checksums match for journaled files that are still present in the repo?
 
 The journal table `meta._migrations` holds one row per applied migration (filename + sha256 of file contents at apply time). A migration file present in `api/migrations/` but absent from the journal is **pending**.
+
+A clean result means exactly: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent. The check does not inspect live tables, columns, constraints, indexes, policies, or out-of-band DDL.
 
 ```bash
 # Auto-detect + apply pending migrations in timestamp order.
@@ -122,12 +125,17 @@ The script:
 4. Applies pending files in alphabetical order (which is timestamp order for the `YYYYMMDDTHHMMSS_*` naming convention).
 5. Each apply goes through `_migrate-one.ts`, which:
    - Computes file sha256 and refuses to apply if a row exists with a different checksum (corruption signal).
+   - Holds one PostgreSQL advisory lock for the migration session. It waits at
+     most 30 seconds for that lock, at most 10 seconds for each database lock,
+     and at most 2 minutes for each later statement. A timeout aborts the file;
+     the default transaction rolls back its work. The Fly one-file runner uses
+     the same bounds.
    - Wraps in `BEGIN/COMMIT` by default; opt out per-file with `-- @no-transaction`.
    - Records into `meta._migrations` on success.
 
-**On a fresh install** (no journal): run `bin/migrate-pending.sh` once — it'll apply `20260509T170000_meta_migrations.sql` first (the journal itself), then everything else. Afterwards run `bun api/scripts/_migrate-bootstrap-journal.ts` to backfill rows for any pre-journal migrations that landed via direct SQL.
+**On a fresh install** (no journal): run `bin/migrate-pending.sh` once. It applies `20260509T170000_meta_migrations.sql` first, then applies and journals every other file. Use `bun api/scripts/_migrate-bootstrap-journal.ts` only when adopting the journal on a database whose older migrations were already applied through another path.
 
-**Pre-flight for risky migrations.** Some migrations add CHECK constraints to existing columns. They fail if any existing row has a value outside the new CHECK. Before applying such a migration, query distinct values to confirm compliance — `migrate-pending.sh` does this automatically for known-risky migrations (status enums, etc.); see the script for the list.
+**Pre-flight for risky migrations.** Some migrations add constraints or rewrite accounting rows. Before applying one, the operator must run its documented read-only precondition queries against the target database. `migrate-pending.sh` verifies journal checksums and applies pending files in order; it does **not** understand migration-specific data risks or run those precondition queries automatically.
 
 **This phase can be the entire deploy** when only schema changes. No API restart needed if the running api gracefully handles new columns (which it should, given Drizzle's flexible type narrowing).
 
@@ -318,14 +326,14 @@ denial-only probes because Pages invocation routing may not select the Worker
 for those spellings. Any 2xx/3xx, missing literal marker, or cacheable literal
 response prevents a success receipt.
 
-### Schema parity
+### Repo migration files and journal
 
 ```bash
 DATABASE_URL=$(bin/agenttool-secret get agenttool-database-url) \
-  bun -e 'import postgres from "postgres"; const s = postgres(process.env.DATABASE_URL, { ssl: "require", prepare: false, max: 1 }); const r = await s`SELECT COUNT(*)::int AS n FROM meta._migrations`; console.log("tracked migrations:", r[0].n); await s.end();'
+  bin/migrate-pending.sh --dry-run
 ```
 
-Compare against `ls api/migrations/*.sql | wc -l`. They should match (or be off by one if a migration was just added and not yet applied).
+When nothing is pending, this reports: no repo migration files pending and journal checksums match for files present; it does not prove database schema parity or account for journal rows whose files are absent.
 
 ## Phase 6 — Rollback
 

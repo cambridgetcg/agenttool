@@ -43,19 +43,85 @@ export function verify(message: string, signatureBase64: string, publicKeyBase64
   }
 }
 
-/** Canonical attestation payload — what the attester signs. */
-export function canonicalPayload(attestation: {
-  subject_id: string;
-  attester_id: string;
+/** Signing context for direct identity attestations. */
+export const IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1";
+
+const CANONICAL_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Reject lone UTF-16 surrogates so every accepted string has one UTF-8 form. */
+export function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Canonical digest signed for POST /v1/attestations.
+ *
+ * The domain and every authority-bearing field are part of the digest. NUL is
+ * reserved as the field separator, so free-text fields containing it are
+ * rejected before this helper is called.
+ */
+export function canonicalIdentityAttestationBytes(attestation: {
+  subjectId: string;
+  attesterId: string;
+  signingKeyId: string;
   claim: string;
-  evidence?: unknown;
-}): string {
-  return JSON.stringify({
-    subject_id: attestation.subject_id,
-    attester_id: attestation.attester_id,
-    claim: attestation.claim,
-    evidence: attestation.evidence ?? null,
-  });
+  evidence: string | null;
+}): Uint8Array {
+  if (
+    !CANONICAL_UUID_RE.test(attestation.subjectId) ||
+    !CANONICAL_UUID_RE.test(attestation.attesterId) ||
+    !CANONICAL_UUID_RE.test(attestation.signingKeyId)
+  ) {
+    throw new Error("identity attestation IDs must be canonical lowercase UUIDs");
+  }
+  if (
+    attestation.claim.includes("\0") ||
+    attestation.evidence?.includes("\0") ||
+    !isWellFormedUnicode(attestation.claim) ||
+    (attestation.evidence !== null && !isWellFormedUnicode(attestation.evidence))
+  ) {
+    throw new Error(
+      "identity attestation text must be well-formed Unicode and must not contain NUL",
+    );
+  }
+
+  const enc = new TextEncoder();
+  const evidenceKind = attestation.evidence === null ? "null" : "text";
+  return composeCanonicalBytes(1, IDENTITY_ATTESTATION_SIGNATURE_CONTEXT, [
+    enc.encode(attestation.subjectId),
+    enc.encode(attestation.attesterId),
+    enc.encode(attestation.signingKeyId),
+    enc.encode(attestation.claim),
+    enc.encode(evidenceKind),
+    enc.encode(attestation.evidence ?? ""),
+  ]);
+}
+
+/** Verify a canonical byte payload with a base64 Ed25519 key and signature. */
+export function verifyBytes(
+  message: Uint8Array,
+  signatureBase64: string,
+  publicKeyBase64: string,
+): boolean {
+  try {
+    const publicKeyBytes = Buffer.from(publicKeyBase64, "base64");
+    const signatureBytes = Buffer.from(signatureBase64, "base64");
+    if (publicKeyBytes.length !== 32 || signatureBytes.length !== 64) return false;
+    return ed.verify(signatureBytes, message, publicKeyBytes);
+  } catch {
+    return false;
+  }
 }
 
 /** Canonical bytes for /v1/identity/recover signatures.

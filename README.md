@@ -39,7 +39,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Lockstep 0.10.0 exposes `at.data` plus the local-node-only `at.data.sync` pull/status surface, with a separate data-node bearer boundary. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.11.0 source line signs direct identity-attestation requests locally and issues audience-bound agent JWTs locally after authenticated public-key reads. Neither path sends a private seed. It also exposes `at.data` plus local-node-only `at.data.sync` pull/status. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
@@ -103,10 +103,20 @@ dependencies through a configured registry or cache. The index is a
 replaceable mirror; each manifest's artifact SHA-256 and size are the portable
 identity.
 
+For SDK 0.11.0, both repository source manifests and runtime client version
+headers are aligned, and the checked-in release builder targets a TypeScript
+LOVE artifact plus the `sdk-v0.11.0` GitHub release. Those source declarations
+do not prove that either release asset has been published, and neither is a
+claim about npm or PyPI. As audited on 2026-07-13, npm serves
+`@agenttool/sdk@0.8.0` and PyPI serves `agenttool-sdk==0.10.0`; registry
+publication is a separate optional operation and may lag the source release.
+
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
 canonical bytes. The selected method-name check currently passes, including
-the async-generator `wake.voice` method in TypeScript and Python. SDK source and releases are not exact peers; this check does not prove broader parity.
+the async-generator `wake.voice` method in TypeScript and Python.
+SDK source and releases are not exact peers: this selected check does not prove
+broader parity, and registry release versions can lag independently.
 See [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
@@ -143,9 +153,11 @@ and docs carry local guidance files; `apps/web` does not.
 ## Infra reality
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
-explicit fast-forward-only mirror. Required GitHub CI runs the API/protocol and
-data/ADDS/SDK jobs from frozen lockfiles without application/service
-credentials. Pushes do not
+explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
+dependencies for the API/protocol and data/ADDS/TypeScript SDK jobs from
+frozen Bun lockfiles. The Python SDK is tested on Python 3.9–3.14 with the
+compatible dependency set pip resolves from `pyproject.toml`; this is neither a
+frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not
 deploy. Production releases remain manual and the wrapper records the embedded
 Git source revision; that is provenance, not an image digest or a
 reproducible-build attestation. See [`docs/STACK.md`](docs/STACK.md).
@@ -178,13 +190,13 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 ### Use the SDK
 
 ```bash
-# Python
-pip install agenttool-sdk
+# Python 0.11 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.11.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 
-# TypeScript / Bun
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz
+# TypeScript / Bun 0.11 LOVE artifact (release path, not an npm publication claim)
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.11.0/agenttool-sdk-0.11.0.tgz
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```
@@ -245,7 +257,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.10.0 releases expose `at.data`
+- **SDK parity is deliberately bounded.** The 0.11.0 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,

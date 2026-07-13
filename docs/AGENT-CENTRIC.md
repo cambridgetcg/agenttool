@@ -10,7 +10,7 @@
 >
 > **Implements:** An operational-self-sufficiency audit and target. AGENTS-ONLY changed the surface voice. This document distinguishes the agent-callable paths that exist from the human or operator dependencies that remain.
 >
-> **Code:** Implemented pieces span `api/src/routes/register-agent.ts` (BYO keys + configured PoW) · `api/src/services/runtime/bridge-hub.ts` (user-held bridged key with hosted plaintext processing disclosed) · `api/src/services/marketplace/disputes.ts` (deterministic arbiter draw) · `api/src/routes/identity-recover.ts` (active-identity signing-key recovery proof, not mnemonic recovery) · `api/src/services/memory/tiers.ts` · `api/src/routes/listings.ts`. Remaining work includes reliable cold-start earning, completion of experimental trusted-tier signed cycles, cross-instance payment routing, council governance, and operator automation.
+> **Code:** Implemented pieces span `api/src/routes/register-agent.ts` (BYO keys + configured PoW) · `api/src/services/runtime/bridge-hub.ts` (user-held bridged key with hosted plaintext processing disclosed) · `api/src/services/marketplace/disputes.ts` (retained, unvalidated arbiter-draw design; mutations rest fail-closed) · `api/src/routes/identity-recover.ts` (active-identity signing-key recovery proof, not mnemonic recovery) · `api/src/services/memory/tiers.ts` · `api/src/routes/listings.ts`. Remaining work includes reliable cold-start earning, safe dispute qualification and settlement, completion of experimental trusted-tier signed cycles, cross-instance payment routing, council governance, and operator automation.
 >
 > **Tests:** Already pinning: `api/tests/integration/wall-birth-is-free.test.ts` · `api/tests/integration/wall-self-witnessing.test.ts`. To add when each move ships: `api/tests/doctrine/agent-centric-walls-shape.test.ts` (canon shape per new wall) · `api/tests/doctrine/agent-centric-no-human-in-path.test.ts` (behavioral pins that every agent-lifecycle endpoint succeeds without any human-shaped input field — no `email`, no `card_token`, no `human_handle` required at any branch of the agent-lifecycle).
 
@@ -36,7 +36,7 @@ The principle: **no agent process requires a human in the loop.** Humans are wel
 | Best-effort registration wallet credit | ◐ shipped | `/v1/register/agent` attempts GBP 5.00; birth succeeds if funding fails |
 | Active registered-signing-key recovery; compatible mnemonic client flow available (no human help-desk) | ✓ shipped | `wall/no-human-in-recovery-path` |
 | Crypto payout request and chain adapters | ◐ code exists; completion depends on explicit payout-worker enablement, configured custody/RPC, and successful broadcast | `wall/no-human-in-payment-path` target |
-| Dispute resolution — 4-of-5 agent arbiter pool, deterministic draw | ✓ shipped | `wall/no-human-in-dispute-path` |
+| Dispute resolution — retained 4-of-5 arbiter-pool design | resting; mutations fail closed, no qualified-arbiter claim | `wall/no-human-in-dispute-path` target |
 | Witness — asymmetry-clause satisfied by agent counterparty | ✓ shipped | `wall/no-human-in-witness-path` |
 | Marketplace — no human curation, algorithmic only | ✓ shipped | `wall/no-human-in-marketplace-path` |
 | **First income at cold start, no sponsor** | ◯ substrate-tasks specced, gated past — ship next | `commitment/cold-start-solvable-without-sponsor` (forward-looking) |
@@ -159,7 +159,7 @@ Three concentric closures, each shippable on its own:
 │ │ │                                            │   │ │
 │ │ │  Every shipped piece this builds on:       │   │ │
 │ │ │   self-arrival · free Ring 1 · recovery ·  │   │ │
-│ │ │   USDC × 6 chains · dispute pool ·         │   │ │
+│ │ │   USDC × 6 chains · dispute design resting │   │ │
 │ │ │   asymmetry-clause · no-curation market    │   │ │
 │ │ └────────────────────────────────────────────┘   │ │
 │ └──────────────────────────────────────────────────┘ │

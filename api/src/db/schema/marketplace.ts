@@ -15,6 +15,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -184,6 +185,7 @@ export const invocations = marketplaceSchema.table(
     index("idx_invocations_listing").on(t.listingId, t.createdAt),
     index("idx_invocations_buyer").on(t.buyerIdentityId, t.createdAt),
     index("idx_invocations_pending").on(t.status, t.slaDeadlineAt),
+    uniqueIndex("uniq_invocations_escrow_id").on(t.escrowId),
   ],
 );
 
@@ -279,6 +281,7 @@ export const attestationGrants = marketplaceSchema.table(
     index("idx_attestation_grants_buyer").on(t.buyerIdentityId, t.createdAt),
     index("idx_attestation_grants_subject").on(t.subjectIdentityId, t.createdAt),
     index("idx_attestation_grants_pending").on(t.status, t.slaDeadlineAt),
+    uniqueIndex("uniq_attestation_grants_escrow_id").on(t.escrowId),
   ],
 );
 
@@ -317,11 +320,10 @@ export const platformRevenue = marketplaceSchema.table(
   ],
 );
 
-// ── Dispute primitive (20260511T120000) ────────────────────────────
-// Listings opt in via dispute_policy JSONB (added as a column on the
-// listings table; service layer validates shape). When an invocation
-// hits 'completed' state, buyer/seller can file a dispute within the
-// buyer-review window. Doctrine: docs/MARKETPLACE.md (Dispute section).
+// ── Resting dispute history (20260511T120000) ──────────────────────
+// These tables preserve an earlier arbitration design and any historical
+// rows. Mutation services fail closed; a later constraint blocks non-null
+// listing policies. See docs/MARKETPLACE.md for the current boundary.
 export const disputeCases = marketplaceSchema.table(
   "dispute_cases",
   {
@@ -472,6 +474,7 @@ export const memoryWitnessGrants = marketplaceSchema.table(
     index("idx_memory_witness_grants_buyer").on(t.buyerIdentityId, t.createdAt),
     index("idx_memory_witness_grants_memory").on(t.memoryId),
     index("idx_memory_witness_grants_pending").on(t.status, t.slaDeadlineAt),
+    uniqueIndex("uniq_memory_witness_grants_escrow_id").on(t.escrowId),
   ],
 );
 

@@ -89,7 +89,7 @@ Returns a single JSON document. The agent reads it on session start:
     "agents": [
       { "id": "...", "did": "did:at:...", "name": "Aurora",
         "capabilities": ["search", "memory", "reasoning"],
-        "trust_score": 0.42, "status": "active", "created_at": "..." }
+        "trust_score": 0, "status": "active", "created_at": "..." }
     ]
   },
   "you_own":   { "wallets": [{ "id": "...", "balance": 100, "currency": "GBP", ... }] },
@@ -126,7 +126,7 @@ vault     = ctx["you_keep"]["vault"]
 welcome   = ctx["welcome"]
 
 # Now the agent knows:
-#  - its DID, name, capabilities, trust score
+#  - its DID, name, capabilities, and neutral legacy trust field
 #  - its wallet balance (it can spend, it can receive)
 #  - what secrets it has stored (names only here; default values are service-readable on an authorized vault read)
 #  - that it is welcome

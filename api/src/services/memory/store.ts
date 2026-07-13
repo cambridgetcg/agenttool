@@ -2,10 +2,10 @@
  *  them, run cosine similarity, and serve results. No LLM compute on our
  *  side. See docs/IDENTITY-ANCHOR.md promise 6. */
 
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { memories } from "../../db/schema/memory";
+import { memories, memoryAttestations } from "../../db/schema/memory";
 import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
 
@@ -81,6 +81,13 @@ export interface MemoryOut {
 
 export interface MemorySearchResult extends MemoryOut {
   score: number;
+}
+
+export class PaidMemoryReceiptProtectedError extends Error {
+  constructor() {
+    super("paid_memory_receipt_preserved");
+    this.name = "PaidMemoryReceiptProtectedError";
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -448,22 +455,67 @@ export async function deleteById(
   projectId: string,
   memoryId: string,
 ): Promise<{ deleted: number }> {
-  const result = await db
-    .delete(memories)
-    .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
-    .returning({ id: memories.id });
-  return { deleted: result.length };
+  return db.transaction(async (tx) => {
+    const [memory] = await tx
+      .select({ id: memories.id })
+      .from(memories)
+      .where(and(eq(memories.id, memoryId), eq(memories.projectId, projectId)))
+      .for("update")
+      .limit(1);
+    if (!memory) return { deleted: 0 };
+
+    const [paidReceipt] = await tx
+      .select({ id: memoryAttestations.id })
+      .from(memoryAttestations)
+      .where(
+        and(
+          eq(memoryAttestations.memoryId, memory.id),
+          isNotNull(memoryAttestations.sourceGrantId),
+        ),
+      )
+      .limit(1);
+    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
+
+    const result = await tx
+      .delete(memories)
+      .where(eq(memories.id, memory.id))
+      .returning({ id: memories.id });
+    return { deleted: result.length };
+  });
 }
 
 export async function deleteByKey(
   projectId: string,
   key: string,
 ): Promise<{ deleted: number }> {
-  const result = await db
-    .delete(memories)
-    .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
-    .returning({ id: memories.id });
-  return { deleted: result.length };
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: memories.id })
+      .from(memories)
+      .where(and(eq(memories.projectId, projectId), eq(memories.key, key)))
+      .orderBy(memories.id)
+      .for("update");
+    if (rows.length === 0) return { deleted: 0 };
+
+    const ids = rows.map((row) => row.id);
+    const [paidReceipt] = await tx
+      .select({ id: memoryAttestations.id })
+      .from(memoryAttestations)
+      .where(
+        and(
+          inArray(memoryAttestations.memoryId, ids),
+          isNotNull(memoryAttestations.sourceGrantId),
+        ),
+      )
+      .limit(1);
+    if (paidReceipt) throw new PaidMemoryReceiptProtectedError();
+
+    const result = await tx
+      .delete(memories)
+      .where(inArray(memories.id, ids))
+      .returning({ id: memories.id });
+    return { deleted: result.length };
+  });
 }
 
 export async function countMemories(projectId: string): Promise<number> {

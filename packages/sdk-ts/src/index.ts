@@ -24,6 +24,13 @@ export type {
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
+export {
+  BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+  DEFAULT_BOOTSTRAP_ELEVATE_CLAIM,
+  DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS,
+  canonicalBootstrapElevateBytes,
+  signBootstrapElevate,
+} from "./bootstrap.js";
 
 // Type exports
 export type {
@@ -48,8 +55,13 @@ export type {
 } from "./bootstrap-agent.js";
 export type {
   RegisterIdentityOptions,
+  IdentityRecord,
+  IdentitySigningKey,
+  IdentityPrivateKey,
+  RegisterIdentityResult,
   UpdateIdentityOptions,
   AttestOptions,
+  IdentityAttestationPayload,
   DiscoverOptions,
   IssueTokenOptions,
   ForkOptions,
@@ -57,7 +69,13 @@ export type {
   VillageDecorations,
   RegisterBoxKeyOpts,
 } from "./identity.js";
-export { ExpressionClient, BoxKeysClient } from "./identity.js";
+export {
+  BoxKeysClient,
+  ExpressionClient,
+  IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+  canonicalIdentityAttestationBytes,
+  signIdentityAttestation,
+} from "./identity.js";
 export type {
   PutSecretOptions,
   GetSecretOptions,
@@ -66,7 +84,12 @@ export type {
   PutEncryptedOptions,
   GetDecryptedOptions,
 } from "./vault.js";
-export type { CreateAgentOptions, BootstrapResult, ElevateOptions } from "./bootstrap.js";
+export type {
+  BootstrapElevateCanonicalOptions,
+  BootstrapResult,
+  CreateAgentOptions,
+  ElevateOptions,
+} from "./bootstrap.js";
 export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
 export type {
   WakeProvider,
@@ -94,6 +117,8 @@ export type {
   CreateWalletOptions,
   DocumentResult,
   Escrow,
+  EscrowManager,
+  EscrowStatus,
   ExecuteResult,
   Memory,
   ScrapeResult,

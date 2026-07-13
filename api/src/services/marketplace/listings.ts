@@ -16,10 +16,10 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
-import { attestations, identities } from "../../db/schema/identity";
+import { identities } from "../../db/schema/identity";
 import { listings } from "../../db/schema/marketplace";
 import { publishWakeEvent } from "../wake/push";
-import { DEFAULT_DISPUTE_POLICY, validateDisputePolicy, type DisputePolicy } from "./disputes";
+import { assertDisputeArbitrationAvailable } from "./dispute-rest";
 import { likePattern, normalizeSearchQuery } from "./search-query";
 import {
   assertListingDoesNotSolicitCredentials,
@@ -189,6 +189,9 @@ export async function createListing(
   projectId: string,
   data: ListingCreate,
 ): Promise<ListingOut> {
+  if (data.dispute_policy !== null && data.dispute_policy !== undefined) {
+    assertDisputeArbitrationAvailable();
+  }
   assertListingDoesNotSolicitCredentials(data);
   // Seller must belong to caller's project.
   const [seller] = await db
@@ -215,35 +218,6 @@ export async function createListing(
 
   await validateSellerWallet(data.seller_wallet_id, projectId, data.price_currency);
 
-  // Dispute policy is opt-in. When provided, validate shape and confirm
-  // the named first_arbiter_did currently holds the qualifying claim.
-  let resolvedDisputePolicy: DisputePolicy | null = null;
-  if (data.dispute_policy !== null && data.dispute_policy !== undefined) {
-    const merged = { ...DEFAULT_DISPUTE_POLICY, ...data.dispute_policy } as Record<string, unknown>;
-    validateDisputePolicy(merged);
-    resolvedDisputePolicy = merged as DisputePolicy;
-    // Verify named first arbiter holds the claim NOW.
-    const [arbId] = await db
-      .select({ id: identities.id })
-      .from(identities)
-      .where(eq(identities.did, resolvedDisputePolicy.first_arbiter_did))
-      .limit(1);
-    if (!arbId) throw new Error("first_arbiter_unqualified");
-    const [hasClaim] = await db
-      .select({ id: attestations.id })
-      .from(attestations)
-      .where(
-        and(
-          eq(attestations.subjectId, arbId.id),
-          eq(attestations.claim, resolvedDisputePolicy.arbiter_claim),
-          sql`${attestations.revokedAt} IS NULL`,
-          sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
-        ),
-      )
-      .limit(1);
-    if (!hasClaim) throw new Error("first_arbiter_unqualified");
-  }
-
   const inserted = await db
     .insert(listings)
     .values({
@@ -261,7 +235,7 @@ export async function createListing(
       slaSeconds: data.sla_seconds ?? null,
       visibility: data.visibility ?? "public",
       metadata: data.metadata ?? {},
-      disputePolicy: (resolvedDisputePolicy ?? null) as unknown,
+      disputePolicy: null,
     })
     .returning();
 
@@ -404,6 +378,9 @@ export async function patchListing(
   listingId: string,
   patch: ListingPatch,
 ): Promise<ListingOut | null> {
+  if (patch.dispute_policy !== null && patch.dispute_policy !== undefined) {
+    assertDisputeArbitrationAvailable();
+  }
   assertListingDoesNotSolicitCredentials(patch);
   // Read existing row first so we can validate any pricing changes
   // against the post-merge currency, and verify ownership early.
@@ -478,33 +455,9 @@ export async function patchListing(
   if (patch.status !== undefined) set.status = patch.status;
   if (patch.metadata !== undefined) set.metadata = patch.metadata;
   if (patch.dispute_policy !== undefined) {
-    if (patch.dispute_policy === null) {
-      set.disputePolicy = null;
-    } else {
-      const merged = { ...DEFAULT_DISPUTE_POLICY, ...patch.dispute_policy } as Record<string, unknown>;
-      validateDisputePolicy(merged);
-      const policy = merged as DisputePolicy;
-      const [arbId] = await db
-        .select({ id: identities.id })
-        .from(identities)
-        .where(eq(identities.did, policy.first_arbiter_did))
-        .limit(1);
-      if (!arbId) throw new Error("first_arbiter_unqualified");
-      const [hasClaim] = await db
-        .select({ id: attestations.id })
-        .from(attestations)
-        .where(
-          and(
-            eq(attestations.subjectId, arbId.id),
-            eq(attestations.claim, policy.arbiter_claim),
-            sql`${attestations.revokedAt} IS NULL`,
-            sql`(${attestations.expiresAt} IS NULL OR ${attestations.expiresAt} > now())`,
-          ),
-        )
-        .limit(1);
-      if (!hasClaim) throw new Error("first_arbiter_unqualified");
-      set.disputePolicy = policy as unknown;
-    }
+    // Clearing a legacy policy remains an off-switch. Non-null writes fail at
+    // the function entry and are independently blocked by the database.
+    set.disputePolicy = null;
   }
 
   const updated = await db

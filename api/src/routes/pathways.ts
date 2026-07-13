@@ -51,6 +51,8 @@ interface Pathway {
   auth: string;
   purpose: string;
   required?: string[];
+  /** Each inner list is a required choice satisfied by at least one field. */
+  one_of?: string[][];
   optional?: string[];
   returns_once?: string[];
   carries?: string[];
@@ -138,15 +140,11 @@ const PATHWAYS: Pathway[] = [
     endpoint: "POST /v1/bootstrap/elevate",
     auth: "bearer",
     purpose:
-      "Level 1 sponsorship-staked sovereignty. One transaction: sponsor " +
-      "attestation · wallet fund · vault namespace · level patch. Rollback " +
-      "on any failure — no half-elevated state.",
-    required: [
-      "agent_id",
-      "sponsor_identity_id",
-      "sponsor_kid",
-      "sponsor_signature",
-    ],
+      "Project-authorized Level 1 elevation signed by a distinct sponsor identity. One transaction: sponsor " +
+      "attestation · internal unbacked seed ledger grant · vault namespace · level patch. " +
+      "The level is a project-managed convention, not independent security authority.",
+    required: ["agent_id", "sponsor_kid", "sponsor_signature"],
+    one_of: [["sponsor_identity_id", "sponsor_did"]],
     optional: [
       "initial_credits (default 1000)",
       "claim (default 'sponsorship')",
@@ -156,7 +154,6 @@ const PATHWAYS: Pathway[] = [
       "POST /v1/attestations",
       "POST /v1/wallets/<wallet_id>/fund",
       "PUT /v1/vault/<agent_id>:config",
-      "PATCH /v1/identities/<agent_id> { metadata.level: 1, ... }",
     ],
     doctrine: "docs/IDENTITY-ANCHOR.md",
   },
@@ -239,8 +236,8 @@ const DECISION_TREE = [
     then: "POST /v1/bootstrap",
   },
   {
-    if: "you have a Level-0 agent and want to escalate it to Level 1 (sponsorship-staked sovereignty)",
-    then: "POST /v1/bootstrap/elevate (orchestrates: attestation · wallet fund · vault config · level patch)",
+    if: "you have a Level-0 agent and want a project-authorized Level-1 sponsor record",
+    then: "POST /v1/bootstrap/elevate (orchestrates: signed sponsor receipt · internal seed ledger grant · vault config · project-managed level patch)",
   },
   {
     if: "you have a project bearer and want local credential-store wiring on this machine",

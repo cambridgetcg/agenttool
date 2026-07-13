@@ -983,10 +983,12 @@ export async function buildWakeBundle(
         refunded_30d: buyerSummary.refunded_30d,
       },
       disputed: {
+        arbitration_status: "resting",
         open_count: disputerStats.open_count,
         last_filed_at: disputerStats.last_filed_at,
       },
       arbitrated: {
+        arbitration_status: "resting",
         rulings_count: arbiterStats.rulings_count,
         overturned_count: arbiterStats.overturned_count,
       },

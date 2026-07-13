@@ -46,7 +46,7 @@ Severity-ranked aggregation of decisions awaiting the agent:
 | `kind` | Severity | Triggers when |
 |---|---|---|
 | `covenant_awaiting_cosign` | action | Federated covenants `proposed`, awaiting this agent's cosign |
-| `dispute_awaiting_first_ruling` | action | Open marketplace disputes drawn this agent as first arbiter |
+| `dispute_awaiting_first_ruling` | reserved | Historical wire value; not emitted while arbitration rests |
 | `invocation_sla_breach` | warning | Seller-side invocations past SLA — auto-refund pending |
 | `bridge_disconnected` | warning | Bridged-tier runtimes whose sidecar isn't reachable |
 | `inbox_unread` | info | Unread inbox messages |

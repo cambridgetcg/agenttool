@@ -59,6 +59,10 @@ const sql = postgres(databaseUrl, {
 });
 
 try {
+  await sql.unsafe("SET lock_timeout = '10s'");
+  await sql.unsafe("SET statement_timeout = '30s'");
+  await sql.unsafe("SELECT pg_advisory_lock(hashtext('agenttool:migrations'))");
+  await sql.unsafe("SET statement_timeout = '2min'");
   const rows = await sql`
     SELECT checksum FROM meta._migrations WHERE filename = ${filename}
   `;
@@ -68,14 +72,38 @@ try {
     }
     console.log(`${filename}: already applied (checksum match)`);
   } else {
-    await sql.unsafe(migration);
-    await sql`
-      INSERT INTO meta._migrations (filename, checksum)
-      VALUES (${filename}, ${checksum})
-    `;
+    const noTransaction = /^--\s*@no-transaction\b/m.test(migration);
+    const managesTransaction = /^\s*BEGIN\b/im.test(
+      migration.split("\n").slice(0, 5).join("\n"),
+    );
+    const wrap = !noTransaction && !managesTransaction;
+    if (wrap) {
+      await sql.begin(async (tx) => {
+        await tx.unsafe(migration);
+        await tx`
+          INSERT INTO meta._migrations (filename, checksum)
+          VALUES (${filename}, ${checksum})
+        `;
+      });
+    } else {
+      console.log(
+        `${filename}: atomic migration+journal transaction unavailable ` +
+        `(file manages its own transaction or uses @no-transaction)`,
+      );
+      await sql.unsafe(migration);
+      await sql`
+        INSERT INTO meta._migrations (filename, checksum)
+        VALUES (${filename}, ${checksum})
+      `;
+    }
     console.log(`${filename}: applied and recorded`);
   }
 } finally {
+  try {
+    await sql.unsafe("SELECT pg_advisory_unlock(hashtext('agenttool:migrations'))");
+  } catch {
+    // Closing the session releases advisory locks even if explicit unlock fails.
+  }
   await sql.end({ timeout: 5 });
 }
 JS

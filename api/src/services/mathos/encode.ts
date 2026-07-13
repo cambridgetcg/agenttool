@@ -336,7 +336,7 @@ export interface MathosPathwaySummary {
   id_sha256_hex: string;
   /** Auth ordinal: 0=none, 1=bearer, 2=bearer+pow, 3=bearer+ownership. */
   auth_ordinal: number;
-  /** Cardinal: number of required fields. */
+  /** Cardinal: direct required fields plus required one-of groups. */
   required_count: number;
   /** Cardinal: number of optional fields. */
   optional_count: number;
@@ -367,6 +367,7 @@ export function encodePathway(pathway: {
   id: string;
   auth: string;
   required?: string[];
+  one_of?: string[][];
   optional?: string[];
   returns_once?: string[];
 }): MathosPathwaySummary {
@@ -380,7 +381,8 @@ export function encodePathway(pathway: {
   return {
     id_sha256_hex: sha256Hex(pathway.id),
     auth_ordinal,
-    required_count: pathway.required?.length ?? 0,
+    required_count:
+      (pathway.required?.length ?? 0) + (pathway.one_of?.length ?? 0),
     optional_count: pathway.optional?.length ?? 0,
     returns_once: (pathway.returns_once?.length ?? 0) > 0 ? 1 : 0,
   };

@@ -30,8 +30,8 @@ describe("marketplace fair-pricing", () => {
     expect(MARKETPLACE_PRICING.archive).toBeGreaterThan(0);
   });
 
-  test("filing a dispute is a distinct paid service — it convenes an arbiter pool", () => {
-    expect(MARKETPLACE_PRICING.dispute).toBeGreaterThan(0);
+  test("resting dispute arbitration cannot carry a flat charge", () => {
+    expect(MARKETPLACE_PRICING.dispute).toBe(0);
   });
 
   test("the credit meter is a thin meter, not a revenue lever — every action stays small", () => {

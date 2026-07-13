@@ -104,6 +104,13 @@ All `/v1/*` routes must be added to one of the auth-prefix lists in `api/src/ind
 
 Selected mutating routes pass through the `idempotency()` middleware mounted per-prefix in `api/src/index.ts`. The middleware is opt-in through `Idempotency-Key`. While Redis is available it can replay cached responses for 24 hours; when Redis is disabled or unavailable it deliberately fails open and the request executes normally. JSON with credential-shaped field names or an AgentTool bearer prefix is never put in this plaintext response cache; such responses carry `X-Idempotency-Skipped: sensitive-response` and `Cache-Control: private, no-store`. This is a conservative structural screen, not universal DLP. The support header is therefore not, by itself, a guarantee that a retry will be deduplicated.
 
+`POST /v1/escrows` has a separate durable contract. Its optional key must be
+8–256 visible ASCII characters without spaces. PostgreSQL stores only the key
+SHA-256 and a hash of the recognized normalized creation fields, scoped to the
+authenticated project. An exact retry resolves the same escrow and returns its
+current row; changed bound input returns `409`. Records do not expire. Without
+a key, retrying can create and fund another escrow.
+
 ### Error responses
 
 Current shape (in progress; not yet codified as a catalog):

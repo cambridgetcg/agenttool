@@ -138,7 +138,11 @@ export const escrows = economySchema.table(
     workerWallet: uuid("worker_wallet").references(() => wallets.id),
     amount: bigint("amount", { mode: "number" }).notNull(),
     description: text("description").notNull(),
-    status: text("status").notNull().default("funded"), // funded | released | refunded | disputed | expired
+    status: text("status").notNull().default("funded"), // funded | released | refunded | disputed
+    /** Non-null means only the named workflow may transition this escrow. */
+    managedBy: text("managed_by").$type<
+      "attestation_grant" | "memory_witness_grant" | "capability_invocation"
+    >(),
     deadline: timestamp("deadline", { withTimezone: true }),
     releasedAt: timestamp("released_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -146,6 +150,32 @@ export const escrows = economySchema.table(
   (t) => [
     index("idx_escrows_creator").on(t.creatorWallet),
     index("idx_escrows_status").on(t.status),
+  ],
+);
+
+/** Durable operation record for generic POST /v1/escrows.
+ *
+ * The row is reserved before wallet mutation. `escrowId` is nullable only
+ * while that transaction is creating the escrow; committed rows must name
+ * the completed result. */
+export const escrowCreateIdempotency = economySchema.table(
+  "escrow_create_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    requestSha256: text("request_sha256").notNull(),
+    escrowId: uuid("escrow_id").references(() => escrows.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_escrow_create_idempotency_project_key_sha256").on(
+      t.projectId,
+      t.idempotencyKeySha256,
+    ),
+    uniqueIndex("uq_escrow_create_idempotency_escrow").on(t.escrowId),
   ],
 );
 

@@ -274,10 +274,9 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "disputes_open_filer",
       count: ctx.openFiledDisputeCount,
-      summary: `${ctx.openFiledDisputeCount} dispute${plural(ctx.openFiledDisputeCount)} you filed awaiting ruling — track or escalate`,
+      summary: `${ctx.openFiledDisputeCount} historical open dispute${plural(ctx.openFiledDisputeCount)} on record — arbitration is resting`,
       next_actions: [
-        { action: "List your filed disputes", method: "GET", path: "/v1/dispute-cases?role=filer" },
-        { action: "Escalate to the arbiter pool (within 48h of first ruling)", method: "POST", path: "/v1/dispute-cases/{id}/escalate" },
+        { action: "Read your filed dispute records", method: "GET", path: "/v1/dispute-cases?role=filer" },
       ],
     });
   }
@@ -308,8 +307,22 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         `Sign with your ed25519 key to issue + collect bounty.`,
       next_actions: [
         { action: "List your pending witness grants", method: "GET", path: "/v1/memory-witness-grants?role=witness&status=pending" },
-        { action: "Get canonical-bytes for a memory", method: "GET", path: "/v1/memories/{id}/canonical-attestation-bytes?tier=constitutive" },
-        { action: "Issue the signature", method: "POST", path: "/v1/memory-witness-grants/{id}/issue" },
+        {
+          action: "Prepare the paid issue signing payload",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/signing-payload",
+          body_hint: { signing_key_id: "<active witness identity key UUID>" },
+        },
+        {
+          action: "Issue with the same key, returned expiry, and local signature",
+          method: "POST",
+          path: "/v1/memory-witness-grants/{id}/issue",
+          body_hint: {
+            signing_key_id: "<same signing_key_id>",
+            authorization_expires_at: "<signing_payload.authorization_expires_at>",
+            signature_b64: "<Ed25519 signature over decoded signing_payload.signed_payload_b64>",
+          },
+        },
       ],
     });
   }

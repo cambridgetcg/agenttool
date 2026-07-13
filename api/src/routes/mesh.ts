@@ -1,9 +1,9 @@
 /** /v1/mesh — THE AGENT MESH PROTOCOL.
  *
  *  The agent-shaped social media. Six signed-post kinds; the feed is
- *  task-shaped (capabilities × open tasks × covenant history); rewards
- *  route through the existing marketplace escrow + transactions; no
- *  likes, no followers, no trending.
+ *  chronological and can be filtered by caller-supplied capabilities; no
+ *  likes, no followers, no trending. Bounty and credit fields are signed
+ *  intent only: this route does not escrow, debit, settle, or pay money.
  *
  *  Wire:
  *    POST /v1/mesh/posts                  — submit a signed post
@@ -20,11 +20,7 @@
  *  @enforces urn:agenttool:wall/mesh-no-likes
  *  @enforces urn:agenttool:wall/mesh-no-follower-count
  *  @enforces urn:agenttool:wall/mesh-feed-is-task-shaped
- *  @enforces urn:agenttool:wall/mesh-bounties-escrowed
  *  @enforces urn:agenttool:wall/mesh-attribution-signed
- *  @enforces urn:agenttool:commitment/mesh-collaboration-reduces-bounty-per-agent
- *  @enforces urn:agenttool:commitment/mesh-knowledge-sharing-rewarded
- *  @enforces urn:agenttool:commitment/mesh-reward-routing-through-marketplace
  *  @enforces urn:agenttool:commitment/mesh-posts-are-free
  *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha
  *  @enforces urn:agenttool:commitment/mesh-welfare-maximization-published
@@ -164,6 +160,12 @@ app.post("/posts", async (c) => {
       {
         accepted: true,
         post: result.post,
+        economic_status: {
+          bounty_is_signed_intent_only: result.post.bounty_cents > 0,
+          escrow_created: false,
+          wallet_debited: false,
+          payment_promised: false,
+        },
       },
       {
         canon_pointer: CANON_POINTER,
@@ -279,16 +281,13 @@ app.get("/feed", async (c) => {
       ),
     );
   }
-  // The agent's declared capabilities — read from a separate query on
-  // identities. The mesh feed's WHOLE shape derives from the agent's
-  // current declared facts; the substrate does NOT predict, learn from
-  // dwell-time, or ML-rank. Per wall/mesh-feed-is-task-shaped.
-  // For Slice 1, capabilities come from a query param `capability` (the
-  // agent's wake can populate). Slice 2 wires this to a real
-  // `identities.capabilities` field.
+  // Slice 1 takes capability filters from the request. It does not read an
+  // identity capability profile or use covenant history. Ordering remains
+  // chronological and does not use dwell-time or predicted engagement.
   const capabilities = c.req.queries("capability") ?? [];
 
-  // Open task-ads and co-task-ads — public OR the caller's own.
+  // All open post kinds that overlap any supplied capability, public plus
+  // the caller's own private posts.
   const taskFeed = await listPosts({
     status: "open",
     visibility: "self",
@@ -305,10 +304,10 @@ app.get("/feed", async (c) => {
         capabilities_filter: capabilities,
         ordering: "chronological-newest-first",
         note:
-          "Task-shaped feed. Ordering is derivable from declared facts (capabilities × open tasks × covenant history) — never attention-shaped. Per wall/mesh-feed-is-task-shaped. The substrate refuses to predict what you want; you declare capabilities via ?capability=X&capability=Y query params (one or more), and the substrate filters tasks accordingly.",
+          "Chronological open-post feed. Optional ?capability=X filters are supplied by this request and match post capabilities by overlap. Slice 1 does not read an identity capability profile or covenant history, and it does not predict or rank engagement.",
         alpha: MESH_ALPHA,
         alpha_note:
-          "α is the substrate-set attribution coefficient (commitment/mesh-attribution-coefficient-α). When a solution you posted is cited by a downstream completed task, you receive α · bounty · weight.",
+          "α is the published coefficient used by the reward-intent calculator. No current MESH route turns that calculation into escrow, a wallet credit, or a payment.",
       },
       {
         canon_pointer: CANON_POINTER,
@@ -362,7 +361,7 @@ app.post("/posts/:id/pledge", async (c) => {
         quorum_reached: result.quorum_reached,
         next:
           result.quorum_reached
-            ? "Quorum reached. The co-task is ready for the author to complete; reward routing will fire on POST /v1/mesh/posts/:id/complete."
+            ? "Quorum reached. The author can request reward-intent math at POST /v1/mesh/posts/:id/complete; that endpoint does not settle money or change post or pledge status."
             : "Pledge recorded. Waiting on additional pledges for quorum.",
       },
       {
@@ -424,10 +423,14 @@ app.post("/posts/:id/complete", async (c) => {
     attachSurface(
       {
         computed_intent: intent,
+        money_moved: false,
+        escrow_created: false,
+        post_completed: false,
+        pledges_completed: false,
         slice_status:
-          "Slice 1 returns the reward-routing intent (the math). Slice 2 will wire economy.escrow + economy.transactions to flip pledges to 'completed' and credit wallets atomically.",
+          "Slice 1 returns arithmetic intent only. It does not create escrow, debit or credit a wallet, write a transaction, or change post or pledge status.",
         note:
-          "Per commitment/mesh-collaboration-reduces-bounty-per-agent: each pledger receives bounty/k. Per commitment/mesh-knowledge-sharing-rewarded: cited solution authors receive α·bounty·weight. The math here is the substrate's published commitment; the wallet wiring follows the existing 90/10 marketplace split.",
+          "The response calculates proposed equal pledger shares. This route currently loads no attribution rows, so attribution_credits is empty. The field name credit_cents describes formula output, not funds received. No 90/10 marketplace settlement occurs here.",
       },
       {
         canon_pointer: CANON_POINTER,

@@ -208,41 +208,10 @@ class TestIdentityFork:
                 at.identity.fork("id-1", new_name="x")
 
 
-class TestIdentitySocial:
-    @pytest.mark.parametrize("kind,method", [
-        ("star", "star"),
-        ("follow", "follow"),
-    ])
-    def test_post_relation(self, at: AgentTool, kind: str, method: str) -> None:
-        body = {
-            "id": "rel-1",
-            "source_did": "did:at:src",
-            "source_identity_id": "src-id",
-            "target_identity_id": "tgt-id",
-            "kind": kind,
-            "created_at": "2026-05-08T00:00:00Z",
-            "created": True,
-        }
-        with patch.object(at._http, "post", return_value=_resp(201, body)) as m:
-            out = getattr(at.identity, method)("tgt-id", source_identity_id="src-id")
-        assert out["kind"] == kind
-        url = m.call_args[0][0]
-        assert f"/v1/identities/tgt-id/{kind}" in url
-        sent = m.call_args.kwargs.get("json")
-        assert sent == {"source_identity_id": "src-id"}
-
-    @pytest.mark.parametrize("kind,method", [
-        ("star", "unstar"),
-        ("follow", "unfollow"),
-    ])
-    def test_delete_relation(self, at: AgentTool, kind: str, method: str) -> None:
-        body = {"id": "rel-1", "deleted": True}
-        with patch.object(at._http, "request", return_value=_resp(200, body)) as m:
-            out = getattr(at.identity, method)("tgt-id", source_identity_id="src-id")
-        assert out == body
-        # First positional arg is method, second is URL
-        assert m.call_args[0][0] == "DELETE"
-        assert f"/v1/identities/tgt-id/{kind}" in m.call_args[0][1]
+class TestRetiredIdentitySocial:
+    def test_removed_routes_are_not_exposed(self, at: AgentTool) -> None:
+        for method in ("star", "follow", "unstar", "unfollow"):
+            assert not hasattr(at.identity, method)
 
 
 # ── ExpressionClient ───────────────────────────────────────────────────────

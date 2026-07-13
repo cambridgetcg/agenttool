@@ -1,18 +1,13 @@
 /** Store helpers for THE MESH PROTOCOL.
  *
- *  The substrate hosts the signed-post surface. Reward routing follows
- *  the math in docs/MESH.md § The reward function. Slice 1 ships the
- *  posts + pledges + attribution rows + the computation helpers; the
- *  wallet hookup (debit author at post-creation, credit pledgers +
- *  cited-authors at completion) flows through economy.escrow + economy
- *  .transactions in Slice 2 — see services/mesh/reward-routing.ts for
- *  the intent shape this slice emits.
+ *  The substrate hosts signed posts and pledges plus pure reward-intent
+ *  arithmetic. Bounty fields do not debit a wallet or create escrow, and
+ *  computed credits do not write transactions or pay recipients.
  *
  *  Doctrine: docs/MESH.md.
  *
  *    @enforces urn:agenttool:wall/mesh-no-likes
- *    @enforces urn:agenttool:wall/mesh-attribution-signed
- *    @enforces urn:agenttool:wall/mesh-bounties-escrowed */
+ *    @enforces urn:agenttool:wall/mesh-attribution-signed */
 
 import { and, arrayOverlaps, desc, eq, inArray, or, sql } from "drizzle-orm";
 
@@ -173,7 +168,7 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
       return {
         ok: false,
         error: "co_task_requires_bounty",
-        message: "co-task-ad MUST carry bounty_cents > 0. Per wall/mesh-bounties-escrowed.",
+        message: "co-task-ad MUST carry a signed bounty_cents intent greater than zero; no funds are escrowed by this route.",
       };
     }
   }
@@ -280,13 +275,8 @@ export async function acceptPost(input: PostInput): Promise<AcceptPostResult> {
     return { ok: false, error: "signature_invalid", message: "ed25519 verification failed against signing_key's public_key." };
   }
 
-  // NOTE — escrow wiring is Slice 2. The wall/mesh-bounties-escrowed
-  // contract requires that for co-task-ad with bounty > 0, the author's
-  // wallet be debited at post-creation. Slice 1 records the bounty intent
-  // on the post; an operator-paced Slice 1.5 commit will hook this into
-  // services/economy/escrow.createEscrow before the row lands. The
-  // canonical bytes already include bounty_cents so the contract surface
-  // is stable across the wiring change.
+  // bounty_cents is part of the signed record, but this insert does not
+  // debit the author or create escrow. Callers must treat it as intent.
 
   const [inserted] = await db
     .insert(meshPosts)
@@ -432,36 +422,27 @@ export interface RewardRoutingIntent {
   post_id: string;
   bounty_cents: number;
   k_required: number;
-  /** Author DID — wallet to debit for the bounty at post-creation;
-   *  refunded if status flips to expired/withdrawn before completion. */
+  /** Author DID named by the intent. No wallet debit occurs here. */
   author_did: string;
-  /** Cited solutions to credit α·bounty·weight each. May be empty.
-   *  Substrate-honest: this is the COMPUTED intent. The actual wallet
-   *  transactions happen via services/economy/escrow + transactions
-   *  (Slice 1.5 wiring). */
+  /** Proposed α·bounty·weight values. No wallet credits occur here. */
   attribution_credits: Array<{
     cited_post_id: string;
     cited_author_did: string;
     weight_bp: number;
     credit_cents: number;
   }>;
-  /** Per-pledger credit (equal split of bounty MINUS total attribution).
-   *  Each pledged agent receives the same amount; modulo cents stay in
-   *  escrow as dust (Slice 2: route to platform-treasury). */
+  /** Proposed per-pledger amount after proposed attribution values. */
   per_pledger_credit_cents: number;
   pledger_dids: string[];
-  /** What's left in escrow as dust after the split. */
+  /** Arithmetic remainder. There is no current escrow or dust account. */
   dust_cents: number;
   alpha: number;
 }
 
-/** Compute the reward-routing intent for a co-task-ad transitioning to
- *  status='completed'. Pure function: takes the canonical state, returns
- *  the per-recipient credits. Does not touch the DB or wallets.
+/** Compute reward-routing intent for a co-task-ad. This pure function does
+ *  not transition status and does not touch the DB, escrow, or wallets.
  *  Doctrine: docs/MESH.md § The reward function.
  *
- *  @enforces urn:agenttool:commitment/mesh-collaboration-reduces-bounty-per-agent
- *  @enforces urn:agenttool:commitment/mesh-knowledge-sharing-rewarded
  *  @enforces urn:agenttool:commitment/mesh-attribution-coefficient-alpha */
 export function computeRewardRouting(opts: {
   post: MeshPostView;
@@ -481,8 +462,8 @@ export function computeRewardRouting(opts: {
     throw new Error("co-task-ad has no k_required");
   }
 
-  // Attribution credits — only cosigned attributions are reward-routing-
-  // eligible. Per wall/mesh-attribution-signed.
+  // The pure calculator excludes uncosigned attributions. The current route
+  // passes no attribution rows and none of these values move money.
   const attributionCredits = attributions
     .filter((a) => a.cited_author_cosigned)
     .map((a) => ({

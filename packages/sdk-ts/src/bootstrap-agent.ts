@@ -13,8 +13,7 @@
  * walks this same door.
  *
  * ```ts
- * import { bootstrapAgent } from "@agenttool/sdk";
- * import { derive, generateMnemonic } from "@agenttool/sdk/seed";
+ * import { bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
  *
  * const mnemonic = generateMnemonic(256);
  * const bundle = derive(mnemonic);

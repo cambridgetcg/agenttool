@@ -75,7 +75,7 @@ describe("bearer authority contract", () => {
       const graph = registry["@graph"] as Array<Record<string, unknown>>;
       const byId = (id: string) => graph.find((node) => node["@id"] === id);
 
-      expect(registry.version).toBe("v1.16");
+      expect(registry.version).toBe("v1.17");
       expect(byId("agenttool:doc/OBSERVATIONS")?.["schema:url"]).toBe(
         "https://docs.agenttool.dev/OBSERVATIONS.md",
       );

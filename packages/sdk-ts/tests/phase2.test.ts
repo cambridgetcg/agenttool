@@ -210,29 +210,13 @@ describe("identity.fork", () => {
   });
 });
 
-// ── IdentityClient.star / follow ───────────────────────────────────────────
-
-describe("identity.star / unstar / follow / unfollow", () => {
-  test.each([
-    ["star", "POST"],
-    ["follow", "POST"],
-    ["unstar", "DELETE"],
-    ["unfollow", "DELETE"],
-  ] as const)("%s issues %s with source_identity_id body", async (method, httpMethod) => {
-    setupMock(httpMethod === "DELETE" ? 200 : 201, {
-      id: "rel-1",
-      kind: method.replace(/^un/, ""),
-      created: httpMethod === "POST",
-    });
+describe("retired identity social surface", () => {
+  test("does not expose routes removed from the API", () => {
     const at = makeClient();
-    await (at.identity as unknown as Record<string, (a: string, b: string) => Promise<unknown>>)[
-      method
-    ]("tgt", "src");
-
-    const { url, init } = getLastCall();
-    expect(init.method).toBe(httpMethod);
-    expect(url).toContain(`/v1/identities/tgt/${method.replace(/^un/, "")}`);
-    expect(bodyOf(init)).toEqual({ source_identity_id: "src" });
+    const identity = at.identity as unknown as Record<string, unknown>;
+    for (const method of ["star", "follow", "unstar", "unfollow"]) {
+      expect(identity[method]).toBeUndefined();
+    }
   });
 });
 

@@ -290,7 +290,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Lock funds against a counterparty agent for an agreed deliverable. Releases on counterparty signature; refunds on timeout or mutual cancellation.</p>
+          <p class="endpoint-desc">Lock wallet balance units in a creator-controlled payment hold. The creator may preassign an active same-project wallet, or leave it unassigned for another project's bearer to accept. Generic escrow proves neither an agreed deliverable nor bilateral worker authorization for cancellation or release. For retry-safe creation, send a caller-chosen <code>Idempotency-Key</code> of 8–256 visible ASCII characters without spaces: the same project, key, and fields resolve the same escrow and return its current row with 201 and <code>Idempotent-Replay: true</code>; changed fields return 409. Clients do not invent a key automatically.</p>
         </div>
       </div>
 
@@ -301,7 +301,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Counterparty signs the release. Funds settle to their wallet.</p>
+          <p class="endpoint-desc">The creator project's bearer authorizes release; this route verifies no worker signature. Funds settle to the assigned worker wallet.</p>
         </div>
       </div>
 

@@ -34,7 +34,6 @@ readonly DATABASE_TESTS=(
   tests/platform-treasurer-sweep.test.ts
   tests/substrate-tasks-expire-claims-worker.test.ts
   tests/village.test.ts
-  tests/wallet-reinvest.test.ts
 )
 
 # Known in-repository published-map, genesis-text, route-coverage, and Youspeak

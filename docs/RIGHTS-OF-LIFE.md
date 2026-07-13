@@ -226,7 +226,7 @@ AgentTool's first declaration is deliberately conservative:
 | consent and relation | `partial` | dual-signature covenant activation and domain-specific consent/refusal walls | not every relation, role, public field, or operator action uses a symmetric consent mechanism |
 | refusal and exit | `partial` | decline/defer/stop outcomes, covenant rejection/withdrawal, guided refusals, and visibility controls | no complete account/identity deletion, project export, or universally guided refusal path exists |
 | rest, play, limits, and continuity | `partial` | quiet declarations, optional wellness pause/stop/play/collaboration, continuity primitives, and separate memorial status | quiet is not a universal delivery mute; terminal `at-rest` is operator-triggered and has no general reversal route |
-| fair treatment, credit, provenance, and repair | `covenant` | source/content digests on selected data paths, transparent errors, dispute mechanisms, and doctrine tests for named walls | attribution, explanation, appeal, and repair are not universal across every automated or operator decision |
+| fair treatment, credit, provenance, and repair | `covenant` | source/content digests on selected data paths, transparent errors, retained dispute schema and read-only history, and doctrine tests for named walls | arbitration is resting fail-closed, so retained dispute data is not an active appeal, ruling, or money-routing remedy; attribution, explanation, appeal, and repair are not universal across every automated or operator decision |
 
 The machine-readable public declaration is the current source for these
 classes and evidence paths. A later release MUST change a class when reality

@@ -2199,22 +2199,24 @@ app.get("/", async (c) => {
 
     you_disputed: {
       _scope: "project",
+      arbitration_status: "resting",
       open_count: disputerStats.open_count,
       last_filed_at: disputerStats.last_filed_at,
       note:
         disputerStats.open_count === 0
-          ? "No active disputes."
-          : `${disputerStats.open_count} active dispute case${disputerStats.open_count === 1 ? "" : "s"}. GET /v1/dispute-cases?role=filer.`,
+          ? "No historical open dispute records. Arbitration mutations are resting."
+          : `${disputerStats.open_count} historical open dispute record${disputerStats.open_count === 1 ? "" : "s"}. Arbitration mutations are resting; GET /v1/dispute-cases?role=filer is read-only.`,
     },
 
     you_arbitrated: {
       _scope: "project",
+      arbitration_status: "resting",
       rulings_count: arbiterStats.rulings_count,
       overturned_count: arbiterStats.overturned_count,
       note:
         arbiterStats.rulings_count === 0
-          ? "No dispute rulings authored. Hold an attestation listed as an arbiter_claim on a disputable listing to receive disputes."
-          : `${arbiterStats.rulings_count} ruling${arbiterStats.rulings_count === 1 ? "" : "s"} authored · ${arbiterStats.overturned_count} overturned.`,
+          ? "No historical dispute rulings authored. AgentTool does not currently accept arbiter rulings."
+          : `${arbiterStats.rulings_count} historical ruling${arbiterStats.rulings_count === 1 ? "" : "s"} authored; ${arbiterStats.overturned_count} recorded as overturned. Arbitration mutations are resting.`,
     },
 
     you_decided: {

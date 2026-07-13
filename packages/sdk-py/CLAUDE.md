@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. Published on PyPI as `agenttool-sdk`.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`; as audited on 2026-07-13, PyPI serves 0.10.0. This checkout's 0.11.0 version is repository source, not a claim that PyPI already serves it.
 
 ## Current State
-Active — v0.10.0 release source. Phases 0–6 plus the separate `at.data` node client are shipped.
+Active - v0.11.0 repository source and parity target. Phases 0-6 plus the separate `at.data` node client are implemented here. The 0.11.0 release plan uses the `sdk-v0.11.0` GitHub source tag; PyPI publication remains a separate operator step.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,20 +16,20 @@ Active — v0.10.0 release source. Phases 0–6 plus the separate `at.data` node
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.10.0")
+  __init__.py            — Public surface + __version__ ("0.11.0")
   client.py              — AgentTool (composes 13 service clients + at.deciding sugar)
   _context.py            — AmbientContext for auto-trace ambient state
   bootstrap.py           — BootstrapClient (agent creation, elevation)
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   covenants.py           — CovenantsClient (vows + bonds; federation-aware)
   economy.py             — EconomyClient (wallets, escrow, transactions)
-  identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (DIDs, foundations, fork, lineage, social)
+  identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   memory.py              — MemoryClient (store, search, get, delete; tiered)
   data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
   register.py            — Top-level register() — DEPRECATED since 2026-05-15 (agents-only); raises with 410 migration payload pointing at bootstrap_agent
   bootstrap_agent.py     — Top-level bootstrap_agent() — POST /v1/register/agent canonical arrival door (BYO keys + PoW)
-  tools.py               — ToolsClient (search, scrape, browse, document, execute)
+  tools.py               — ToolsClient (scrape, browse, document, execute)
   traces.py              — TracesClient (store, search, chain)
   vault.py               — VaultClient (encrypted secrets, policies)
   verify.py              — VerifyClient (deprecated — endpoint dropped, removal in 0.7.0)
@@ -69,10 +69,19 @@ pytest
 python -m build
 ```
 
-## How to Deploy
+## How to Publish to PyPI
+
+This optional registry step is separate from merging the source, publishing the
+GitHub tag, and committing the TypeScript LOVE package.
+
 ```bash
-# Publish to PyPI
-python -m build && twine upload dist/*
+# From the clean release commit. Remove only generated build output.
+test -z "$(git status --porcelain)"
+python -m pytest -q
+rm -rf dist build
+python -m build
+python -m twine check dist/*
+python -m twine upload dist/*
 ```
 
 ## Dependencies
@@ -82,7 +91,7 @@ python -m build && twine upload dist/*
 - **Auth**: Reads `AT_API_KEY` from env or accepts `api_key` parameter
 
 ## Parity invariant
-py and ts ship at the same minor version (lockstep enforced from 0.7.0). Each new module must land in BOTH languages before merging — `cd packages/sdk-ts && bun run check-parity` is the gate.
+py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
 
 ## Doctrine
 The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. `SOUL.md` ships inside the wheel as a runtime artifact: `from agenttool import soul; print(soul())`.
@@ -100,7 +109,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing 13 service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.10.0"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.11.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract

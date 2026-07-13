@@ -6,10 +6,10 @@
  *    /v1/identities/...                       — CRUD on identities
  *    /v1/identities/:id/keys/...              — key rotation/revocation
  *    /v1/identities/:id/attestations/...      — attestations about this identity
- *    /v1/identities/:id/tokens                — issue agent JWT
+ *    /v1/identities/:id/tokens                — retired server-side issue route (410)
  *    /v1/attestations/...                     — attestation by id
  *    /v1/discover                             — search/filter identities
- *    /v1/tokens/verify                        — verify any JWT */
+ *    /v1/tokens/verify                        — verify a local JWT for one audience */
 
 import { Hono } from "hono";
 

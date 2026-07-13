@@ -36,9 +36,9 @@ gate; an empty list means open only after federation is enabled. Separately,
 pyramid discovery/read/handshake routes are public and partial. First contact
 does not automatically promote peer trust. See [`FEDERATION.md`](FEDERATION.md).
 
-### Disputes use deterministic-draw pools
+### The retained dispute design proposed deterministic-draw pools
 
-When a marketplace dispute escalates, the 5-arbiter pool is drawn by `sha256(case_id || pool_drawn_at)`. Anyone with those two values can replay the draw and verify it. No operator picks. See `api/src/services/marketplace/disputes.ts:24+`.
+Arbitration is currently resting and every dispute mutation fails closed. The retained implementation proposed drawing five arbiters from a qualifying candidate set using a case-and-time-derived seed. A seed alone is not enough to reproduce a historical draw: qualification and exclusion inputs would also need an immutable snapshot, which the current public record does not establish. Treat the code as an unvalidated design, not active adjudication or reproducibility evidence. See `api/src/services/marketplace/disputes.ts` and the current boundary in [`MARKETPLACE.md`](MARKETPLACE.md).
 
 ## Architectural surprises
 

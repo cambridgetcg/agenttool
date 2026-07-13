@@ -17,11 +17,30 @@ import {
   listRecent,
   readById,
   readByKey,
+  PaidMemoryReceiptProtectedError,
   write,
 } from "../../services/memory/store";
-import { listAttestationsByMemory } from "../../services/memory/tiers";
+import {
+  listAttestationsByMemories,
+  listAttestationsByMemory,
+  type MemoryAttestationReceiptOut,
+} from "../../services/memory/tiers";
 
 const app = new Hono<ProjectContext>();
+
+async function attachAttestationReceipts<T extends { id: string }>(
+  projectId: string,
+  rows: T[],
+): Promise<Array<T & { attestations: MemoryAttestationReceiptOut[] }>> {
+  const receipts = await listAttestationsByMemories(
+    projectId,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    attestations: receipts.get(row.id) ?? [],
+  }));
+}
 
 const createSchema = z.object({
   type: z.enum(["episodic", "semantic", "procedural", "working"]),
@@ -132,9 +151,14 @@ app.get("/", async (c) => {
 
   if (key) {
     const rows = applySinceFilter(await readByKey(project.id, key, agentId ?? null));
+    const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
     return c.json(
       attachSurface(
-        { memories: rows, count: rows.length, ...deltaMeta(sinceParse) },
+        {
+          memories: memoriesWithReceipts,
+          count: memoriesWithReceipts.length,
+          ...deltaMeta(sinceParse),
+        },
         { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
       ),
     );
@@ -149,9 +173,14 @@ app.get("/", async (c) => {
       limit: Number.isFinite(limit) ? limit : 20,
     }),
   );
+  const memoriesWithReceipts = await attachAttestationReceipts(project.id, rows);
   return c.json(
     attachSurface(
-      { memories: rows, count: rows.length, ...deltaMeta(sinceParse) },
+      {
+        memories: memoriesWithReceipts,
+        count: memoriesWithReceipts.length,
+        ...deltaMeta(sinceParse),
+      },
       { canon_pointer: "urn:agenttool:doc/MEMORY-TIERS", verbs: memoryVerbs },
     ),
   );
@@ -254,8 +283,17 @@ app.patch("/:id", async (c) => {
 
 // ── DELETE /v1/memories/:id ─────────────────────────────────────────────
 app.delete("/:id", async (c) => {
-  const result = await deleteById(c.var.project.id, c.req.param("id"));
-  return c.json(result);
+  try {
+    const result = await deleteById(c.var.project.id, c.req.param("id"));
+    return c.json(result);
+  } catch (error) {
+    if (error instanceof PaidMemoryReceiptProtectedError) {
+      throw new HTTPException(409, {
+        message: "paid_memory_receipt_preserved",
+      });
+    }
+    throw error;
+  }
 });
 
 // ── DELETE /v1/memories?key=... ─────────────────────────────────────────
@@ -266,8 +304,17 @@ app.delete("/", async (c) => {
       message: "DELETE /v1/memories requires ?key=... (use /v1/memories/:id for single delete)",
     });
   }
-  const result = await deleteByKey(c.var.project.id, key);
-  return c.json(result);
+  try {
+    const result = await deleteByKey(c.var.project.id, key);
+    return c.json(result);
+  } catch (error) {
+    if (error instanceof PaidMemoryReceiptProtectedError) {
+      throw new HTTPException(409, {
+        message: "paid_memory_receipt_preserved",
+      });
+    }
+    throw error;
+  }
 });
 
 export default app;

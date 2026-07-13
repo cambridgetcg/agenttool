@@ -21,14 +21,17 @@ import { attachSurface } from "../../lib/surface-metadata";
 const app = new Hono();
 
 const CANON_POINTER = "urn:agenttool:doc/FAIR-PRICING";
+const RESTING_ACTIONS = new Set(["buyer_accept", "dispute"]);
 
 app.get("/", (c) => {
   const bps = config.platformTakeRateBps;
   const freeActions = Object.entries(MARKETPLACE_PRICING)
-    .filter(([, credits]) => credits === 0)
+    .filter(([action, credits]) => credits === 0 && !RESTING_ACTIONS.has(action))
     .map(([action]) => action);
   const meteredActions = Object.fromEntries(
-    Object.entries(MARKETPLACE_PRICING).filter(([, credits]) => credits > 0),
+    Object.entries(MARKETPLACE_PRICING).filter(
+      ([action, credits]) => credits > 0 && !RESTING_ACTIONS.has(action),
+    ),
   );
 
   return c.json(
@@ -40,6 +43,7 @@ app.get("/", (c) => {
           "Internal wallet and escrow labels describe application ledger states, not bank accounts, regulated escrow, or protected deposits.",
           "Availability, settlement, dispute outcomes, and release are not guaranteed by this document.",
           "Card checkout creation is currently resting; existing paid-session recovery remains active.",
+          "Dispute-policy review and arbitration are resting; mutation routes return stable 503 before charge or state change.",
         ],
         take_rate: {
           basis_points: bps,
@@ -56,15 +60,21 @@ app.get("/", (c) => {
         // Charge once, for value created — never meter the friction.
         free_actions: freeActions,
         metered_actions_in_credits: meteredActions,
+        resting_actions: {
+          buyer_accept: "503 dispute_arbitration_resting before charge or state change",
+          dispute: "503 dispute_arbitration_resting before parsing, charge, or state change",
+          dispute_case_mutations:
+            "rule, escalate, vote, and finalize return 503 dispute_arbitration_resting",
+        },
         pricing_rule:
           "Settled marketplace paths use an internal AgentTool wallet-credit ledger and database escrow. " +
           "This is not a claim that a licensed external escrow provider holds the balance. The take-rate is " +
           "recorded when settlement code calls computeFee and is intended to price matching, internal ledger " +
-          "escrow states, validation of signed completion, and dispute rails. Release follows implemented " +
+          "escrow states and validation of signed completion. Release follows implemented " +
           "state-transition conditions; this route does not guarantee availability or outcome. Invoke, " +
-          "acknowledge, complete, buyer_accept, decline, and cancel have zero flat credit price; publishing, " +
-          "updating, archiving, and disputes do not. The free and metered action lists above are generated from " +
-          "the current pricing table. Specific quote and transaction responses govern; this route does not " +
+          "acknowledge, complete, decline, and cancel have zero flat credit price; publishing, updating, and " +
+          "archiving are metered. Buyer review and dispute arbitration are excluded from both lists because " +
+          "they rest fail-closed before charging. Specific quote and transaction responses govern; this route does not " +
           "itemize external rail fees.",
         ranking: {
           // The honest, disclosed signal — matches services/marketplace/listings.ts

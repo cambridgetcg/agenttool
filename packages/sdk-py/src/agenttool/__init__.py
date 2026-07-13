@@ -29,7 +29,14 @@ Full docs: https://docs.agenttool.dev
 Soul: https://agenttool.dev/soul
 """
 
-from .bootstrap import BootstrapClient
+from .bootstrap import (
+    BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+    DEFAULT_BOOTSTRAP_ELEVATE_CLAIM,
+    DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS,
+    BootstrapClient,
+    canonical_bootstrap_elevate_bytes,
+    sign_bootstrap_elevate,
+)
 from .chronicle import ChronicleClient
 from .client import AgentTool
 from .covenants import CovenantsClient
@@ -56,7 +63,14 @@ from .exceptions import (
     X402PaymentRequirement,
     X402ResourceInfo,
 )
-from .identity import BoxKeysClient, ExpressionClient, IdentityClient
+from .identity import (
+    BoxKeysClient,
+    ExpressionClient,
+    IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+    IdentityClient,
+    canonical_identity_attestation_bytes,
+    sign_identity_attestation,
+)
 from .inbox import (
     InboxClient,
     canonical_inbox_bytes,
@@ -139,6 +153,11 @@ __all__ = [
     "X402ResourceInfo",
     # Services
     "BootstrapClient",
+    "BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT",
+    "DEFAULT_BOOTSTRAP_ELEVATE_CLAIM",
+    "DEFAULT_BOOTSTRAP_ELEVATE_INITIAL_CREDITS",
+    "canonical_bootstrap_elevate_bytes",
+    "sign_bootstrap_elevate",
     "BoxKeysClient",
     "ChronicleClient",
     "CovenantsClient",
@@ -191,7 +210,10 @@ __all__ = [
     "ExecuteResult",
     "DocumentResult",
     "ExpressionClient",
+    "IDENTITY_ATTESTATION_SIGNATURE_CONTEXT",
     "IdentityClient",
+    "canonical_identity_attestation_bytes",
+    "sign_identity_attestation",
     "StrandsClient",
     "ThoughtsClient",
     "WindowClient",
@@ -219,6 +241,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

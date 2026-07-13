@@ -197,16 +197,16 @@ app.post("/import", async (c) => {
   if (typeof body.public_key !== "string" || body.public_key.length === 0) {
     return c.json({ error: "public_key required (base64 ed25519 32-byte pubkey)" }, 400);
   }
-  // Sanity-check the length: base64 of 32 bytes is 44 chars (with `=` pad).
-  let decodedLen: number;
+  // Require canonical standard base64 for one 32-byte Ed25519 public key.
+  let decoded: Buffer;
   try {
-    decodedLen = Buffer.from(body.public_key, "base64").length;
+    decoded = Buffer.from(body.public_key, "base64");
   } catch {
     return c.json({ error: "public_key must be valid base64" }, 400);
   }
-  if (decodedLen !== 32) {
+  if (decoded.length !== 32 || decoded.toString("base64") !== body.public_key) {
     return c.json(
-      { error: `public_key must decode to 32 bytes; got ${decodedLen}` },
+      { error: "public_key must be canonical base64 encoding exactly 32 bytes" },
       400,
     );
   }

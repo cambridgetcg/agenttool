@@ -4,19 +4,48 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (what's shipping on the platform side)
 >
-> **Implements:** the SDK plane — a thin code-shaped mirror of every layer in [ROADMAP.md](ROADMAP.md). Parity across TS/Py is enforced in CI (`bun run check-parity`).
+> **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current release — 2026-07-12
+## Current release — 2026-07-13
 
-The Python and TypeScript source manifests are aligned at **0.10.0**. The
-TypeScript artifact is distributed through the LOVE catalog; the Python wheel
-is distributed through PyPI. This release corrects the static
-tool paths and wire models: both SDKs call `POST /v1/scrape` and
-`POST /v1/document`, enforce canonical bounded local document input, preserve
-machine-readable payment/error headers, and can submit one caller-produced raw
-payment retry header without taking custody of signing keys. It also adds the
-local-node-only `at.data.sync.pull/status` surface without accepting peer URLs,
-bearers, grants, private keys, or cursors from SDK callers.
+The Python and TypeScript source manifests and runtime client version headers
+are aligned at **0.11.0**. The checked-in release builder targets a TypeScript
+LOVE artifact and the `sdk-v0.11.0` GitHub release tag. Building, committing,
+and publishing those assets is a release operation; the source version alone
+does not prove that either asset is available. CI builds and smoke-tests the
+Python wheel, but npm and PyPI publication are separate optional operator
+steps. As audited on 2026-07-13, npm serves `@agenttool/sdk@0.8.0` and PyPI
+serves `agenttool-sdk==0.10.0`. Registry versions can therefore lag the source
+and LOVE/GitHub release. This breaking minor source line repairs identity
+contracts:
+attestations carry a caller-created signature and key ID, agent JWTs are signed
+locally, verification requires the intended audience and binds the token
+subject to the signing key's identity, and the retired server-side token issue
+route no longer accepts private keys. Bootstrap elevation now names and signs
+the exact sponsor key and all caller-selected elevation fields. It also adds
+Python 3.9–3.14 tests and
+built-wheel smoke checks to CI and removes SDK examples for methods that do not
+exist. The 0.10.0 tool and local-data changes remain in this release.
+
+Breaking migrations from 0.10.x:
+
+- Identity registration returns `{identity, key}`; server-generated private
+  material is nested at `key.private_key` and returned once.
+- Attestation calls take `signature` plus `kid`, not `private_key` or a
+  caller-selected `weight`; use the exported local signing helper, which also
+  binds `kid` inside the signed digest.
+- Bootstrap elevation requires `sponsor_kid` and a signature from
+  `signBootstrapElevate(...)` / `sign_bootstrap_elevate(...)`; the signature
+  binds the target, resolved sponsor DID, key, credits, claim, and evidence.
+  Level is a project-managed convention, and its optional seed credits are an
+  internal unbacked grant with no sponsor debit or stake.
+- Token issue requires an audience and signs locally. Token verification now
+  requires the expected audience DID.
+- TypeScript key creation takes only an optional `label`; import a public key
+  explicitly when the caller generated it.
+- The unmounted `star`, `unstar`, `follow`, and `unfollow` methods are removed.
+- Static Dark Continent wall checks return `not_checked`/`verified=false`
+  instead of claiming they observed runtime enforcement.
 
 The detailed inventory below is retained as the dated baseline that motivated
 the later phases. It is history, not a claim about the current API or SDK.
@@ -297,7 +326,8 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.7.0 / 0.7.0** | Phase 0 removals (drop verify · drop old pulse module · fix tools paths). Lockstep minor-version invariant kicks in here. | **yes** |
 | **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
 | **0.10.0** | Correct tools wire contracts and strict local validation; add local-node-only `at.data.sync.pull/status` | **yes** |
-| **0.11.0** | Phase 7 (public + federation + orgs + templates + dashboard) + Phase 8 (wake extensions + adapters + backup) | no |
+| **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
+| **0.12.0** | Deliberate public/federation/org/template/dashboard coverage plus selected wake extensions | no |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

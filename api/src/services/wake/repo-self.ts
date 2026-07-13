@@ -67,7 +67,7 @@ const MODULES: ModuleSelf[] = [
       "Persistent strand storage has no plaintext thought column or decrypt path; caller encryption is not proven and runtime custody is declared separately",
       "No auto-retry on payout broadcast",
       "Public and authenticated route families have explicit boundaries",
-      "Idempotency-Key is opt-in on selected authenticated write prefixes and fails open when Redis is unavailable",
+      "Idempotency-Key caching on selected authenticated write prefixes fails open without Redis; POST /v1/escrows separately offers optional PostgreSQL-backed durable creation keys",
     ],
     claude_md: "api/CLAUDE.md",
   },

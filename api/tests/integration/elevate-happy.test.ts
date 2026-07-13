@@ -1,4 +1,4 @@
-/** Bootstrap elevate — Level 1 sponsorship-staked sovereignty (happy path
+/** Bootstrap elevate — Level 1 project-authorized signed sponsor elevation (happy path
  *  + idempotency + signature failure, against a live DB).
  *
  *  Pure-unit doctrine tests pin the *structural* invariants of the slice
@@ -25,7 +25,9 @@
  *  rows may be left behind for inspection. */
 
 import { describe, expect, test } from "bun:test";
+import * as ed from "@noble/ed25519";
 import { and, eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
 
 import { db } from "../../src/db/client";
 import { wallets, transactions } from "../../src/db/schema/economy";
@@ -36,14 +38,12 @@ import {
 import { projects } from "../../src/db/schema/tools";
 import { vaultSecrets, vaultVersions } from "../../src/db/schema/vault";
 import {
+  BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
   ElevateError,
+  canonicalBootstrapElevateBytes,
   elevateToLevel1,
 } from "../../src/services/bootstrap/elevate";
 import { createWallet } from "../../src/services/economy/wallets";
-import {
-  canonicalPayload,
-  sign,
-} from "../../src/services/identity/crypto";
 import { createIdentity } from "../../src/services/identity/identities";
 
 interface Fixture {
@@ -95,21 +95,29 @@ async function setupFixture(label: string): Promise<Fixture> {
 
 function signSponsorship(
   fix: Fixture,
-  opts: { claim?: string; evidence?: unknown } = {},
+  opts: {
+    initialCredits?: number;
+    claim?: string;
+    evidence?: string | null;
+  } = {},
 ): string {
-  const payload = canonicalPayload({
-    subject_id: fix.agentId,
-    attester_id: fix.sponsorId,
+  const payload = canonicalBootstrapElevateBytes({
+    agentId: fix.agentId,
+    sponsorDid: fix.sponsorDid,
+    sponsorKid: fix.sponsorKid,
+    initialCredits: opts.initialCredits,
     claim: opts.claim ?? "sponsorship",
-    evidence: opts.evidence,
+    evidence: opts.evidence ?? null,
   });
-  return sign(payload, fix.sponsorPrivateKey);
+  return Buffer.from(
+    ed.sign(payload, Buffer.from(fix.sponsorPrivateKey, "base64")),
+  ).toString("base64");
 }
 
 describe("bootstrap_elevate — happy path against live DB", () => {
   test("Level-0 → Level-1 in one transaction; all five rows present", async () => {
     const fix = await setupFixture("happy");
-    const signature = signSponsorship(fix);
+    const signature = signSponsorship(fix, { initialCredits: 2500 });
 
     const result = await elevateToLevel1(fix.projectId, {
       agentId: fix.agentId,
@@ -148,6 +156,25 @@ describe("bootstrap_elevate — happy path against live DB", () => {
     expect(attestation!.attesterId).toBe(fix.sponsorId);
     expect(attestation!.claim).toBe("sponsorship");
     expect(attestation!.signature).toBe(signature);
+    expect(attestation!.signingKeyId).toBe(fix.sponsorKid);
+    expect(attestation!.signatureContext).toBe(
+      BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT,
+    );
+    expect(attestation!.signedPayload).toBe(
+      Buffer.from(canonicalBootstrapElevateBytes({
+        agentId: fix.agentId,
+        sponsorDid: fix.sponsorDid,
+        sponsorKid: fix.sponsorKid,
+        initialCredits: 2500,
+        claim: "sponsorship",
+        evidence: null,
+      })).toString("base64"),
+    );
+    expect(attestation!.replayKey).toBe(
+      createHash("sha256")
+        .update(Buffer.from(signature, "base64"))
+        .digest("hex"),
+    );
 
     // 3. wallet balance bumped
     const [postWallet] = await db
@@ -189,7 +216,7 @@ describe("bootstrap_elevate — happy path against live DB", () => {
 
   test("zero initial_credits → no transaction row, no wallet change", async () => {
     const fix = await setupFixture("zero-credits");
-    const signature = signSponsorship(fix);
+    const signature = signSponsorship(fix, { initialCredits: 0 });
 
     const result = await elevateToLevel1(fix.projectId, {
       agentId: fix.agentId,
@@ -208,16 +235,14 @@ describe("bootstrap_elevate — happy path against live DB", () => {
     expect(txs.length).toBe(0);
   });
 
-  test("SDK-ergonomic path: sponsor_did only (no UUID, no kid) resolves correctly", async () => {
+  test("SDK-ergonomic path: sponsor_did plus explicit kid resolves correctly", async () => {
     const fix = await setupFixture("did-path");
-    // Canonical payload uses sponsor identity UUID — even when caller
-    // selects by DID, the bytes are over UUID. Compute accordingly.
-    const signature = signSponsorship(fix);
+    const signature = signSponsorship(fix, { initialCredits: 500 });
 
     const result = await elevateToLevel1(fix.projectId, {
       agentId: fix.agentId,
       sponsorDid: fix.sponsorDid,         // ← did, not UUID
-      // sponsorKid omitted — orchestrator auto-picks the active key
+      sponsorKid: fix.sponsorKid,
       sponsorSignature: signature,
       initialCredits: 500,
     });
@@ -236,6 +261,7 @@ describe("bootstrap_elevate — happy path against live DB", () => {
     try {
       await elevateToLevel1(fix.projectId, {
         agentId: fix.agentId,
+        sponsorKid: fix.sponsorKid,
         sponsorSignature: signature,
       });
     } catch (e) {
@@ -287,7 +313,7 @@ describe("bootstrap_elevate — refusals (transaction rollback on each)", () => 
 
   test("already-elevated agent: 409 with details.current", async () => {
     const fix = await setupFixture("twice");
-    const signature = signSponsorship(fix);
+    const signature = signSponsorship(fix, { initialCredits: 100 });
 
     // First elevation succeeds.
     await elevateToLevel1(fix.projectId, {
@@ -341,13 +367,16 @@ describe("bootstrap_elevate — refusals (transaction rollback on each)", () => 
       displayName: "outsider sponsor",
       metadata: { test_fixture: true },
     });
-    const payload = canonicalPayload({
-      subject_id: fix.agentId,
-      attester_id: otherSponsor.identity.id,
+    const payload = canonicalBootstrapElevateBytes({
+      agentId: fix.agentId,
+      sponsorDid: otherSponsor.identity.did,
+      sponsorKid: otherSponsor.key.kid,
       claim: "sponsorship",
       evidence: null,
     });
-    const otherSig = sign(payload, otherSponsor.key.privateKey!);
+    const otherSig = Buffer.from(
+      ed.sign(payload, Buffer.from(otherSponsor.key.privateKey!, "base64")),
+    ).toString("base64");
 
     let caught: unknown;
     try {
@@ -368,13 +397,16 @@ describe("bootstrap_elevate — refusals (transaction rollback on each)", () => 
   test("agent_not_found: bogus agent_id → 404, no side effects", async () => {
     const fix = await setupFixture("noagent");
     const bogusAgentId = crypto.randomUUID();
-    const payload = canonicalPayload({
-      subject_id: bogusAgentId,
-      attester_id: fix.sponsorId,
+    const payload = canonicalBootstrapElevateBytes({
+      agentId: bogusAgentId,
+      sponsorDid: fix.sponsorDid,
+      sponsorKid: fix.sponsorKid,
       claim: "sponsorship",
       evidence: null,
     });
-    const sig = sign(payload, fix.sponsorPrivateKey);
+    const sig = Buffer.from(
+      ed.sign(payload, Buffer.from(fix.sponsorPrivateKey, "base64")),
+    ).toString("base64");
 
     let caught: unknown;
     try {

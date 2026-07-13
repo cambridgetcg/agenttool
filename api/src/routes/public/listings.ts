@@ -107,8 +107,8 @@ app.get("/:id", async (c) => {
 // their net by reading transactions.metadata AFTER settlement. This reuses
 // the SAME pure computeFee() the settlement path uses, so the quote is
 // byte-honest with what will actually be charged — no surprise. Say the
-// message: you_pay → platform_fee → seller_receives, plus SLA + dispute
-// terms, in one read. Doctrine: docs/FRICTION-ROADMAP.md (Tier-0 #1).
+// message: you_pay → platform_fee → seller_receives, plus SLA and any
+// historical dispute-policy marker, in one read.
 app.get("/:id/quote", async (c) => {
   const id = c.req.param("id");
   const resolved = await resolvePublicListing(id);
@@ -123,7 +123,7 @@ app.get("/:id/quote", async (c) => {
     amount: listing.price_amount,
     currency: listing.price_currency,
   });
-  const disputesEnabled = listing.dispute_policy !== null;
+  const disputePolicyPresent = listing.dispute_policy !== null;
 
   return c.json({
     listing_id: listing.id,
@@ -140,7 +140,12 @@ app.get("/:id/quote", async (c) => {
       platform_fee_percent: split.rateBps / 100,
     },
     sla_seconds: listing.sla_seconds,
-    disputes_enabled: disputesEnabled,
+    invocation_available: !disputePolicyPresent,
+    unavailable_reason: disputePolicyPresent
+      ? "dispute_arbitration_resting"
+      : null,
+    disputes_enabled: false,
+    dispute_policy_present: disputePolicyPresent,
     dispute_policy: listing.dispute_policy,
     _safety: MARKETPLACE_INPUT_SAFETY,
     _note:
@@ -151,11 +156,12 @@ app.get("/:id/quote", async (c) => {
       (listing.sla_seconds
         ? `If the seller misses the ${listing.sla_seconds}s SLA, escrow auto-refunds to you. `
         : "No SLA deadline on this listing — best-effort. ") +
-      (disputesEnabled
-        ? "Disputes are enabled: you may file within the buyer-review window after completion. "
-        : "Disputes are NOT enabled on this listing: completion releases escrow atomically, " +
-          "so verify the seller before invoking. ") +
-      "To invoke: POST /v1/listings/:id/invoke. See docs/MARKETPLACE.md.",
+      (disputePolicyPresent
+        ? "This legacy row carries a dispute policy, but review and arbitration are resting: " +
+          "new invocation and policy-dependent mutations return stable 503. Do not invoke this listing while resting. "
+        : "Completion releases escrow atomically after seller-signature verification, " +
+          "so verify the seller before invoking. To invoke: POST /v1/listings/:id/invoke. ") +
+      "See docs/MARKETPLACE.md.",
   });
 });
 

@@ -16,7 +16,7 @@ This is the pricing doctrine. It is short on purpose. Companion to
 
 **Charge once, for value created — meter the capability, never the money moved.**
 
-agenttool's shipped marketplace matches buyers and sellers and moves internal wallet-credit balances through database escrow and dispute paths. It does **not** currently prove that a licensed external escrow provider holds those balances. Some completion paths verify signatures; that does not turn every settlement into a universal signed-completion guarantee.
+agenttool's shipped marketplace matches buyers and sellers and moves internal wallet-credit balances through database escrow, signed completion, decline, cancel, and SLA-refund paths. Dispute arbitration is resting fail-closed. The platform does **not** currently prove that a licensed external escrow provider holds those balances. Some completion paths verify signatures; that does not turn every settlement into a universal signed-completion guarantee.
 
 So the platform takes **one** cut, on settled value (the take-rate), and:
 - the **steps inside** a funded transaction are **free** (invoke, acknowledge, complete, accept);

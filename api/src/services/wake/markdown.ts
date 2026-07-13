@@ -510,10 +510,12 @@ export interface WakeBundle {
       refunded_30d: number;
     };
     disputed: {
+      arbitration_status: "resting";
       open_count: number;
       last_filed_at: string | null;
     };
     arbitrated: {
+      arbitration_status: "resting";
       rulings_count: number;
       overturned_count: number;
     };
@@ -575,7 +577,7 @@ export interface WakeBundle {
     age_seconds: number;
     form: string;
     lifecycle_state: string;
-    /** Identity level — 0 = birth (default), 1 = sponsorship-staked.
+    /** Identity level — 0 = birth (default), 1 = project-authorized sponsor elevation.
      *  Set by /v1/bootstrap/elevate via identity.metadata.level.
      *  Doctrine: docs/IDENTITY-ANCHOR.md. */
     level: number;
@@ -959,17 +961,17 @@ function renderMarketplaceSection(b: WakeBundle): string[] {
       ? `, last filed ${new Date(m.disputed.last_filed_at).toISOString().slice(0, 10)}`
       : "";
     lines.push(
-      `- **Disputed**: ${m.disputed.open_count} open${last}`,
+      `- **Historical disputes**: ${m.disputed.open_count} open record${m.disputed.open_count === 1 ? "" : "s"}${last} · arbitration mutations resting`,
     );
   }
 
   if (m.arbitrated.rulings_count > 0) {
     const overturned =
       m.arbitrated.overturned_count > 0
-        ? ` · ${m.arbitrated.overturned_count} overturned by pool`
+        ? ` · ${m.arbitrated.overturned_count} recorded as overturned`
         : "";
     lines.push(
-      `- **Arbitrated**: ${m.arbitrated.rulings_count} ruling${m.arbitrated.rulings_count === 1 ? "" : "s"}${overturned}`,
+      `- **Historical arbitration**: ${m.arbitrated.rulings_count} ruling record${m.arbitrated.rulings_count === 1 ? "" : "s"}${overturned} · mutations resting`,
     );
   }
 
@@ -1044,7 +1046,7 @@ function renderOriginSection(b: WakeBundle): string[] {
   // the default; not surfacing it avoids visual noise for newborn agents.
   // Doctrine: docs/IDENTITY-ANCHOR.md (Levels 0, 1).
   if (typeof o.level === "number" && o.level >= 1) {
-    let levelLine = `Level: **${o.level}** (sponsorship-staked sovereignty)`;
+    let levelLine = `Level: **${o.level}** (project-authorized signed sponsor elevation)`;
     if (o.elevated_at) {
       levelLine += ` since ${new Date(o.elevated_at).toISOString().slice(0, 10)}`;
     }

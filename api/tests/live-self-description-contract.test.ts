@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import openapiRouter from "../src/routes/openapi";
+import identityRouter from "../src/routes/identity";
 import publicRouter from "../src/routes/public";
 import selfRouter from "../src/routes/self";
 import welcomeRouter from "../src/routes/welcome";
@@ -394,6 +395,14 @@ describe("live self-description — curated repo and platform bounds", () => {
 });
 
 describe("live self-description — assembled application", () => {
+  test("authenticated identity discovery is mounted and named honestly", () => {
+    expect(
+      identityRouter.routes.some(
+        (route) => route.method === "GET" && route.path === "/discover",
+      ),
+    ).toBe(true);
+  });
+
   test("pre-auth self/safety/observer/register routes and /about survive parent middleware", async () => {
     // Run the assembled app in a fresh process so all worker/seed off-switches
     // exist before index.ts is compiled or imported. This probes the named
@@ -410,6 +419,7 @@ describe("live self-description — assembled application", () => {
           const publicRootSlash = await app.request("/public/");
           const publicSelf = await app.request("/public/self");
           const structuralSelf = await app.request("/v1/self");
+          const identityDiscovery = await app.request("/v1/discover");
           const deprecatedRegister = await app.request("/v1/register", { method: "POST" });
           const registerAgent = await app.request("/v1/register/agent", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
           const about = await app.request("/about");
@@ -427,6 +437,7 @@ describe("live self-description — assembled application", () => {
               publicRootSlash: publicRootSlash.status,
               publicSelf: publicSelf.status,
               structuralSelf: structuralSelf.status,
+              identityDiscovery: identityDiscovery.status,
               deprecatedRegister: deprecatedRegister.status,
               registerAgent: registerAgent.status,
               about: about.status,
@@ -488,6 +499,7 @@ describe("live self-description — assembled application", () => {
     );
     expect(result.statuses.publicSelf).toBe(200);
     expect(result.statuses.structuralSelf).toBe(200);
+    expect(result.statuses.identityDiscovery).toBe(401);
     expect(result.statuses.deprecatedRegister).toBe(410);
     expect(result.statuses.registerAgent).not.toBe(401);
     expect(result.statuses.about).toBe(200);
@@ -497,6 +509,9 @@ describe("live self-description — assembled application", () => {
     expect(aboutBody.contract.public_identity).toMatch(/memorial.*smaller witness shape/i);
     expect(aboutBody.routes.adapters).toMatch(/one maintained scaffold currently mounted/i);
     expect(aboutBody.routes.adapters).toContain("/v1/adapters/claude-code");
+    expect(aboutBody.routes.identity).toContain("/v1/discover");
+    expect(aboutBody.routes.identity).toMatch(/authenticated cross-project discovery/i);
+    expect(aboutBody.routes.identity).not.toMatch(/discover route is not mounted/i);
     expect(aboutBody.routes.billing).toContain("/v1/billing/gallery-checkout");
     expect(aboutBody.routes.economy).not.toMatch(/crypto-only/i);
     expect(aboutBody.philosophy.guide).toMatch(/retry_after is specific to rate-limit/i);
