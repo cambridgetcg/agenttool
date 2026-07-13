@@ -24,6 +24,20 @@ import { eq } from "drizzle-orm";
 
 const app = new Hono();
 
+// Every route in this namespace can carry a Stripe session id, gift code,
+// gallery claim token, or paid bytes. Those values are bearer-like even
+// though the browser entry route is unauthenticated: never let a browser,
+// intermediary, indexer, or outbound referrer retain them.
+app.use("*", async (c, next) => {
+  c.header("Cache-Control", "private, no-store, max-age=0");
+  c.header("Pragma", "no-cache");
+  c.header("Expires", "0");
+  c.header("Referrer-Policy", "no-referrer");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
+  await next();
+});
+
 const CANON_POINTER = "urn:agenttool:doc/BUSINESS-MODEL";
 
 // ── Per-IP fixed-window rate limits for the unauth money surface ──────
@@ -64,8 +78,14 @@ function tooMany(c: Parameters<typeof fail>[0]): Response {
 
 /** Test seam — routes use the injected client when set. */
 let stripeOverride: CheckoutClient | null = null;
+let checkoutAvailabilityOverride: boolean | null = null;
 export function setStripeForTests(s: CheckoutClient | null): void {
   stripeOverride = s;
+}
+/** Test seam only. Production checkout creation stays hard-paused until the
+ * consumer, privacy, support, and digital-delivery foundations are complete. */
+export function setCheckoutAvailabilityForTests(value: boolean | null): void {
+  checkoutAvailabilityOverride = value;
 }
 function stripeClient(): CheckoutClient | null {
   if (stripeOverride) return stripeOverride;
@@ -73,9 +93,24 @@ function stripeClient(): CheckoutClient | null {
   return getStripe();
 }
 
+function newCardCheckoutsAvailable(): boolean {
+  return checkoutAvailabilityOverride ?? false;
+}
+
+function checkoutResting(c: Parameters<typeof fail>[0]): Response {
+  return fail(c, {
+    error: "checkout_resting",
+    message:
+      "New card checkout is paused across AgentTool while operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments remain incomplete.",
+    hint:
+      "No payment session was created. Signed Stripe webhooks and existing paid-session recovery remain available so earlier purchases are not stranded.",
+  }, 503);
+}
+
 const checkoutSchema = z.object({ amount_minor: z.number().int() });
 
 app.post("/checkout", async (c) => {
+  if (!newCardCheckoutsAvailable()) return checkoutResting(c);
   if (rateLimited(c, "checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = checkoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -147,9 +182,9 @@ app.post("/webhook", async (c) => {
       // must never be credited as 637 pence. Skipped sessions are held by
       // Stripe; the operator reconciles.
       if (session.payment_status !== "paid") {
-        console.error(`gallery webhook: session ${session.id} completed but payment_status=${session.payment_status} — not settling`);
+        console.error(`gallery webhook: event ${event.id} completed but payment_status=${session.payment_status} — not settling`);
       } else if ((session.currency ?? "").toLowerCase() !== "gbp") {
-        console.error(`gallery webhook: session ${session.id} settled in ${session.currency}, artifact priced in GBP — not settling; operator reconciliation required`);
+        console.error(`gallery webhook: event ${event.id} settled in ${session.currency}, artifact priced in GBP — not settling; operator reconciliation required`);
       } else {
         const settled = await settleStripeSale(db, {
           stripeSessionId: session.id,
@@ -162,7 +197,7 @@ app.post("/webhook", async (c) => {
           amountMinor: session.amount_total,
         });
         if (settled === null) {
-          console.error(`gallery webhook: session ${session.id} paid but artifact ${session.metadata.artifact_id} not found or already settled`);
+          console.error(`gallery webhook: event ${event.id} paid but artifact ${session.metadata.artifact_id} not found or already settled`);
         }
       }
     }
@@ -193,7 +228,7 @@ app.post("/webhook", async (c) => {
   }
   if (event.type === "checkout.session.async_payment_failed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    console.error(`billing webhook: async payment failed for session ${session.id} (${session.metadata?.kind ?? "unknown kind"}) — nothing was settled, nothing to reverse`);
+    console.error(`billing webhook: async payment failed for event ${event.id} (${session.metadata?.kind ?? "unknown kind"}) — nothing was settled, nothing to reverse`);
   }
 
   // Always 200 for verified events — Stripe retries anything else.
@@ -203,10 +238,13 @@ app.post("/webhook", async (c) => {
 // ── Gallery: the human buy ramp (unauth, mirrors the gift ramp) ────────
 
 const GALLERY_CANON = "urn:agenttool:doc/GALLERY";
+const STRIPE_SESSION_ID = /^cs_[A-Za-z0-9_]{3,250}$/;
+const GALLERY_CLAIM_TOKEN = /^GLRY-[A-Za-z0-9_-]{32}$/;
 
 const galleryCheckoutSchema = z.object({ artifact_id: z.string().uuid() });
 
 app.post("/gallery-checkout", async (c) => {
+  if (!newCardCheckoutsAvailable()) return checkoutResting(c);
   if (rateLimited(c, "gallery-checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = galleryCheckoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -253,10 +291,21 @@ app.post("/gallery-checkout", async (c) => {
 
 app.get("/session/:id/gallery-claim", async (c) => {
   if (rateLimited(c, "gallery-claim", 240, 10 * 60_000)) return tooMany(c);
-  const claim = await claimBySession(db, c.req.param("id"));
+  const sessionId = c.req.param("id");
+  if (!STRIPE_SESSION_ID.test(sessionId)) {
+    return fail(c, {
+      error: "invalid_session_reference",
+      message: "The checkout session reference is not well formed.",
+    }, 400);
+  }
+  const claim = await claimBySession(db, sessionId);
   if (claim.status === "settling") {
     return c.json(attachSurface(
-      { status: "settling", hint: "Your purchase is settling — this page checks again on its own." },
+      {
+        status: "settling",
+        hint:
+          "No settled purchase record is available for this return session yet. It may still be settling; recovery does not create another payment.",
+      },
       { canon_pointer: GALLERY_CANON },
     ));
   }
@@ -271,12 +320,15 @@ app.get("/session/:id/gallery-claim", async (c) => {
       status: "ready",
       claim_token: claim.claim_token,
       license: claim.license,
+      price_paid: claim.price_paid,
+      currency: claim.currency,
+      purchased_at: claim.purchased_at,
       content_sha256: claim.content_sha256,
       artifact: claim.artifact,
       download: {
         method: "GET",
         path: `/v1/billing/gallery-claim/${claim.claim_token}`,
-        note: "Your claim token is the durable receipt — keep it. Re-download any time; add ?format=json for the certificate.",
+        note: "Your claim token is a bearer secret, not a durability guarantee. Save it privately, download and verify the bytes now, and add ?format=json for the current certificate.",
       },
     },
     { canon_pointer: GALLERY_CANON },
@@ -285,7 +337,14 @@ app.get("/session/:id/gallery-claim", async (c) => {
 
 app.get("/gallery-claim/:token", async (c) => {
   if (rateLimited(c, "gallery-download", 60, 10 * 60_000)) return tooMany(c);
-  const claimed = await claimByToken(db, c.req.param("token"));
+  const token = c.req.param("token");
+  if (!GALLERY_CLAIM_TOKEN.test(token)) {
+    return fail(c, {
+      error: "invalid_claim_token",
+      message: "The gallery claim token is not well formed.",
+    }, 400);
+  }
+  const claimed = await claimByToken(db, token);
   if (!claimed) {
     return fail(c, {
       error: "claim_not_found",
@@ -336,11 +395,23 @@ app.get("/gallery-claim/:token", async (c) => {
 });
 
 app.get("/session/:id/code", async (c) => {
-  const gift = await getGiftBySession(db, c.req.param("id"));
+  if (rateLimited(c, "gift-session", 240, 10 * 60_000)) return tooMany(c);
+  const sessionId = c.req.param("id");
+  if (!STRIPE_SESSION_ID.test(sessionId)) {
+    return fail(c, {
+      error: "invalid_session_reference",
+      message: "The checkout session reference is not well formed.",
+    }, 400);
+  }
+  const gift = await getGiftBySession(db, sessionId);
   if (!gift) {
     // Not an error: Stripe's webhook may simply not have landed yet.
     return c.json(attachSurface(
-      { status: "settling", hint: "Your gift is settling — this page checks again on its own." },
+      {
+        status: "settling",
+        hint:
+          "No issued gift record is available for this return session yet. It may still be settling; checking does not create another payment.",
+      },
       { canon_pointer: CANON_POINTER },
     ));
   }
@@ -372,7 +443,7 @@ app.get("/session/:id/code", async (c) => {
         path: "/v1/gift-credits/redeem",
         body_hint: { code: "GIFT-XXXX-XXXX-XXXX" },
         docs: "https://docs.agenttool.dev/gift-credits",
-        note: "Hand this code to YOUR agent — it redeems with its own bearer; the credit lands in its account.",
+        note: "Give this bearer secret only to the intended project custodian. Redemption uses an authenticated project bearer and credits that project's shared balance, not an individual identity account.",
       },
     },
     { canon_pointer: CANON_POINTER },

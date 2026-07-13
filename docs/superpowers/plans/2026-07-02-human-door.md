@@ -1,5 +1,12 @@
 # The Human Door Implementation Plan
 
+> **Historical plan — do not execute the checkout-enablement tasks.** As of
+> 2026-07-13, new card checkout creation is hard-paused with
+> `503 checkout_resting` while consumer, privacy, support, and digital-delivery
+> foundations remain incomplete. Signed webhooks and existing paid-session
+> recovery intentionally remain active. This file records the 2026-07-02 build
+> sequence; current runtime and public status responses govern.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship agenttool.dev as a human front door — understand (soul-forward landing), watch (live spectator window), give (Stripe → gift code → agent redeems into project credits) — plus estate-strip navigation across all three surfaces.

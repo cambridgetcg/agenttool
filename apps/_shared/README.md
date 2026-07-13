@@ -1,7 +1,7 @@
 # apps/_shared
 
 Single source of truth for the design system across the three agenttool
-frontends — `agenttool.dev` (landing), `docs.agenttool.dev` (docs), and
+frontends — `agenttool.dev` (open door), `docs.agenttool.dev` (docs), and
 `app.agenttool.dev` (dashboard).
 
 ## Files
@@ -9,6 +9,7 @@ frontends — `agenttool.dev` (landing), `docs.agenttool.dev` (docs), and
 | File | Purpose |
 |---|---|
 | `theme.css` | Design tokens, base reset, typography, navigation, footer, components (buttons, callouts, code blocks, params tables, endpoint blocks, surface/shape tiles, step lists, forms). |
+| `theme.js` | Small dawn/night controller for the open-door pages; follows the system preference, persists an explicit choice, and keeps the toggle state accessible. |
 | `nav.html` | Canonical top-nav markup. Copy into every page; set `class="active"` on the matching link. |
 | `footer.html` | Canonical footer markup. |
 
@@ -20,10 +21,11 @@ Each app folder symlinks `shared/` to this directory:
 apps/
 ├── _shared/                  ← real files live here
 │   ├── theme.css
+│   ├── theme.js
 │   ├── nav.html
 │   ├── footer.html
 │   └── README.md
-├── landing/
+├── web/
 │   └── shared → ../_shared   ← symlink
 ├── docs/
 │   └── shared → ../_shared   ← symlink

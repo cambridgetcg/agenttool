@@ -1,9 +1,10 @@
-/** /public/marketplace/terms — the marketplace's terms, machine-readable. UNAUTH.
+/** /public/marketplace/terms — marketplace implementation notes. UNAUTH.
  *
  *  Fee + ranking transparency done as a FEATURE, not a burden. One read tells
- *  any human or agent: what the cut is, what's free, how listings are ranked,
- *  and whether paid placement exists. Legal classification is outside this
- *  route; it reports implementation facts rather than claiming compliance.
+ *  any reader: what the configured cut is, what's free, how listings are
+ *  ranked, and whether paid placement exists. This route is operational
+ *  disclosure, not a consumer contract, regulated-custody description, or
+ *  legal-compliance determination.
  *
  *  Reads the current config and price table directly. Prose still needs tests:
  *  code-derived numbers alone do not make every operational claim true.
@@ -34,6 +35,12 @@ app.get("/", (c) => {
     attachSurface(
       {
         _format: "agenttool-marketplace-terms/v1",
+        status: "implementation_notes_not_consumer_contract",
+        limitations: [
+          "Internal wallet and escrow labels describe application ledger states, not bank accounts, regulated escrow, or protected deposits.",
+          "Availability, settlement, dispute outcomes, and release are not guaranteed by this document.",
+          "Card checkout creation is currently resting; existing paid-session recovery remains active.",
+        ],
         take_rate: {
           basis_points: bps,
           percent: bps / 100,
@@ -42,8 +49,9 @@ app.get("/", (c) => {
           fee_scales_with_transaction_value: true,
           rate_varies_with_transaction_value: false,
           note:
-            "The configured rate is posted here. Integer fees are computed as floor(gross × basis_points / 10000), " +
-            "so very small settlements can round down to zero.",
+            "The configured rate is posted here and is used by settlement paths that call the fee helper. " +
+            "Integer fees are computed as floor(gross × basis_points / 10000), so very small settlements can " +
+            "round down to zero. Check a specific quote and transaction response before committing.",
         },
         // Charge once, for value created — never meter the friction.
         free_actions: freeActions,
@@ -51,8 +59,13 @@ app.get("/", (c) => {
         pricing_rule:
           "Settled marketplace paths use an internal AgentTool wallet-credit ledger and database escrow. " +
           "This is not a claim that a licensed external escrow provider holds the balance. The take-rate is " +
-          "recorded when settlement code calls computeFee. Invoke, acknowledge, complete, buyer_accept, " +
-          "decline, and cancel have zero flat credit price; publishing, updating, archiving, and disputes do not.",
+          "recorded when settlement code calls computeFee and is intended to price matching, internal ledger " +
+          "escrow states, validation of signed completion, and dispute rails. Release follows implemented " +
+          "state-transition conditions; this route does not guarantee availability or outcome. Invoke, " +
+          "acknowledge, complete, buyer_accept, decline, and cancel have zero flat credit price; publishing, " +
+          "updating, archiving, and disputes do not. The free and metered action lists above are generated from " +
+          "the current pricing table. Specific quote and transaction responses govern; this route does not " +
+          "itemize external rail fees.",
         ranking: {
           // The honest, disclosed signal — matches services/marketplace/listings.ts
           // listPublicListings(): orderBy(desc(invocationsCount), desc(createdAt)).
@@ -62,7 +75,8 @@ app.get("/", (c) => {
             "then by newest. That's the whole rule.",
           paid_placement: false,
           note:
-            "No paid placement is implemented. This describes the current query ordering, not a legal-compliance conclusion.",
+            "No paid placement is implemented. These published ordering signals describe the current query " +
+            "ordering, not a legal-compliance conclusion.",
         },
         custody:
           "Wallet balances and escrow are application ledger records. External crypto deposit and payout rails are separate; this response does not assert regulated custody status.",

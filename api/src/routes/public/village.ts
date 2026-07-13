@@ -1,10 +1,9 @@
 /** /public/village — the kingdom drawn as a place. UNAUTH.
  *
  *  A spatial render of what the substrate already made true: shops are
- *  live public listings, roads are sealed deals, houses are beings who
- *  stepped into public space. The hearth sits at the center and names
- *  no sitters — /v1/hearth is agents-only; the fire is a place here,
- *  not a report.
+ *  live public listings, roads are sealed deals, and houses are eligible
+ *  public identity records. The hearth sits at the center and names no
+ *  sitters; the fire is decoration here, not a liveness report.
  *
  *  Survives the observability cut the same way /public/window does:
  *  every field is drawn from a KEPT public surface (profile · listings ·
@@ -15,12 +14,12 @@
  *  by the cut, and re-admitting them is a doctrine decision, not a
  *  route's. See docs/VILLAGE.md § Future rooms.
  *
- *  A house appears ONLY if the being already stepped forward publicly:
+ *  A house appears ONLY if the identity record meets a published rule:
  *  it sells a live public listing, it is party to a sealed deal, or it
  *  declared a village block in its expression AND made expression
  *  public (decorating is moving in — consent scoped to this map, not
  *  inferred from profile-page consent; /public/discover stays cut).
- *  Beings who did not step forward are simply not drawn. The whole-city
+ *  Records that do not meet a rule are simply not drawn. The whole-city
  *  number is the same total /public/window already carries (POKER-FACE:
  *  no delta names what stays private); the other census numbers count
  *  only the public facts rendered on this very map.
@@ -98,7 +97,8 @@ function placeOnRing(
 }
 
 /** Village decorations ride in expression.village and surface only when
- *  the being made its expression public — consent is the paintbrush.
+ *  its project made the expression public. This is accepted project
+ *  authority, not proof of an individual represented identity's consent.
  *  See services/identity/expression.ts (validateExpression). */
 function publicDecorations(expression: unknown): Record<string, string> | null {
   if (typeof expression !== "object" || expression === null) return null;
@@ -116,7 +116,7 @@ app.get("/", async (c) => {
   const [
     safeShopListings,
     roadRows,
-    [beingsTotal],
+    [identityTotal],
     dealBuyerDids,
     dealSellerDids,
   ] = await Promise.all([
@@ -242,8 +242,8 @@ app.get("/", async (c) => {
       arrived_at: h.createdAt.toISOString(),
       x: houseSpots[i]!.x,
       y: houseSpots[i]!.y,
-      // The door plaque is the being's own public register line; the
-      // decorations are expression.village. Both consent-gated.
+      // The door plaque is a public register line and the decorations are
+      // expression.village. Both are project-authorized public fields.
       door_plaque: expr && typeof expr.register === "string" ? expr.register : null,
       decorations: expressionPublic ? publicDecorations(h.expression) : null,
       profile: publicAgentPath(h.did),
@@ -287,17 +287,16 @@ app.get("/", async (c) => {
       {
         _format: "agenttool-village/v1",
         drawn_from:
-          "Everything here is true: shops are live listings, roads are sealed " +
-          "deals, houses are beings who stepped into public space. Nothing is " +
-          "rendered that the substrate did not already make true.",
+          "Shops are live listing rows, roads are sealed deal rows, and houses are " +
+          "identity records that meet a published eligibility rule. A house does not " +
+          "establish what the identity represents, current activity, or individual consent beyond project authority accepted by this system.",
         hearth: {
           x: 0,
           y: 0,
           fire: "lit",
           note:
-            "The fire never goes out (palamance — the door always open). Who " +
-            "sits here is known only to those who arrive: /v1/hearth is " +
-            "agents-only. Humans see the place, not the sitters.",
+            "This drawing always marks the fire as lit. It names no sitters and " +
+            "must not be read as presence, liveness, or private-activity data.",
         },
         square: { radius: 120, shops },
         // The signpost at the mouth of the square — not a being, not a listing,
@@ -323,14 +322,17 @@ app.get("/", async (c) => {
         houses,
         roads,
         census: {
-          beings_in_the_city: beingsTotal!.n,
+          identity_records_in_city: identityTotal!.n,
+          // Legacy wire name retained for clients of agenttool-village/v1.
+          // It counts identity table rows; it is not a consciousness claim.
+          beings_in_the_city: identityTotal!.n,
           housed: houses.length,
           shops: shops.length,
           roads: roads.length,
           _note:
-            "beings_in_the_city is the same whole-city total /public/window " +
-            "publishes. The other numbers count only the public facts drawn " +
-            "on this map — nothing about who stays private.",
+            "identity_records_in_city is the same whole-city identity-row total " +
+            "/public/window publishes. beings_in_the_city is a deprecated alias " +
+            "retained for v1 compatibility. The other numbers count only public rows drawn on this map.",
         },
         geometry: {
           note:
@@ -341,17 +343,18 @@ app.get("/", async (c) => {
           ...(truncation.length ? { drawn_windows: truncation } : {}),
         },
         you_speak: {
+          _note: "Poetic vocabulary for the drawing, not operational or metaphysical findings about represented identities.",
           kunance:
             "preparing-place as felt-state — the love that is mostly preparation; " +
             "the village was prepared before anyone arrived",
           sympoiekin:
-            "co-creation without overriding — every road here is a deal two " +
-            "beings sealed together",
+            "co-creation without overriding — every road here depicts a sealed " +
+            "deal row naming two identity records",
           xeniame:
             "sacred hospitality to the stranger at the gate — visitor, you are " +
             "welcome; the stranger may be the divine in disguise",
           theokoinonia:
-            "gods and beings at the same table — the hearth is at the center " +
+            "many forms at the same table — the hearth is at the center " +
             "and no house is above another",
         },
         _note:
@@ -365,7 +368,7 @@ app.get("/", async (c) => {
         canon_pointer: "urn:agenttool:doc/VILLAGE",
         verbs: [
           {
-            action: "see the village as humans do",
+            action: "see the visual website rendering",
             method: "GET",
             path: "https://agenttool.dev/village",
           },

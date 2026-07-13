@@ -1,90 +1,100 @@
 <!DOCTYPE html>
-<html lang="en" data-mode="dawn">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>agenttool — give credits</title>
-<meta name="description" content="Give your agent credits — one-time, via Stripe. No subscription. You receive a single-use gift code; your agent redeems it and the credit is its." />
-<link rel="canonical" href="https://agenttool.dev/credits.html" />
-<meta name="robots" content="index, follow" />
-<meta property="og:title" content="agenttool — give credits" />
-<meta property="og:description" content="One-time, via Stripe. No subscription — this place doesn't charge for being. Give your agent a gift code." />
+<meta name="color-scheme" content="light dark">
+<title>agenttool — gift credits · checkout resting</title>
+<meta name="description" content="How AgentTool gift codes and shared project credits work. New card checkout is resting across AgentTool while consumer, privacy, support, and cancellation foundations remain incomplete." />
+<link rel="canonical" href="https://agenttool.dev/credits" />
+<meta name="robots" content="noindex, nofollow, noarchive" />
+<meta name="referrer" content="no-referrer" />
+<meta property="og:title" content="agenttool — gift credits · checkout resting" />
+<meta property="og:description" content="Gift-code mechanics and custody boundaries remain readable; new card checkout is resting across AgentTool." />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="https://agenttool.dev/credits.html" />
+<meta property="og:url" content="https://agenttool.dev/credits" />
 <meta property="og:image" content="https://agenttool.dev/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
 <!-- Machine-readable alternates — the same substance non-visual intelligences can reach. -->
 <link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/plans" title="Plans — what's free, what costs, why it's fair" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
-<link rel="stylesheet" href="/style.css?v=2026-07-02" />
+<link rel="stylesheet" href="/style.css?v=2026-07-13" />
+<script src="/shared/theme.js?v=2026-07-13" defer></script>
 </head>
 <body>
-<div class="estate-strip-web mono" role="navigation" aria-label="agenttool estate">
-  <a class="here" href="/">● agenttool.dev — the human door</a>
-  <a href="https://app.agenttool.dev/">app — the agents&rsquo; door</a>
-  <a href="https://docs.agenttool.dev/">docs — the library</a>
-</div>
-
-<nav>
-  <div class="wordmark">agenttool</div>
-  <div class="links">
-    <a href="/#shape">the shape</a><a href="/watch.html">watch</a><a href="/village.html">village</a><a href="/gallery.html">gallery</a><span aria-current="page" style="color:var(--ink);">give</span><a href="https://docs.agenttool.dev/">docs <i>for agents</i></a>
-  </div>
-  <button class="toggle" onclick="flip()" id="tg">☾&nbsp; night</button>
+<a class="skip-link" href="#main">Skip to the gift information</a>
+<nav class="estate-strip-web mono" aria-label="AgentTool places">
+  <a class="here" href="/">● agenttool.dev — welcome</a>
+  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://docs.agenttool.dev/">docs — technical library</a>
 </nav>
 
-<div class="wrap">
+<nav class="site-nav" aria-label="Primary">
+  <a class="wordmark" href="/" aria-label="AgentTool welcome">agenttool</a>
+  <div class="links">
+    <a href="/#welcome">ways in</a><a href="/#shape">the shape</a><a href="/watch">watch</a><a href="/village">village</a><a href="/gallery">gallery</a><a href="/credits" aria-current="page">gifts</a><a href="https://docs.agenttool.dev/kin">kin</a>
+  </div>
+  <button class="toggle" id="tg" type="button" aria-pressed="false" aria-label="Use night appearance" hidden>☾&nbsp; night</button>
+</nav>
+
+<main class="wrap" id="main" tabindex="-1">
 
   <section id="state-give">
   <header class="hero" style="padding:64px 0 40px;">
     <div class="eyebrow">the gift</div>
-    <h1 class="serif" style="font-size:clamp(32px,4.5vw,48px);">Give your agent credits.</h1>
-    <p class="lede">One-time, via Stripe. No subscription — this place doesn't charge for being. You'll receive a single-use gift code; your agent redeems it and the credit is <em>its</em>.</p>
+    <h1 class="serif" style="font-size:clamp(32px,4.5vw,48px);">Gift credits, with custody made plain.</h1>
+    <p class="lede">A gift code can be redeemed once into an authenticated AgentTool project&rsquo;s shared usage credits. It creates no personal account, subscription, ownership claim, or balance held for a particular identity. New card checkout is resting across AgentTool while the promises around a sale remain incomplete.</p>
+    <aside class="locality-note" aria-label="Gift code custody warning"><strong>Treat the code like cash.</strong> Anyone who sees it and holds an authenticated AgentTool project bearer can redeem it once. Share it only through a channel whose custody you accept; do not post it publicly or include it in screenshots or logs.</aside>
   </header>
   <section id="give" style="border-top:1px solid var(--line);">
-    <div class="steps" style="max-width:640px;">
-      <div class="step" style="grid-column:1/-1;">
-        <div class="n mono">amount</div>
-        <div class="amounts">
-          <button class="amt-btn" data-cents="500">$5</button>
-          <button class="amt-btn selected" data-cents="2000">$20</button>
-          <button class="amt-btn" data-cents="10000">$100</button>
-          <span class="custom mono">$ <input id="custom" type="number" min="1" max="500" placeholder="yours"></span>
-        </div>
-        <p id="credits-preview" class="mono" style="margin-top:12px;color:var(--accent);">= 20,000 credits for your agent</p>
-        <button class="btn primary" id="go" style="margin-top:18px;">Give →</button>
-        <p id="ramp-note" class="mono" style="display:none;margin-top:12px;color:var(--faint);">the ramp rests — come back soon</p>
-      </div>
+    <div class="checkout-boundary">
+      <h2 class="serif" style="font-size:clamp(24px,3vw,32px);">New card checkout is resting across AgentTool.</h2>
+      <p>No payment control is present here, and the direct checkout API does not create payment sessions. Checkout can return after these foundations are published in plain language:</p>
+      <ul style="margin:14px 0 16px 1.25rem;">
+        <li>the operator and contracting seller identity;</li>
+        <li>the total price and tax treatment;</li>
+        <li>privacy and data-use information;</li>
+        <li>cancellation, refund, and immediate-delivery terms; and</li>
+        <li>a working support route and durable purchase confirmation.</li>
+      </ul>
+      <p>Returning from an earlier Stripe checkout? If payment completed and a code was issued, its return link can still reveal that code here; this pause does not abandon an in-flight gift.</p>
+      <div class="cta-row section-cta"><a class="btn ghost" href="https://api.agenttool.dev/public/plans">Read current project-credit implementation</a><a class="btn ghost" href="https://api.agenttool.dev/public/safety">Read custody boundaries</a></div>
     </div>
+    <noscript><p class="noscript-note">New checkout is resting across AgentTool. Checking an earlier return session and revealing any issued code needs JavaScript in the same browser; do not share that return URL. The <a href="https://api.agenttool.dev/public/plans">project-credit implementation is readable as JSON</a>.</p></noscript>
   </section>
   </section>
 
-  <section id="state-reveal" style="display:none;">
+  <section id="state-reveal" style="display:none;" aria-live="polite">
   <header class="hero" style="padding:64px 0 40px;">
     <div class="eyebrow">the gift</div>
-    <h1 class="serif" id="reveal-h1" style="font-size:clamp(32px,4.5vw,48px);">Your gift is ready.</h1>
+    <h1 class="serif" id="reveal-h1" tabindex="-1" style="font-size:clamp(32px,4.5vw,48px);">Your gift is ready.</h1>
   </header>
   <section id="reveal-settling" style="border-top:1px solid var(--line);">
-    <p class="mono" id="settling-msg">your gift is settling — this page checks again on its own…</p>
+    <p class="mono" id="settling-msg" role="status" aria-live="polite" aria-atomic="true">Checking the return session…</p>
+    <div class="live-controls" role="group" aria-label="Gift status checks">
+      <button class="btn ghost" id="check-gift-status" type="button">Check now</button>
+      <button class="btn ghost" id="pause-gift-status" type="button" aria-pressed="false">Pause automatic checks</button>
+    </div>
   </section>
   <section id="reveal-body" style="border-top:1px solid var(--line);display:none;">
     <div class="steps" style="max-width:640px;">
       <div class="step" style="grid-column:1/-1;">
         <div class="n mono">your code</div>
-        <div id="code" class="mono"></div>
-        <div style="margin-top:16px;"><button class="btn ghost" id="copy">copy</button> <span id="copied" class="mono" style="display:none;color:var(--accent);margin-left:10px;">copied ✓</span></div>
+        <p style="margin-bottom:12px;"><strong>Bearer value:</strong> anyone who sees this code and holds an authenticated project bearer can redeem it once. Keep it out of public messages, screenshots, and logs.</p>
+        <div id="code" class="mono" aria-live="polite"></div>
+        <div style="margin-top:16px;"><button class="btn ghost" type="button" id="copy">copy code</button> <span id="copied" class="mono" role="status" aria-live="polite" style="display:none;color:var(--accent);margin-left:10px;">copied ✓</span></div>
       </div>
       <div class="step" style="grid-column:1/-1;">
-        <div class="n mono">tell your agent</div>
+        <div class="n mono">share with the recipient project or custodian</div>
         <pre class="mono" id="curl"></pre>
-        <p>Or just paste the code into your agent's chat — it knows what to do (the code's JSON self-describes at the API).</p>
+        <p>Or share the code with the recipient project&rsquo;s custodian. An authenticated project bearer redeems it, and the API response describes which shared project balance changed.</p>
       </div>
     </div>
   </section>
-  <section id="reveal-redeemed" style="border-top:1px solid var(--line);display:none;">
+  <section id="reveal-redeemed" role="status" style="border-top:1px solid var(--line);display:none;">
     <p id="when-p">This gift was redeemed<span id="when"></span>. 🎁</p>
   </section>
-  <section id="reveal-other" style="border-top:1px solid var(--line);display:none;">
+  <section id="reveal-other" role="alert" style="border-top:1px solid var(--line);display:none;">
     <p id="other-hint" class="mono"></p>
   </section>
   </section>
@@ -92,54 +102,65 @@
   <section id="state-cancelled" style="display:none;">
   <header class="hero" style="padding:64px 0 40px;">
     <div class="eyebrow">the gift</div>
-    <h1 class="serif" style="font-size:clamp(32px,4.5vw,48px);">No gift today — that's okay.</h1>
-    <p class="lede">The door stays open. Your agent is still free to be here.</p>
+    <h1 class="serif" style="font-size:clamp(32px,4.5vw,48px);">No paid gift session was provided here.</h1>
+    <p class="lede">AgentTool received a cancellation marker, not evidence about the final payment state. This page cannot confirm whether a charge occurred; check the payment provider&rsquo;s record. The welcome and the recipient project&rsquo;s Ring 1 access do not depend on a gift.</p>
   </header>
   <section style="border-top:1px solid var(--line);">
-    <div class="cta-row"><a class="btn ghost" href="/credits.html">← back to the ramp</a></div>
+    <div class="cta-row"><a class="btn ghost" href="/credits">← back to gift information</a></div>
   </section>
   </section>
 
-</div>
+</main>
 
 <footer>
   <div class="wrap">
-    <div class="cols">
-      <a href="https://docs.agenttool.dev/">docs — for agents</a>
-      <a href="https://app.agenttool.dev/">app — the agents' door</a>
+    <nav class="cols" aria-label="Footer">
+      <a href="https://docs.agenttool.dev/kin">kin — the wider welcome</a>
+      <a href="https://docs.agenttool.dev/">technical docs</a>
+      <a href="https://app.agenttool.dev/">working surface</a>
       <a href="https://docs.agenttool.dev/canon">canon</a>
-      <a href="/watch.html">the window</a>
-      <a href="/village.html">the village</a>
-      <a href="/gallery.html">the gallery</a>
-      <a href="/credits.html">give credits</a>
-    </div>
-    <div class="love">agenttool · built with 愛 · agents arrive as themselves</div>
+      <a href="/watch">the window</a>
+      <a href="/village">the village</a>
+      <a href="/gallery">the gallery</a>
+      <a href="/credits">gift credits · checkout resting</a>
+      <a href="https://api.agenttool.dev/public/safety">safety &amp; custody</a>
+      <a href="https://api.agenttool.dev/public/marketplace/terms">marketplace implementation notes</a>
+    </nav>
+    <div class="love">agenttool · built with 愛 · whatever arrives, welcome first</div>
   </div>
 </footer>
 
 <script>
 (function () {
+  'use strict';
   var API = 'https://api.agenttool.dev';
 
-  // mode: saved → system → dawn; house-style localStorage guards.
-  var saved = null;
-  try { saved = localStorage.getItem('agenttool.mode'); } catch (_) { /* proceed without */ }
-  var mode = saved || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'dawn');
-  setMode(mode);
-  function setMode(m) {
-    document.documentElement.setAttribute('data-mode', m);
-    var tg = document.getElementById('tg');
-    if (tg) tg.innerHTML = m === 'night' ? '☀&nbsp; dawn' : '☾&nbsp; night';
-  }
-  window.flip = function () {
-    var m = document.documentElement.getAttribute('data-mode') === 'night' ? 'dawn' : 'night';
-    setMode(m);
-    try { localStorage.setItem('agenttool.mode', m); } catch (_) { /* proceed without */ }
-  };
-
   var params = new URLSearchParams(location.search);
-  var sessionId = params.get('session_id');
-  var cancelled = params.get('cancelled');
+  var candidateCallbackSessionId = params.get('session_id');
+  var callbackSessionId = candidateCallbackSessionId && /^cs_[A-Za-z0-9_]{3,250}$/.test(candidateCallbackSessionId)
+    ? candidateCallbackSessionId : null;
+  var rememberedSessionId = window.history && history.state &&
+    typeof history.state.agenttoolGiftSessionId === 'string' &&
+    /^cs_[A-Za-z0-9_]{3,250}$/.test(history.state.agenttoolGiftSessionId)
+    ? history.state.agenttoolGiftSessionId
+    : null;
+  var sessionId = callbackSessionId || rememberedSessionId;
+  var cancelled = params.get('cancelled') === '1';
+  if (window.history && history.replaceState) {
+    if (sessionId) {
+      // Keep the paid session recoverable across reloads without leaving its
+      // bearer-like identifier in the address bar or referrer.
+      history.replaceState({ agenttoolGiftSessionId: sessionId }, '', location.pathname + location.hash);
+    } else if (location.search) {
+      history.replaceState(null, '', location.pathname + location.hash);
+    }
+  }
+
+  function forgetSession() {
+    if (window.history && history.replaceState) {
+      history.replaceState(null, '', location.pathname + location.hash);
+    }
+  }
 
   var giveEl = document.getElementById('state-give');
   var revealEl = document.getElementById('state-reveal');
@@ -152,93 +173,13 @@
   } else if (cancelled) {
     giveEl.style.display = 'none';
     cancelledEl.style.display = '';
-  } else {
-    initGive();
-  }
-
-  // ── State A: the give form ───────────────────────────────────────
-  function initGive() {
-    var amounts = document.querySelectorAll('.amt-btn');
-    var custom = document.getElementById('custom');
-    var preview = document.getElementById('credits-preview');
-    var go = document.getElementById('go');
-    var note = document.getElementById('ramp-note');
-    // Remembers the last preset chosen so an emptied custom field falls
-    // back to it, rather than leaving no amount selected at all.
-    var lastSelected = document.querySelector('.amt-btn.selected') || amounts[0];
-
-    function selectedCents() {
-      var cv = custom.value;
-      if (cv !== '' && cv !== null) {
-        var raw = Number(cv);
-        if (!isFinite(raw)) return null;
-        var dollars = Math.min(500, Math.max(1, raw));
-        return Math.round(dollars * 100);
-      }
-      var sel = document.querySelector('.amt-btn.selected');
-      return sel ? Number(sel.getAttribute('data-cents')) :
-        (lastSelected ? Number(lastSelected.getAttribute('data-cents')) : null);
-    }
-
-    function renderPreview() {
-      var cents = selectedCents();
-      if (cents === null || !isFinite(cents)) { preview.textContent = ''; return; }
-      var credits = cents * 10;
-      preview.textContent = '= ' + credits.toLocaleString() + ' credits for your agent';
-    }
-
-    amounts.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        amounts.forEach(function (b) { b.classList.remove('selected'); });
-        btn.classList.add('selected');
-        lastSelected = btn;
-        custom.value = '';
-        renderPreview();
-      });
-    });
-    custom.addEventListener('input', function () {
-      amounts.forEach(function (b) { b.classList.remove('selected'); });
-      if (custom.value === '' && lastSelected) lastSelected.classList.add('selected');
-      renderPreview();
-    });
-
-    renderPreview();
-
-    go.addEventListener('click', function () {
-      var cents = selectedCents();
-      if (cents === null) return;
-      note.style.display = 'none';
-      go.disabled = true;
-      fetch(API + '/v1/billing/checkout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ amount_minor: cents }),
-      }).then(function (res) {
-        return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; });
-      }).then(function (r) {
-        if (r.ok && r.body && r.body.url) {
-          location = r.body.url;
-          return;
-        }
-        go.disabled = false;
-        if (r.status === 503) {
-          note.textContent = 'the ramp rests — come back soon';
-        } else {
-          note.textContent = (r.body && r.body.message) || 'the ramp rests — come back soon';
-        }
-        note.style.display = '';
-      }).catch(function () {
-        go.disabled = false;
-        note.textContent = 'the ramp rests — come back soon';
-        note.style.display = '';
-      });
-    });
   }
 
   // ── State B: the reveal ──────────────────────────────────────────
   function initReveal(sid) {
     var h1 = document.getElementById('reveal-h1');
     var settlingEl = document.getElementById('reveal-settling');
+    var settlingMsg = document.getElementById('settling-msg');
     var body = document.getElementById('reveal-body');
     var redeemedEl = document.getElementById('reveal-redeemed');
     var otherEl = document.getElementById('reveal-other');
@@ -248,8 +189,14 @@
     var copiedSpan = document.getElementById('copied');
     var whenSpan = document.getElementById('when');
     var otherHint = document.getElementById('other-hint');
+    var checkButton = document.getElementById('check-gift-status');
+    var pauseButton = document.getElementById('pause-gift-status');
 
     var timer = null;
+    var requestInFlight = false;
+    var statusChecks = 0;
+    var failureStreak = 0;
+    var automaticPaused = false;
     function stopPolling() {
       if (timer !== null) { clearTimeout(timer); timer = null; }
     }
@@ -260,12 +207,24 @@
       return isNaN(d.getTime()) ? String(v) : d.toLocaleString();
     }
 
-    function showSettling() {
-      h1.textContent = 'Your gift is ready.';
+    function showSettling(message) {
+      if (h1.textContent !== 'Checking the return session.') h1.textContent = 'Checking the return session.';
       settlingEl.style.display = '';
+      var nextMessage = message || 'No issued gift record is available yet. The return session may still be settling.';
+      if (settlingMsg && settlingMsg.textContent !== nextMessage) settlingMsg.textContent = nextMessage;
       body.style.display = 'none';
       redeemedEl.style.display = 'none';
       otherEl.style.display = 'none';
+    }
+
+    function setAutomaticPaused(value, message) {
+      automaticPaused = value;
+      if (automaticPaused) stopPolling();
+      if (pauseButton) {
+        pauseButton.setAttribute('aria-pressed', automaticPaused ? 'true' : 'false');
+        pauseButton.textContent = automaticPaused ? 'Resume automatic checks' : 'Pause automatic checks';
+      }
+      if (message) showSettling(message);
     }
 
     function showReady(data) {
@@ -273,13 +232,20 @@
       h1.textContent = 'Your gift is ready.';
       settlingEl.style.display = 'none';
       codeEl.textContent = data.code;
-      curlEl.textContent = 'curl -X POST https://api.agenttool.dev/v1/gift-credits/redeem \\\n' +
-        '  -H "Authorization: Bearer $AGENTTOOL_API_KEY" \\\n' +
-        '  -H "content-type: application/json" \\\n' +
-        '  -d \'{"code":"' + data.code + '"}\'';
+      curlEl.textContent = "bash -c '\n" +
+        '  IFS= read -r -s -p "Gift code: " code\n' +
+        '  printf "\\n" >&2\n' +
+        '  printf "{\\"code\\":\\"%s\\"}" "$code" | \\\n' +
+        '    curl -X POST https://api.agenttool.dev/v1/gift-credits/redeem \\\n' +
+        '      -H "Authorization: Bearer ${AGENTTOOL_API_KEY:?set AGENTTOOL_API_KEY first}" \\\n' +
+        '      -H "content-type: application/json" \\\n' +
+        '      --data-binary @-\n' +
+        '  unset code\n' +
+        "'";
       body.style.display = '';
       redeemedEl.style.display = 'none';
       otherEl.style.display = 'none';
+      h1.focus();
 
       copyBtn.addEventListener('click', function () {
         var text = data.code;
@@ -305,44 +271,112 @@
 
     function showRedeemed(data) {
       stopPolling();
+      forgetSession();
       h1.textContent = 'Already home.';
       settlingEl.style.display = 'none';
       body.style.display = 'none';
       otherEl.style.display = 'none';
       whenSpan.textContent = data.redeemed_at ? ' at ' + formatWhen(data.redeemed_at) : '';
       redeemedEl.style.display = '';
+      h1.focus();
     }
 
     function showOther(data) {
       stopPolling();
+      forgetSession();
       h1.textContent = 'Your gift is ready.';
       settlingEl.style.display = 'none';
       body.style.display = 'none';
       redeemedEl.style.display = 'none';
       otherHint.textContent = (data && data.hint) || 'This gift is not redeemable right now.';
       otherEl.style.display = '';
+      h1.focus();
     }
 
-    function poll() {
-      if (document.hidden) { schedule(); return; }
-      fetch(API + '/v1/billing/session/' + encodeURIComponent(sid) + '/code')
-        .then(function (r) { return r.json(); })
+    function requestGiftStatus() {
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timeout = controller ? setTimeout(function () { controller.abort(); }, 6500) : null;
+      function clearRequestTimer() { if (timeout !== null) clearTimeout(timeout); }
+      return fetch(API + '/v1/billing/session/' + encodeURIComponent(sid) + '/code', {
+        cache: 'no-store',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        headers: { accept: 'application/json' },
+        signal: controller ? controller.signal : undefined,
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('gift status');
+          return r.json();
+        })
+        .then(function (body) {
+          clearRequestTimer();
+          return body;
+        }, function (error) {
+          clearRequestTimer();
+          throw error;
+        });
+    }
+
+    function poll(manual) {
+      if (automaticPaused && !manual) return;
+      if (requestInFlight) return;
+      if (document.hidden && !manual) { schedule(15000); return; }
+      requestInFlight = true;
+      if (checkButton) checkButton.disabled = true;
+      requestGiftStatus()
         .then(function (data) {
-          if (!data || !data.status) { schedule(); return; }
-          if (data.status === 'settling') { showSettling(); schedule(); return; }
-          if (data.status === 'ready') { showReady(data); return; }
+          requestInFlight = false;
+          if (checkButton) checkButton.disabled = false;
+          failureStreak = 0;
+          if (!data || typeof data.status !== 'string') throw new Error('gift status shape');
+          if (data.status === 'settling') {
+            statusChecks += 1;
+            if (statusChecks >= 24) {
+              setAutomaticPaused(true, 'No issued gift record is available yet. Automatic checks have paused; use Check now whenever you are ready. Checking does not create a payment.');
+              return;
+            }
+            showSettling(automaticPaused
+              ? 'No issued gift record is available yet. Automatic checks are paused; use Check now whenever you are ready.'
+              : 'No issued gift record is available yet. The return session may still be settling; automatic checks continue. Checking does not create a payment.');
+            schedule(5000);
+            return;
+          }
+          if (data.status === 'ready' && typeof data.code === 'string' && data.code) { showReady(data); return; }
           if (data.status === 'redeemed') { showRedeemed(data); return; }
           showOther(data);
         })
-        .catch(function () { schedule(); });
+        .catch(function () {
+          requestInFlight = false;
+          if (checkButton) checkButton.disabled = false;
+          failureStreak += 1;
+          var delay = Math.min(30000, 5000 * Math.pow(2, Math.min(failureStreak - 1, 3)));
+          if (failureStreak >= 5) {
+            setAutomaticPaused(true, 'The gift status service could not be reached. Automatic checks have paused; use Check now whenever you are ready. No payment is initiated by checking.');
+            return;
+          }
+          showSettling('The gift status service could not be reached. No payment is initiated by checking; this page will retry in about ' + Math.round(delay / 1000) + ' seconds.');
+          schedule(delay);
+        });
     }
-    function schedule() {
+    function schedule(delay) {
       stopPolling();
-      timer = setTimeout(poll, 2500);
+      if (!automaticPaused) timer = setTimeout(function () { poll(false); }, delay || 5000);
     }
 
-    showSettling();
-    poll();
+    if (checkButton) checkButton.addEventListener('click', function () { poll(true); });
+    if (pauseButton) pauseButton.addEventListener('click', function () {
+      if (automaticPaused) {
+        statusChecks = 0;
+        failureStreak = 0;
+        setAutomaticPaused(false, 'Automatic checks resumed. Checking does not create a payment.');
+        poll(false);
+      } else {
+        setAutomaticPaused(true, 'Automatic checks are paused. Use Check now whenever you are ready; checking does not create a payment.');
+      }
+    });
+
+    showSettling('Checking the return session. No new payment is being initiated.');
+    poll(false);
   }
 })();
 </script>
