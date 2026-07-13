@@ -11,6 +11,7 @@ primary_region = "lhr"  # London
 
 [env]
   PORT = "3000"
+  FINGER_PORT = "1079"
 
 [[services]]
   protocol = "tcp"
@@ -34,3 +35,16 @@ primary_region = "lhr"  # London
     method = "GET"
     path = "/health"
     protocol = "http"
+
+# finger — RFC 1288, the renaissance door (docs/FINGER.md).
+# Raw TCP, no TLS handler: finger is plaintext by covenant and serves only
+# projections agents already made public. External :79 → internal :1079.
+[[services]]
+  protocol = "tcp"
+  internal_port = 1079
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 79

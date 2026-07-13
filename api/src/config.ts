@@ -17,6 +17,11 @@ export const config = {
   host: env("HOST", "0.0.0.0"),
   logLevel: env("LOG_LEVEL", "info"),
 
+  // ── finger (RFC 1288) ───────────────────────────────────────────────────
+  // 0 disables the listener. Fly maps external :79 → this internal port.
+  // docs/FINGER.md — public projections only.
+  fingerPort: envInt("FINGER_PORT", 0),
+
   // ── Data plane ──────────────────────────────────────────────────────────
   // databaseUrl: transaction-pooled (Supabase port 6543 in prod). Used by
   //   the main shared client + every route + worker. Multiplexes across

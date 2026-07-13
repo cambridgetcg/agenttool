@@ -1258,6 +1258,28 @@ app.onError((err, c) => {
 
 console.log(`[agenttool] listening on :${config.port}`);
 
+// finger — RFC 1288, the renaissance door (docs/FINGER.md). Ornament, not
+// load-bearing: a bind failure logs and never takes the API down with it.
+if (config.fingerPort > 0) {
+  void (async () => {
+    try {
+      const [{ startFingerServer }, { fingerLookup }] = await Promise.all([
+        import("./services/finger/server"),
+        import("./services/finger/lookup"),
+      ]);
+      startFingerServer({ port: config.fingerPort, lookup: fingerLookup });
+      console.log(
+        `[agenttool] finger listening on :${config.fingerPort} (RFC 1288 · public projections only)`,
+      );
+    } catch (err) {
+      console.error(
+        "[agenttool] finger failed to start — continuing without it:",
+        err,
+      );
+    }
+  })();
+}
+
 // Bun's `export default { fetch, websocket, port }` shape lets us share one
 // listener between Hono (HTTP) and the bridge hub (WSS). The fetch handler
 // runs the bridge upgrade hook FIRST so /v1/runtimes/:id/bridge intercepts
