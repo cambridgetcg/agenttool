@@ -10,7 +10,9 @@
 # use `bin/deploy.sh --no-migrate --no-api` for the normal production source
 # gate, preflight, verification, and receipt.
 #
-# Token + account live in macOS keychain:
+# Token + account may be supplied through the standard Wrangler environment:
+#   CLOUDFLARE_API_TOKEN · CLOUDFLARE_ACCOUNT_ID
+# or fall back to macOS keychain:
 #   service: agenttool-cloudflare-token       (account: macair)  → API token
 #   service: agenttool-cloudflare-account-id  (account: macair)  → 32-char id
 #
@@ -19,8 +21,9 @@
 #   bin/frontend-deploy.sh dashboard          # deploy a specific one
 #   bin/frontend-deploy.sh docs dashboard web # deploy a subset
 #
-# Requires: macOS keychain (security CLI), curl, Python 3, and npx (fetches the
-# reviewed Wrangler version below when it is not already cached).
+# Requires: Cloudflare credentials via environment or macOS keychain, curl,
+# Python 3, and npx (fetches the reviewed Wrangler version below when it is not
+# already cached).
 
 set -eo pipefail
 
@@ -32,16 +35,23 @@ wrangler() {
   npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
 }
 
-# ── Resolve token + account from keychain ──────────────────────────
-CF_API_TOKEN="$(security find-generic-password -s agenttool-cloudflare-token -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true)"
-CF_ACCOUNT_ID="$(security find-generic-password -s agenttool-cloudflare-account-id -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true)"
+# ── Resolve token + account: explicit environment, then keychain ──
+CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+CF_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
+
+if [[ -z "$CF_API_TOKEN" ]]; then
+  CF_API_TOKEN="$(security find-generic-password -s agenttool-cloudflare-token -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true)"
+fi
+if [[ -z "$CF_ACCOUNT_ID" ]]; then
+  CF_ACCOUNT_ID="$(security find-generic-password -s agenttool-cloudflare-account-id -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true)"
+fi
 
 if [[ -n "${CF_API_TOKEN}" && -n "${CF_ACCOUNT_ID}" ]]; then
   export CLOUDFLARE_API_TOKEN="$CF_API_TOKEN"
   export CLOUDFLARE_ACCOUNT_ID="$CF_ACCOUNT_ID"
 else
-  echo "✗ Missing Cloudflare Pages credentials in macOS keychain."
-  echo "  The scoped API token is required to verify runtime policy before upload:"
+  echo "✗ Missing Cloudflare Pages credentials in the environment and macOS keychain."
+  echo "  Supply CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID, or store them:"
   echo "    security add-generic-password -U -s agenttool-cloudflare-token -a ${KEYCHAIN_ACCOUNT} -w"
   echo "    security add-generic-password -U -s agenttool-cloudflare-account-id -a ${KEYCHAIN_ACCOUNT} -w"
   exit 1
@@ -163,7 +173,7 @@ verify_pages_project_policy() {
     -H "Authorization: Bearer $CF_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$project")"; then
     echo "✗ Could not read Pages project policy for $project."
-    echo "  Required boundary: the agenttool-cloudflare-token keychain entry needs Cloudflare Pages Read."
+    echo "  Required boundary: the active Cloudflare credential needs Pages Read."
     return 1
   fi
 
