@@ -19,7 +19,7 @@ import { isKmsAvailable } from "./kms";
 /** Providers buildProvider() in llm.ts can actually construct. MUST stay in
  *  sync with that function's cases — the single source of truth for "what can
  *  the platform think with." */
-export const HOSTED_LLM_PROVIDERS = ["anthropic", "openai"] as const;
+export const HOSTED_LLM_PROVIDERS = ["anthropic", "openai", "ollama"] as const;
 export type HostedLlmProvider = (typeof HOSTED_LLM_PROVIDERS)[number];
 
 export function isHostedProvider(name: string): boolean {

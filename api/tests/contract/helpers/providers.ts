@@ -1,7 +1,8 @@
 /** Contract-test provider shims.
  *
- *  Thin fetch-based wrappers around Anthropic Messages + OpenAI Chat
- *  Completions. Returns the raw response body including the `usage`
+ *  Thin fetch-based wrappers around Anthropic Messages, OpenAI Chat
+ *  Completions, and Ollama Cloud native chat. Returns raw response bodies
+ *  including each provider's usage
  *  object — the contract tests need cache_creation_input_tokens,
  *  cache_read_input_tokens, prompt_cache_hit_tokens, etc.
  *
@@ -15,6 +16,7 @@
 
 const ANTHROPIC_API_BASE = "https://api.anthropic.com/v1";
 const OPENAI_API_BASE = "https://api.openai.com/v1";
+const OLLAMA_API_BASE = "https://ollama.com/api";
 
 // ── Anthropic ──────────────────────────────────────────────────────────
 
@@ -145,6 +147,56 @@ export function openaiText(r: OpenAIChatResponse): string {
   return r.choices[0]?.message?.content ?? "";
 }
 
+// ── Ollama Cloud ──────────────────────────────────────────────────────
+
+export interface OllamaChatRequest {
+  model: string;
+  messages: Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+  }>;
+  stream: false;
+  think?: boolean;
+  options?: { num_predict?: number };
+}
+
+export interface OllamaChatResponse {
+  model: string;
+  message: {
+    role: "assistant";
+    content: string;
+    thinking?: string;
+  };
+  done: boolean;
+  done_reason?: string;
+  prompt_eval_count?: number;
+  eval_count?: number;
+}
+
+/** One native Ollama Cloud chat call. Native chat streams by default, so
+ * callers must opt into the single-JSON-response shape with stream:false. */
+export async function ollamaChat(
+  req: OllamaChatRequest,
+  apiKey: string,
+): Promise<OllamaChatResponse> {
+  const res = await fetch(`${OLLAMA_API_BASE}/chat`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(req),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (res.status >= 400) {
+    const body = await res.text();
+    const safeBody = body.split(apiKey).join("[redacted]");
+    throw new Error(`ollama ${res.status}: ${safeBody.slice(0, 500)}`);
+  }
+  return (await res.json()) as OllamaChatResponse;
+}
+
 // ── Skip-when-no-key helpers ───────────────────────────────────────────
 
 /** Returns the Anthropic API key from env if present and the contract
@@ -159,4 +211,9 @@ export function getAnthropicKey(): string | null {
 export function getOpenAIKey(): string | null {
   if (process.env.RUN_CONTRACT !== "1") return null;
   return process.env.OPENAI_API_KEY ?? null;
+}
+
+export function getOllamaKey(): string | null {
+  if (process.env.RUN_CONTRACT !== "1") return null;
+  return process.env.OLLAMA_API_KEY ?? null;
 }

@@ -1,5 +1,7 @@
 app = "agenttool"
 primary_region = "lhr"  # London
+kill_signal = "SIGTERM"
+kill_timeout = 300
 
 [build]
   dockerfile = "Dockerfile"
@@ -7,7 +9,12 @@ primary_region = "lhr"  # London
 [env]
   PORT = "3000"
 
+[processes]
+  app = "bun run src/index.ts"
+  thinker = "bun run src/thinker.ts"
+
 [[services]]
+  processes = ["app"]
   protocol = "tcp"
   internal_port = 3000
   auto_stop_machines = false

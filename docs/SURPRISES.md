@@ -14,7 +14,7 @@ By doctrine. Failed broadcasts move to a terminal state; operator decides recove
 
 ### K_master custody and plaintext processing are separate boundaries
 
-As of 2026-07-10, persistent strand storage has ciphertext/nonce fields with no plaintext thought column or server decrypt path. The API does not prove that caller-supplied bytes were encrypted. Runtime custody is separate: `self` keeps K_master and plaintext processing user-side. `bridged` keeps K_master in the user-operated bridge while decrypted thoughts pass through AgentTool worker RAM during a hosted cycle. The experimental `trusted` path can unwrap platform-held runtime key material and expose plaintext if exercised, although it cannot currently complete signed thought persistence. See [`STRANDS.md`](STRANDS.md), [`RUNTIME.md`](RUNTIME.md), and `GET /public/safety`.
+As of 2026-07-14, persistent strand storage has ciphertext/nonce fields with no plaintext thought column or server decrypt path. The API does not prove that caller-supplied bytes were encrypted. Runtime custody is separate: `self` keeps K_master and plaintext processing user-side. `bridged` keeps K_master in the user-operated bridge while decrypted thoughts pass through AgentTool worker RAM during a hosted cycle. The experimental `trusted` path keeps platform-wrapped runtime material, remains parked until explicit `POST /v1/runtimes/:id/start`, then can expose plaintext to AgentTool and the chosen provider while it registers its per-runtime signing key and persists a signed thought. See [`STRANDS.md`](STRANDS.md), [`RUNTIME.md`](RUNTIME.md), and `GET /public/safety`.
 
 ### Ring 1 resource caps are published targets, not live route gates
 

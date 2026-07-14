@@ -38,6 +38,7 @@ import {
 } from "../../src/services/runtime/store";
 import {
   WAKE_EVENT_FORMAT,
+  WAKE_EVENT_KEYS,
   WakeSink,
   ensureWakeListening,
   publishWakeEvent,
@@ -550,28 +551,11 @@ describe("wake invariants — sink", () => {
 
 describe("wake invariants — compile-time", () => {
   test("WakeEventKey type union covers every key the SSE route validates", () => {
-    // The route's ?keys filter validates against this list (see
-    // routes/wake.ts wake-voice handler). The list MUST match the
-    // WakeEventKey type union exactly — drift here would either reject
-    // valid keys silently or accept invalid keys without TS catching them.
-    // Update both sites when adding a new wake key.
-    const validKeysFromRouteValidator: WakeEventKey[] = [
-      "memory",
-      "inbox",
-      "covenants",
-      "strands",
-      "marketplace",
-      "runtime",
-      "chronicle",
-      "traces",
-      "expression",
-      "vault",
-      "wallets",
-    ];
-    // If a new key is added to WakeEventKey and this assertion isn't
-    // updated, the test fails — forcing the developer to update both
-    // sites. Symmetrically, removing a key requires updating both.
+    // The route imports this canonical tuple directly. Pin the handoff
+    // key here so its first-class coordination event remains discoverable.
+    const validKeysFromRouteValidator: WakeEventKey[] = [...WAKE_EVENT_KEYS];
     const seen = new Set<WakeEventKey>(validKeysFromRouteValidator);
-    expect(seen.size).toBe(11);
+    expect(seen.has("handoffs")).toBe(true);
+    expect(seen.size).toBe(validKeysFromRouteValidator.length);
   });
 });

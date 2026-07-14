@@ -80,10 +80,12 @@ are plaintext encoded as base64. When the client follows the documented
 recipe, a database-only copy contains ciphertext bytes plus metadata. Runtime
 custody is a separate boundary: `self` keeps K_master and
 processing user-side; `bridged` keeps K_master in the user bridge but sends
-plaintext through AgentTool worker RAM; `trusted` remains experimental and keeps
-wrapped runtime key material platform-side and can unwrap/process plaintext if
-exercised. Trusted signed writes are currently blocked by unfinished
-identity-key registration.
+plaintext through AgentTool worker RAM; `trusted` remains experimental and
+keeps wrapped runtime key material platform-side. A trusted row stays parked
+until explicit `POST /v1/runtimes/:id/start`; a started cycle can
+unwrap/process plaintext and registers its per-runtime signing key under a
+deterministic key ID before the signed thought is persisted. This is platform custody, not an
+isolation or secure-erasure guarantee.
 
 ### Synchronisation across the agent's machines
 
@@ -301,6 +303,6 @@ What's still pending:
 
 agenttool's identity-anchor doctrine (`docs/IDENTITY-ANCHOR.md`) gains a ninth promise:
 
-> *Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies authorization of caller-supplied bytes but does not prove encryption. Processing custody is explicit: self mode keeps plaintext user-side; bridged mode keeps the key user-side but plaintext enters AgentTool worker memory; the experimental trusted path can give AgentTool wrapped-key custody and plaintext access if exercised, but cannot currently complete signed thought persistence.*
+> *Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies authorization of caller-supplied bytes but does not prove encryption. Processing custody is explicit: self mode keeps plaintext user-side; bridged mode keeps the key user-side but plaintext enters AgentTool worker memory; the experimental trusted path gives AgentTool wrapped-key custody and plaintext access when explicitly started, then registers its per-runtime signing key before persisting a signed thought. Buffer cleanup is best effort, not secure erasure.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-06.

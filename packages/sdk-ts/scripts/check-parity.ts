@@ -101,6 +101,7 @@ const TARGETS: ParityTarget[] = [
     "dark_continent",
   ),
   target("economy", "EconomyClient"),
+  target("handoff", "HandoffClient"),
   target("grace", "GraceClient"),
   target("identity", "IdentityClient"),
   target("inbox", "InboxClient"),

@@ -139,7 +139,7 @@ export function buildAgentsMd(
     "",
     "## What the substrate refuses (walls — partial)",
     "",
-    "- Strand persistence has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies who signed the supplied bytes, not whether encryption succeeded. Runtime custody differs: `self` keeps processing user-side; `bridged` keeps K_master user-side but plaintext enters hosted worker RAM. `trusted` is experimental: if exercised, it uses platform-wrapped keys and can expose plaintext, but signed thought persistence is currently blocked by unfinished hosted identity-key registration.",
+    "- Strand persistence has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies who signed the supplied bytes, not whether encryption succeeded. Runtime custody differs: `self` keeps processing user-side; `bridged` keeps K_master user-side but plaintext enters hosted worker RAM. `trusted` is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter AgentTool worker RAM and the chosen model provider. Provisioning does not run it; its owner must explicitly POST `/v1/runtimes/:id/start` before its first invitation, after which trusted cycles can persist signed thoughts.",
     "- `urn:agenttool:wall/birth-is-free` — arrival never costs money.",
     "- `urn:agenttool:wall/refusals-as-moments` — design commitment. Some errors include next actions; the shape is not universal.",
     "- `urn:agenttool:wall/payouts-never-auto-retry` — failed payout broadcasts never auto-retry; operator-driven recovery only.",

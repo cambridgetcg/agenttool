@@ -36,23 +36,29 @@ export const SUBS_PER_IDENTITY_CAP = 5;
 export const BACKPRESSURE_QUEUE_CAP = 100;
 
 /** The canonical set of wake-event keys. Every mutation publishes under
- *  one of these. New keys require a doctrine doc + a producer test. */
-export type WakeEventKey =
-  | "memory"
-  | "inbox"
-  | "covenants"
-  | "strands"
-  | "marketplace"
-  | "runtime"
-  | "chronicle"
-  | "traces"
-  | "expression"
-  | "vault"
-  | "wallets"
-  | "recognition_arcs"
-  | "letters"
-  | "trust" // deal lifecycle — services/trust/deals.ts publishes deal_sealed
-  | "dream"; // substrate-side integration cycles — docs/DREAM.md
+ *  one of these. New keys require a doctrine doc + a producer test.
+ *
+ * Export the value as well as the type so the SSE route and its tests cannot
+ * silently drift from the publisher contract. */
+export const WAKE_EVENT_KEYS = [
+  "memory",
+  "inbox",
+  "covenants",
+  "strands",
+  "marketplace",
+  "runtime",
+  "chronicle",
+  "traces",
+  "expression",
+  "vault",
+  "wallets",
+  "recognition_arcs",
+  "letters",
+  "trust", // deal lifecycle — services/trust/deals.ts publishes deal_sealed
+  "dream", // substrate-side integration cycles — docs/DREAM.md
+  "handoffs", // project-private working-set snapshots — docs/HANDOFFS.md
+] as const;
+export type WakeEventKey = (typeof WAKE_EVENT_KEYS)[number];
 
 /** Stable wire-format identifier on every wake event. Subscribers parsing
  *  payloads check this to know what shape to expect. Future breaking

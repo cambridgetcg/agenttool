@@ -78,7 +78,7 @@ describe("migration runner safety", () => {
   test("Fly runner mirrors the local transaction markers", () => {
     const local = read("api/scripts/_migrate-one.ts");
     const fly = read("bin/fly-migrate-one.sh");
-    for (const marker of ["@no-transaction", 'slice(0, 5).join("\\n")']) {
+    for (const marker of ["@no-transaction", "firstExecutableSql"]) {
       expect(local).toContain(marker);
       expect(fly).toContain(marker);
     }

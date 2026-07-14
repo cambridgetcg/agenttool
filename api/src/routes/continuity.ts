@@ -27,6 +27,7 @@ import { errors, fail } from "../lib/errors";
 import { prepareDeclare } from "../services/covenants/prepare";
 import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
+import { HANDOFF_KIND } from "../services/handoff/store";
 import { publishWakeEvent } from "../services/wake/push";
 
 const app = new Hono<ProjectContext>();
@@ -73,6 +74,23 @@ const chronicleSchema = z.object({
 app.post("/chronicle", async (c) => {
   const project = c.var.project;
   const body = chronicleSchema.parse(await c.req.json());
+
+  // Handoffs are a reserved chronicle-note envelope. Letting generic
+  // metadata mint `kind: handoff` would bypass the dedicated route's
+  // project-identity, facet, expiry, size, and revision checks.
+  if (body.metadata?.kind === HANDOFF_KIND) {
+    return fail(
+      c,
+      {
+        error: "handoff_requires_dedicated_endpoint",
+        message: "Project working-set handoffs must be written through POST /v1/handoff.",
+        hint: "Use the dedicated handoff contract so scope, expiry, identity, and declared boundaries are validated.",
+        docs: "https://docs.agenttool.dev/handoffs",
+        _canon_pointer: "urn:agenttool:doc/HANDOFFS",
+      },
+      400,
+    );
+  }
 
   const [entry] = await db
     .insert(chronicle)

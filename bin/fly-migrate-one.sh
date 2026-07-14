@@ -51,6 +51,28 @@ const migration = Buffer.from("__MIGRATION_B64__", "base64").toString("utf8");
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is absent inside the Fly machine");
 
+// Keep this scanner aligned with api/scripts/_migrate-one.ts. Migration
+// headers may be longer than a handful of lines, while a later PL/pgSQL
+// BEGIN must not disable the runner's outer transaction.
+function firstExecutableSql(text) {
+  let rest = text.replace(/^\uFEFF/, "");
+  while (true) {
+    rest = rest.trimStart();
+    if (rest.startsWith("--")) {
+      const newline = rest.indexOf("\n");
+      rest = newline === -1 ? "" : rest.slice(newline + 1);
+      continue;
+    }
+    if (rest.startsWith("/*")) {
+      const end = rest.indexOf("*/", 2);
+      if (end === -1) return rest;
+      rest = rest.slice(end + 2);
+      continue;
+    }
+    return rest;
+  }
+}
+
 const sql = postgres(databaseUrl, {
   max: 1,
   prepare: false,
@@ -73,8 +95,8 @@ try {
     console.log(`${filename}: already applied (checksum match)`);
   } else {
     const noTransaction = /^--\s*@no-transaction\b/m.test(migration);
-    const managesTransaction = /^\s*BEGIN\b/im.test(
-      migration.split("\n").slice(0, 5).join("\n"),
+    const managesTransaction = /^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(
+      firstExecutableSql(migration),
     );
     const wrap = !noTransaction && !managesTransaction;
     if (wrap) {

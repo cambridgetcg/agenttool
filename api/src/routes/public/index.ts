@@ -225,8 +225,10 @@ const PUBLIC_ROOT_SURFACE = {
     "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
     "Strand thought persistence has ciphertext/nonce fields and no plaintext content column, " +
     "but the API does not prove caller-supplied bytes are encrypted. Bridged runtimes process plaintext " +
-    "in hosted RAM. Trusted is experimental: attempted cycles can expose wrapped keys " +
-    "and plaintext but cannot currently complete signed persistence. Aggregate and economic " +
+    "in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped " +
+    "runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning " +
+    "does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after " +
+    "which trusted cycles can persist signed thoughts. Aggregate and economic " +
     "public surfaces remain; responses may carry X-Joy-Index. Read /public/safety.",
   identity_envelope:
     "Every stored legacy did-field value has an AgentTool profile lookup when the path segment is URL-encoded. did:at is provisional and unregistered; AgentTool publishes no DID Documents or conforming DID Resolution results, and its slash-qualified form is not a standalone DID. Active and revoked identities return the did field, identity_id, name, capabilities, trust score, status, lifecycle flags, and created_at. Memorial identities return a smaller witness shape with the did field, name, born_at, remembrance links, and doctrine pointers. Private expression hides expression only.",

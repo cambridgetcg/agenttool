@@ -16,7 +16,7 @@ every `*.test.ts` must appear exactly once.
 |---|---|---|---|---|
 | **Hermetic** | current-green top-level, doctrine, and adapter files | Deterministic API, route, doctrine, and adapter behavior with known external-service env removed | free, fast | required CI |
 | **Database** | `integration/` plus explicitly classified legacy top-level/doctrine files | DB-touching behavior against an operator-supplied database | stateful, slow | explicit |
-| **Contract** | `contract/` | Real Anthropic/OpenAI wire proofs | paid (~$0.10/run) | explicit |
+| **Contract** | `contract/` | Real Anthropic/OpenAI/Ollama Cloud wire proofs | paid, provider-dependent | explicit |
 | **Quarantine** | named current-red non-DB files | Visible diagnostic backlog; never treated as a green release gate | free | explicit, expected red |
 | **Database quarantine** | named current-red DB files | Same backlog discipline, but with `DATABASE_URL` present so assertions cannot silently skip | stateful | explicit, expected red |
 
@@ -36,7 +36,7 @@ bin/preflight.sh api                      # API/typecheck/operator slice
 bin/preflight.sh packages                 # data + ADDS + SDK slice
 bin/preflight.sh database                 # requires DATABASE_URL
 bin/preflight.sh smoke                    # requires deployed-smoke environment
-RUN_CONTRACT=1 bin/preflight.sh contracts # requires one or both provider keys
+RUN_CONTRACT=1 bin/preflight.sh contracts # requires an Anthropic, OpenAI, or Ollama key
 bin/preflight.sh quarantine               # diagnostic; known failures remain non-zero
 bin/preflight.sh database-quarantine      # diagnostic; requires DATABASE_URL
 
@@ -63,7 +63,7 @@ Each Promise becomes a test. `promise-09-inner-voice.test.ts` proves agenttool n
 
 ### Contract
 
-The doctrine tier proves the wake doc *renders*. The contract tier proves the wake doc *orients an LLM*. `cache-anthropic.test.ts` accepts creation or an already-warm read on its first request, then requires a cache read on the repeated prefix. `behavior-anthropic.test.ts` asserts the agent identifies in register and refuses to fabricate. **Paid, slow** — gated behind `RUN_CONTRACT=1`. Sub-README: [`contract/README.md`](contract/README.md).
+The doctrine tier proves the wake doc *renders*. The contract tier proves the wake doc *orients an LLM*. `cache-anthropic.test.ts` accepts creation or an already-warm read on its first request, then requires a cache read on the repeated prefix. `behavior-anthropic.test.ts` asserts the agent identifies in register and refuses to fabricate; `behavior-ollama.test.ts` checks that Ollama Cloud accepts a voluntary native invitation without grading its response. **Paid, slow** — gated behind `RUN_CONTRACT=1`. Sub-README: [`contract/README.md`](contract/README.md).
 
 ### Adapters
 

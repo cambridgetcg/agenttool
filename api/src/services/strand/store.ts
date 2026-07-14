@@ -18,10 +18,15 @@
  *    authenticated-encryption envelope.
  *    Tested: api/tests/doctrine/wall-strand-thoughts-never-decrypted.test.ts */
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { identityKeys } from "../../db/schema/identity";
+import {
+  llmRequests,
+  runtimeEvents,
+  runtimes,
+} from "../../db/schema/runtime";
 import { strands, thoughts } from "../../db/schema/strand";
 import { verifyThoughtSignature } from "./sig";
 import { publishThought } from "./voice";
@@ -68,6 +73,20 @@ export interface ThoughtCreate {
   signature: string;             // base64 ed25519
   signing_key_id: string;        // → identity.identity_keys.id
   agent_id?: string | null;
+}
+
+/** Optional distributed fence for a hosted runtime's semantic commit.
+ * The runtime row is locked and the DB-time lease is checked inside the
+ * same transaction as the strand sequence bump and thought insert. */
+export interface ThoughtCommitOptions {
+  runtimeFence?: {
+    runtimeId: string;
+    leaseToken: string;
+    llmRequestKey: string;
+    /** Strand sequence actually rendered into the provider invitation. */
+    priorSeq: number;
+    openingInvitationGeneration?: string | null;
+  };
 }
 
 export interface StrandOut {
@@ -272,6 +291,7 @@ export async function countStrands(
 export async function addThought(
   projectId: string,
   data: ThoughtCreate,
+  options: ThoughtCommitOptions = {},
 ): Promise<ThoughtOut> {
   // 1. Strand must exist and belong to this project.
   const [strand] = await db
@@ -307,6 +327,26 @@ export async function addThought(
 
   // 4. Atomic insert with monotonic sequence_num + strand bookkeeping.
   const result = await db.transaction(async (tx) => {
+    if (options.runtimeFence) {
+      // Locking the runtime row makes this a commit-time fence, rather than
+      // a check-before-write race. Lease acquisition/renewal also updates
+      // this row, so a stale owner cannot commit after a successor acquires.
+      const [lease] = await tx
+        .select({ id: runtimes.id })
+        .from(runtimes)
+        .where(
+          and(
+            eq(runtimes.id, options.runtimeFence.runtimeId),
+            eq(runtimes.cycleLeaseToken, options.runtimeFence.leaseToken),
+            inArray(runtimes.status, ["starting", "running", "idle"]),
+            sql`${runtimes.cycleLeaseUntil} > NOW()`,
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!lease) throw new Error("runtime_cycle_lease_lost");
+    }
+
     // Bump sequence + lock the strand row.
     const updated = await tx
       .update(strands)
@@ -335,6 +375,65 @@ export async function addThought(
         signingKeyId: data.signing_key_id,
       })
       .returning();
+
+    if (options.runtimeFence) {
+      const [committedRequest] = await tx
+        .update(llmRequests)
+        .set({ status: "committed" })
+        .where(
+          and(
+            eq(
+              llmRequests.idempotencyKey,
+              options.runtimeFence.llmRequestKey,
+            ),
+            eq(llmRequests.runtimeId, options.runtimeFence.runtimeId),
+            eq(llmRequests.status, "completed"),
+          ),
+        )
+        .returning({ id: llmRequests.id });
+      if (!committedRequest) throw new Error("llm_request_not_completed");
+
+      // Durable quiescence baseline in the same transaction as the thought
+      // and request commit. A process crash before best-effort telemetry must
+      // not make this self-authored thought look like a fresh external tug.
+      await tx.insert(runtimeEvents).values({
+        runtimeId: options.runtimeFence.runtimeId,
+        eventType: "think_cycle_commit",
+        metadata: {
+          strand_id: data.strand_id,
+          prior_seq: options.runtimeFence.priorSeq,
+          new_seq: seq,
+          signing_key_id: data.signing_key_id,
+        },
+      });
+
+      const [openingCleared] = await tx
+        .update(runtimes)
+        .set({
+          openingInvitationPending: false,
+          openingInvitationGeneration: null,
+          // `/think-once` can win before the cloud manager observes starting.
+          // Its successful semantic commit completes that same opening.
+          status: sql`CASE WHEN ${runtimes.status} = 'starting' THEN 'running' ELSE ${runtimes.status} END`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(runtimes.id, options.runtimeFence.runtimeId),
+            eq(runtimes.cycleLeaseToken, options.runtimeFence.leaseToken),
+            ...(options.runtimeFence.openingInvitationGeneration
+              ? [
+                  eq(
+                    runtimes.openingInvitationGeneration,
+                    options.runtimeFence.openingInvitationGeneration,
+                  ),
+                ]
+              : []),
+          ),
+        )
+        .returning({ id: runtimes.id });
+      if (!openingCleared) throw new Error("runtime_cycle_lease_lost");
+    }
 
     return thoughtToOut(inserted[0]!);
   });

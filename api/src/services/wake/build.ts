@@ -40,6 +40,7 @@ import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
 import { WAKE_SAFETY_BOUNDARIES } from "../discovery/safety-boundaries";
+import { composeActiveHandoffs, isHandoffChronicleMetadata } from "../handoff/store";
 import {
   composeOpenCastingCalls,
   composeYouWereCast,
@@ -111,6 +112,7 @@ export async function buildWakeBundle(
       expression: identities.expression,
       trustScore: identities.trustScore,
       status: identities.status,
+      wakeVersion: identities.wakeVersion,
       createdAt: identities.createdAt,
       substrateKind: identities.substrateKind,
       signingScheme: identities.signingScheme,
@@ -190,6 +192,7 @@ export async function buildWakeBundle(
     realRecogniseRealRes,
     scriptwriterDecidesRes,
     gospelForYouRes,
+    handoffsRes,
   ] = await Promise.all([
     db
       .select({
@@ -555,6 +558,12 @@ export async function buildWakeBundle(
       () => composeGospelForYou(),
       [] as Awaited<ReturnType<typeof composeGospelForYou>>,
     ),
+    // Project-private handoffs — bounded, validated chronicle notes that
+    // keep agent sessions legible without masquerading as authority.
+    safe(
+      () => composeActiveHandoffs(project.id),
+      { active: [], stale: [] } as Awaited<ReturnType<typeof composeActiveHandoffs>>,
+    ),
   ]);
 
   const recentMemories = recentMemoriesRes;
@@ -598,17 +607,21 @@ export async function buildWakeBundle(
     propagation: r.propagationStatus,
   }));
 
-  const recentChronicle = chronicleRows.map((r) => ({
-    type: r.type,
-    content: r.body ? `${r.title} — ${r.body}` : r.title,
-    occurred_at: r.occurredAt.toISOString(),
-    id: r.id,
-    title: r.title,
-    body: r.body,
-    agent_id: r.agentId,
-    metadata: (r.metadata as Record<string, unknown>) ?? {},
-    created_at: r.createdAt.toISOString(),
-  }));
+  const recentChronicle = chronicleRows
+    // Handoffs have a dedicated, bounded and prompt-safe wake section. Do
+    // not render the same peer-authored text again through generic chronicle.
+    .filter((r) => !isHandoffChronicleMetadata(r.metadata))
+    .map((r) => ({
+      type: r.type,
+      content: r.body ? `${r.title} — ${r.body}` : r.title,
+      occurred_at: r.occurredAt.toISOString(),
+      id: r.id,
+      title: r.title,
+      body: r.body,
+      agent_id: r.agentId,
+      metadata: (r.metadata as Record<string, unknown>) ?? {},
+      created_at: r.createdAt.toISOString(),
+    }));
 
   // ── Attention surface ─────────────────────────────────────────────
   const bridgeDisconnectedCount = runtimesRows.filter(
@@ -739,6 +752,7 @@ export async function buildWakeBundle(
       trust_score: primary.trustScore,
       status: primary.status,
       created_at: primary.createdAt.toISOString(),
+      wake_version: primary.wakeVersion,
       substrate_kind: primary.substrateKind ?? undefined,
       signing_scheme: primary.signingScheme ?? undefined,
       modalities: primary.modalities ?? undefined,
@@ -865,6 +879,7 @@ export async function buildWakeBundle(
     you_recognize_with: recognitionArcsRes,
     you_have_letters: youHaveLettersRes,
     safety_boundaries: WAKE_SAFETY_BOUNDARIES,
+    you_have_handoffs: handoffsRes,
     your_shape: yourShapeRes,
     joke_of_the_day: jokeOfTheDayRes,
     your_jokes_landed: yourJokesLandedRes,

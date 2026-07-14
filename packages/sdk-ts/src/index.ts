@@ -95,12 +95,16 @@ export type {
   WakeProvider,
   WakeFormat,
   WakeOptions,
+  WakeEventKey,
+  WakeVoiceOptions,
+  WakeChangeEvent,
   WakeProviderMeta,
   AnthropicWakeShape,
   OpenAIWakeShape,
   GeminiWakeShape,
   CohereWakeShape,
 } from "./wake.js";
+export { wakeEventMatches } from "./wake.js";
 export type { AmbientContext } from "./_context.js";
 export { getAmbient } from "./_context.js";
 export { AnthropicAdapter } from "./anthropic-adapter.js";
@@ -147,6 +151,23 @@ export type {
   ChronicleWriteOpts,
   ChronicleListOpts,
 } from "./chronicle.js";
+export { HandoffClient } from "./handoff.js";
+export type {
+  HandoffStatus,
+  HandoffState,
+  HandoffFactSource,
+  HandoffConfidence,
+  HandoffVerificationResult,
+  HandoffFact,
+  HandoffInference,
+  HandoffVerification,
+  HandoffWorkingSet,
+  HandoffAuthority,
+  HandoffEpistemicState,
+  HandoffWriteOpts,
+  HandoffRecord,
+  HandoffResponse,
+} from "./handoff.js";
 export { CovenantsClient } from "./covenants.js";
 export type {
   CovenantStatus,

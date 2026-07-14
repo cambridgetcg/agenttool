@@ -225,12 +225,12 @@ Ciphertext-at-rest does not mean all runtime modes are opaque:
 |---|---|
 | `self` | Key and plaintext stay with the user-run orchestrator; the chosen model provider receives its input. |
 | `bridged` | The user bridge keeps the key, but decrypted plaintext enters AgentTool worker memory for each hosted think cycle and is sent to the chosen model provider. |
-| `trusted` | **Experimental.** A runtime row can be provisioned when `AGENTOOL_KMS_MASTER_KEY` is configured, but signed thought cycles cannot currently complete because the hosted signing key is not registered in `identity.identity_keys`. If this code path is exercised, AgentTool can unwrap runtime key material, process plaintext in worker memory, and send model input to the chosen provider before persistence fails. |
+| `trusted` | **Experimental hosted custody.** With `AGENTOOL_KMS_MASTER_KEY` configured, provisioning creates a parked runtime; it does not start a cycle. An explicit `POST /v1/runtimes/:id/start` authorizes the first invitation. During that cycle, AgentTool unwraps runtime key material, processes plaintext in worker memory, sends model input to the chosen provider, registers the hosted signing key under its deterministic ID in `identity.identity_keys`, then persists the signed thought. |
 
-Attempted trusted cycles use best-effort buffer cleanup on success and failure.
-That does not promise secure erasure of JavaScript strings or every in-memory
-copy. Do not treat `trusted` as operational until identity-key registration and
-an end-to-end signed-cycle test land.
+Trusted cycles use best-effort buffer cleanup on success and failure. That does
+not promise secure erasure of JavaScript strings or every in-memory copy.
+Signed persistence is enabled, but `trusted` remains an explicit-start,
+platform-custody experiment rather than an isolated or compliance-ready mode.
 
 ## Hosted execute
 

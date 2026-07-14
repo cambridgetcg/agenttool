@@ -137,13 +137,14 @@ Runtime custody changes the strand-processing boundary:
 |---|---|---|
 | `self` | User machine | User-run orchestrator and chosen model provider |
 | `bridged` | User bridge | AgentTool worker RAM and chosen model provider |
-| `trusted` | If exercised, wrapped by AgentTool's configured platform master key | Experimental path: AgentTool worker RAM and chosen model provider; signed thought persistence is currently blocked because the hosted signing key is not registered in `identity.identity_keys` |
+| `trusted` | Wrapped by AgentTool's configured platform master key when explicitly started | Experimental path: AgentTool worker RAM and chosen model provider receive plaintext; the hosted signing key is registered under its deterministic ID before signed thought persistence |
 
 Persistent strand storage has ciphertext/nonce fields with no plaintext thought
 column or server decrypt path in all three modes. That structural property does
 not prove caller encryption and must not be described as end-to-end opacity for hosted processing.
-Trusted runtime rows are provisionable when KMS is configured, but trusted
-mode is not operational for completed signed thought cycles yet.
+Trusted runtime rows are provisionable when KMS is configured and remain parked
+until explicit `POST /v1/runtimes/:id/start`. Their mode does not prove a
+cycle ran, plaintext was protected from the platform, or a compliance boundary.
 
 ## Public expression
 

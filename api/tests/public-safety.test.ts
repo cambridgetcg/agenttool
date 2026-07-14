@@ -25,6 +25,15 @@ function parseKv(body: string): Map<string, string> {
   return values;
 }
 
+const TRUSTED_SIGNED_CYCLE_ENABLED =
+  /(?:signed thoughts?(?: cycle| persistence)?.{0,180}(?:enabled|can (?:persist|complete)|persists?|persisted)|(?:enabled|can (?:persist|complete)|persists?|persisted).{0,180}signed thoughts?(?: cycle| persistence)?)/is;
+
+const EXPLICIT_TRUSTED_START =
+  /(?:explicit.{0,120}(?:POST\s+)?(?:\/v1\/runtimes\/:id)?\/start|(?:POST\s+)?(?:\/v1\/runtimes\/:id)?\/start.{0,120}explicit)/is;
+
+const BLOCKED_TRUSTED_SIGNED_CYCLE =
+  /(?:(?:cannot|blocked|unable|unfinished|incomplete).{0,180}signed thoughts?(?: cycle| persistence)?|signed thoughts?(?: cycle| persistence)?.{0,180}(?:cannot|blocked|unable|unfinished|incomplete))/is;
+
 describe("GET /public/safety", () => {
   test("serves the versioned canonical object without authentication", async () => {
     const res = await publicRouter.request("/safety");
@@ -134,13 +143,25 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.runtime_custody.bridged.agenttool_access).toContain(
       "plaintext",
     );
-    expect(SAFETY_BOUNDARIES.runtime_custody.trusted.agenttool_access).toContain(
+    const trusted = SAFETY_BOUNDARIES.runtime_custody.trusted;
+    expect(trusted.agenttool_access).toContain(
       "plaintext",
     );
-    expect(SAFETY_BOUNDARIES.runtime_custody.trusted.maturity).toBe("experimental");
-    expect(SAFETY_BOUNDARIES.runtime_custody.trusted.current_status).toMatch(
-      /cannot currently complete a signed thought cycle/i,
+    expect(trusted.plaintext_processing).toMatch(
+      /(?:hosted (?:orchestrator|worker) RAM|AgentTool worker RAM).*chosen model provider/is,
     );
+    expect(trusted.maturity).toBe("experimental");
+    expect(trusted.current_status).toMatch(/AGENTOOL_KMS_MASTER_KEY/i);
+    expect(trusted.current_status).toMatch(
+      /provisioning.{0,120}(?:does not|never).{0,80}(?:start|cycle)/is,
+    );
+    expect(trusted.current_status).toMatch(EXPLICIT_TRUSTED_START);
+    expect(trusted.current_status).toMatch(TRUSTED_SIGNED_CYCLE_ENABLED);
+    expect(SAFETY_BOUNDARIES.runtime_custody.rule).toMatch(/experimental/i);
+    expect(SAFETY_BOUNDARIES.runtime_custody.rule).toMatch(EXPLICIT_TRUSTED_START);
+    expect(
+      [trusted.current_status, SAFETY_BOUNDARIES.runtime_custody.rule].join("\n"),
+    ).not.toMatch(BLOCKED_TRUSTED_SIGNED_CYCLE);
     expect(SAFETY_BOUNDARIES.marketplace_input.enforcement).toMatch(
       /bounded, high-confidence detector/i,
     );

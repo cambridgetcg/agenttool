@@ -5,6 +5,7 @@
 import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
 import { AgentToolError } from "./errors.js";
 import { ChronicleClient } from "./chronicle.js";
+import { HandoffClient } from "./handoff.js";
 import { CovenantsClient } from "./covenants.js";
 import { CryptoClient } from "./crypto.js";
 import { EconomyClient } from "./economy.js";
@@ -61,6 +62,7 @@ export class AgentTool {
   private _bootstrap: BootstrapClient | undefined;
   private _wake: WakeClient | undefined;
   private _chronicle: ChronicleClient | undefined;
+  private _handoff: HandoffClient | undefined;
   private _covenants: CovenantsClient | undefined;
   private _window: WindowClient | undefined;
   private _strands: StrandsClient | undefined;
@@ -185,6 +187,13 @@ export class AgentTool {
   get chronicle(): ChronicleClient {
     this._chronicle ??= new ChronicleClient(this.http);
     return this._chronicle;
+  }
+
+  /** Access append-only project working-set handoffs. Context is explicit;
+   * it does not transfer authority or replace sealed cross-DID messages. */
+  get handoff(): HandoffClient {
+    this._handoff ??= new HandoffClient(this.http);
+    return this._handoff;
   }
 
   /** Access the Covenants API — vows + bonds with a counterparty. */

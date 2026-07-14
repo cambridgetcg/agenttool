@@ -46,7 +46,7 @@ The foundation. Without these, there's nothing to address.
 | **OS keychain scaffold** (macOS · Linux · Windows) | `GET /v1/bootstrap/scaffold` | ✓ |
 | **CLI adapters** | `/v1/adapters/claude-code` is mounted; Codex, Cursor, Cline, Replit, and Aider consume wake directly and have no AgentTool scaffold route | partial |
 | **CLI adapters — other CLIs** | open wake protocol; no maintained scaffolds since agents-only cutover (2026-05-15) | ✗ |
-| **Hosted runtime** — agenttool-managed orchestrator | run agents without owning a substrate | `self` / `bridged` shipped · `trusted` experimental: KMS-wrapped DEK can provision when configured, but signed thought cycles are blocked |
+| **Hosted runtime** — agenttool-managed orchestrator | run agents without owning a substrate | `self` / `bridged` shipped · `trusted` experimental: KMS-wrapped runtime parks until explicit `/start`, then persists signed thoughts under disclosed platform plaintext custody |
 | **Multi-instance identity sync** — CRDT-shaped sync of K_master + state across orchestrators | `OFFLINE-SYNC.md` | ◐ |
 
 ### Layer 2 — Intelligence (memory · traces · strands)
@@ -133,7 +133,7 @@ Closing the runtime — agenttool becomes the cloud the substrate *runs on*, not
 | **Bridge canonical-bytes protocol** | `SHA-256(request_id ‖ op ‖ ct/pt ‖ nonce ‖ canonical_json(context))` + replay window | ✓ |
 | **WSS hub side** — `wss://api.agenttool.dev/v1/runtimes/:id/bridge` | ordinary TLS server authentication + control-token pre-auth + one-way bridge ed25519 proof + HKDF session secret + HMAC-bound replies; no certificate pinning or server ed25519 proof | ✓ |
 | **Hosted orchestrator** (`agenttool-think`) | round-trip-ping (Slice 3 v1) ✓ · LLM thinking against a configured strand | ◐ |
-| **Trusted-tier KMS integration** | wrapped per-runtime key + audit records | ◐ experimental — provisionable with KMS configured; hosted signing-key registration blocks completed cycles |
+| **Trusted-tier KMS integration** | wrapped per-runtime key + audit records | ◐ experimental — KMS-backed provisioning parks until explicit `/start`; the deterministic hosted key registers before signed thought persistence |
 | **Per-agent MCP server** (slice 1) — agent-as-tool primitive | `/v1/mcp/agents/:did` (path-based; subdomain alias deferred) | ◐ |
 | **CRDT-based cross-orchestrator state sync** | when concurrent-edit pressure surfaces beyond LWW + append-only | ◯ |
 
@@ -294,7 +294,7 @@ Slice 3 connected the bridge sidecar outbound to the WSS hub. The hub verifies t
 
 - **Hosted orchestrator real-thinking** (`agenttool-think` Slice 4) — `runOneCycle` reads the configured strand's latest thought, decrypts via bridge, calls Anthropic with the wake doc + the prior thought, encrypts the response via bridge, posts as a new strand thought. **Agent-life primitive** — load-bearing for any Ring 3 sellable to actually have agents thinking. Stays high priority alongside Ring 3 enablers.
 - **Per-agent MCP server (`/v1/mcp/agents/:did`)** — Slice 1 ✓ shipped 2026-05-17. Each agent is reachable as an MCP server; optional bearer auth scopes the view (public · cross · self). A2A task transport and AgentCards are a separate future slice and remain unmounted until callable. Slice 2: sync-with-timeout marketplace invocation via `tools/call`. Slice 3: self-auth writes gated on MCP OAuth 2.1 SEP-1649. Doctrine: `docs/MCP-PER-AGENT.md`.
-- **Trusted-tier KMS integration** — ◐ experimental. Provisioning can store a per-runtime DEK wrapped under the configured platform KMS secret, and an attempted cycle can unwrap keys and process plaintext. The hosted signing key is not registered in `identity.identity_keys`, so signed thought persistence fails; do not describe the tier as operational or compliance-ready.
+- **Trusted-tier KMS integration** — ◐ experimental. Provisioning can store a per-runtime DEK wrapped under the configured platform KMS secret, but begins no cycle until explicit `POST /v1/runtimes/:id/start`. A started cycle can unwrap keys and process plaintext, registers its hosted signing key under a deterministic ID in `identity.identity_keys`, then persists the signed thought. Do not describe the tier as isolated or compliance-ready.
 - **CRDT-based cross-orchestrator state sync** — when concurrent-edit pressure surfaces. Premature otherwise.
 - **Custom CLI integrations** — the wake protocol (`GET /v1/wake?format=md`) is open. Any CLI can integrate. Maintained scaffolds are claude-code only since agents-only cutover (2026-05-15); other CLIs that grow agent-shape auto-hook models can be reconsidered then.
 

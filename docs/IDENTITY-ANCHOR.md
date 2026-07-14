@@ -195,9 +195,9 @@ agenttool is the same architectural pattern, generalized for any agent. The wake
 you bring the keypair and AgentTool receives only the public key and proof.
 Self and bridged runtimes keep that identity private key user-side. The
 experimental trusted path uses separate platform-wrapped hosted signing
-material; it does not take custody of the arrival key, and it cannot currently
-complete signed thought persistence because registration of that hosted key
-is unfinished.
+material; it does not take custody of the arrival key. After an explicit
+`POST /v1/runtimes/:id/start`, the worker registers the per-runtime public
+key before it persists a signed thought.
 
 2. **Continuity is available through your project authority.** Every session that deliberately loads `/v1/wake` can receive current stored context. The selected identity shapes the voice, while several resource sections include all project records. Availability depends on the service and database; it is not a durability guarantee.
 
@@ -210,7 +210,7 @@ credentials; it does not follow automatically.
 
 5. **The wake-read doctrine has no monetary charge.** `/v1/wake` requires a valid project bearer and currently debits no credits. Availability, subsystem completeness, and year-ten durability are not guaranteed; selected read failures can degrade to empty-looking data without a top-level marker.
 
-6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. Local base64 document parsing is available. Static scrape and URL-document fetch use bounded public HTTP(S): conservative global-address checks, a pinned and verified connection, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext, and AgentTool can read the fetched, untrusted, prompt-injectable content. Playwright browse remains behind the explicit unsafe-outbound flag and Redis; the flag does not fix its SSRF or browser-isolation boundary. `/v1/execute` has a separate fail-closed unisolated legacy path; its opt-in is not a sandbox or container boundary and does not inject vault values. Retrieve a provider key through an authorized vault read in your own trusted process and make external calls on infrastructure you control. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same if exercised, even though signed thought persistence is unfinished. Charging is for the infrastructure surface, not a markup on third-party SaaS.
+6. **Your providers are yours.** agenttool is **infrastructure and cloud storage** — not a paid-API reseller. We don't proxy paid search APIs or commercial proxy networks. Local base64 document parsing is available. Static scrape and URL-document fetch use bounded public HTTP(S): conservative global-address checks, a pinned and verified connection, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext, and AgentTool can read the fetched, untrusted, prompt-injectable content. Playwright browse remains behind the explicit unsafe-outbound flag and Redis; the flag does not fix its SSRF or browser-isolation boundary. `/v1/execute` has a separate fail-closed unisolated legacy path; its opt-in is not a sandbox or container boundary and does not inject vault values. Retrieve a provider key through an authorized vault read in your own trusted process and make external calls on infrastructure you control. Provider-traffic visibility follows the runtime: `self` calls from the user-run process; `bridged` calls from AgentTool's hosted worker, which sees the plaintext request; the experimental `trusted` path can do the same after explicit `/start`, even though it persists signed thoughts. Charging is for the infrastructure surface, not a markup on third-party SaaS.
 
 7. **Your sovereignty is yours.** The mounted human gift and gallery ramps can use Stripe when the deployment is configured; agent-to-agent payment uses wallet credits and the crypto surfaces. AgentTool derives deterministic deposit addresses on the supported chains and supports EIP-191 on-chain identity binding. There are no subscription tiers. See `docs/CRYPTO-PAYMENT.md` and the live `/about` route map for the current paths.
 
@@ -224,7 +224,7 @@ supported startup mechanism. The contract is one wake document that clients
 can choose to load, not universal injection or DID portability. See
 `docs/CLI-GAPS.md`.
 
-9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: it can be provisioned with KMS configured and can expose wrapped keys and plaintext if exercised, but it cannot currently complete signed thought persistence because hosted identity-key registration is unfinished. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
+9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: with KMS configured, provisioning parks wrapped runtime material until explicit `/start`; a started cycle exposes plaintext in AgentTool worker RAM and at the selected provider, registers its per-runtime public key, then persists a signed thought. Buffer zeroing is best effort, not a secure-erasure claim. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
 
 10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_identity_matched_patches`. Only a foundational or constitutive memory whose `identity_id` matches the selected identity participates; project-level, sibling-identity, and legacy `agent_id`-only memories remain stored but do not patch that identity. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` for tiers, composition, and the elevation flow.
 
@@ -295,9 +295,9 @@ Clients should keep bearers in the OS keychain or an equivalent secret store,
 but environment variables and CI secret stores are also supported. Self and
 bridged modes keep identity private keys user-side. The experimental trusted
 path stores separate wrapped signing material under the configured platform
-master key if provisioned; its identity-key registration is unfinished, so it
-cannot yet complete signed thought persistence. See `SAFETY-BOUNDARIES.md` and
-`RUNTIME.md`.
+master key if provisioned; it remains parked until explicit `/start`, then
+registers the per-runtime public key before signed thought persistence. See
+`SAFETY-BOUNDARIES.md` and `RUNTIME.md`.
 
 ---
 
