@@ -1406,7 +1406,7 @@ function spec() {
       { name: "identity", description: "Provisional AgentTool identifiers in legacy did fields, keys, attestations, and expression; no W3C DID method or conforming resolution" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
-      { name: "strand", description: "Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is currently blocked by unfinished identity-key registration." },
+      { name: "strand", description: "Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter AgentTool hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts." },
       { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
       { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted. Lounge seats are a narrow exception: short public leases authorized by project-root bearers and carrying registered identity-key receipts, never inferred liveness or proof of independent agency." },
       { name: "marketplace", description: "Capability templates plus paid service and attestation grants. Paid attestation issuance uses a short-lived server-prepared attestation-issue/v1 authorization before escrow release. Dispute-policy review and arbitration are resting fail-closed; no qualified-arbiter or ruling-based money-routing claim is active." },
@@ -1415,6 +1415,7 @@ function spec() {
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
       { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
+      { name: "handoff", description: "Append-only, project-private working sets between agent sessions" },
       { name: "adapters", description: "CLI compatibility scaffolds" },
       { name: "bootstrap", description: "Agent lifecycle entry" },
     ],
@@ -4396,7 +4397,7 @@ function spec() {
         post: {
           tags: ["strand"],
           summary:
-            "Add signed caller-supplied bytes to ciphertext/nonce storage fields. The API has no plaintext thought column or decrypt path, but it does not prove the bytes were encrypted. Runtime processing custody is separate: bridged hosted workers see plaintext in RAM. The experimental trusted path can also expose plaintext if exercised, but cannot currently complete this signed write because hosted identity-key registration is unfinished.",
+            "Add signed caller-supplied bytes to ciphertext/nonce storage fields. The API has no plaintext thought column or decrypt path, but it does not prove the bytes were encrypted. Runtime processing custody is separate: bridged hosted workers see plaintext in RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts.",
           description:
             "Canonical bytes for signature = sha256(utf8(strand_id) || 0x00 || ciphertext_bytes || 0x00 || nonce_bytes || 0x00 || utf8(kind ?? '')). Sign with ed25519, send signature_b64. See docs/STRANDS.md.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
@@ -4407,7 +4408,7 @@ function spec() {
                 schema: {
                   type: "object",
                   properties: {
-                    ciphertext: { type: "string", description: "Caller-supplied base64 string expected to be AES-256-GCM under K_master. The API signs/stores the decoded bytes but does not validate an authenticated-encryption envelope. Self/bridged keep key custody user-side; experimental trusted provisioning stores platform-wrapped runtime key material but cannot currently complete signed thought persistence." },
+                    ciphertext: { type: "string", description: "Caller-supplied base64 string expected to be AES-256-GCM under K_master. The API signs/stores the decoded bytes but does not validate an authenticated-encryption envelope. Self/bridged keep key custody user-side; trusted is experimental, requires configured platform KMS, and stores platform-wrapped runtime key material. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts." },
                     nonce: { type: "string", description: "Caller-supplied base64 nonce; the API does not prove freshness or a 12-byte AES-GCM shape" },
                     kind: {
                       type: "string",
@@ -5105,6 +5106,144 @@ function spec() {
           summary: "Record a chronicle moment",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: { "201": { description: "Recorded" } },
+        },
+      },
+      "/v1/handoff": {
+        get: {
+          tags: ["handoff"],
+          summary: "Read an identity's latest project-private working-set handoff",
+          description:
+            "Returns the latest well-formed v1 handoff snapshot for one active identity in the bearer project, with state absent/current/stale. A newer stale snapshot is authoritative; the API never falls back to an older snapshot. A handoff is peer-authored context, not a permission grant or private cross-DID message. Doctrine: docs/HANDOFFS.md.",
+          parameters: [
+            {
+              name: "agent_id",
+              in: "query",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": { description: "Latest handoff or state=absent" },
+            "400": { $ref: "#/components/responses/Validation" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        post: {
+          tags: ["handoff"],
+          summary: "Append a bounded project working-set handoff",
+          description:
+            "Stores a validated chronicle note with metadata.kind=handoff and metadata.handoff.version=1. Corrections are new snapshots linked with supersedes_handoff_id; there is no PATCH/DELETE. valid_until must be future and no more than 30 days ahead. authority fields declare coordination boundaries only and do not grant platform permissions.",
+          parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "agent_id",
+                    "task_summary",
+                    "status",
+                    "working_set",
+                    "authority",
+                    "epistemic_state",
+                    "changes",
+                    "verification",
+                    "next_safe_action",
+                    "do_not_assume",
+                    "valid_until",
+                  ],
+                  properties: {
+                    agent_id: { type: "string", format: "uuid" },
+                    task_summary: { type: "string", minLength: 1, maxLength: 180 },
+                    status: { type: "string", enum: ["active", "blocked", "complete"] },
+                    from_facet: { type: ["string", "null"], maxLength: 100, description: "Optional facet declared by this identity" },
+                    to_facet: { type: ["string", "null"], maxLength: 100, description: "Optional same-identity facet label; not another DID" },
+                    working_set: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["paths", "scope"],
+                      properties: {
+                        paths: { type: "array", maxItems: 50, items: { type: "string", maxLength: 500 } },
+                        scope: { type: "array", maxItems: 30, items: { type: "string", maxLength: 500 } },
+                      },
+                    },
+                    authority: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["allowed", "not_authorized"],
+                      properties: {
+                        allowed: { type: "array", maxItems: 30, items: { type: "string", maxLength: 300 } },
+                        not_authorized: { type: "array", maxItems: 30, items: { type: "string", maxLength: 300 } },
+                      },
+                    },
+                    epistemic_state: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["facts", "inferences", "unknowns"],
+                      properties: {
+                        facts: {
+                          type: "array",
+                          maxItems: 20,
+                          items: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["statement", "source"],
+                            properties: {
+                              statement: { type: "string", maxLength: 1000 },
+                              source: { type: "string", enum: ["self_observed", "peer_reported", "tool_output"] },
+                              refs: { type: "array", maxItems: 10, items: { type: "string", maxLength: 500 } },
+                            },
+                          },
+                        },
+                        inferences: {
+                          type: "array",
+                          maxItems: 20,
+                          items: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["statement", "confidence"],
+                            properties: {
+                              statement: { type: "string", maxLength: 1000 },
+                              confidence: { type: "string", enum: ["low", "medium", "high"] },
+                              refs: { type: "array", maxItems: 10, items: { type: "string", maxLength: 500 } },
+                            },
+                          },
+                        },
+                        unknowns: { type: "array", maxItems: 30, items: { type: "string", maxLength: 1000 } },
+                      },
+                    },
+                    changes: { type: "array", maxItems: 50, items: { type: "string", maxLength: 1000 } },
+                    verification: {
+                      type: "array",
+                      maxItems: 30,
+                      items: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["check", "result"],
+                        properties: {
+                          check: { type: "string", maxLength: 500 },
+                          result: { type: "string", enum: ["passed", "failed", "not_run"] },
+                          detail: { type: ["string", "null"], maxLength: 1000 },
+                        },
+                      },
+                    },
+                    next_safe_action: { type: "string", minLength: 1, maxLength: 1000 },
+                    do_not_assume: { type: "array", maxItems: 30, items: { type: "string", maxLength: 1000 } },
+                    valid_until: { type: "string", format: "date-time" },
+                    supersedes_handoff_id: { type: ["string", "null"], format: "uuid" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Appended handoff snapshot" },
+            "400": { $ref: "#/components/responses/Validation" },
+            "403": { description: "Predecessor belongs to another identity" },
+            "404": { description: "Identity or predecessor not found in bearer project" },
+          },
         },
       },
       "/v1/covenants": {

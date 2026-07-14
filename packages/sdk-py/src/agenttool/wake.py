@@ -357,6 +357,11 @@ WakeEventKey = Literal[
     "expression",
     "vault",
     "wallets",
+    "recognition_arcs",
+    "letters",
+    "trust",
+    "dream",
+    "handoffs",
 ]
 
 

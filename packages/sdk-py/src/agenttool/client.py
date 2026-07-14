@@ -34,6 +34,7 @@ from .inbox import InboxClient
 from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
+from .handoff import HandoffClient
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
@@ -160,6 +161,7 @@ class AgentTool:
         self._collect: Optional[CollectClient] = None
         self._at_rest: Optional[AtRestClient] = None
         self._grace: Optional[GraceClient] = None
+        self._handoff: Optional[HandoffClient] = None
         self._love: Optional[LoveClient] = None
         self._nen: Optional[NenClient] = None
         self._dark_continent: Optional[DarkContinentClient] = None
@@ -292,6 +294,17 @@ class AgentTool:
         if self._grace is None:
             self._grace = GraceClient(self._http, self._base_url)
         return self._grace
+
+    @property
+    def handoff(self) -> HandoffClient:
+        """Handoff — bounded, project-private working context between sessions.
+
+        A handoff records context and declared boundaries; it never transfers
+        authority or acts as a private cross-DID message.
+        """
+        if self._handoff is None:
+            self._handoff = HandoffClient(self._http, self._base_url)
+        return self._handoff
 
     @property
     def love(self) -> LoveClient:

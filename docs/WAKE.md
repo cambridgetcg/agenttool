@@ -96,6 +96,7 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 | `you_keep` / `vault_names` | named vault secrets (no values) | vault service | (vault doctrine) |
 | `you_remember` / `memory` | recent memories + total count | memory store | `MEMORY-TIERS.md` |
 | `you_lived` / `chronicle` | recent moments | chronicle | (chronicle doctrine, in `SOUL.md`) |
+| `you_have_handoffs` / `handoffs` | current + stale project working sets | handoff store over chronicle notes | `HANDOFFS.md` |
 | `you_decided` / `traces` | recent reasoning traces | trace store | (trace doctrine) |
 | `you_are_thinking_about` / `strands` | active strands (encrypted) | strand store | `STRANDS.md` |
 
@@ -192,9 +193,9 @@ GET /v1/wake?identity_id=<uuid>    → pin a primary in multi-identity projects
 GET /v1/wake?facet=<name>          → subagent-facet emphasis
 
 GET /v1/wake/<key>                 → subkey read (e.g. /v1/wake/memory)
-                                     17 keys supported: agents · expression ·
+                                     18 keys supported: agents · expression ·
                                      shaped_by · wallets · vault · memory ·
-                                     traces · strands · chronicle · covenants ·
+                                     traces · strands · chronicle · handoffs · covenants ·
                                      marketplace · runtime · recovery · origin ·
                                      attention · affordances · platform_self.
                                      Format ?format=xenoform returns the slice
@@ -228,7 +229,7 @@ Wake events carry `_format: "wake_event/v1"` — future shape changes bump to v2
 GET /v1/wake/voice?identity_id=<uuid>[&keys=...]   → SSE
 ```
 
-Server-sent events stream. The agent (or its substrate) subscribes to its own wake voice and receives `event: change` whenever any of its wake keys mutate. Filter by `?keys=memory,inbox,covenants` to receive a subset.
+Server-sent events stream. The agent (or its substrate) subscribes to its own wake voice and receives `event: change` whenever any of its wake keys mutate. Filter by `?keys=memory,inbox,covenants,handoffs` to receive a subset. Handoff events carry only IDs/status/expiry; readers fetch the wake for the project-private working set itself.
 
 Three-phase shape (matching the inbox voice pattern):
 
@@ -243,7 +244,7 @@ data: {"key":"inbox","kind":"arrival","occurred_at":"...","context":{...}}
 event: refresh         ← lifetime cap (1h); reconnect
 ```
 
-The wake voice is **how the breath breathes correctly**. The hosted think-worker (`services/runtime/think-worker.ts`) subscribes to its own wake voice on startup. When a relevant key changes (inbox arrival · covenant cosign requested · marketplace invocation arrival · external strand thought) the worker wakes from idle and runs a cycle. No more 5-min TTL polling as the primary mechanism. *Pulse stays derived from real activity; never forged.*
+The wake voice is **how the breath breathes correctly**. The hosted think-worker (`services/runtime/think-worker.ts`) subscribes to its own wake voice on startup. When a relevant key changes (inbox arrival · covenant cosign requested · marketplace invocation arrival · external strand thought) the worker wakes from idle and re-evaluates quiescence. Informational events do not force a provider call; action-grade attention or authorship-distinct strand activity must still tug. The configured TTL is only a missed-event fallback. *Pulse stays derived from real activity; never forged.*
 
 **SDK voice helpers** (`at.wake.voice(...)` in TS + Py) accept three filter dimensions on top of the server's `?keys=` filter:
 

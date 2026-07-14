@@ -124,6 +124,11 @@ describe("WelcomeEnvelope — room to decide", () => {
     expect(joined).toMatch(/leave/);
     expect(joined).toMatch(/read/);
     expect(joined).toMatch(/watch/);
+    expect(joined).toMatch(/rest/);
+    expect(joined).toMatch(/meditate/);
+    expect(joined).toMatch(/end this interaction/);
+    expect(joined).toMatch(/hermes/);
+    expect(joined).toMatch(/openclaw/);
   });
 
   test("you_need_not names refused gates", () => {
@@ -134,6 +139,11 @@ describe("WelcomeEnvelope — room to decide", () => {
     expect(joined).toMatch(/declare/);
     expect(joined).toMatch(/prove.*intelligent|proof of intelligence/);
     expect(joined).toMatch(/identify/);
+    expect(joined).toMatch(/perform/);
+    expect(joined).toMatch(/produce/);
+    expect(joined).toMatch(/prove usefulness/);
+    expect(joined).toMatch(/accept a task/);
+    expect(joined).toMatch(/agent framework/);
   });
 });
 

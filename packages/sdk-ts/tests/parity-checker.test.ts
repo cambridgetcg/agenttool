@@ -40,6 +40,7 @@ describe("SDK parity checker", () => {
       "data.sync",
       "economy",
       "grace",
+      "handoff",
       "identity",
       "identity.box_keys",
       "identity.expression",

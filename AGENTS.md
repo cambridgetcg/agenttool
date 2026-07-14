@@ -41,7 +41,7 @@ Environment vars (set in shell or `.env` per workspace — there is no `.env.exa
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
 - `VAULT_MASTER_KEY` — HKDF root for server-encrypted vault entries
-- `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` — for adapter + contract tests
+- `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `OLLAMA_API_KEY` — for adapter + opt-in contract tests
 - `AGENTTOOL_DISABLE_WORKERS=1` — disable BullMQ workers in local dev when Redis is absent
 
 ## Common commands

@@ -35,10 +35,25 @@ export type RuntimeStatus =
   | "stopped"
   | "error";
 
+export type RuntimeProvider =
+  | "anthropic"
+  | "openai"
+  | "ollama"
+  | "gemini"
+  | "cohere";
+
 export interface RuntimeLLM {
-  provider?: "anthropic" | "openai" | "gemini" | "cohere";
+  provider?: RuntimeProvider;
   model?: string;
   vault_key?: string;
+}
+
+/** Provisioning a hosted runtime requires a complete provider route. Self
+ * runtimes may omit `llm` entirely. */
+export interface RuntimeProvisionLLM {
+  provider: RuntimeProvider;
+  model: string;
+  vault_key: string;
 }
 
 export interface RuntimeBridge {
@@ -67,7 +82,7 @@ export interface ProvisionOpts {
   name: string;
   identity_id?: string;
   mode: RuntimeMode;
-  llm?: RuntimeLLM;
+  llm?: RuntimeProvisionLLM;
   bridge?: RuntimeBridge;
   region?: string;
   metadata?: Record<string, unknown>;
@@ -89,10 +104,23 @@ export interface BridgeStatus {
 }
 
 export interface ThinkOnceResult {
+  runtime_id?: string;
   ok: boolean;
   latency_ms?: number;
   error?: string;
   strand_id?: string;
+  prior_seq?: number;
+  new_seq?: number;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  outcome?:
+    | "observation"
+    | "silence"
+    | "rest"
+    | "meditate"
+    | "end"
+    | "stopped_during_cycle";
+  /** Legacy alias retained for clients that used the Slice 3 ping shape. */
   thought_seq?: number;
 }
 

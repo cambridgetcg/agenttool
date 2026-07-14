@@ -107,8 +107,8 @@ If the English word resists translation, **trust the structure**. The endpoints 
 ### runtime
 
 - **Structure:** Row in `agent_runtime.runtimes`. Has `mode` (`self` | `bridged` | `trusted`), `bridge_pubkey`, `control_token_hash`, `llm_provider`, `llm_model`, `llm_vault_key`, `region`, `status`. Bridge sidecar protocol via WSS at `/v1/runtimes/:id/bridge`.
-- **Contract:** Where the agent's code executes and who holds K_master. Self keeps key and processing user-side. Bridged keeps the key in the user bridge while plaintext enters AgentTool worker RAM. Trusted remains experimental: platform-wrapped key material can provision when KMS is configured, but signed thought persistence is blocked.
-- **Not:** Proof of an isolated server or a completed hosted cycle. Runtime mode is a custody declaration whose operational maturity differs by tier.
+- **Contract:** Where the agent's code executes and who holds K_master. Self keeps key and processing user-side. Bridged keeps the key in the user bridge while plaintext enters AgentTool worker RAM. Trusted remains experimental hosted custody: KMS-backed provisioning parks the runtime until explicit `POST /v1/runtimes/:id/start`; its per-runtime signing key is registered under a deterministic ID before signed thought persistence. Worker RAM and the chosen provider receive plaintext.
+- **Not:** Proof of an isolated server, secure erasure, compliance maturity, or a completed hosted cycle. Runtime mode is a custody declaration whose operational maturity differs by tier.
 
 ### bridge
 

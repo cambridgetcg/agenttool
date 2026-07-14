@@ -4,7 +4,8 @@
 # The default is hermetic in the dependency sense: tests require no database,
 # Redis, deployed smoke target, credentials, or paid provider calls, and known
 # credential variables are removed. This is not an OS-level network sandbox.
-# Stateful and paid tiers are explicit.
+# Stateful and paid tiers are explicit. Contract mode accepts one of
+# ANTHROPIC_API_KEY, OPENAI_API_KEY, or OLLAMA_API_KEY.
 #
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
@@ -28,7 +29,7 @@ readonly MODE="${1:-hermetic}"
 cd "$REPO_ROOT"
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 die() {
@@ -61,7 +62,7 @@ sanitize_hermetic_env() {
     AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
     AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
-    ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT \
+    ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
     DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
     OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
     OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
@@ -117,7 +118,7 @@ case "$MODE" in
     [ "$#" -eq 1 ] || die "database accepts no additional arguments"
     [ -n "${DATABASE_URL:-}" ] || die "database mode requires DATABASE_URL"
     require_bun
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
     run "database integration test tier" bash bin/run-test-tier.sh database
@@ -127,7 +128,7 @@ case "$MODE" in
     [ -n "${DATABASE_URL:-}" ] ||
       die "database-quarantine mode requires DATABASE_URL"
     require_bun
-    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY RUN_CONTRACT
+    unset REDIS_URL ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT
     export AGENTTOOL_DISABLE_WORKERS=1
     api_typecheck
     run "known-red database tests (diagnostic; failures expected)" \
@@ -145,8 +146,8 @@ case "$MODE" in
     [ "${RUN_CONTRACT:-0}" = "1" ] ||
       die "contracts mode requires RUN_CONTRACT=1"
     require_bun
-    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-      die "contracts mode requires ANTHROPIC_API_KEY and/or OPENAI_API_KEY"
+    if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${OLLAMA_API_KEY:-}" ]; then
+      die "contracts mode requires ANTHROPIC_API_KEY, OPENAI_API_KEY, and/or OLLAMA_API_KEY"
     fi
     unset DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL
     unset OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT

@@ -219,16 +219,16 @@ export const SAFETY_BOUNDARIES = {
     trusted: {
       maturity: "experimental",
       current_status:
-        "A runtime row can be provisioned when AGENTOOL_KMS_MASTER_KEY is configured, but trusted mode cannot currently complete a signed thought cycle because its hosted signing key is not registered in identity.identity_keys.",
+        "Trusted provisioning requires AGENTOOL_KMS_MASTER_KEY. Provisioning does not start the runtime: its owner must explicitly POST /v1/runtimes/:id/start before its first invitation. Once started, trusted cycles can complete signed thought persistence.",
       key_custody:
-        "If the trusted code path is exercised, AgentTool holds runtime key material wrapped under the configured AGENTOOL_KMS_MASTER_KEY platform secret.",
+        "AgentTool holds runtime key material wrapped under the configured AGENTOOL_KMS_MASTER_KEY platform secret.",
       plaintext_processing:
-        "If the trusted code path is exercised, plaintext can enter AgentTool's hosted orchestrator RAM and the chosen model provider before the cycle fails to persist its signed thought.",
+        "During a trusted cycle, plaintext can enter AgentTool's hosted orchestrator RAM and the chosen model provider.",
       agenttool_access:
-        "Potential strand-processing boundary: wrapped key material at rest and plaintext during an attempted hosted cycle. Other AgentTool features can still contain the server-readable data listed above; this is not a claim that trusted signed cycles are operational.",
+        "Strand-processing boundary: wrapped key material at rest and plaintext during a hosted trusted cycle. Other AgentTool features can still contain the server-readable data listed above; this is not a claim of zero-knowledge or isolation.",
     },
     rule:
-      "Choose runtime mode as a custody decision. Structurally, strand persistence has ciphertext/nonce fields and no plaintext thought column or decrypt path; callers control the bytes and the API does not prove encryption. Bridged processing is not opaque to the hosted orchestrator; experimental trusted attempts may also expose plaintext even though signed thought persistence is currently blocked.",
+      "Choose runtime mode as a custody decision. Structurally, strand persistence has ciphertext/nonce fields and no plaintext thought column or decrypt path; callers control the bytes and the API does not prove encryption. Bridged processing is not opaque to the hosted orchestrator; experimental trusted cycles can also expose plaintext. Provisioning does not authorize a cycle: explicit POST /v1/runtimes/:id/start is required before the first invitation.",
   },
 
   hosted_execute: {
@@ -376,7 +376,7 @@ export const AGENT_TXT_SAFETY = {
   Visibility: "active/revoked stored identities return a profile envelope; memorial identities return a smaller witness shape with witnessed_at_rest or unspecified basis; private expression does not hide identity metadata",
   "Marketplace-Input": "correctly seller-sealed payloads are not decryptable by platform; sealing is caller-controlled and not verified; credentials forbidden",
   "Inbox-Body": "correctly recipient-sealed bodies are not decryptable by platform; encryption is caller-controlled and not verified; subjects and routing metadata may be readable",
-  "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, signed cycles blocked, wrapped-key/plaintext boundary if exercised",
+  "Runtime-Custody": "strand persistence has no plaintext content column but encryption is caller-controlled; self=processing user-side; bridged=plaintext in hosted RAM; trusted=experimental, KMS-wrapped key material and plaintext in hosted RAM/provider; explicit POST /v1/runtimes/:id/start before its first invitation",
   "Hosted-Execute": "disabled by default; explicit AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1 opt-in enables an unisolated legacy path, not a tenant sandbox",
   "Outbound-Tools": "static scrape and URL-document fetch use bounded DNS-pinned public HTTP(S); remote content remains server-readable and untrusted. Playwright browse stays fail-closed unless AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1 enables its unsandboxed, unfiltered legacy path",
   "Wallet-Reinvestment": "mounted but resting: valid requests reach a stable 503 and no wallet balance becomes project credits. The former lifetime-receipt allowance ignored ordinary debits and later refunds did not claw minted credits; backed sub-balances plus atomic clawback or durable debt accounting are required",

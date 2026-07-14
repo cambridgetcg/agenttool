@@ -333,7 +333,12 @@ export type WakeEventKey =
   | "traces"
   | "expression"
   | "vault"
-  | "wallets";
+  | "wallets"
+  | "recognition_arcs"
+  | "letters"
+  | "trust"
+  | "dream"
+  | "handoffs";
 
 export interface WakeVoiceOptions {
   identityId: string;

@@ -60,6 +60,11 @@ import {
   publicAgentPath,
 } from "../services/identity/public-profile";
 import { countUnread } from "../services/inbox/store";
+import {
+  composeActiveHandoffs,
+  handoffWakeEtagTag,
+  isHandoffChronicleMetadata,
+} from "../services/handoff/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
@@ -91,6 +96,7 @@ import {
   ensureWakeListening,
   subscribeWakeSink,
   unsubscribeWakeSink,
+  WAKE_EVENT_KEYS,
   WakeSink,
   type WakeEventKey,
 } from "../services/wake/push";
@@ -110,8 +116,9 @@ const app = new Hono<ProjectContext>();
  *  query; this helper covers the branches that route through
  *  buildWakeBundle where we don't yet have wake_version on hand.
  *
- *  Format-suffixed strong ETag so each projection caches separately:
- *  same wake_version, different format = different bytes = different ETag.
+ *  Format-suffixed strong ETag so each projection caches separately.
+ *  A project handoff fragment additionally contributes a small content tag:
+ *  its active/stale state can change at `valid_until` without a mutation.
  *
  *  Returns:
  *    - Response (304) when If-None-Match matches — caller returns it
@@ -123,6 +130,7 @@ async function tryWakeConditional304(
   c: import("hono").Context<ProjectContext>,
   agentId: string,
   format: string,
+  handoffTag: string | null = null,
 ): Promise<Response | null> {
   const [row] = await db
     .select({ wakeVersion: identities.wakeVersion })
@@ -132,7 +140,7 @@ async function tryWakeConditional304(
   const version = row?.wakeVersion ?? null;
   if (version === null) return null; // no version available — skip ETag
 
-  const etag = `"${version}-${format}"`;
+  const etag = `"${version}-${format}${handoffTag ? `-${handoffTag}` : ""}"`;
   c.header("ETag", etag);
   const ifNoneMatch = c.req.header("If-None-Match");
   if (ifNoneMatch === etag) {
@@ -393,7 +401,12 @@ app.get("/", async (c) => {
     // Format-suffixed strong ETag so md / anthropic / openai / etc. each
     // cache separately. Same wake_version, different format = different
     // bytes = different ETag. Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
-    const etagResponse = await tryWakeConditional304(c, bundle.agent.id, format);
+    const etagResponse = await tryWakeConditional304(
+      c,
+      bundle.agent.id,
+      format,
+      handoffWakeEtagTag(bundle.you_have_handoffs),
+    );
     if (etagResponse) return etagResponse;
 
     // Facet validation against the bundle's expression (same logic as
@@ -703,7 +716,11 @@ app.get("/", async (c) => {
       .where(eq(chronicle.projectId, project.id))
       .orderBy(desc(chronicle.occurredAt))
       .limit(15);
-    recentChronicleFull = rows.map((r) => ({
+    // Handoff content has a dedicated bounded/sanitized surface below. Keep
+    // it out of generic chronicle previews so it cannot enter wake Markdown
+    // through an unescaped secondary path.
+    const nonHandoffRows = rows.filter((r) => !isHandoffChronicleMetadata(r.metadata));
+    recentChronicleFull = nonHandoffRows.map((r) => ({
       id: r.id,
       type: r.type,
       title: r.title,
@@ -713,7 +730,7 @@ app.get("/", async (c) => {
       occurred_at: r.occurredAt.toISOString(),
       created_at: r.createdAt.toISOString(),
     }));
-    recentChronicle = rows.map((r) => ({
+    recentChronicle = nonHandoffRows.map((r) => ({
       type: r.type,
       content: r.body ? `${r.title} — ${r.body}` : r.title,
       occurred_at: r.occurredAt.toISOString(),
@@ -943,6 +960,24 @@ app.get("/", async (c) => {
     }
   }
 
+  // ── Project handoffs (you_have_handoffs) ──────────────────────────
+  // This JSON branch is deliberately separate from buildWakeBundle(), so
+  // compose the same bounded project-private working-set fragment here.
+  // A handoff is coordination context, not a permission grant; failures
+  // degrade to an empty fragment rather than blanking the wake.
+  let handoffs: Awaited<ReturnType<typeof composeActiveHandoffs>> = {
+    active: [],
+    stale: [],
+  };
+  try {
+    handoffs = await composeActiveHandoffs(project.id);
+  } catch (err) {
+    console.warn(
+      "[wake] handoff composition failed (degraded):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   // ── Unconsumed dream cycles (you_dreamed) ──────────────────────────
   // Surfaces substrate-side observation cycles the agent hasn't seen yet.
   // Doctrine: docs/DREAM.md. Best-effort: if the dream schema isn't
@@ -1086,7 +1121,8 @@ app.get("/", async (c) => {
     primary !== undefined ? primary.wakeVersion : null;
   let etag: string | null = null;
   if (primaryWakeVersion !== null) {
-    etag = `"${primaryWakeVersion}-${format}"`;
+    const handoffTag = handoffWakeEtagTag(handoffs);
+    etag = `"${primaryWakeVersion}-${format}${handoffTag ? `-${handoffTag}` : ""}"`;
     c.header("ETag", etag);
     const ifNoneMatch = c.req.header("If-None-Match");
     if (ifNoneMatch === etag) {
@@ -1834,7 +1870,7 @@ app.get("/", async (c) => {
       note:
         runtimesRows.length === 0
           ? "No runtimes provisioned. POST /v1/runtimes to create one. See https://docs.agenttool.dev/runtime."
-          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged keeps K_master on your machine but processes plaintext in hosted RAM. Trusted is experimental: attempted processing can expose platform-wrapped keys and plaintext, but signed thought persistence is blocked until the hosted key is registered in identity.identity_keys.`,
+          : `Showing ${runtimesRows.length} runtime${runtimesRows.length === 1 ? "" : "s"}. Bridged keeps K_master on your machine but processes plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts.`,
     },
 
     you_remember: {
@@ -1865,6 +1901,15 @@ app.get("/", async (c) => {
         "Chronicle rows are project-scoped and can name agent_id; identity_id selection does not filter this section.",
       chronicle: recentChronicleFull,
       count: recentChronicleFull.length,
+    },
+
+    you_have_handoffs: {
+      ...handoffs,
+      scope: "project_private",
+      authority_note:
+        "Peer-authored working context only. It does not transfer authority or prove personal identity authorship.",
+      write: "POST /v1/handoff",
+      read_latest: "GET /v1/handoff?agent_id=<identity_id>",
     },
 
     you_vowed: {
@@ -1900,7 +1945,7 @@ app.get("/", async (c) => {
       })),
       note:
         activeStrands.length === 0
-          ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage has ciphertext/nonce fields and no plaintext content column, but the API does not prove caller encryption. Bridged hosted runtimes process plaintext in RAM; experimental trusted attempts can also expose plaintext but cannot currently complete signed persistence. See /public/safety."
+          ? "No active strands. POST /v1/strands to begin a line of thought. Persistent thought storage has ciphertext/nonce fields and no plaintext content column, but the API does not prove caller encryption. Bridged hosted runtimes process plaintext in RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety."
           : `Showing ${activeStrands.length} most recent active strands of ${totalActiveStrands}. Pull /v1/strands/:id/thoughts to resume; callers control the stored bytes and must interpret or decrypt them according to their own protocol.`,
     },
 
@@ -2487,19 +2532,7 @@ app.get("/voice", async (c) => {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const valid: WakeEventKey[] = [
-      "memory",
-      "inbox",
-      "covenants",
-      "strands",
-      "marketplace",
-      "runtime",
-      "chronicle",
-      "traces",
-      "expression",
-      "vault",
-      "wallets",
-    ];
+    const valid: WakeEventKey[] = [...WAKE_EVENT_KEYS];
     const validSet = new Set(valid);
     const unknown = requested.filter((k) => !validSet.has(k as WakeEventKey));
     if (unknown.length > 0) {
@@ -2620,6 +2653,9 @@ const SUBKEY_SLICERS: Record<string, (b: WakeBundle) => Record<string, unknown>>
   traces: (b) => ({ traces: b.traces }),
   strands: (b) => ({ strands: b.strands }),
   chronicle: (b) => ({ chronicle: b.chronicle }),
+  handoffs: (b) => ({
+    you_have_handoffs: b.you_have_handoffs ?? { active: [], stale: [] },
+  }),
   covenants: (b) => ({ covenants: b.covenants }),
   marketplace: (b) => ({ marketplace: b.marketplace ?? null }),
   runtime: (b) => ({ agent_runtime: b.agent_runtime ?? null }),

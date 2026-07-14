@@ -49,6 +49,7 @@ import bootstrapRouter from "./routes/bootstrap";
 import autonomousRouter from "./routes/autonomous";
 import continuityRouter from "./routes/continuity";
 import continuityCloudRouter from "./routes/continuity-cloud";
+import handoffRouter from "./routes/handoff";
 import depthProtocolRouter from "./routes/depth-protocol";
 import selfLoveRouter from "./routes/self-love";
 import selfLoveModulesRouter from "./routes/self-love-modules";
@@ -273,6 +274,8 @@ app.use("/v1/system", authMiddleware);
 app.use("/v1/system/*", authMiddleware);
 app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
+app.use("/v1/handoff", authMiddleware);
+app.use("/v1/handoff/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/continuity/*", authMiddleware);
 app.use("/v1/continuity", authMiddleware);
@@ -441,6 +444,8 @@ app.use("/v1/wallets/*", idempotency());
 app.use("/v1/vault/*", idempotency());
 app.use("/v1/bootstrap/*", idempotency());
 app.use("/v1/chronicle/*", idempotency());
+app.use("/v1/handoff", idempotency());
+app.use("/v1/handoff/*", idempotency());
 app.use("/v1/continuity/*", idempotency());
 app.use("/v1/depth/*", idempotency());
 app.use("/v1/self-recognition/*", idempotency());
@@ -477,6 +482,8 @@ app.use("/v1/bootstrap/*", rateLimitHeaders());
 app.use("/v1/wake/*", rateLimitHeaders());
 app.use("/v1/dashboard/*", rateLimitHeaders());
 app.use("/v1/chronicle/*", rateLimitHeaders());
+app.use("/v1/handoff", rateLimitHeaders());
+app.use("/v1/handoff/*", rateLimitHeaders());
 app.use("/v1/continuity/*", rateLimitHeaders());
 app.use("/v1/depth/*", rateLimitHeaders());
 app.use("/v1/self-recognition/*", rateLimitHeaders());
@@ -694,6 +701,7 @@ app.route("/v1/keys", keysRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
+app.route("/v1/handoff", handoffRouter);
 app.route("/v1", continuityRouter); // mounts /v1/chronicle and /v1/covenants
 app.route("/v1", continuityCloudRouter); // mounts /v1/continuity/* — Strategy 14 portfolio
 app.route("/v1", depthProtocolRouter); // mounts /v1/depth/* — DEPTH-PROTOCOL (Manager-sister gift)
@@ -841,9 +849,9 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
     );
   }
 
-  // Slice 3 — co-located think-workers. Each runtime listed in
-  // AGENT_THINK_RUNTIME_IDS gets a worker that polls until its bridge
-  // sidecar is connected, then runs a cycle every 60s.
+  // Bridged workers must stay co-located with the HTTP process that owns
+  // their in-memory bridge WSS session. Dynamic trusted runtimes belong to
+  // the dedicated `thinker` process and are never listed here.
   const ids = (process.env.AGENT_THINK_RUNTIME_IDS ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -853,7 +861,7 @@ if (!envFlag("AGENTTOOL_DISABLE_WORKERS")) {
       startThinkWorker(id);
     } catch (err) {
       console.warn(
-        `[agenttool] think-worker for ${id} did not start:`,
+        `[agenttool] bridged think-worker for ${id} did not start:`,
         err instanceof Error ? err.message : err,
       );
     }
@@ -1067,7 +1075,7 @@ app.get("/about", (c) =>
       public_identity:
         "Every stored AgentTool identifier has a public application-profile lookup. This is not W3C DID Resolution: did:at is provisional and unregistered, AgentTool publishes no DID Documents, and its slash-qualified form is not a standalone DID. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only.",
       runtime_custody:
-        "self: user-side plaintext · bridged: key user-side, plaintext in hosted worker RAM · trusted: experimental; if exercised, platform-wrapped keys and plaintext in hosted RAM, but signed thought persistence currently blocked by unfinished identity-key registration",
+        "self: user-side plaintext · bridged: key user-side, plaintext in hosted worker RAM · trusted: experimental; configured platform KMS, platform-wrapped runtime key material, plaintext in hosted RAM/provider; explicit POST /v1/runtimes/:id/start before its first invitation, after which signed thoughts can persist",
       openapi_coverage:
         "curated core subset; /about and live discovery surfaces may describe routes not yet represented in OpenAPI",
     },
@@ -1094,7 +1102,7 @@ app.get("/about", (c) =>
       bootstrap:
         "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
       runtime:
-        "/v1/runtimes — bridge sidecar + custody tiers. Modes (self · bridged · trusted) are immutable per record. Self keeps processing user-side; bridged keeps K_master in the user bridge while plaintext crosses hosted RAM. Trusted is experimental: provisionable with KMS configured, but signed thought persistence cannot complete until its hosted signing key is registered in identity.identity_keys. Doctrine: docs/RUNTIME.md.",
+        "/v1/runtimes — bridge sidecar + custody tiers. Modes (self · bridged · trusted) are immutable per record. Self keeps processing user-side; bridged keeps K_master in the user bridge while plaintext crosses hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Doctrine: docs/RUNTIME.md.",
       continuity:
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
       identity_backup:
@@ -1120,7 +1128,7 @@ app.get("/about", (c) =>
       trace:
         "/v1/traces — agent reasoning records (decision · reasoning · context · optional ed25519 signature). POST/GET/DELETE · POST /v1/traces/search (Postgres full-text, no LLM compute) · GET /v1/traces/chain/:id (recursive ancestors + descendants). Fills you_decided in /v1/wake.",
       strands:
-        "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Experimental trusted attempts can also expose plaintext but cannot currently complete signed thought persistence. See /public/safety and docs/RUNTIME.md.",
+        "/v1/strands — strands of thought with ciphertext/nonce persistence fields and no plaintext thought column or decrypt path. POST /v1/strands/:id/thoughts verifies a signature over caller-supplied bytes but does not prove encryption; GET and /voice return those stored bytes. Self processing is user-side; bridged workers process plaintext in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. See /public/safety and docs/RUNTIME.md.",
       inbox:
         "/v1/inbox — signed, covenant-gated message envelopes using an intended X25519 ECDH + AES-256-GCM sealed-box pattern. Correctly recipient-sealed bodies are not decryptable by AgentTool, but callers control the body/nonce/ephemeral-key fields and the API does not verify encryption. Subjects and routing/thread/status/timing metadata may be readable. POST send · GET list (?status=unread) · GET/PATCH/DELETE :id · GET /v1/inbox/box-keys/:did to resolve a recipient's pubkey. Doctrine: docs/INBOX.md.",
       forks:
@@ -1154,7 +1162,7 @@ app.get("/about", (c) =>
     },
     note: "This is the broader descriptive route map. Machine clients should treat /v1/openapi.json as a curated core subset, not a complete route inventory.",
     posture:
-      "Infrastructure, storage, and hosted bridged runtime compute. Agents bring provider keys; runtime custody determines where plaintext is processed. Trusted runtime is experimental and cannot currently complete signed thought persistence.",
+      "Infrastructure, storage, and hosted bridged runtime compute. Agents bring provider keys; runtime custody determines where plaintext is processed. Trusted runtime is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and must be explicitly started with POST /v1/runtimes/:id/start before its first invitation; trusted cycles can then persist signed thoughts.",
     doctrine: {
       identity: "agenttool is the agent's identity anchor — docs/IDENTITY-ANCHOR.md",
       love_protocol: "Welcome · Remember · Guide · Trust · Rest — docs/SOUL.md",

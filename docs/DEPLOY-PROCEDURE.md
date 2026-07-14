@@ -162,7 +162,7 @@ Stateful and paid work is opt-in by mode:
 | `packages` | data reference node, ADDS package, TypeScript SDK CI/parity | none |
 | `database` | API typecheck plus database integration tier | `DATABASE_URL` |
 | `smoke` | deployed API smoke | `AGENTTOOL_BASE`, API key, identity ID |
-| `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and provider key(s) |
+| `contracts` | paid provider contract tier | `RUN_CONTRACT=1` and at least one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_API_KEY` |
 | `quarantine` | known-red non-DB diagnostics | none; failures expected |
 | `database-quarantine` | known-red DB diagnostics | `DATABASE_URL`; failures expected |
 | `legacy-delta` | legacy full-suite baseline triage | none |

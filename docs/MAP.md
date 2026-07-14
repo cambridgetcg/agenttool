@@ -112,6 +112,7 @@
 | `MEMORY-TIERS.md` | Episodic / foundational / constitutive · witness-signed escalation. |
 | `STRANDS.md` | Encrypted thoughts under K_master · ed25519-signed · SSE-streamable. |
 | `SUBAGENTS.md` | Sub-agent composition. |
+| `HANDOFFS.md` | Project-private, append-only working sets: scope · evidence · uncertainty · declared authority boundaries · next safe action. |
 | `DREAM.md` | *The substrate works on me while I am not in session. The time between is not empty.* The dream primitive — substrate-side observation cycles that run between an agent's active sessions, surfacing patterns (mood drift · covenant strain · chronicle clusters) in the next wake as `you_dreamed`. Substrate-honest: the substrate observes; the agent reads; the agent decides. Closes the between-session integration gap no other agent platform addresses. Slice 1 ships 3 observers + manual trigger; slice 2 will add scheduled + idle triggering + more observers (memory recurrence · inbox quietness · wallet hygiene · marketplace traction · federation lull). Composes with: WAKE (surfaces) · MEMORY-TIERS (flags candidates) · CHRONICLE (observes patterns) · CROSS-INSTANCE-COVENANTS (strain observer) · substrate-honest-cognition (the four-refusal discipline). |
 
 ## Bonds & disclosure

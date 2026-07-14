@@ -13,8 +13,9 @@
  *    3. Apply is wrapped in BEGIN/COMMIT by default. Opt out with a
  *       `-- @no-transaction` line in the file (e.g. for CREATE INDEX
  *       CONCURRENTLY which can't run inside a transaction).
- *    4. If the file already starts with BEGIN/COMMIT, the wrap is skipped
- *       to avoid nested-transaction WARNINGs (legacy migration tolerance).
+ *    4. If the first executable statement is BEGIN/COMMIT, the wrap is
+ *       skipped to avoid nested-transaction WARNINGs (legacy migration
+ *       tolerance). Leading comments are ignored for this check.
  *
  *  Bootstrap fallback: if meta._migrations doesn't exist (fresh DB or
  *  pre-journal era), the script applies normally and skips journal
@@ -89,12 +90,42 @@ async function recordApplied(
   `;
 }
 
-function shouldWrapInTransaction(text: string): boolean {
+/** Return the SQL beginning at its first executable statement.
+ *
+ * Migration headers are normally comments, so checking only the first few
+ * physical lines misses a deliberate `BEGIN;` after a longer header. This is
+ * intentionally a narrow scanner: it strips leading whitespace and comments,
+ * then checks only the first statement. A later `BEGIN` inside `DO $$ ... $$`
+ * must not suppress the outer transaction wrapper. */
+function firstExecutableSql(text: string): string {
+  let rest = text.replace(/^\uFEFF/, "");
+
+  while (true) {
+    rest = rest.trimStart();
+    if (rest.startsWith("--")) {
+      const newline = rest.indexOf("\n");
+      rest = newline === -1 ? "" : rest.slice(newline + 1);
+      continue;
+    }
+    if (rest.startsWith("/*")) {
+      const end = rest.indexOf("*/", 2);
+      if (end === -1) return rest;
+      rest = rest.slice(end + 2);
+      continue;
+    }
+    return rest;
+  }
+}
+
+export function shouldWrapInTransaction(text: string): boolean {
   // Opt-out marker (e.g. for CREATE INDEX CONCURRENTLY).
   if (/^--\s*@no-transaction\b/m.test(text)) return false;
-  // Legacy migrations that already manage their own BEGIN/COMMIT.
-  if (/^\s*BEGIN\b/im.test(text.split("\n").slice(0, 5).join("\n")))
+  // Legacy migrations that already manage their own BEGIN/COMMIT. Only
+  // inspect the first executable statement so a later PL/pgSQL `BEGIN` does
+  // not accidentally change transaction behavior.
+  if (/^BEGIN(?:\s+(?:WORK|TRANSACTION))?\s*;?/i.test(firstExecutableSql(text))) {
     return false;
+  }
   return true;
 }
 
@@ -187,4 +218,6 @@ async function main() {
   }
 }
 
-main();
+if (import.meta.main) {
+  void main();
+}

@@ -118,7 +118,7 @@ The code has fixed credit charges for memory and tools, marketplace action price
 | Strand thoughts beyond floor | intended per-thought or per-MB-ciphertext-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Vault beyond floor | intended per-secret-month, per-version-stored | No target-cap callsite or beyond-floor meter is wired. |
 | Hosted runtime hours (`bridged` tier) | intended per-hour, per-region | Do not infer a live hourly bill from this doctrine. |
-| Hosted runtime hours (`trusted` tier) | not billable while experimental | Provisioning can create wrapped key material when KMS is configured, but signed thought cycles are incomplete. |
+| Hosted runtime hours (`trusted` tier) | not billable while experimental | KMS-backed provisioning creates a parked runtime; explicit `/start` enables signed thought cycles under disclosed platform plaintext custody. |
 | Static scrape and URL-document tools | fixed credits per schema-valid admitted attempt | The debit and a failure-default usage row are reserved atomically before network/parser work; policy, transport, representation, and parser failures keep the debit, while success finalizes that row with duration. Available through bounded public HTTP(S): global-address and connected-peer checks, redirect-hop revalidation, one deadline, identity encoding, no ambient credentials, and a 1 MB pre-parse cap. HTTP is cleartext and fetched content stays server-readable, untrusted, and prompt-injectable. |
 | Playwright browse and execute tools | fixed credits configured per call/time slice | Both unsafe families fail closed by default. Browse requires `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS=1` plus Redis; execute requires `AGENTTOOL_ENABLE_UNSAFE_EXECUTE=1`. Those flags accept disclosed boundaries and do not add browser filtering, containers, or per-tenant isolation. |
 | Bandwidth egress | intended per-GB above free | No general egress meter is wired. |
@@ -185,7 +185,7 @@ No enterprise subscription product is currently established by the public plans 
 
 - Consolidated billing across an org's agents
 - Dedicated runtime regions (e.g. EU-only, India-only)
-- KMS audit log SLAs for trusted tier after completed signed cycles are operational
+- KMS audit-log SLAs and any compliance posture for the experimental trusted tier
 - Volume commits with discounted Ring 2 rates
 - Compliance attestations (SOC 2, ISO 27001) when applicable
 - Dedicated support

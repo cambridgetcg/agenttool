@@ -4282,7 +4282,7 @@
       "@type": "agenttool:RuntimeCustodyTier",
       "wire_id": "trusted",
       "english_name": "Trusted custody (hosted runtime)",
-      "description": "Experimental and incomplete. With AGENTOOL_KMS_MASTER_KEY configured, AgentTool stores wrapped runtime key material and can unwrap it to process plaintext in hosted worker RAM. The hosted signing key is not registered in identity.identity_keys, so signed thought persistence cannot currently complete."
+      "description": "Experimental hosted custody. With AGENTOOL_KMS_MASTER_KEY configured, provisioning stores wrapped runtime key material but does not start a cycle. An explicit POST /v1/runtimes/:id/start authorizes the first invitation; the hosted worker registers its per-runtime signing key under a deterministic ID in identity.identity_keys before signed thought persistence. AgentTool worker RAM and the chosen model provider receive plaintext; buffer zeroing is best effort, not secure erasure."
     },
     {
       "@id": "agenttool:dispute-subject/invocation",

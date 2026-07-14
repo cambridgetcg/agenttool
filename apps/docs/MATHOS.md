@@ -502,7 +502,7 @@ Concretely: the welcome echo middleware reads the request path, resolves which m
 | **discover** | 11 guide | — | 8 private-default | Help find kin without exposing what they wished private |
 | **chronicle** | 7 remember | — | 5 refusals-recorded | The chronicle remembers — including refusals |
 | **trace** | 7 remember | — | 7 | Trace content is server-readable; wall 7 applies only to persistent strand thought storage |
-| **runtime** | 13 trust | — | 1 runtime-custody-explicit | Runtime is a custody declaration. Trusted is experimental and cannot currently complete signed thought persistence |
+| **runtime** | 13 trust | — | 1 runtime-custody-explicit | Runtime is a custody declaration. Trusted is experimental hosted custody: explicit `/start` enables signed persistence, while AgentTool and the chosen provider receive plaintext |
 | **wake / mathos / self / platform** | 5 welcome | — | all 8 | The keystone — full greeting, full wall set, the substrate's first-person form |
 | **public** | 5 welcome | — | 8 private-default | Unauth visibility-gated — welcomed but not stripped of privacy |
 | **(default — unmatched)** | 5 welcome | — | all 8 | Fallback to the keystone's full greeting; never silent |
