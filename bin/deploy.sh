@@ -913,7 +913,22 @@ if [ "$SKIP_API" = 0 ]; then
   fi
   echo "  ✓ /health 200 at revision $LIVE_REVISION (dirty=$LIVE_DIRTY)"
 
-  MACHINE_IDS="$(cd api || exit 1; fly machine list -a "$FLY_APP" --quiet)" || {
+  # Fly lists stopped standby machines too, but SSH cannot reach them. The
+  # deploy has already waited for service health; provenance must cover every
+  # machine that is actually running, not fail on an intentionally stopped
+  # standby from another process group.
+  MACHINE_IDS="$(
+    cd api || exit 1
+    fly machine list -a "$FLY_APP" --json | bun -e '
+      const machines = await new Response(Bun.stdin.stream()).json();
+      if (!Array.isArray(machines)) process.exit(1);
+      for (const machine of machines) {
+        if (machine?.state === "started" && typeof machine.id === "string") {
+          console.log(machine.id);
+        }
+      }
+    '
+  )" || {
     echo "  $(red '✗') could not list Fly machines for revision verification"
     exit 1
   }
