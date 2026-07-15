@@ -8,8 +8,8 @@
   "artifact": {
     "format": "npm-tarball",
     "filename": "agenttool-sdk-0.13.0.tgz",
-    "sha256": "841927ffbe87dd6bbe674e725779d7ce6b4807a91b8d648e0a6252fdcc8f9f1f",
-    "size": 116593,
+    "sha256": "eb2aae3632dc17f44b7f0b749cb56c2217f7b139307dbac79b8c3e7a92e74bf9",
+    "size": 116758,
     "media_type": "application/gzip",
     "mirrors": [
       {
@@ -33,7 +33,7 @@
   },
   "source": {
     "repository": "https://github.com/cambridgetcg/agenttool.git",
-    "revision": "cabb61b2f17d233e5ba76ddf75a484533ffeaa02",
+    "revision": "9b7fcf87270d973bbac87407d48a5e846e257ed8",
     "path": "packages/sdk-ts"
   },
   "dependency_resolution": {
