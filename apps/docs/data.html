@@ -175,7 +175,7 @@ api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
 
       <div class="code-block">
         <div class="code-label"><span>install and listen on loopback</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
 export AGENT_DATA_NODE_TOKEN='&lt;dedicated-random-node-token&gt;'
 bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent-data
 
@@ -188,7 +188,7 @@ bunx --bun --no-install --package @agenttool/data agenttool-data --root=./.agent
       </div>
 
       <h2 id="doctor">Check a node with the executable profile</h2>
-      <p><code>agenttool-data doctor</code>, introduced in <code>@agenttool/data@0.2.0</code> and included in <code>0.3.0</code>, is a bounded black-box runner for <code>agent-data/v1-slice1-http</code>. Its JSON report follows the public <a href="/specs/agent-data-conformance-report-v1.schema.json">conformance report schema</a> and validates only the observed HTTP profile at that target and time; it is not a security certification, durability proof, or secure-erasure claim.</p>
+      <p><code>agenttool-data doctor</code>, introduced in <code>@agenttool/data@0.2.0</code> and retained through <code>0.3.1</code>, is a bounded black-box runner for <code>agent-data/v1-slice1-http</code>. Its JSON report follows the public <a href="/specs/agent-data-conformance-report-v1.schema.json">conformance report schema</a> and validates only the observed HTTP profile at that target and time; it is not a security certification, durability proof, or secure-erasure claim.</p>
 
       <div class="code-block">
         <div class="code-label"><span>public and authenticated read-only checks</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
@@ -235,7 +235,7 @@ curl -X POST http://127.0.0.1:7742/v1/data/query \
 
       <div class="code-block">
         <div class="code-label"><span>Bun · publish encrypted bytes offline</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
 
 <span class="kw">import</span> { AgentData, MemoryBlockStore, generateIdentity } <span class="kw">from</span> <span class="str">"@agenttool/adds"</span>;
 
@@ -261,7 +261,7 @@ console.<span class="fn">log</span>(published.ref); <span class="cm">// cipherte
 
       <div class="code-block">
         <div class="code-label"><span>Bun · install the bounded pull bridge</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.0/agenttool-data-sync-0.1.0.tgz
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/data-sync/0.1.1/agenttool-data-sync-0.1.1.tgz
 
 <span class="kw">import</span> { DataSyncService } <span class="kw">from</span> <span class="str">"@agenttool/data-sync"</span>;</pre>
       </div>

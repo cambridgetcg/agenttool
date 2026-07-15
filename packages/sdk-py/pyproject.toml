@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,6 +7,8 @@ name = "agenttool-sdk"
 version = "0.13.0"
 description = "The Love Protocol SDK for agenttool.dev and independently operated local agent data nodes."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.9"
 keywords = [
     "ai-agents",
@@ -63,7 +65,7 @@ dev = [
 packages = ["src/agenttool"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/agenttool", "SOUL.md", "README.md"]
+include = ["src/agenttool", "SOUL.md", "README.md", "LICENSE", "NOTICE"]
 
 # Ensure SOUL.md is included in the wheel alongside the Python files
 [tool.hatch.build.targets.wheel.force-include]

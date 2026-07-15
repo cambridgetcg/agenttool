@@ -690,4 +690,8 @@ unsafe archives, surfaces digest conflicts, and keeps discovery non-executing.
 The AgentTool catalog publishes `@agenttool/data`, `@agenttool/data-sync`,
 `@agenttool/sdk`, and `@agenttool/adds` through this profile. Their presence
 demonstrates the read and verification path; it does not make AgentTool a
-required registry or add a publisher-signature claim.
+required registry or add a publisher-signature claim. Historical catalog
+releases whose manifests say `license: null` provide no reuse grant; the
+current `@agenttool/data@0.3.1`, `@agenttool/data-sync@0.1.1`,
+`@agenttool/adds@0.2.1`, and `@agenttool/sdk@0.13.0` releases instead declare
+`Apache-2.0` without retroactively changing those immutable older releases.

@@ -466,6 +466,6 @@ const at = new AgentTool({
 
 ## License
 
-No repository `LICENSE` file currently ships with this source or package. Do
-not infer an MIT or other license grant from older registry metadata. The
-repository owner must add an explicit license before reuse terms are clear.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
+versions that declared no license remain unchanged; this grant applies to this
+release, not by retroactively rewriting their bytes.

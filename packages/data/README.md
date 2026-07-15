@@ -21,14 +21,15 @@ does not change the manifest's `peer_sync: false` capability.
 
 ## Install
 
-Replica-import seams and persisted feed identities ship in `0.3.0`; the
-executable HTTP conformance runner introduced in `0.2.0` remains included.
+Replica-import seams and persisted feed identities shipped in `0.3.0`; the
+licensed `0.3.1` package retains them and the executable HTTP conformance
+runner introduced in `0.2.0`.
 
 This package requires Bun because the reference node uses `bun:sqlite` and
 `Bun.serve`:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.0/agenttool-data-0.3.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/agenttool-data-0.3.1.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
@@ -385,3 +386,7 @@ Errors have one SDK-friendly shape:
 | items per collector call | 100 |
 
 Collection record limits can only make the node-wide content limit stricter.
+
+## License
+
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

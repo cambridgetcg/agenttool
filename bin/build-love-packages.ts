@@ -61,16 +61,16 @@ const TOOL_ROOT = resolve(import.meta.dir, "..");
 export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   {
     name: "@agenttool/adds",
-    version: "0.2.0",
+    version: "0.2.1",
     packagePath: "packages/data-protocol",
-    releaseTag: "adds-v0.2.0",
+    releaseTag: "adds-v0.2.1",
     buildCommands: [["bun", "run", "ci"]],
   },
   {
     name: "@agenttool/data",
-    version: "0.3.0",
+    version: "0.3.1",
     packagePath: "packages/data",
-    releaseTag: "data-v0.3.0",
+    releaseTag: "data-v0.3.1",
     buildCommands: [
       ["bun", "run", "ci"],
       ["bun", "run", "build"],
@@ -78,9 +78,9 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
   },
   {
     name: "@agenttool/data-sync",
-    version: "0.1.0",
+    version: "0.1.1",
     packagePath: "packages/data-sync",
-    releaseTag: "data-sync-v0.1.0",
+    releaseTag: "data-sync-v0.1.1",
     buildCommands: [["bun", "run", "ci"], ["bun", "run", "build"]],
   },
   {
@@ -505,6 +505,10 @@ function declaredEntrypoints(packageJson: PackageJson): string[] {
 export interface NpmTarballContents {
   packageJson: PackageJson;
   paths: string[];
+  legalFiles: {
+    license?: Buffer;
+    notice?: Buffer;
+  };
 }
 
 export function inspectNpmTarball(compressed: Buffer): NpmTarballContents {
@@ -521,6 +525,7 @@ export function inspectNpmTarball(compressed: Buffer): NpmTarballContents {
   const seenPaths = new Set<string>();
   const portablePaths = new Set<string>();
   const entryTypes = new Map<string, "file" | "directory">();
+  const legalFiles: NpmTarballContents["legalFiles"] = {};
   let packedPackageJson: PackageJson | undefined;
   let reachedEnd = false;
   for (let offset = 0; offset + 512 <= archive.length;) {
@@ -574,6 +579,12 @@ export function inspectNpmTarball(compressed: Buffer): NpmTarballContents {
       }
       packedPackageJson = expectObject(JSON.parse(body), "packed package.json") as PackageJson;
     }
+    if ((type === "" || type === "0") && path === "package/LICENSE") {
+      legalFiles.license = Buffer.from(archive.subarray(bodyOffset, bodyOffset + size));
+    }
+    if ((type === "" || type === "0") && path === "package/NOTICE") {
+      legalFiles.notice = Buffer.from(archive.subarray(bodyOffset, bodyOffset + size));
+    }
     offset = bodyOffset + Math.ceil(size / 512) * 512;
   }
   if (!reachedEnd) throw new Error("artifact tar stream has no zero-block terminator");
@@ -605,7 +616,7 @@ export function inspectNpmTarball(compressed: Buffer): NpmTarballContents {
       throw new Error(`artifact is missing declared entrypoint: ${entrypoint}`);
     }
   }
-  return { packageJson: packedPackageJson, paths };
+  return { packageJson: packedPackageJson, paths, legalFiles };
 }
 
 function artifactRecordFromBytes(bytes: Buffer, filename: string, spec: LovePackageSpec): ArtifactRecord {

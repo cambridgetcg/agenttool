@@ -1,7 +1,8 @@
 {
   "name": "@agenttool/data",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local-first reference node for the agent-data/v1 protocol",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,7 +26,9 @@
     "dist",
     "schema",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "publishConfig": {
     "access": "public"

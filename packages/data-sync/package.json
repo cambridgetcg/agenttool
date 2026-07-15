@@ -1,7 +1,8 @@
 {
   "name": "@agenttool/data-sync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Explicit encrypted pull replication for agent-data/v1 nodes",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,7 +15,9 @@
   "files": [
     "dist",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "publishConfig": {
     "access": "public"
@@ -44,8 +47,8 @@
   },
   "homepage": "https://docs.agenttool.dev/data",
   "peerDependencies": {
-    "@agenttool/adds": "^0.2.0",
-    "@agenttool/data": "^0.3.0"
+    "@agenttool/adds": "^0.2.1",
+    "@agenttool/data": "^0.3.1"
   },
   "overrides": {
     "@agenttool/adds": "file:../data-protocol",

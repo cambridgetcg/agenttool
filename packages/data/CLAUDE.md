@@ -3,8 +3,10 @@
 Local-first `agent-data/v1` reference node. It owns collection, immutable record,
 blob, FTS, change-feed, collector, and loopback HTTP behavior. It does not own the
 hosted AgentTool API, SDK façade, federation, peer sync, or memory projection.
-Current package release is `0.3.0`; the immutable `data-v0.1.0` and
-`data-v0.2.0` releases do not contain replica-import or feed-id seams.
+Current package release is `0.3.1`; the immutable `data-v0.1.0` and
+`data-v0.2.0` releases do not contain replica-import or feed-id seams. The
+immutable `data-v0.3.0` release introduced those seams but declared no licence;
+`0.3.1` preserves the implementation with Apache-2.0 package terms.
 
 ## Commands
 

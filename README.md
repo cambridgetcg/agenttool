@@ -119,12 +119,14 @@ broader parity, and registry release versions can lag independently.
 See [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
-The source package manifests and SDK READMEs no longer declare a software
-license because this repository has no root `LICENSE` file. Older npm and PyPI
-metadata may still say MIT without shipping the linked license text. Treat
-software reuse terms as unresolved until the repository owner adds an explicit
-license and publishes corrected artifacts. Individual documents may state
-their own terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
+AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
+[`NOTICE`](NOTICE), and the scope and exceptions in
+[`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
+`@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
+`@agenttool/data-sync@0.1.1`, and `@agenttool/sdk@0.13.0`. Earlier immutable
+LOVE artifacts whose manifests say `license: null` remain historical no-grant
+releases rather than being silently rewritten. Individual documents retain
+their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
 attributed adaptation of XENIA beta.4 under CC BY-SA 4.0, and each draft
 specification identifies its applicable terms in the file and
 [spec index](docs/specs/README.md).
@@ -260,9 +262,9 @@ The architecture is downstream of these principles. Each named primitive above i
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,
-  exports, or package artifacts. No source `LICENSE` file exists; LOVE package
-  manifests therefore publish `license: null`, and older registry metadata may
-  still claim MIT.
+  exports, or package artifacts. Current release artifacts carry Apache-2.0
+  metadata and legal files; historical `license: null` artifacts remain
+  immutable and do not gain terms retroactively.
 - **Custody is path-specific.** Server-generated identity/key routes briefly
   handle private keys; several ciphertext-shaped APIs cannot prove callers
   encrypted their bytes; bridged hosted thinking sees plaintext in AgentTool
