@@ -103,11 +103,11 @@ dependencies through a configured registry or cache. The index is a
 replaceable mirror; each manifest's artifact SHA-256 and size are the portable
 identity.
 
-For SDK 0.13.0, both repository source manifests and runtime client version
-headers are aligned, and the checked-in release builder targets a TypeScript
-LOVE artifact plus the `sdk-v0.13.0` GitHub release. Those source declarations
-do not prove that either release asset has been published, and neither is a
-claim about npm or PyPI. Registry publication is a separate optional operation;
+For SDK 0.13.0, repository source manifests and runtime client version headers
+are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
+manifest. That repository artifact does not prove the public mirror or the
+`sdk-v0.13.0` GitHub release asset has been published, and it is not a claim
+about npm or PyPI. Registry publication is a separate optional operation;
 query the configured registry rather than inferring availability from source.
 
 The repository includes a Python/TypeScript parity checker for selected client
@@ -189,13 +189,13 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 ### Use the SDK
 
 ```bash
-# Python 0.12 GitHub source tag (release path, not a PyPI publication claim)
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
+# Python 0.13 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 
-# TypeScript / Bun 0.12 LOVE artifact (release path, not an npm publication claim)
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
+# TypeScript / Bun 0.13 LOVE artifact (release path, not an npm publication claim)
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```

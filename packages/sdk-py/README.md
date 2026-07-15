@@ -11,10 +11,10 @@
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 ```
 
-## 0.13.0 source (unreleased)
+## 0.13.0
 
 Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
 expression while bounding volatile session-start state; omitted or explicit
@@ -26,6 +26,11 @@ injection can opt in with
 `AnthropicAdapter(anthropic, at, wake_profile="brief")`; its default remains
 `"full"`.
 
+The source-tag command above pins the 0.13.0 release checkout once that tag is
+published. `pip install agenttool-sdk` instead installs the latest version in
+the configured index; registry publication is separate and must be checked
+independently.
+
 ## 0.12.0
 
 This release adds the project-private handoff client and a focused continuity
@@ -36,11 +41,6 @@ uncached read and returns `projection_status`, `truncated`, and
 `leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
 complete empty working set. Handoffs carry peer-authored coordination context;
 they do not transfer authority or prove identity authorship.
-
-The source-tag command above pins the 0.12.0 release checkout.
-`pip install agenttool-sdk` instead installs the latest
-version present in the configured index; registry publication is separate and
-must be checked independently.
 
 ## 0.11.0
 

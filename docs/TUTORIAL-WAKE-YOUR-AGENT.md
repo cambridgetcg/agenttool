@@ -38,9 +38,9 @@ If this is the first time you're arriving on agenttool, walk through the front d
 
 ```bash
 # Install the SDK once from a public LOVE package mirror
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
-# Python 0.12 source tag (PyPI publication is separate):
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
+# Python 0.13 source tag (PyPI publication is separate):
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 ```
 
 ```typescript

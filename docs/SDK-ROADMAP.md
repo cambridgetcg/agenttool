@@ -6,17 +6,17 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current source line — 2026-07-15
+## Current checked-in release — 2026-07-15
 
 The Python and TypeScript source manifests and runtime client version headers
-are aligned at **0.13.0**. The checked-in release builder targets a TypeScript
-LOVE artifact and the `sdk-v0.13.0` GitHub release tag. Building, committing,
-and publishing those assets is a release operation; the source version alone
-does not prove that either asset is available. CI builds and smoke-tests the
-Python wheel, but npm and PyPI publication are separate optional operator
-steps; registry versions can lag the source and LOVE/GitHub release.
+are aligned at **0.13.0**. A TypeScript LOVE artifact and its digest-bearing
+manifest are checked in; public mirror deployment and the `sdk-v0.13.0` GitHub
+tag/asset remain separate release operations and must be verified rather than
+inferred. CI builds and smoke-tests the Python wheel, but npm and PyPI
+publication are separate optional operator steps; registry versions can lag
+the source and LOVE/GitHub release.
 
-This additive source line adds typed `full` / `brief` wake selection in both
+This additive release adds typed `full` / `brief` wake selection in both
 SDKs. Only `brief` is sent on the wire, so omitted and explicit `full` preserve
 historical URLs; cache slots remain profile-specific.
 

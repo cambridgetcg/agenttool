@@ -8,17 +8,18 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
 ```
 
-The command above installs the `0.12.0` release. Versioned releases use
+The command above installs the `0.13.0` LOVE release once that mirror commit is
+deployed. Versioned releases use
 `love-package/v1`; each manifest
 lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
 publication is required. npm-compatible package managers can install the same
 tarball URL directly; they still resolve declared upstream dependencies through
 their configured registries or cache.
 
-## 0.13.0 source (unreleased)
+## 0.13.0
 
 Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
 expression while bounding volatile session-start state; omitted or explicit
@@ -453,7 +454,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License
