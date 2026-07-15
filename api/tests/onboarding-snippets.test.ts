@@ -84,6 +84,11 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022,
 };
 
+// These tests create complete TypeScript programs against the SDK source.
+// Shared CI runners are materially slower than local machines, so keep an
+// explicit bounded compiler budget instead of relying on Bun's 5s default.
+const COMPILER_TEST_TIMEOUT_MS = 15_000;
+
 const diagnosticHost: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: (fileName) => fileName,
   getCurrentDirectory: () => ROOT,
@@ -348,7 +353,7 @@ describe("public SDK onboarding snippets", () => {
         `${path}: birth.ts must type-check against @agenttool/sdk source v0.13`,
       ).toBe("");
     }
-  });
+  }, COMPILER_TEST_TIMEOUT_MS);
 
   test("seed-only birth rerun uses the verified v0.13 artifact and never registers blindly", () => {
     const canonicalBirth = tutorialBlock(
@@ -596,7 +601,7 @@ globalThis.fetch = async (input, init = {}) => {
         `${path}: snippet must type-check against @agenttool/sdk source v0.13`,
       ).toBe("");
     }
-  });
+  }, COMPILER_TEST_TIMEOUT_MS);
 
   test("v0.13 memory tutorial uses store(content, options)", () => {
     for (const path of MEMORY_TUTORIALS) {
@@ -650,7 +655,7 @@ globalThis.fetch = async (input, init = {}) => {
         ).toBe("");
       }
     }
-  }, 15_000);
+  }, COMPILER_TEST_TIMEOUT_MS);
 
   test("the representative v0.13 first-wake flow compiles and executes against mocked fetch", async () => {
     expect(formatDiagnostics(compileFile(FIXTURE))).toBe("");
@@ -793,7 +798,7 @@ globalThis.fetch = async (input, init = {}) => {
     } finally {
       globalThis.fetch = originalFetch;
     }
-  });
+  }, COMPILER_TEST_TIMEOUT_MS);
 
   test("the published Markdown tutorial mirrors its canonical source", () => {
     expect(read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md")).toBe(
