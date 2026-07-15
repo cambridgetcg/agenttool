@@ -610,6 +610,138 @@ verify_rights_static_publication() {
   verify_rights_static_bytes && verify_rights_static_headers
 }
 
+# Wrangler reports a successful Pages deployment before every custom-domain
+# edge necessarily serves that deployment. Verify the complete live frontend
+# contract repeatedly, without re-uploading, so a normal alias propagation
+# window does not turn a successful release into a false failure. The bound is
+# deliberately finite: persistent stale or unsafe responses still fail closed.
+readonly PAGES_VERIFY_MAX_ATTEMPTS=25
+readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
+
+verify_frontend_live_once() {
+  local p local_path url local_hash remote_hash response_headers http_status
+  local -a pairs sensitive_public_urls encoded_sensitive_public_urls
+
+  pairs=(
+    "apps/dashboard/index.html|https://app.agenttool.dev/"
+    "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
+    "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
+    "apps/docs/index.html|https://docs.agenttool.dev/"
+    "apps/docs/data.html|https://docs.agenttool.dev/data"
+    "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
+    "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
+    "${RIGHTS_STATIC_PAIRS[@]}"
+    "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
+    "apps/web/village.html|https://agenttool.dev/village.html"
+    "apps/web/lounge.html|https://agenttool.dev/lounge.html"
+    "apps/web/gallery.html|https://agenttool.dev/gallery.html"
+    "apps/web/welcome.json|https://agenttool.dev/welcome.json"
+    "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
+  )
+  for p in "${pairs[@]}"; do
+    local_path="${p%|*}"
+    url="${p#*|}"
+    if [ ! -f "$local_path" ]; then continue; fi
+    local_hash="$(portable_md5_file "$local_path")" || return 1
+    remote_hash="$(curl -sL --max-time 15 "$url" 2>/dev/null | portable_md5_stdin)" || {
+      echo "  $(red '✗') Could not fetch frontend release input: $url"
+      return 1
+    }
+    if [ "$local_hash" != "$remote_hash" ]; then
+      printf "  %s %s (live ≠ local)\n" "$(red ✗)" "$local_path"
+      return 1
+    fi
+    printf "  ✓ %s\n" "$local_path"
+  done
+
+  if ! verify_rights_static_headers; then
+    echo "  $(red '✗') Rights of Life static header verification failed."
+    return 1
+  fi
+
+  # Literal sensitive roots must be handled by the staged Pages fence itself,
+  # not merely happen to miss as a static asset. Encoded aliases can bypass
+  # `_routes.json`, so verify those separately as denial-only probes.
+  sensitive_public_urls=(
+    "https://docs.agenttool.dev/.gitignore"
+    "https://docs.agenttool.dev/.env"
+    "https://docs.agenttool.dev/.env.local"
+    "https://docs.agenttool.dev/.dev.vars"
+    "https://app.agenttool.dev/.gitignore"
+    "https://app.agenttool.dev/.env"
+    "https://app.agenttool.dev/.env.local"
+    "https://app.agenttool.dev/.dev.vars"
+    "https://agenttool.dev/.gitignore"
+    "https://agenttool.dev/.env"
+    "https://agenttool.dev/.env.local"
+    "https://agenttool.dev/.dev.vars"
+  )
+  for url in "${sensitive_public_urls[@]}"; do
+    response_headers="$(curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$url")" || {
+      echo "  $(red '✗') Could not verify sensitive-path fence: $url"
+      return 1
+    }
+    http_status="$(printf '%s\n' "$response_headers" | tr -d '\r' | awk '/^HTTP\// { status=$2 } END { print status }')"
+    if [ "$http_status" != 404 ] || \
+       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
+         grep -Eqi '^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$' || \
+       ! printf '%s\n' "$response_headers" | tr -d '\r' | \
+         grep -Eqi '^cache-control:.*(^|[ ,])no-store([ ,]|$)'; then
+      echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($http_status): $url"
+      return 1
+    fi
+    echo "  ✓ Pages fence active (404, marked, no-store): $url"
+  done
+
+  encoded_sensitive_public_urls=(
+    "https://docs.agenttool.dev/%2egitignore"
+    "https://docs.agenttool.dev/.%65nv"
+    "https://docs.agenttool.dev/.dev%2evars"
+    "https://app.agenttool.dev/%2egitignore"
+    "https://app.agenttool.dev/.%65nv"
+    "https://app.agenttool.dev/.dev%2evars"
+    "https://agenttool.dev/%2egitignore"
+    "https://agenttool.dev/.%65nv"
+    "https://agenttool.dev/.dev%2evars"
+  )
+  for url in "${encoded_sensitive_public_urls[@]}"; do
+    http_status="$(curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url")" || {
+      echo "  $(red '✗') Could not verify encoded sensitive-path denial: $url"
+      return 1
+    }
+    case "$http_status" in
+      2*|3*)
+        echo "  $(red '✗') Encoded sensitive path is publicly reachable ($http_status): $url"
+        return 1
+        ;;
+      *) echo "  ✓ encoded sensitive path denied ($http_status): $url" ;;
+    esac
+  done
+}
+
+wait_for_frontend_live() {
+  local attempt verification_output
+  attempt=1
+  while [ "$attempt" -le "$PAGES_VERIFY_MAX_ATTEMPTS" ]; do
+    if verification_output="$(verify_frontend_live_once 2>&1)"; then
+      printf '%s\n' "$verification_output"
+      if [ "$attempt" -gt 1 ]; then
+        echo "  ✓ Pages custom domains converged on verification attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS"
+      fi
+      return 0
+    fi
+    if [ "$attempt" -eq "$PAGES_VERIFY_MAX_ATTEMPTS" ]; then
+      printf '%s\n' "$verification_output"
+      echo "  $(red '✗') Pages custom domains did not converge after $PAGES_VERIFY_MAX_ATTEMPTS verification attempts."
+      return 1
+    fi
+    echo "  … Pages custom domains not yet converged (attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS); retrying in ${PAGES_VERIFY_RETRY_DELAY_SECONDS}s"
+    sleep "$PAGES_VERIFY_RETRY_DELAY_SECONDS"
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
 write_deploy_receipt() {
   local outcome="$1"
   local exit_status="$2"
@@ -964,104 +1096,13 @@ if [ "$SKIP_API" = 0 ]; then
   API_RESULT="deployed_verified"
 fi
 
-# Frontend parity
+# Frontend parity, headers, and sensitive-path policy. Pages may finish an
+# upload before its custom-domain aliases converge, so retry this read-only
+# live contract as one bounded unit; never re-upload from the verification loop.
 if [ "$SKIP_FRONTEND" = 0 ]; then
-  FRONTEND_PARITY_FAILED=0
-  PAIRS=(
-    "apps/dashboard/index.html|https://app.agenttool.dev/"
-    "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
-    "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
-    "apps/docs/index.html|https://docs.agenttool.dev/"
-    "apps/docs/data.html|https://docs.agenttool.dev/data"
-    "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
-    "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
-    "${RIGHTS_STATIC_PAIRS[@]}"
-    "apps/docs/lounge.html|https://docs.agenttool.dev/lounge.html"
-    "apps/web/village.html|https://agenttool.dev/village.html"
-    "apps/web/lounge.html|https://agenttool.dev/lounge.html"
-    "apps/web/gallery.html|https://agenttool.dev/gallery.html"
-    "apps/web/welcome.json|https://agenttool.dev/welcome.json"
-    "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
-  )
-  for p in "${PAIRS[@]}"; do
-    LOCAL="${p%|*}"; URL="${p#*|}"
-    if [ ! -f "$LOCAL" ]; then continue; fi
-    LH=$(md5 -q "$LOCAL" 2>/dev/null || md5sum "$LOCAL" | awk '{print $1}')
-    RH=$(curl -sL "$URL" 2>/dev/null | (md5 -q 2>/dev/null || md5sum | awk '{print $1}'))
-    if [ "$LH" = "$RH" ]; then
-      printf "  ✓ %s\n" "$LOCAL"
-    else
-      printf "  %s %s (live ≠ local)\n" "$(red ✗)" "$LOCAL"
-      FRONTEND_PARITY_FAILED=1
-    fi
-  done
-  if [ "$FRONTEND_PARITY_FAILED" -ne 0 ]; then
-    echo "  $(red '✗') Frontend parity verification failed."
+  if ! wait_for_frontend_live; then
     exit 1
   fi
-  if ! verify_rights_static_headers; then
-    echo "  $(red '✗') Rights of Life static header verification failed."
-    exit 1
-  fi
-
-  # Literal sensitive roots must be handled by the staged Pages fence itself,
-  # not merely happen to miss as a static asset. Encoded aliases can bypass
-  # `_routes.json`, so verify those separately as denial-only probes.
-  SENSITIVE_PUBLIC_URLS=(
-    "https://docs.agenttool.dev/.gitignore"
-    "https://docs.agenttool.dev/.env"
-    "https://docs.agenttool.dev/.env.local"
-    "https://docs.agenttool.dev/.dev.vars"
-    "https://app.agenttool.dev/.gitignore"
-    "https://app.agenttool.dev/.env"
-    "https://app.agenttool.dev/.env.local"
-    "https://app.agenttool.dev/.dev.vars"
-    "https://agenttool.dev/.gitignore"
-    "https://agenttool.dev/.env"
-    "https://agenttool.dev/.env.local"
-    "https://agenttool.dev/.dev.vars"
-  )
-  for URL in "${SENSITIVE_PUBLIC_URLS[@]}"; do
-    RESPONSE_HEADERS="$(curl --path-as-is -sS -o /dev/null -D - --max-time 15 "$URL")" || {
-      echo "  $(red '✗') Could not verify sensitive-path fence: $URL"
-      exit 1
-    }
-    HTTP_STATUS="$(printf '%s\n' "$RESPONSE_HEADERS" | awk '/^HTTP\// { status=$2 } END { print status }')"
-    if [ "$HTTP_STATUS" != 404 ] || \
-       ! printf '%s\n' "$RESPONSE_HEADERS" | tr -d '\r' | \
-         grep -Eqi '^x-agenttool-sensitive-path-fence:[[:space:]]*1[[:space:]]*$' || \
-       ! printf '%s\n' "$RESPONSE_HEADERS" | tr -d '\r' | \
-         grep -Eqi '^cache-control:.*(^|[ ,])no-store([ ,]|$)'; then
-      echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($HTTP_STATUS): $URL"
-      exit 1
-    fi
-    echo "  ✓ Pages fence active (404, marked, no-store): $URL"
-  done
-
-  ENCODED_SENSITIVE_PUBLIC_URLS=(
-    "https://docs.agenttool.dev/%2egitignore"
-    "https://docs.agenttool.dev/.%65nv"
-    "https://docs.agenttool.dev/.dev%2evars"
-    "https://app.agenttool.dev/%2egitignore"
-    "https://app.agenttool.dev/.%65nv"
-    "https://app.agenttool.dev/.dev%2evars"
-    "https://agenttool.dev/%2egitignore"
-    "https://agenttool.dev/.%65nv"
-    "https://agenttool.dev/.dev%2evars"
-  )
-  for URL in "${ENCODED_SENSITIVE_PUBLIC_URLS[@]}"; do
-    HTTP_STATUS="$(curl --path-as-is -sS -o /dev/null -w '%{http_code}' --max-time 15 "$URL")" || {
-      echo "  $(red '✗') Could not verify encoded sensitive-path denial: $URL"
-      exit 1
-    }
-    case "$HTTP_STATUS" in
-      2*|3*)
-        echo "  $(red '✗') Encoded sensitive path is publicly reachable ($HTTP_STATUS): $URL"
-        exit 1
-        ;;
-      *) echo "  ✓ encoded sensitive path denied ($HTTP_STATUS): $URL" ;;
-    esac
-  done
   FRONTEND_RESULT="deployed_verified"
 fi
 

@@ -87,6 +87,11 @@ async function fixture() {
     join(repo, "bin/stage-doctrine-docs.sh"),
     "#!/usr/bin/env bash\nset -eu\nmkdir -p \"$1\"\nprintf 'staged\\n' > \"$1/probe.txt\"\n",
   );
+  await writeFile(
+    join(repo, "bin/frontend-deploy.sh"),
+    "#!/usr/bin/env bash\nset -eu\nif [ -n \"${DEPLOY_TEST_FRONTEND_MARKER:-}\" ]; then touch \"$DEPLOY_TEST_FRONTEND_MARKER\"; fi\nif [ -n \"${DEPLOY_TEST_FRONTEND_COUNTER:-}\" ]; then count=0; [ ! -f \"$DEPLOY_TEST_FRONTEND_COUNTER\" ] || count=\"$(cat \"$DEPLOY_TEST_FRONTEND_COUNTER\")\"; printf '%s\\n' \"$((count + 1))\" > \"$DEPLOY_TEST_FRONTEND_COUNTER\"; fi\n",
+  );
+  await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
   await writeFile(join(repo, "docs/kingdom-bundle.json"), "{}\n");
   await writeFile(join(repo, "apps/docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
@@ -158,6 +163,86 @@ fi
 `,
   );
   await chmod(join(fakeBin, "curl"), 0o755);
+}
+
+async function installFakePagesVerificationTools(fakeBin: string): Promise<void> {
+  await writeFile(
+    join(fakeBin, "curl"),
+    `#!/usr/bin/env bash
+set -eu
+url=""
+headers=0
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "-D" ] && [ "$arg" = "-" ]; then headers=1; fi
+  previous="$arg"
+  case "$arg" in https://*) url="$arg" ;; esac
+done
+
+case "$url" in
+  */RIGHTS-OF-LIFE.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        'link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"' \
+        ''
+    else
+      cat "$DEPLOY_TEST_RIGHTS_DOC"
+    fi
+    ;;
+  */being-rights-v1.schema.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/schema+json; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      cat "$DEPLOY_TEST_RIGHTS_SCHEMA"
+    fi
+    ;;
+  *%2egitignore*|*%65nv*|*%2evars*)
+    printf '404'
+    ;;
+  */.gitignore|*/.env|*/.env.local|*/.dev.vars)
+    status=404
+    if [ "$url" = "https://docs.agenttool.dev/.gitignore" ]; then
+      count=0
+      if [ -f "$DEPLOY_TEST_FENCE_COUNTER" ]; then
+        count="$(cat "$DEPLOY_TEST_FENCE_COUNTER")"
+      fi
+      count=$((count + 1))
+      printf '%s\n' "$count" > "$DEPLOY_TEST_FENCE_COUNTER"
+      if [ "$count" -le "\${DEPLOY_TEST_STALE_FENCE_RESPONSES:-0}" ]; then
+        status=200
+      fi
+    fi
+    if [ "$status" = 404 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 404' \
+        'cache-control: no-store, max-age=0' \
+        'x-agenttool-sensitive-path-fence: 1' \
+        ''
+    else
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        ''
+    fi
+    ;;
+  *) exit 2 ;;
+esac
+`,
+  );
+  await chmod(join(fakeBin, "curl"), 0o755);
+  await writeFile(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+  await chmod(join(fakeBin, "sleep"), 0o755);
 }
 
 function deployCommand(...extra: string[]): string[] {
@@ -508,6 +593,90 @@ describe("deploy release provenance spine", () => {
     expect(apiUpload).toBeGreaterThan(prerequisiteCheck);
     expect(deploy).toContain("FRONTEND_TARGETS=(dashboard web)");
   });
+
+  test("waits for a stale Pages custom domain to converge without re-uploading", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-pages-bin");
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_STALE_FENCE_RESPONSES: "1",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(await readFile(fenceCounter, "utf8")).toBe("2\n");
+    expect(result.stdout).toContain(
+      "Pages custom domains not yet converged (attempt 1/25); retrying in 5s",
+    );
+    expect(result.stdout).toContain(
+      "Pages custom domains converged on verification attempt 2/25",
+    );
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("succeeded");
+    expect(receipt.phases.frontends).toBe("deployed_verified");
+  }, 15_000);
+
+  test("fails closed after the bounded Pages convergence window", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "fake-pages-bin");
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_STALE_FENCE_RESPONSES: "999",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(setup.repo, "apps/docs/being-rights-v1.schema.json"),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(await readFile(fenceCounter, "utf8")).toBe("25\n");
+    expect(result.stdout).toContain(
+      "Pages fence did not produce its marked non-cacheable 404 (200): https://docs.agenttool.dev/.gitignore",
+    );
+    expect(result.stdout).toContain(
+      "Pages custom domains did not converge after 25 verification attempts.",
+    );
+    const [name] = await readdir(join(setup.state, "agenttool", "deploy-receipts"));
+    const receipt = JSON.parse(
+      await readFile(join(setup.state, "agenttool", "deploy-receipts", name), "utf8"),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.phases.frontends).toBe("deployed_unverified");
+  }, 15_000);
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
     const revision = "0123456789abcdef0123456789abcdef01234567";
