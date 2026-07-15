@@ -303,7 +303,11 @@ class AgentTool:
         authority or acts as a private cross-DID message.
         """
         if self._handoff is None:
-            self._handoff = HandoffClient(self._http, self._base_url)
+            self._handoff = HandoffClient(
+                self._http,
+                self._base_url,
+                on_write=lambda: self._wake.clear_cache() if self._wake else None,
+            )
         return self._handoff
 
     @property

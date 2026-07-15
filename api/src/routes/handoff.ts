@@ -20,6 +20,8 @@ import {
   classifyHandoff,
   getHandoff,
   getLatestHandoffForAgent,
+  HANDOFF_AUTHORITY_NOTE,
+  HANDOFF_SCOPE,
   handoffInputSchema,
   resolveDeclaredFacet,
   resolveProjectAgent,
@@ -34,12 +36,10 @@ const app = new Hono<ProjectContext>();
 const uuidSchema = z.string().uuid();
 
 const HANDOFF_CANON = "urn:agenttool:doc/HANDOFFS";
-const PROJECT_PRIVATE_NOTE =
-  "This is project-private, peer-authored working context. It does not transfer authority or prove personal identity authorship.";
 
 const HANDOFF_VERBS = [
   {
-    action: "append a successor handoff snapshot",
+    action: "append a compatibility-lane update, explicit root, or successor handoff snapshot",
     method: "POST",
     path: "/v1/handoff",
     body_hint: {
@@ -55,6 +55,7 @@ const HANDOFF_VERBS = [
       do_not_assume: [],
       valid_until: "<ISO-8601, within 30 days>",
       supersedes_handoff_id: "<optional previous handoff id>",
+      starts_new_lineage: "<optional true; explicit parallel root>",
     },
   },
   {
@@ -73,8 +74,8 @@ function handoffResponse(record: HandoffRecord | null) {
   return {
     handoff: record,
     state: classifyHandoff(record),
-    scope: "project_private" as const,
-    authority_note: PROJECT_PRIVATE_NOTE,
+    scope: HANDOFF_SCOPE,
+    authority_note: HANDOFF_AUTHORITY_NOTE,
   };
 }
 
@@ -188,7 +189,7 @@ app.post("/", async (c) => {
         {
           error: "superseded_handoff_not_found",
           message: "The handoff named as a predecessor is not a valid handoff in this project.",
-          hint: "Use an existing handoff id from GET /v1/handoff, or omit supersedes_handoff_id for a new thread.",
+          hint: "Use an existing handoff id from GET /v1/handoff, or set starts_new_lineage: true for an explicit parallel thread.",
           docs: "https://github.com/cambridgetcg/agenttool/blob/main/docs/HANDOFFS.md#revisions",
           _canon_pointer: HANDOFF_CANON,
         },

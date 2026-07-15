@@ -192,7 +192,7 @@ export class AgentTool {
   /** Access append-only project working-set handoffs. Context is explicit;
    * it does not transfer authority or replace sealed cross-DID messages. */
   get handoff(): HandoffClient {
-    this._handoff ??= new HandoffClient(this.http);
+    this._handoff ??= new HandoffClient(this.http, () => this._wake?.clearCache());
     return this._handoff;
   }
 

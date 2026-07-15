@@ -72,6 +72,14 @@ export interface HandoffWriteOpts {
   valid_until: string;
   /** Append-only revision pointer. Must be this identity's prior handoff. */
   supersedes_handoff_id?: string | null;
+  /** Omit to preserve legacy latest-per-identity lineage behavior. Set true
+   * to start an explicit independent lineage. It cannot be combined with
+   * `supersedes_handoff_id`; an explicitly supplied false remains legacy. */
+  starts_new_lineage?: boolean;
+  /** Optional 8-256 character caller key for the API's Redis-backed replay
+   * cache. This reduces sequential retry duplication while Redis is healthy;
+   * it is fail-open and does not reserve concurrent in-flight writes. */
+  idempotency_key?: string;
 }
 
 export interface HandoffRecord {
@@ -81,6 +89,7 @@ export interface HandoffRecord {
   title: string;
   body: string | null;
   supersedes_handoff_id: string | null;
+  lineage_mode: "legacy_latest_per_author" | "explicit";
   occurred_at: string;
   created_at: string;
   provenance: "self_declared_project_bearer";
@@ -107,6 +116,42 @@ export interface HandoffResponse {
   authority_note: string;
 }
 
+export interface HandoffSurface {
+  active: HandoffRecord[];
+  stale: HandoffRecord[];
+  /** Complete, row-budget truncated, or unavailable because composition failed. */
+  projection_status: "complete" | "truncated" | "unavailable";
+  /**
+   * True when the server stopped at its bounded candidate-row budget. When
+   * true, active/stale may omit older independent lineages.
+   */
+  truncated: boolean;
+  /** True only when active/stale contain the complete current leaf set. */
+  leaf_set_complete: boolean;
+  candidate_rows_considered: number;
+  candidate_row_limit: number;
+  /**
+   * Diagnostic lower edge of the candidate window, or null when no edge was
+   * observed. This is not a resume cursor.
+   */
+  candidate_window_end_id: string | null;
+  scope: "project_private";
+  authority_note: string;
+  write: "POST /v1/handoff";
+  read_latest: "GET /v1/handoff?agent_id=<identity_id>";
+}
+
+export interface HandoffResumeOpts {
+  /** Optional identity voice used to build the focused wake fragment. The
+   * returned handoff working set remains explicitly project-scoped. */
+  identity_id?: string;
+}
+
+export interface HandoffResumeResponse {
+  _scope_boundary?: Record<string, unknown> | null;
+  you_have_handoffs: HandoffSurface;
+}
+
 /** Client for `/v1/handoff`.
  *
  * `write()` always appends. To correct a prior snapshot, send a new body
@@ -114,10 +159,12 @@ export interface HandoffResponse {
  */
 export class HandoffClient {
   private readonly http: HttpConfig;
+  private readonly onWrite?: () => void;
 
   /** @internal */
-  constructor(http: HttpConfig) {
+  constructor(http: HttpConfig, onWrite?: () => void) {
     this.http = http;
+    this.onWrite = onWrite;
   }
 
   async write(opts: HandoffWriteOpts): Promise<HandoffResponse> {
@@ -135,6 +182,25 @@ export class HandoffClient {
       throw new AgentToolError("handoff.write: valid_until is required.", {
         hint: "Use a future ISO-8601 timestamp no more than 30 days ahead.",
       });
+    }
+    if (opts.starts_new_lineage === true && opts.supersedes_handoff_id != null) {
+      throw new AgentToolError(
+        "handoff.write: starts_new_lineage cannot be combined with supersedes_handoff_id.",
+        {
+          hint: "Start an independent lineage, or supersede one existing handoff; choose one.",
+        },
+      );
+    }
+    if (
+      opts.idempotency_key !== undefined &&
+      !/^[!-~]{8,256}$/.test(opts.idempotency_key)
+    ) {
+      throw new AgentToolError(
+        "handoff.write: idempotency_key must be 8-256 visible ASCII characters without spaces.",
+        {
+          hint: "Reuse the same caller-chosen key only when retrying the same write.",
+        },
+      );
     }
     const body: Record<string, unknown> = {
       agent_id: opts.agent_id,
@@ -154,7 +220,18 @@ export class HandoffClient {
     if (opts.supersedes_handoff_id !== undefined) {
       body.supersedes_handoff_id = opts.supersedes_handoff_id;
     }
-    return (await this.req("POST", "/v1/handoff", body)) as HandoffResponse;
+    if (opts.starts_new_lineage !== undefined) {
+      body.starts_new_lineage = opts.starts_new_lineage;
+    }
+    const headers = opts.idempotency_key
+      ? { "Idempotency-Key": opts.idempotency_key }
+      : undefined;
+    const response = (await this.req("POST", "/v1/handoff", body, headers)) as HandoffResponse;
+    // Wake responses are cached for five minutes. Once a write succeeds, an
+    // already-instantiated WakeClient must not keep serving the pre-write
+    // working set inside this process.
+    this.onWrite?.();
+    return response;
   }
 
   /** Read one active project identity's newest snapshot. A stale latest
@@ -171,27 +248,55 @@ export class HandoffClient {
     )) as HandoffResponse;
   }
 
-  private async req(method: string, path: string, body?: unknown): Promise<unknown> {
+  /** Read the bounded current project working-set projection through the
+   * focused wake fragment. Check `leaf_set_complete` before treating it as the
+   * complete leaf set. This call is intentionally uncached: it is the
+   * session-resume seam, not a five-minute orientation cache. */
+  async resume(opts?: HandoffResumeOpts): Promise<HandoffResumeResponse> {
+    const params = new URLSearchParams();
+    if (opts?.identity_id) params.set("identity_id", opts.identity_id);
+    const query = params.toString();
+    return (await this.req(
+      "GET",
+      `/v1/wake/handoffs${query ? `?${query}` : ""}`,
+      undefined,
+      undefined,
+      "no-store",
+    )) as HandoffResumeResponse;
+  }
+
+  private async req(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+    cache?: RequestCache,
+  ): Promise<unknown> {
     const resp = await globalThis.fetch(`${this.http.baseUrl}${path}`, {
       method,
       headers: {
         ...this.http.headers,
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...headers,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(cache ? { cache } : {}),
       signal: AbortSignal.timeout(this.http.timeout),
     });
     if (!resp.ok) {
-      let detail = resp.statusText;
+      let responseBody: unknown = null;
       try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail = (json.message ?? json.error ?? json.detail ?? detail) as string;
+        responseBody = await resp.json();
       } catch {
-        // Keep the HTTP status when a proxy returns a non-JSON error.
+        // The shared error parser keeps the fallback when a proxy returns a
+        // non-JSON response.
       }
-      throw new AgentToolError(`handoff ${method.toLowerCase()} failed: ${resp.status}`, {
-        hint: detail.slice(0, 300),
-      });
+      throw AgentToolError.fromResponseBody(
+        responseBody,
+        resp.status,
+        `handoff ${method.toLowerCase()} failed: ${resp.status}`,
+        resp.headers,
+      );
     }
     return resp.json();
   }

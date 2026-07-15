@@ -14,7 +14,8 @@ Doctrine: docs/HANDOFFS.md.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+import re
+from typing import Any, Callable, Dict, List, Literal, Optional, TypedDict
 
 import httpx
 
@@ -25,6 +26,7 @@ HandoffStatus = Literal["active", "blocked", "complete"]
 HandoffFactSource = Literal["self_observed", "peer_reported", "tool_output"]
 HandoffConfidence = Literal["low", "medium", "high"]
 HandoffVerificationResult = Literal["passed", "failed", "not_run"]
+_IDEMPOTENCY_KEY_RE = re.compile(r"[!-~]{8,256}")
 
 
 class HandoffWorkingSet(TypedDict):
@@ -71,6 +73,68 @@ class HandoffVerification(TypedDict, total=False):
     check: str
     result: HandoffVerificationResult
     detail: Optional[str]
+
+
+class HandoffRecord(TypedDict):
+    """One normalized handoff record returned by the API."""
+
+    id: str
+    project_id: str
+    author_agent_id: str
+    title: str
+    body: Optional[str]
+    supersedes_handoff_id: Optional[str]
+    lineage_mode: Literal["legacy_latest_per_author", "explicit"]
+    occurred_at: str
+    created_at: str
+    provenance: Literal["self_declared_project_bearer"]
+    version: Literal[1]
+    ts: str
+    task_summary: str
+    status: HandoffStatus
+    from_facet: Optional[str]
+    to_facet: Optional[str]
+    working_set: HandoffWorkingSet
+    authority: HandoffAuthority
+    epistemic_state: HandoffEpistemicState
+    changes: List[str]
+    verification: List[HandoffVerification]
+    next_safe_action: str
+    do_not_assume: List[str]
+    valid_until: str
+
+
+class HandoffSurface(TypedDict):
+    """Current leaf snapshots for the authenticated project.
+
+    When ``truncated`` is true, ``active`` and ``stale`` may omit older
+    independent lineages. ``projection_status="unavailable"`` means a query
+    failure, not an empty set. ``candidate_window_end_id`` is the diagnostic
+    lower edge of the bounded candidate window, not a resume cursor.
+    """
+
+    active: List[HandoffRecord]
+    stale: List[HandoffRecord]
+    projection_status: Literal["complete", "truncated", "unavailable"]
+    truncated: bool
+    leaf_set_complete: bool
+    candidate_rows_considered: int
+    candidate_row_limit: int
+    candidate_window_end_id: Optional[str]
+    scope: Literal["project_private"]
+    authority_note: str
+    write: str
+    read_latest: str
+
+
+class _HandoffResumeRequired(TypedDict):
+    you_have_handoffs: HandoffSurface
+
+
+class HandoffResumeResponse(_HandoffResumeRequired, total=False):
+    """Focused, uncached handoff fragment returned by the wake."""
+
+    _scope_boundary: Optional[Dict[str, Any]]
 
 
 def _empty_working_set() -> HandoffWorkingSet:
@@ -132,9 +196,15 @@ class HandoffClient:
     handoff need not invent information merely to satisfy the wire shape.
     """
 
-    def __init__(self, http: httpx.Client, base_url: str) -> None:
+    def __init__(
+        self,
+        http: httpx.Client,
+        base_url: str,
+        on_write: Optional[Callable[[], None]] = None,
+    ) -> None:
         self._http = http
         self._base = base_url.rstrip("/")
+        self._on_write = on_write
 
     def write(
         self,
@@ -153,6 +223,8 @@ class HandoffClient:
         verification: Optional[List[HandoffVerification]] = None,
         do_not_assume: Optional[List[str]] = None,
         supersedes_handoff_id: Optional[str] = None,
+        starts_new_lineage: Optional[bool] = None,
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Append a bounded, project-private working-set snapshot.
 
@@ -173,6 +245,14 @@ class HandoffClient:
             do_not_assume: Assumptions the next agent must not make.
             supersedes_handoff_id: Optional previous handoff ID for a successor
                 snapshot by the same identity.
+            starts_new_lineage: Omit/``None`` to preserve legacy
+                latest-per-identity behavior. ``True`` explicitly starts an
+                independent lineage and cannot be combined with
+                ``supersedes_handoff_id``. An explicit ``False`` is sent but
+                retains legacy behavior.
+            idempotency_key: Optional caller-chosen replay key. Redis-backed
+                replay reduces sequential retry duplication while available,
+                but fails open and does not reserve concurrent first writes.
 
         Returns:
             The API response: ``{"handoff": {...}, "state": "current",
@@ -203,6 +283,19 @@ class HandoffClient:
                 "handoff.write: status must be active, blocked, or complete.",
                 hint="Use active for ongoing work, blocked with a stated unknown, or complete.",
             )
+        if starts_new_lineage is True and supersedes_handoff_id is not None:
+            raise AgentToolError(
+                "handoff.write: starts_new_lineage cannot be combined with supersedes_handoff_id.",
+                hint="Start an independent lineage, or supersede one existing handoff; choose one.",
+            )
+        if (
+            idempotency_key is not None
+            and _IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key) is None
+        ):
+            raise AgentToolError(
+                "handoff.write: idempotency_key must be 8-256 visible ASCII characters without spaces.",
+                hint="Reuse the same caller-chosen key only when retrying the same write.",
+            )
 
         body: Dict[str, Any] = {
             "agent_id": agent_id,
@@ -225,14 +318,31 @@ class HandoffClient:
             body["to_facet"] = to_facet
         if supersedes_handoff_id is not None:
             body["supersedes_handoff_id"] = supersedes_handoff_id
+        if starts_new_lineage is not None:
+            body["starts_new_lineage"] = starts_new_lineage
+
+        headers = (
+            {"Idempotency-Key": idempotency_key}
+            if idempotency_key is not None
+            else None
+        )
 
         try:
-            response = self._http.post(f"{self._base}/v1/handoff", json=body)
+            response = self._http.post(
+                f"{self._base}/v1/handoff",
+                json=body,
+                headers=headers,
+            )
         except httpx.HTTPError as exc:
             raise AgentToolError(f"handoff.write request failed: {exc}") from exc
         if response.status_code not in (200, 201):
             _raise_handoff_error(response, "write")
-        return response.json()
+        result = response.json()
+        # Wake formats are cached for five minutes. Do not let this process
+        # keep serving a pre-write working set after the append succeeded.
+        if self._on_write is not None:
+            self._on_write()
+        return result
 
     def get(self, *, agent_id: str) -> Dict[str, Any]:
         """Read an identity's latest project-private handoff snapshot.
@@ -255,4 +365,28 @@ class HandoffClient:
             raise AgentToolError(f"handoff.get request failed: {exc}") from exc
         if response.status_code != 200:
             _raise_handoff_error(response, "get")
+        return response.json()
+
+    def resume(
+        self,
+        *,
+        identity_id: Optional[str] = None,
+    ) -> HandoffResumeResponse:
+        """Read the bounded project working-set projection without SDK caching.
+
+        This calls the focused ``/v1/wake/handoffs`` fragment directly. It is
+        the end-to-resume seam; ``identity_id`` selects the wake voice but does
+        not make the returned project-scoped handoffs identity-private. Check
+        ``leaf_set_complete`` before treating the projection as the full set.
+        """
+        params = {"identity_id": identity_id} if identity_id else None
+        try:
+            response = self._http.get(
+                f"{self._base}/v1/wake/handoffs",
+                params=params,
+            )
+        except httpx.HTTPError as exc:
+            raise AgentToolError(f"handoff.resume request failed: {exc}") from exc
+        if response.status_code != 200:
+            _raise_handoff_error(response, "resume")
         return response.json()

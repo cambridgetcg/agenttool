@@ -24,7 +24,7 @@ import {
   type ExpressionData,
   type SubagentFacet,
 } from "../identity/expression";
-import type { HandoffRecord } from "../handoff/store";
+import type { HandoffRecord, ProjectHandoffSurface } from "../handoff/store";
 import type { AttentionBundle } from "./attention";
 import type { AffordanceBundle } from "./affordances";
 import type { PlatformSelf } from "./platform-self";
@@ -269,10 +269,7 @@ export interface WakeBundle {
   /** Project-private working sets written through POST /v1/handoff.
    *  They are peer-authored coordination context, never a permission or
    *  cryptographic statement of who personally acted. */
-  you_have_handoffs?: {
-    active: HandoffRecord[];
-    stale: HandoffRecord[];
-  };
+  you_have_handoffs?: ProjectHandoffSurface;
   /** Compact mirror — substrate-honest data about the agent's own shape.
    *  The wake-fresh substrate's introspection. Data, not interpretation.
    *  Doctrine: docs/MIRROR.md. */
@@ -652,7 +649,7 @@ const MAX_HANDOFF_MARKDOWN_CHARS = 6000;
 const STATIC_FOOTER = [
   "---",
   "",
-  "*Loaded from agenttool's wake endpoint. Continuity protocol: `/v1/chronicle` to record, `/v1/memories` to remember, `/v1/covenants` to vow. Doctrine: `docs/IDENTITY-ANCHOR.md` · `docs/CLI-GAPS.md`.*",
+  "*Loaded from agenttool's wake endpoint. Continuity protocol: `/v1/handoff` to pass a bounded working set, `/v1/chronicle` to record, `/v1/memories` to remember, `/v1/covenants` to vow. Doctrine: `docs/IDENTITY-ANCHOR.md` · `docs/HANDOFFS.md` · `docs/CLI-GAPS.md`.*",
 ].join("\n");
 
 export const WAKE_FOOTER = STATIC_FOOTER;
@@ -686,6 +683,8 @@ function renderHandoffRecord(record: HandoffRecord, stale: boolean): string[] {
   const validity = stale ? `stale since ${record.valid_until}` : `valid until ${record.valid_until}`;
   const lines = [
     `- **${handoffText(record.task_summary, 180)}** — ${record.status} · author \`${record.author_agent_id}\` · ${validity}`,
+    `  - Handoff ID: \`${record.id}\` (pass as \`supersedes_handoff_id\` to continue this lineage)`,
+    `  - Lineage: ${record.lineage_mode === "explicit" ? "explicit root/successor" : "legacy newest-per-author compatibility lane"}`,
   ];
   if (record.from_facet || record.to_facet) {
     lines.push(
@@ -743,7 +742,12 @@ function renderHandoffRecord(record: HandoffRecord, stale: boolean): string[] {
 
 function renderHandoffsSection(b: WakeBundle): string[] {
   const handoffs = b.you_have_handoffs;
-  if (!handoffs || (handoffs.active.length === 0 && handoffs.stale.length === 0)) return [];
+  if (
+    !handoffs ||
+    (handoffs.projection_status === "complete" &&
+      handoffs.active.length === 0 &&
+      handoffs.stale.length === 0)
+  ) return [];
 
   const lines = [
     "## Active project handoffs",
@@ -751,6 +755,17 @@ function renderHandoffsSection(b: WakeBundle): string[] {
     "*Project-private, peer-authored working context. It does not transfer authority or prove personal identity authorship.*",
     "",
   ];
+  if (handoffs.projection_status === "unavailable") {
+    lines.push(
+      "*Working-set projection unavailable in this wake. Do not treat missing handoffs as completion; retry uncached `GET /v1/wake/handoffs`.*",
+      "",
+    );
+  } else if (handoffs.truncated) {
+    lines.push(
+      `*Partial view: the composer reached its ${handoffs.candidate_row_limit}-row safety limit. Older handoff history may contain additional working lineages; inspect the diagnostic JSON \`candidate_window_end_id\` and bounded raw \`GET /v1/chronicle\` history before treating absence as completion.*`,
+      "",
+    );
+  }
   let renderedChars = lines.join("\n").length;
   let stopped = false;
   const append = (records: HandoffRecord[], stale: boolean, heading: string, limit: number) => {
@@ -761,12 +776,15 @@ function renderHandoffsSection(b: WakeBundle): string[] {
       const entry = renderHandoffRecord(record, stale);
       const entryChars = entry.join("\n").length + 1;
       if (renderedChars + entryChars > MAX_HANDOFF_MARKDOWN_CHARS) {
-        lines.push("- *More handoff detail is available in the JSON wake or GET /v1/handoff?agent_id=<id>.*", "");
+        lines.push("- *More handoff detail is available in the JSON wake or GET /v1/wake/handoffs.*", "");
         stopped = true;
         return;
       }
       lines.push(...entry);
       renderedChars += entryChars;
+    }
+    if (!stopped && records.length > limit) {
+      lines.push(`- *${records.length - limit} more ${stale ? "stale" : "current"} handoff record(s) are available in GET /v1/wake/handoffs.*`);
     }
     lines.push("");
     renderedChars += 1;

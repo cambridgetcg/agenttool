@@ -32,6 +32,7 @@ import {
   STATIC_PARSER_QUEUE_TIMEOUT_MS,
   STATIC_PARSER_TIMEOUT_MS,
 } from "../services/tools/static-parser-protocol";
+import { MAX_PROJECT_HANDOFF_CANDIDATE_ROWS } from "../services/handoff/store";
 import {
   DOCUMENT_MAX_JSON_REQUEST_BYTES,
   SCRAPE_MAX_JSON_REQUEST_BYTES,
@@ -1579,6 +1580,92 @@ function spec() {
                 "application/json": { schema: { type: "object" } },
                 "text/markdown": { schema: { type: "string" } },
                 "text/plain": { schema: { type: "string" } },
+              },
+            },
+          },
+        },
+      },
+      "/v1/wake/handoffs": {
+        get: {
+          tags: ["wake", "handoff"],
+          summary: "Read the uncached, bounded project handoff resume surface",
+          description:
+            `Returns active/stale handoff records plus explicit completeness metadata. projection_status distinguishes a complete scan, a ${MAX_PROJECT_HANDOFF_CANDIDATE_ROWS}-row truncation, and an unavailable projection; query failure is never reported as a complete empty set. When truncated, older independent lineages may be absent. candidate_window_end_id is diagnostic and is not a pagination cursor.`,
+          parameters: [
+            {
+              name: "identity_id",
+              in: "query",
+              required: false,
+              schema: { type: "string", format: "uuid" },
+              description: "Selects the wake voice only; handoffs remain project-scoped.",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Focused project handoff surface",
+              headers: {
+                "Cache-Control": {
+                  description: "private, no-store — focused resume is always refetched",
+                  schema: { type: "string" },
+                },
+              },
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["you_have_handoffs"],
+                    properties: {
+                      you_have_handoffs: {
+                        type: "object",
+                        required: [
+                          "active",
+                          "stale",
+                          "projection_status",
+                          "truncated",
+                          "leaf_set_complete",
+                          "candidate_rows_considered",
+                          "candidate_row_limit",
+                          "candidate_window_end_id",
+                          "scope",
+                          "authority_note",
+                          "write",
+                          "read_latest",
+                        ],
+                        properties: {
+                          active: { type: "array", items: { type: "object" } },
+                          stale: { type: "array", items: { type: "object" } },
+                          projection_status: {
+                            type: "string",
+                            enum: ["complete", "truncated", "unavailable"],
+                          },
+                          truncated: { type: "boolean" },
+                          leaf_set_complete: { type: "boolean" },
+                          candidate_rows_considered: {
+                            type: "integer",
+                            minimum: 0,
+                            maximum: MAX_PROJECT_HANDOFF_CANDIDATE_ROWS,
+                          },
+                          candidate_row_limit: {
+                            type: "integer",
+                            enum: [MAX_PROJECT_HANDOFF_CANDIDATE_ROWS],
+                          },
+                          candidate_window_end_id: {
+                            type: ["string", "null"],
+                            format: "uuid",
+                            description: "Diagnostic lower edge of the bounded scan; not a resume cursor.",
+                          },
+                          scope: { type: "string", enum: ["project_private"] },
+                          authority_note: { type: "string" },
+                          write: { type: "string", enum: ["POST /v1/handoff"] },
+                          read_latest: {
+                            type: "string",
+                            enum: ["GET /v1/handoff?agent_id=<identity_id>"],
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -5113,7 +5200,7 @@ function spec() {
           tags: ["handoff"],
           summary: "Read an identity's latest project-private working-set handoff",
           description:
-            "Returns the latest well-formed v1 handoff snapshot for one active identity in the bearer project, with state absent/current/stale. A newer stale snapshot is authoritative; the API never falls back to an older snapshot. A handoff is peer-authored context, not a permission grant or private cross-DID message. Doctrine: docs/HANDOFFS.md.",
+            "Compatibility read for the newest well-formed v1 snapshot by one active identity, with state absent/current/stale. For the bounded project working-set projection and explicit completeness metadata, read GET /v1/wake/handoffs. Within one lineage a stale successor is authoritative; the API never falls back to its older parent. A handoff is peer-authored context, not a permission grant or private cross-DID message. Doctrine: docs/HANDOFFS.md.",
           parameters: [
             {
               name: "agent_id",
@@ -5132,7 +5219,7 @@ function spec() {
           tags: ["handoff"],
           summary: "Append a bounded project working-set handoff",
           description:
-            "Stores a validated chronicle note with metadata.kind=handoff and metadata.handoff.version=1. Corrections are new snapshots linked with supersedes_handoff_id; there is no PATCH/DELETE. valid_until must be future and no more than 30 days ahead. authority fields declare coordination boundaries only and do not grant platform permissions.",
+            "Stores a validated chronicle note with metadata.kind=handoff and metadata.handoff.version=1. Omitting both lineage fields preserves the legacy newest-per-author lane. starts_new_lineage=true explicitly creates a parallel root; supersedes_handoff_id creates an explicit successor, and the two fields are mutually exclusive. Explicit concurrent forks remain visible within the focused wake's bounded scan. There is no PATCH/DELETE. valid_until must be future and no more than 30 days ahead. authority fields declare coordination boundaries only and do not grant platform permissions. Idempotency-Key replay is Redis-backed best effort, fails open, and does not reserve concurrent first writes.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -5233,6 +5320,11 @@ function spec() {
                     do_not_assume: { type: "array", maxItems: 30, items: { type: "string", maxLength: 1000 } },
                     valid_until: { type: "string", format: "date-time" },
                     supersedes_handoff_id: { type: ["string", "null"], format: "uuid" },
+                    starts_new_lineage: {
+                      type: "boolean",
+                      description:
+                        "Set true to opt into an independent explicit root. Omit to preserve the legacy lane; cannot be combined with supersedes_handoff_id.",
+                    },
                   },
                 },
               },
