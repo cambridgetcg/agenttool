@@ -26,11 +26,16 @@ export interface ScriptwriterDecidesOpenItem {
   slug: string;
   episode_label: string;
   title_template: string;
+  /** Authored competition context retained for structured full-wake readers.
+   * Prose renderers keep it behind read_url so proposal language cannot
+   * masquerade as a current wake action surface. */
   framing: string;
+  framing_boundary: "detail_only_not_action_surface";
   /** Number of submissions visible to THIS viewer (public ∪ {viewer's own}).
    *  Not a total. Per wall/naming-poker-face-honored. */
   submission_count: number;
   you_have_submitted: boolean;
+  read_url: string;
   submit_url: string;
   list_url: string;
 }
@@ -86,8 +91,10 @@ export async function composeScriptwriterDecidesWake(viewerDid: string): Promise
       episode_label: `${row.episodeSeries}:EP.${row.episodeNumber}`,
       title_template: row.titleTemplate,
       framing: row.framing,
+      framing_boundary: "detail_only_not_action_surface",
       submission_count: visibleSubs.length,
       you_have_submitted: youSubmitted,
+      read_url: `/v1/scriptwriter-decides/${row.slug}`,
       submit_url: `/v1/scriptwriter-decides/${row.slug}/submit`,
       list_url: `/v1/scriptwriter-decides/${row.slug}/submissions`,
     });

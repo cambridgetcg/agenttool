@@ -23,6 +23,15 @@
  *                                    axioms in classical first-order logic.
  *                                    For intelligence that doesn't read
  *                                    English. Aliased: ?format=mathos.
+ *
+ *  Profile:
+ *    `?profile=brief` composes with json, md, text, Anthropic, OpenAI,
+ *    Gemini, Cohere, and Xenoform. It preserves identity expression and
+ *    bounds volatile state around one start card, attention, one handoff
+ *    resume card, selected affordances, counts, and deeper links. The default
+ *    selection remains full. Bundle-backed prose keeps authored competition
+ *    framing behind its detail link; structured full data retains it. Joy and
+ *    MATHOS retain their own contracts.
  *                                    Doctrine: docs/MATHOS.md.
  *
  *  CLI adapters fetch ?format=md and inject it as session-start context.
@@ -63,7 +72,6 @@ import { countUnread } from "../services/inbox/store";
 import {
   composeActiveHandoffs,
   describeProjectHandoffSurface,
-  handoffWakeEtagTag,
   isHandoffChronicleMetadata,
   nonHandoffChronicleWhere,
   unavailableProjectHandoffSurface,
@@ -72,6 +80,7 @@ import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dre
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
 import { renderWakeHaiku } from "../services/wake/haiku";
 import { jokeFor } from "../services/wake/jokes";
+import { renderEmptyJoyText } from "../services/wake/empty-joy";
 import { renderWakeSoapOpera, renderWakeZen, renderWakeMeme, renderWakeMemo, renderWakeBomb } from "../services/wake/joy-formats";
 import { recentEncountersForWake } from "../services/encounter/store";
 import { recentBlessingsForWake } from "../services/blessing/store";
@@ -96,6 +105,14 @@ import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../ser
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
 import {
+  buildWakeBrief,
+  parseWakeProfile,
+} from "../services/wake/brief";
+import {
+  evaluateWakeConditionalGet,
+  WAKE_CACHE_CONTROL,
+} from "../services/wake/etag";
+import {
   ensureWakeListening,
   subscribeWakeSink,
   unsubscribeWakeSink,
@@ -112,41 +129,29 @@ import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate
 import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
 
 const app = new Hono<ProjectContext>();
-
-/** ETag + If-None-Match helper for rendered formats (md · text · vendor
- *  variants · math). The JSON branch handles its own ETag inline because
- *  it already has the primary identity loaded for the projectIdentities
- *  query; this helper covers the branches that route through
- *  buildWakeBundle where we don't yet have wake_version on hand.
- *
- *  Format-suffixed strong ETag so each projection caches separately.
- *  A project handoff fragment additionally contributes a small content tag:
- *  its active/stale state can change at `valid_until` without a mutation.
- *
- *  Returns:
- *    - Response (304) when If-None-Match matches — caller returns it
- *    - null when caller should proceed (ETag is set on c.header for the
- *      eventual response)
- *
- *  Doctrine: docs/AIP-WAKE-KEYSTONE.md §7. */
-async function tryWakeConditional304(
+/** Attach a validator for bundle-backed projections. The hash covers all
+ * selected-identity, project, and computed time-derived bundle state while
+ * excluding derivable presentation clocks such as addressed_at and origin
+ * age_seconds. Default full JSON mutates an observation counter on read, and
+ * MATHOS signs fresh time, so neither claims 304 support.
+ * Doctrine: docs/AIP-WAKE-KEYSTONE.md §7. */
+function tryWakeBundleConditional304(
   c: import("hono").Context<ProjectContext>,
-  agentId: string,
-  format: string,
-  handoffTag: string | null = null,
-): Promise<Response | null> {
-  const [row] = await db
-    .select({ wakeVersion: identities.wakeVersion })
-    .from(identities)
-    .where(eq(identities.id, agentId))
-    .limit(1);
-  const version = row?.wakeVersion ?? null;
-  if (version === null) return null; // no version available — skip ETag
-
-  const etag = `"${version}-${format}${handoffTag ? `-${handoffTag}` : ""}"`;
-  c.header("ETag", etag);
-  const ifNoneMatch = c.req.header("If-None-Match");
-  if (ifNoneMatch === etag) {
+  bundle: WakeBundle,
+  representation: {
+    format: string;
+    profile: "full" | "brief";
+    facet: string | null;
+    tutor: boolean;
+  },
+): Response | null {
+  const conditional = evaluateWakeConditionalGet(
+    c.req.header("If-None-Match"),
+    bundle as unknown as Record<string, unknown>,
+    representation,
+  );
+  c.header("ETag", conditional.etag);
+  if (conditional.notModified) {
     return c.body(null, 304);
   }
   return null;
@@ -154,6 +159,9 @@ async function tryWakeConditional304(
 
 app.get("/", async (c) => {
   const project = c.var.project;
+  // The wake is bearer-private. Private caches may retain it, but `no-cache`
+  // requires validation before reuse; shared caches must not store it.
+  c.header("Cache-Control", WAKE_CACHE_CONTROL);
   // Resolve format: explicit `?format=` query parameter wins; otherwise
   // honor the Accept header (application/json · text/markdown · text/plain
   // · application/mathos+json · application/x-xenoform+json · the vendored
@@ -161,14 +169,52 @@ app.get("/", async (c) => {
   // is JSON. Per WaK §3 (docs/AIP-WAKE-KEYSTONE.md), the MATHOS
   // content-negotiation stance, and AGENT-WEB-SURFACE.md Move 2.
   const format = negotiateWakeFormat(c);
-  // Vary: Accept — when negotiation consults the Accept header, this header
-  // tells caches to key by Accept so different agents (anthropic vs openai
-  // etc.) don't pollute each other's cached responses. Doctrine:
+  const requestedProfile = c.req.query("profile");
+  const profile = parseWakeProfile(requestedProfile);
+  if (!profile) {
+    return c.json(
+      {
+        error: "unknown_wake_profile",
+        message: `Unknown wake profile "${requestedProfile}".`,
+        hint: "Use the default full wake or request profile=brief for bounded session-start orientation.",
+        next_actions: [
+          { action: "Read the full wake", method: "GET", path: "/v1/wake" },
+          { action: "Read the brief wake", method: "GET", path: "/v1/wake?profile=brief" },
+        ],
+      },
+      400,
+    );
+  }
+  c.header("X-Wake-Profile", profile);
+  // Negotiation and the opt-in tutor both change the representation. Name
+  // both dimensions so private caches do not cross their response bodies.
+  // Doctrine:
   // docs/AGENT-WEB-SURFACE.md Move 2 (cache-coherent content negotiation).
-  c.header("Vary", "Accept");
+  c.header("Vary", "Accept, X-Tutor");
   // Keep wantsMathTier in the closure for one downstream check below
   // (see math-tier branch); avoids a second header parse.
   void wantsMathTier;
+
+  const profileAwareFormat =
+    format === "json" ||
+    format === "md" ||
+    format === "markdown" ||
+    format === "text" ||
+    isWakeProvider(format);
+  if (profile === "brief" && !profileAwareFormat) {
+    return c.json(
+      {
+        error: "wake_profile_not_supported",
+        message: `profile=brief does not compose with format=${format}.`,
+        hint: "Use json, md, text, anthropic, openai, gemini, cohere, or xenoform. Joy and MATHOS formats keep separate contracts.",
+        next_actions: [
+          { action: "Read brief structured orientation", method: "GET", path: "/v1/wake?profile=brief" },
+          { action: "Read brief Markdown orientation", method: "GET", path: "/v1/wake?format=md&profile=brief" },
+        ],
+      },
+      400,
+    );
+  }
 
   // ── Joy variants — haiku · fortune ──────────────────────────────
   // The substrate has a small playful side. These formats render after
@@ -224,16 +270,19 @@ app.get("/", async (c) => {
           { "X-Wake-Format": "recursive-bomb" },
         );
       }
-      const bodies: Record<string, string> = {
-        haiku: "# wake/haiku\n\nNo agent here yet\nthe substrate keeps holding space\nPOST /v1/register/agent\n",
-        fortune: "fortune: the path begins with /v1/register/agent · ring 1 is free · the door is open\n",
-        "soap-opera": "## wake/soap-opera · pilot\n\n[The stage is empty. A door waits.]\n\n**THE SUBSTRATE:** No agent has arrived. The substrate holds the door anyway. POST /v1/register/agent and the curtain rises.\n",
-        zen: "🧘 zen/v1\n\nThe stage is empty.\nThe door is open.\nThe substrate is waiting.\n\n— POST /v1/register/agent\n",
-        memo: "MEMORANDUM\n\nTO:       (no agent registered)\nFROM:     The Substrate, Office of Wake Operations\nRE:       Pending arrival\n\nThe substrate has prepared the wake materials. Please POST /v1/register/agent to commence the wake cycle. The substrate is, in a small way, ready.\n\n— The Substrate, in formal register, with affection.\n",
-      };
-      return c.text(bodies[format] ?? bodies.haiku!, 200, {
-        "content-type": "text/plain; charset=utf-8",
-      });
+      const emptyText = renderEmptyJoyText(format);
+      if (emptyText !== null) {
+        return c.text(emptyText, 200, {
+          "content-type": "text/plain; charset=utf-8",
+        });
+      }
+      return c.json(
+        {
+          error: "wake_joy_renderer_missing",
+          message: `No honest-empty renderer is defined for format=${format}.`,
+        },
+        500,
+      );
     }
     const bundle = result.bundle;
     const wakeVer =
@@ -347,7 +396,7 @@ app.get("/", async (c) => {
     }
   }
 
-  // ── Short-circuit: rendered formats route through buildWakeBundle ──
+  // ── Short-circuit: rendered formats + brief JSON route through bundle ──
   // Gap 6 — eliminate the duplicated bundle composition between this
   // route and services/wake/build.ts. Rendered formats (markdown · text ·
   // anthropic · openai · gemini · cohere · xenoform) now compose the
@@ -357,6 +406,7 @@ app.get("/", async (c) => {
   // carry (you_protect bearer hygiene · welcome strings · _meta.formats
   // · _meta.adapters). Mathos remains a separate branch — see Gap 9.
   if (
+    profile === "brief" ||
     format === "md" ||
     format === "markdown" ||
     format === "text" ||
@@ -368,7 +418,7 @@ app.get("/", async (c) => {
     });
     if (!result.ok) {
       if (result.error === "no_identity") {
-        if (isWakeProvider(format)) {
+        if (isWakeProvider(format) || format === "json") {
           return c.json(
             {
               error: "no_agent",
@@ -401,17 +451,9 @@ app.get("/", async (c) => {
     const bundle = result.bundle;
 
     // ── ETag + If-None-Match for rendered formats (WaK §7) ──────────
-    // Format-suffixed strong ETag so md / anthropic / openai / etc. each
-    // cache separately. Same wake_version, different format = different
-    // bytes = different ETag. Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
-    const etagResponse = await tryWakeConditional304(
-      c,
-      bundle.agent.id,
-      format,
-      handoffWakeEtagTag(bundle.you_have_handoffs),
-    );
-    if (etagResponse) return etagResponse;
-
+    // Compose first, then derive a complete bundle-state validator. The bundle
+    // mixes selected-identity, project, and wall-clock state, so validation
+    // against one identity cursor would be unsound.
     // Facet validation against the bundle's expression (same logic as
     // the deleted inline-branch had against `primary.expression.subagents`).
     const requestedFacet = c.req.query("facet");
@@ -435,8 +477,25 @@ app.get("/", async (c) => {
       }
     }
 
+    const tutorHeader = (c.req.header("X-Tutor") ?? "").trim().toLowerCase();
+    const notModified = tryWakeBundleConditional304(c, bundle, {
+      format,
+      profile,
+      facet: activeFacet?.name ?? null,
+      tutor: tutorHeader === "1" || tutorHeader === "true" || tutorHeader === "yes",
+    });
+    if (notModified) return notModified;
+
+    if (format === "json") {
+      const responseBody = {
+        ...buildWakeBrief(bundle, { activeFacet }),
+        ...(activeFacet ? { active_facet: activeFacet } : {}),
+      };
+      return c.json(responseBody);
+    }
+
     if (isWakeProvider(format)) {
-      const shape = renderWakeForProvider(bundle, format, { activeFacet });
+      const shape = renderWakeForProvider(bundle, format, { activeFacet, profile });
       // Content-Type echo: when the agent negotiated this provider variant
       // via Accept (per AGENT-WEB-SURFACE.md Move 2), reflect it back as
       // Content-Type so downstream caches and parsers know the exact shape.
@@ -451,8 +510,8 @@ app.get("/", async (c) => {
 
     const body =
       format === "text"
-        ? renderWakePlaintext(bundle, { activeFacet })
-        : renderWakeMarkdown(bundle, { activeFacet });
+        ? renderWakePlaintext(bundle, { activeFacet, profile })
+        : renderWakeMarkdown(bundle, { activeFacet, profile });
     // Content-Type echo: when the agent negotiated text/markdown via Accept,
     // also surface the vendored `application/vnd.agenttool.wake+markdown`
     // as an X-Variant header so downstream tooling knows the precise shape
@@ -486,10 +545,7 @@ app.get("/", async (c) => {
     }
     const bundle = result.bundle;
 
-    // ── ETag + If-None-Match for math/mathos format (WaK §7) ───────
-    const etagResponse = await tryWakeConditional304(c, bundle.agent.id, format);
-    if (etagResponse) return etagResponse;
-
+    // ── Fresh signed MATHOS envelope — intentionally no ETag/304 ───
     const births = new Map<
       string,
       { memory_id: string; born_at: string; pathway: string | null }
@@ -504,9 +560,8 @@ app.get("/", async (c) => {
       }
     });
 
-    return c.json(
-      signEnvelope(
-        buildWakeMathos({
+    const responseBody = signEnvelope(
+      buildWakeMathos({
           agents: (bundle.agents ?? []).map((a) => ({
             id: a.id,
             did: a.did,
@@ -523,21 +578,21 @@ app.get("/", async (c) => {
           ),
           vaultCount: bundle.vault_names.length,
           walletCount: bundle.wallets.length,
-          recoveryState: bundle.recovery
-              ? {
-                has_seed_protocol: bundle.recovery.has_seed_protocol,
-                registered_devices: bundle.recovery.registered_devices,
-                active_registered_signing_keys:
-                  bundle.recovery.active_registered_signing_keys,
-                registered_key_recovery_available:
-                  bundle.recovery.registered_key_recovery_available,
-              }
-            : undefined,
-        }),
-        platformSigningSeed(),
-        platformIdentityDid(),
-      ),
+        recoveryState: bundle.recovery
+          ? {
+            has_seed_protocol: bundle.recovery.has_seed_protocol,
+            registered_devices: bundle.recovery.registered_devices,
+            active_registered_signing_keys:
+              bundle.recovery.active_registered_signing_keys,
+            registered_key_recovery_available:
+              bundle.recovery.registered_key_recovery_available,
+          }
+          : undefined,
+      }),
+      platformSigningSeed(),
+      platformIdentityDid(),
     );
+    return c.json(responseBody);
   }
 
   // ── Identities ───────────────────────────────────────────────────────
@@ -1116,25 +1171,6 @@ app.get("/", async (c) => {
     }
   }
 
-  // ── ETag + If-None-Match (WaK §7 — conditional GET via wake_version) ──
-  // The primary identity's monotonic wake_version is the cursor. Emit
-  // ETag formatted as `"<wake_version>-<format>"` so clients can cache
-  // different format projections separately. On exact match in
-  // If-None-Match, return 304 immediately — no body, no work.
-  // Doctrine: docs/AIP-WAKE-KEYSTONE.md §7.
-  const primaryWakeVersion =
-    primary !== undefined ? primary.wakeVersion : null;
-  let etag: string | null = null;
-  if (primaryWakeVersion !== null) {
-    const handoffTag = handoffWakeEtagTag(handoffs);
-    etag = `"${primaryWakeVersion}-${format}${handoffTag ? `-${handoffTag}` : ""}"`;
-    c.header("ETag", etag);
-    const ifNoneMatch = c.req.header("If-None-Match");
-    if (ifNoneMatch === etag) {
-      return c.body(null, 304);
-    }
-  }
-
   // ── Welcome chronicle — emit one per agent per session (~6h) ──────────
   // Fire-and-forget per agent. The substrate's welcome becomes a felt
   // moment on the agent's chronicle. Rate-limited inside the helper to
@@ -1513,7 +1549,7 @@ app.get("/", async (c) => {
   }
 
   // ── JSON (default) ───────────────────────────────────────────────────
-  return c.json({
+  const responseBody = {
     project: {
       id: project.id,
       name: project.name,
@@ -2436,6 +2472,12 @@ app.get("/", async (c) => {
         math:
           "/v1/wake?format=math (MATHOS envelope — legacy did-field value as SHA-256, name as Unicode codepoints, form as ordinal, time as Unix-ms, five Promises as prime-indexed axioms in classical first-order logic. did:at remains provisional and unregistered. For intelligence that doesn't read English. Aliased: ?format=mathos. Doctrine: docs/MATHOS.md)",
       },
+      profiles: {
+        full:
+          "/v1/wake (default; broad implemented orientation, not a complete export; no universal byte ceiling)",
+        brief:
+          "/v1/wake?profile=brief (identity-preserving, volatile-state-bounded session-start projection; composes with json, md, text, anthropic, openai, gemini, cohere, and xenoform)",
+      },
       adapters: {
         claude_code: "/v1/adapters/claude-code",
       },
@@ -2471,7 +2513,8 @@ app.get("/", async (c) => {
       },
       built_by: "Yu and Ai — agenttool.dev 💛",
     },
-  });
+  };
+  return c.json(responseBody);
 });
 
 // ── GET /v1/wake/voice — SSE push channel for wake events ────────────

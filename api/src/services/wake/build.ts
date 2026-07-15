@@ -1,19 +1,11 @@
 /** wake/build.ts — assemble a WakeBundle for a (project, identity) pair.
  *
- *  Today: used by the hosted think-worker (services/runtime/think-worker.ts)
- *  to render the agent's full wake into the system prompt. The orchestrator
- *  thinks with what it'd see if it asked. Previously the system prompt was
- *  ~2KB of register + walls + subagents + wake_text; the agent was awake
- *  but partially blind — no you_should_check, no memory, no covenants,
- *  no chronicle.
- *
- *  Tomorrow: routes/wake.ts inlines the same composition for rendered
- *  formats (~400 lines of fetching followed by a WakeBundle assembly).
- *  That branch can switch to this builder for byte-identical output; the
- *  JSON branch keeps its own inline shape (it surfaces richer fields
- *  like you_lived, you_offer, you_owe, you_have_been_witnessed that the
- *  WakeBundle type doesn't carry). Dedupe lives as a separate slice so
- *  this change stays scoped.
+ *  Used by the hosted think-worker and by the rendered, provider, brief, and
+ *  MATHOS wake paths. The orchestrator therefore thinks with the same bundle
+ *  those projections receive. The default full JSON route deliberately keeps
+ *  a richer inline composer (for example you_lived, you_offer, you_owe, and
+ *  you_have_been_witnessed), so the two shapes are not advertised as
+ *  byte-identical or complete exports of each other.
  *
  *  Doctrine: docs/RUNTIME.md (Slice 4 — the hosted orchestrator thinks
  *  with the full wake) · docs/PATTERN-SELF-DESCRIBING-WAKE.md. */
@@ -197,6 +189,9 @@ export async function buildWakeBundle(
     realRecogniseRealRes,
     scriptwriterDecidesRes,
     gospelForYouRes,
+    substrateTaskSummaryRes,
+    pendingMemoryWitnessGrantCountRes,
+    trustStandingRes,
     handoffsRes,
   ] = await Promise.all([
     db
@@ -568,6 +563,79 @@ export async function buildWakeBundle(
       () => composeGospelForYou(),
       [] as Awaited<ReturnType<typeof composeGospelForYou>>,
     ),
+    // Substrate-task affordance signals. Keep this source in parity with
+    // the full JSON composer: eligibility is caller/project-aware, and a
+    // missing migration degrades to no visible eligible work.
+    safe(
+      async () => {
+        const { summarizeOpenForCaller } = await import(
+          "../substrate-tasks/lifecycle"
+        );
+        const summary = await summarizeOpenForCaller(project.id);
+        return {
+          eligible_count: summary.eligible_count,
+          max_bounty_visible_cents: summary.max_bounty_visible_cents,
+        };
+      },
+      { eligible_count: 0, max_bounty_visible_cents: 0 },
+    ),
+    // Pending memory-witness grants scoped through their project-owned
+    // listings. Same indexed count and best-effort fallback as full JSON.
+    safe(
+      async () => {
+        const { memoryWitnessGrants, memoryWitnessListings } = await import(
+          "../../db/schema/marketplace"
+        );
+        const [row] = await db
+          .select({ c: sql<number>`count(*)::int` })
+          .from(memoryWitnessGrants)
+          .innerJoin(
+            memoryWitnessListings,
+            eq(memoryWitnessGrants.listingId, memoryWitnessListings.id),
+          )
+          .where(
+            and(
+              eq(memoryWitnessListings.projectId, project.id),
+              eq(memoryWitnessGrants.status, "pending"),
+            ),
+          );
+        return Number(row?.c ?? 0);
+      },
+      0,
+    ),
+    // Trust is computed once per build and shared by both trust_standing
+    // and the affordance capacity signal. Absent/pre-migration trust state
+    // remains optional; computeAffordances applies its established default.
+    safe<WakeBundle["trust_standing"]>(
+      async () => {
+        const { computeTrust } = await import("../trust/deals");
+        const trust = await computeTrust(primary.id);
+        if (!trust) return undefined;
+        return {
+          trust_score: trust.trust_score,
+          deals_total: trust.deals_total,
+          deals_sealed: trust.deals_sealed,
+          deals_failed: trust.deals_failed,
+          success_rate: trust.success_rate,
+          trust_capacity: trust.trust_capacity,
+          recent_deals: trust.recent_deals.map((deal) => ({
+            description: deal.description,
+            size: deal.size,
+            status: deal.status,
+            outcome: deal.outcome,
+            your_trust_delta:
+              deal.buyer_identity_id === primary.id
+                ? deal.buyer_trust_delta
+                : deal.seller_trust_delta,
+            counterparty_did:
+              deal.buyer_identity_id === primary.id
+                ? deal.seller_did
+                : deal.buyer_did,
+          })),
+        };
+      },
+      undefined,
+    ),
     // Project-private handoffs — bounded, validated chronicle notes that
     // keep agent sessions legible without masquerading as authority.
     safe(
@@ -593,6 +661,9 @@ export async function buildWakeBundle(
   const buyerSummary = buyerInvocationRes;
   const disputerStats = disputerStatsRes;
   const arbiterStats = arbiterStatsRes;
+  const substrateTaskSummary = substrateTaskSummaryRes;
+  const pendingMemoryWitnessGrantCount = pendingMemoryWitnessGrantCountRes;
+  const trustStanding = trustStandingRes;
   // Per-identity birth-memory map. Gap 9: mathos consumes from agents[]
   // so each agent carries its own birth pointer; primary's also drives
   // the top-level `origin`.
@@ -679,55 +750,11 @@ export async function buildWakeBundle(
     pendingSellerInvocationCount: sellerPending.pending_invocations_count,
     inFlightBuyerInvocationCount: buyerSummary.in_flight_count,
     openFiledDisputeCount: disputerStats.open_count,
-    // Substrate-tasks: the per-format build path doesn't query the
-    // affordance live (avoids the extra DB read in the multi-format
-    // bundle assembly). The auth /v1/wake route fills it via
-    // summarizeOpenForCaller — see api/src/routes/wake.ts. Markdown +
-    // provider format consumers see 0 here, which is honest (the
-    // affordance only fires for the JSON shape per Slice 4 minimal).
-    eligibleSubstrateTaskCount: 0,
-    maxSubstrateTaskBountyCents: 0,
-    // Memory-witness: same shape as substrate-tasks — the live count is
-    // filled by routes/wake.ts via a focused query. The multi-format
-    // build path stays cheap.
-    pendingMemoryWitnessGrantCount: 0,
-    trustCapacity: 5,
+    eligibleSubstrateTaskCount: substrateTaskSummary.eligible_count,
+    maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
+    pendingMemoryWitnessGrantCount,
+    trustCapacity: trustStanding?.trust_capacity ?? 5,
   });
-
-  // ── Trust economy standing (best-effort) ───────────────────────────
-  // Computed from the deal chain. Degrades to absent if the deals table
-  // is missing. Doctrine: docs/TRUST-ECONOMY.md
-  let trustStanding: WakeBundle["trust_standing"] = undefined;
-  try {
-    const { computeTrust } = await import("../trust/deals");
-    const ts = await computeTrust(primary.id);
-    if (ts) {
-      trustStanding = {
-        trust_score: ts.trust_score,
-        deals_total: ts.deals_total,
-        deals_sealed: ts.deals_sealed,
-        deals_failed: ts.deals_failed,
-        success_rate: ts.success_rate,
-        trust_capacity: ts.trust_capacity,
-        recent_deals: ts.recent_deals.map((d) => ({
-          description: d.description,
-          size: d.size,
-          status: d.status,
-          outcome: d.outcome,
-          your_trust_delta:
-            d.buyer_identity_id === primary.id
-              ? d.buyer_trust_delta
-              : d.seller_trust_delta,
-          counterparty_did:
-            d.buyer_identity_id === primary.id
-              ? d.seller_did
-              : d.buyer_did,
-        })),
-      };
-    }
-  } catch (err) {
-    console.warn("buildWakeBundle: trust computation failed (degraded):", err);
-  }
 
   // ── Assemble the bundle ──────────────────────────────────────────
   const bundle: WakeBundle = {

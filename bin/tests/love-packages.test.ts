@@ -109,7 +109,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/adds", version: "0.2.0", releaseTag: "adds-v0.2.0" },
       { name: "@agenttool/data", version: "0.3.0", releaseTag: "data-v0.3.0" },
       { name: "@agenttool/data-sync", version: "0.1.0", releaseTag: "data-sync-v0.1.0" },
-      { name: "@agenttool/sdk", version: "0.12.0", releaseTag: "sdk-v0.12.0" },
+      { name: "@agenttool/sdk", version: "0.13.0", releaseTag: "sdk-v0.13.0" },
     ]);
   });
 });

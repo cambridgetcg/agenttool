@@ -6,17 +6,21 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current release — 2026-07-15
+## Current source line — 2026-07-15
 
 The Python and TypeScript source manifests and runtime client version headers
-are aligned at **0.12.0**. The checked-in release builder targets a TypeScript
-LOVE artifact and the `sdk-v0.12.0` GitHub release tag. Building, committing,
+are aligned at **0.13.0**. The checked-in release builder targets a TypeScript
+LOVE artifact and the `sdk-v0.13.0` GitHub release tag. Building, committing,
 and publishing those assets is a release operation; the source version alone
 does not prove that either asset is available. CI builds and smoke-tests the
 Python wheel, but npm and PyPI publication are separate optional operator
 steps; registry versions can lag the source and LOVE/GitHub release.
 
-This additive release introduces the project-private handoff client in both
+This additive source line adds typed `full` / `brief` wake selection in both
+SDKs. Only `brief` is sent on the wire, so omitted and explicit `full` preserve
+historical URLs; cache slots remain profile-specific.
+
+The preceding 0.12.0 release introduced the project-private handoff client in both
 languages. Writes can explicitly start independent work or supersede one named
 snapshot, accept an idempotency key, preserve guided server errors, and clear
 the local wake cache. Focused `handoff.resume()` reads bypass that cache and
@@ -336,6 +340,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.10.0** | Correct tools wire contracts and strict local validation; add local-node-only `at.data.sync.pull/status` | **yes** |
 | **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
 | **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
+| **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

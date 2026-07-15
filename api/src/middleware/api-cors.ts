@@ -11,13 +11,17 @@ import { cors } from "hono/cors";
 import { welcomeHeaderForPath } from "./welcome";
 
 export const API_CORS_EXPOSED_HEADERS = [
+  "ETag",
   "PAYMENT-REQUIRED",
   "PAYMENT-RESPONSE",
   "Link",
   "Retry-After",
+  "X-Cache-Eligible",
   "X-Credits-Balance",
   "X-Idempotency-Supported",
   "X-Idempotency-Skipped",
+  "X-Wake-Profile",
+  "X-Variant",
   "X-Welcomed",
   "Idempotent-Replay",
 ] as const;

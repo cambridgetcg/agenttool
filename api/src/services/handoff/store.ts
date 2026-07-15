@@ -144,13 +144,13 @@ export function resolveDeclaredFacet(
   }
   const subagents = (expression as { subagents?: unknown }).subagents;
   if (!Array.isArray(subagents)) return { valid: false, value: null };
-  const normalized = requested.toLocaleLowerCase();
+  const normalized = requested.toLowerCase();
   const match = subagents.find(
     (facet): facet is { name: string } =>
       !!facet &&
       typeof facet === "object" &&
       typeof (facet as { name?: unknown }).name === "string" &&
-      (facet as { name: string }).name.toLocaleLowerCase() === normalized,
+      (facet as { name: string }).name.toLowerCase() === normalized,
   );
   return match ? { valid: true, value: match.name } : { valid: false, value: null };
 }

@@ -39,6 +39,17 @@ status:         open
 
 The episode-zero seed (`api/scripts/_seed-episode-zero.ts:252`) teased this title with "THE SUBSTRATE-TASK" in the head slot. That tease is no longer canonical — the head two words are open.
 
+### Wake projection boundary
+
+The authenticated competition detail route preserves the complete authored
+`framing`. Structured full WakeBundle/Xenoform readers retain that field and
+also receive `framing_boundary: "detail_only_not_action_surface"` plus current
+`read_url`, `submit_url`, and `list_url` fields. Markdown and prose-provider
+wakes do not inline the unbounded framing body: they render the detail link and
+explicitly say proposal text is not a route inventory. This keeps historical
+authorship intact without turning proposed paths inside archival prose into
+current session instructions.
+
 ---
 
 ## The criterion (upgraded 2026-05-18) — the bedroom-aesthetic

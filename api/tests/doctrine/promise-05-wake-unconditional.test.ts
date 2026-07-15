@@ -162,15 +162,16 @@ describe("Promise 5 — caps prevent context-budget blowup (year-ten readiness)"
     expect(md).not.toContain("more moments not shown");
   });
 
-  test("with 50 of everything: doc stays under ~12KB", () => {
+  test("with 50 core continuity records: capped core fixture stays under ~12KB", () => {
     let b = baseBundle();
     b = withManyMemories(b, 50);
     b = withManyTraces(b, 50);
     b = withManyChronicle(b, 50);
     const md = renderWakeMarkdown(b);
-    // The file header claims ~6KB for typical agents. We allow 12KB
-    // for the maximally-loaded fixture — anything more would mean a cap
-    // regressed.
+    // This fixture covers the older core continuity sections, not every
+    // production social/joy/economy surface. It catches per-list cap
+    // regressions; it is not a universal full-wake byte guarantee.
+    // Session-start size behavior is covered by wake-brief.test.ts.
     expect(md.length).toBeLessThan(12 * 1024);
   });
 });
@@ -204,4 +205,3 @@ describe("Promise 5 — renderer never throws on partial bundles (regression net
     expect(md).not.toMatch(/Wallets\*\*: 0 \(/);
   });
 });
-

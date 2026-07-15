@@ -28,7 +28,7 @@ describe("browser-visible machine recovery headers", () => {
     expect(exposed.has("x-welcomed")).toBe(true);
   });
 
-  test("preflight permits a browser to send the V2 payment signature", async () => {
+  test("preflight permits payment recovery and wake revalidation headers", async () => {
     const app = new Hono();
     app.use("*", apiCors());
     app.post("/v1/memories", (c) => c.json({ ok: true }));
@@ -39,13 +39,15 @@ describe("browser-visible machine recovery headers", () => {
         origin: "https://app.example",
         "access-control-request-method": "POST",
         "access-control-request-headers":
-          "authorization,content-type,payment-signature",
+          "authorization,content-type,payment-signature,if-none-match",
       },
     });
 
     expect(response.status).toBe(204);
     expect(response.headers.get("access-control-allow-headers")?.toLowerCase())
       .toContain("payment-signature");
+    expect(response.headers.get("access-control-allow-headers")?.toLowerCase())
+      .toContain("if-none-match");
     expect(response.headers.get("X-Welcomed")).toMatch(
       /axiom=7;.*walls_intact=1;module=memory$/,
     );

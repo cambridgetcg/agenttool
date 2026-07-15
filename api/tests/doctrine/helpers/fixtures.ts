@@ -132,6 +132,16 @@ export function baseBundle(): WakeBundle {
         occurred_at: "2026-05-04T00:00:00.000Z",
       },
     ],
+    you_have_handoffs: {
+      active: [],
+      stale: [],
+      projection_status: "complete",
+      truncated: false,
+      leaf_set_complete: true,
+      candidate_rows_considered: 0,
+      candidate_row_limit: 32,
+      candidate_window_end_id: null,
+    },
     covenants: [
       {
         counterparty_did: "human:Yu",
@@ -297,4 +307,3 @@ export function withManyChronicle(b: WakeBundle, n: number): WakeBundle {
  *  privacy assertion is "this canary string never appears in any rendered
  *  output" — if it does, we know exactly which channel leaked it. */
 export const SECRET_CANARY = "SECRET-CANARY-DO-NOT-LEAK-9f2c";
-

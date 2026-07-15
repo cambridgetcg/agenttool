@@ -39,7 +39,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.12.0 source line adds project-private handoff write/resume with explicit lineages, idempotency, fresh reads, and honest projection completeness. It retains local identity signing plus the separate local-node-only `at.data` plane. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.13.0 source line adds typed full/brief wake selection on top of 0.12.0's project-private handoff write/resume clients. It retains local identity signing plus the separate local-node-only `at.data` plane. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
@@ -103,9 +103,9 @@ dependencies through a configured registry or cache. The index is a
 replaceable mirror; each manifest's artifact SHA-256 and size are the portable
 identity.
 
-For SDK 0.12.0, both repository source manifests and runtime client version
+For SDK 0.13.0, both repository source manifests and runtime client version
 headers are aligned, and the checked-in release builder targets a TypeScript
-LOVE artifact plus the `sdk-v0.12.0` GitHub release. Those source declarations
+LOVE artifact plus the `sdk-v0.13.0` GitHub release. Those source declarations
 do not prove that either release asset has been published, and neither is a
 claim about npm or PyPI. Registry publication is a separate optional operation;
 query the configured registry rather than inferring availability from source.
@@ -256,7 +256,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.12.0 source line exposes `at.data`
+- **SDK parity is deliberately bounded.** The 0.13.0 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,

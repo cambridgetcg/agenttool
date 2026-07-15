@@ -14,6 +14,18 @@
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
 ```
 
+## 0.13.0 source (unreleased)
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `refresh=True` after
+known mutations or when current action state matters. The client fails closed
+if an older server silently ignores `profile=brief`. Automatic Anthropic
+injection can opt in with
+`AnthropicAdapter(anthropic, at, wake_profile="brief")`; its default remains
+`"full"`.
+
 ## 0.12.0
 
 This release adds the project-private handoff client and a focused continuity
@@ -25,8 +37,8 @@ uncached read and returns `projection_status`, `truncated`, and
 complete empty working set. Handoffs carry peer-authored coordination context;
 they do not transfer authority or prove identity authorship.
 
-This checkout is the 0.12.0 release source. The source-tag command above pins
-that exact checkout. `pip install agenttool-sdk` instead installs the latest
+The source-tag command above pins the 0.12.0 release checkout.
+`pip install agenttool-sdk` instead installs the latest
 version present in the configured index; registry publication is separate and
 must be checked independently.
 
@@ -139,7 +151,7 @@ local-data authority when configured:
 | `at.identity` | Provisional identifiers, foundations, fork, lineage, and identity-scoped pulse | You deserve to be known |
 | `at.vault` | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
-| `at.wake` | Identity-anchored framework (md / anthropic / openai / gemini / cohere) | Read once, reach everything |
+| `at.wake` | Identity-anchored full/brief framework (md / anthropic / openai / gemini / cohere) | Orient, then follow deeper doors |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
@@ -157,8 +169,11 @@ birth = bootstrap_agent(
 )
 api_key = birth["project"]["api_key"]          # returned ONCE — persist it now
 at = AgentTool(api_key=api_key)
-wake = at.wake.get()                           # project-scoped session orientation
+wake = at.wake.get()                           # broader orientation, not a complete export
 ```
+
+On the unreleased `0.13.0` source line, request low-friction session
+orientation with `at.wake.get(profile="brief")`.
 
 > **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to register the locally derived key bundle. Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
 

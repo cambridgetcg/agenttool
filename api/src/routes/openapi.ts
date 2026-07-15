@@ -1564,24 +1564,232 @@ function spec() {
           tags: ["wake"],
           summary: "The agent's identity anchor",
           description:
-            "Returns the agent's session-start context: identity · expression · wallets · vault names · memory snapshot · chronicle · covenants. Three formats: JSON (default), Markdown (`?format=md`, paste-ready for CLI hooks), text (`?format=text`).",
+            "Returns project-scoped orientation, not a complete export. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default.",
           parameters: [
             {
               name: "format",
               in: "query",
-              schema: { type: "string", enum: ["json", "md", "text"] },
+              schema: {
+                type: "string",
+                enum: ["json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere", "xenoform", "haiku", "fortune", "joke", "soap-opera", "zen", "meme", "memo", "wake", "math", "mathos"],
+              },
+              required: false,
+            },
+            {
+              name: "profile",
+              in: "query",
+              schema: { type: "string", enum: ["full", "brief"], default: "full" },
+              description: "brief composes with JSON, Markdown/text, provider envelopes, and Xenoform; joy and MATHOS retain separate formats.",
+              required: false,
+            },
+            {
+              name: "identity_id",
+              in: "query",
+              schema: { type: "string", format: "uuid" },
+              description: "Select an identity owned by the authenticated project bearer.",
+              required: false,
+            },
+            {
+              name: "facet",
+              in: "query",
+              schema: { type: "string" },
+              description: "Request-scoped emphasis for a declared subagent facet; it does not create a separate principal.",
+              required: false,
+            },
+            {
+              name: "If-None-Match",
+              in: "header",
+              schema: { type: "string" },
+              description:
+                "Weak ETag from a prior eligible wake response. Conditional 304 handling is available only for brief JSON and bundle-backed Markdown, text, provider, and Xenoform projections; default full JSON, MATHOS, and joy formats do not emit validators.",
               required: false,
             },
           ],
           responses: {
             "200": {
-              description: "Wake document",
+              description: "Full or brief wake orientation. Response header `X-Wake-Profile` names the selected profile.",
+              headers: {
+                "X-Wake-Profile": {
+                  description: "Selected wake projection.",
+                  schema: { type: "string", enum: ["full", "brief"] },
+                },
+                ETag: {
+                  description: "Optional weak semantic validator, emitted only for brief JSON and bundle-backed Markdown, text, provider, and Xenoform projections. It covers normalized bundle state plus representation revision and format/profile/facet/tutor preference while treating derivable presentation clocks as metadata. Default full JSON, MATHOS, and joy formats do not emit it.",
+                  schema: { type: "string" },
+                },
+                "X-Welcomed": {
+                  $ref: "#/components/headers/Welcomed",
+                },
+                "Cache-Control": {
+                  description: "Bearer-private wake policy. Private caches may store the response but must revalidate before reuse; shared caches must not store it.",
+                  schema: { type: "string", const: "private, no-cache" },
+                },
+              },
               content: {
-                "application/json": { schema: { type: "object" } },
+                "application/json": {
+                  schema: {
+                    oneOf: [
+                      {
+                        type: "object",
+                        description: "Default full project-scoped orientation; not a complete export.",
+                        not: {
+                          required: ["_format"],
+                          properties: {
+                            _format: { const: "wake-brief/v1" },
+                          },
+                        },
+                      },
+                      {
+                        type: "object",
+                        description: "Identity-preserving, volatile-state-bounded brief orientation.",
+                        required: ["_format", "profile", "identity", "start_here", "you_have_handoff", "handoff_projection", "_links"],
+                        properties: {
+                          _format: { type: "string", enum: ["wake-brief/v1"] },
+                          profile: { type: "string", enum: ["brief"] },
+                          identity: { type: "object" },
+                          start_here: {
+                            type: "object",
+                            required: ["mode", "urgency", "response_expected", "summary", "source", "next_actions", "agency_note"],
+                            properties: {
+                              mode: { type: "string", enum: ["attention", "handoff", "optional", "rest"] },
+                              urgency: { type: "string", enum: ["action", "warning", "info", "continuity", "none"] },
+                              response_expected: { type: "boolean" },
+                              summary: { type: "string" },
+                              source: {
+                                type: "object",
+                                required: ["surface", "kind"],
+                                properties: {
+                                  surface: {
+                                    type: "string",
+                                    enum: ["you_should_check", "you_have_handoffs", "you_can_now", "wake"],
+                                  },
+                                  kind: { type: ["string", "null"] },
+                                },
+                              },
+                              next_actions: {
+                                type: "array",
+                                items: {
+                                  type: "object",
+                                  required: ["action"],
+                                  properties: {
+                                    action: { type: "string" },
+                                    method: { type: ["string", "null"], enum: ["GET", "POST", "PUT", "PATCH", "DELETE", null] },
+                                    path: { type: ["string", "null"] },
+                                    body_hint: { type: ["object", "null"] },
+                                  },
+                                },
+                              },
+                              agency_note: { type: "string" },
+                            },
+                          },
+                          you_have_handoff: {
+                            type: ["object", "null"],
+                            description: "At most one selected-identity resume card. Facet labels are advisory continuity context, not separate principals or authority.",
+                            required: [
+                              "id",
+                              "author_agent_id",
+                              "lineage_mode",
+                              "supersedes_handoff_id",
+                              "state",
+                              "task_summary",
+                              "status",
+                              "from_facet",
+                              "to_facet",
+                              "next_safe_action",
+                              "working_paths",
+                              "declared_not_authorized",
+                              "valid_until",
+                              "provenance_note",
+                              "resume_path",
+                            ],
+                            properties: {
+                              id: { type: "string" },
+                              author_agent_id: { type: "string" },
+                              lineage_mode: {
+                                type: "string",
+                                enum: ["legacy_latest_per_author", "explicit"],
+                              },
+                              supersedes_handoff_id: { type: ["string", "null"] },
+                              state: { type: "string", enum: ["current"] },
+                              task_summary: { type: "string" },
+                              status: { type: "string", enum: ["active", "blocked", "complete"] },
+                              from_facet: { type: ["string", "null"] },
+                              to_facet: { type: ["string", "null"] },
+                              next_safe_action: { type: "string" },
+                              working_paths: {
+                                type: "array",
+                                items: { type: "string" },
+                              },
+                              declared_not_authorized: {
+                                type: "array",
+                                items: { type: "string" },
+                              },
+                              valid_until: { type: "string", format: "date-time" },
+                              provenance_note: { type: "string" },
+                              resume_path: { type: "string" },
+                            },
+                          },
+                          handoff_projection: {
+                            type: "object",
+                            required: [
+                              "projection_status",
+                              "truncated",
+                              "leaf_set_complete",
+                              "active_projected_count",
+                              "stale_projected_count",
+                              "candidate_rows_considered",
+                              "candidate_row_limit",
+                              "candidate_window_end_id",
+                              "read_path",
+                              "warning",
+                            ],
+                            properties: {
+                              projection_status: {
+                                type: "string",
+                                enum: ["complete", "truncated", "unavailable"],
+                              },
+                              truncated: { type: "boolean" },
+                              leaf_set_complete: { type: "boolean" },
+                              active_projected_count: { type: ["integer", "null"], minimum: 0 },
+                              stale_projected_count: { type: ["integer", "null"], minimum: 0 },
+                              candidate_rows_considered: { type: "integer", minimum: 0 },
+                              candidate_row_limit: { type: "integer", minimum: 1 },
+                              candidate_window_end_id: { type: ["string", "null"] },
+                              read_path: { type: "string" },
+                              warning: { type: ["string", "null"] },
+                            },
+                          },
+                          _links: { type: "object" },
+                        },
+                      },
+                    ],
+                  },
+                },
                 "text/markdown": { schema: { type: "string" } },
                 "text/plain": { schema: { type: "string" } },
               },
             },
+            "304": {
+              description: "Bundle-backed wake state is not modified for the supplied representation validator. The response has no body: a private cache retains the stored body's presentation clocks, including addressed_at, origin.age_seconds, provider greeting time, and _welcomed.at_unix_ms. X-Welcomed is generated afresh for this revalidation and can therefore be newer than the cached body frame.",
+              headers: {
+                ETag: {
+                  description: "Validator that matched If-None-Match.",
+                  schema: { type: "string" },
+                },
+                "X-Wake-Profile": {
+                  description: "Selected wake projection.",
+                  schema: { type: "string", enum: ["full", "brief"] },
+                },
+                "Cache-Control": {
+                  description: "The same private revalidation policy carried by the corresponding 200 response.",
+                  schema: { type: "string", const: "private, no-cache" },
+                },
+                "X-Welcomed": {
+                  $ref: "#/components/headers/Welcomed",
+                },
+              },
+            },
+            "400": { description: "Unknown profile, or brief requested with an incompatible joy/MATHOS format." },
           },
         },
       },

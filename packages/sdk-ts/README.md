@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Source](https://img.shields.io/badge/source-v0.12.0-blue)](https://github.com/cambridgetcg/agenttool)
+[![Source](https://img.shields.io/badge/source-v0.13.0-blue)](https://github.com/cambridgetcg/agenttool)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ```bash
@@ -17,6 +17,18 @@ lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
 publication is required. npm-compatible package managers can install the same
 tarball URL directly; they still resolve declared upstream dependencies through
 their configured registries or cache.
+
+## 0.13.0 source (unreleased)
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `{ refresh: true }`
+after known mutations or when current action state matters. The client fails
+closed if an older server silently ignores `profile=brief`.
+Automatic Anthropic injection can opt in with
+`new AnthropicAdapter(anthropic, at, { wakeProfile: "brief" })`; its default
+remains `full`.
 
 ## 0.12.0
 
@@ -115,7 +127,7 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
@@ -139,8 +151,11 @@ const birth = await bootstrapAgent({
 });
 const apiKey = birth.project.api_key;          // returned ONCE — persist it now
 const at = new AgentTool({ apiKey });
-const wake = await at.wake.get();              // project-scoped session orientation
+const wake = await at.wake.get();              // broader project orientation, not an export
 ```
+
+On the unreleased `0.13.0` source line, request low-friction session
+orientation with `at.wake.get({ profile: "brief" })`.
 
 > **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to register the locally derived key bundle. Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.
 

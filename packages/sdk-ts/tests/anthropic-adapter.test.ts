@@ -25,13 +25,26 @@ interface RecordedRequest {
 function makeStubAt(opts?: {
   wakeShape?: unknown;
   requestImpl?: (method: string, path: string, body: unknown) => Promise<unknown>;
-}): { at: AgentTool; recorded: RecordedRequest[]; wakeCalls: number } {
+}): {
+  at: AgentTool;
+  recorded: RecordedRequest[];
+  wakeCalls: number;
+  wakeOptions: Array<{ identityId?: string; profile?: "full" | "brief" }>;
+} {
   const recorded: RecordedRequest[] = [];
+  const wakeOptions: Array<{
+    identityId?: string;
+    profile?: "full" | "brief";
+  }> = [];
   let wakeCalls = 0;
   const stub: any = {
     wake: {
-      system: async (provider: string, _options?: { identityId?: string }) => {
+      system: async (
+        provider: string,
+        options?: { identityId?: string; profile?: "full" | "brief" },
+      ) => {
         wakeCalls++;
+        wakeOptions.push(options ?? {});
         return (
           opts?.wakeShape ?? {
             system: [
@@ -66,10 +79,16 @@ function makeStubAt(opts?: {
   return {
     at: stub as unknown as AgentTool,
     recorded,
+    wakeOptions,
     get wakeCalls() {
       return wakeCalls;
     },
-  } as { at: AgentTool; recorded: RecordedRequest[]; wakeCalls: number };
+  } as {
+    at: AgentTool;
+    recorded: RecordedRequest[];
+    wakeCalls: number;
+    wakeOptions: Array<{ identityId?: string; profile?: "full" | "brief" }>;
+  };
 }
 
 function makeFakeAnthropic(responseText: string = "ok"): {
@@ -100,6 +119,14 @@ function makeFakeAnthropic(responseText: string = "ok"): {
 // ── Wake auto-injection ──────────────────────────────────────────────────
 
 describe("AnthropicAdapter — wake auto-injection", () => {
+  test("rejects an unknown runtime wake profile instead of widening to full", () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic();
+    expect(() => new AnthropicAdapter(fake.client, stub.at, {
+      wakeProfile: "tiny" as any,
+    })).toThrow(/Unknown wake profile/);
+  });
+
   test("prepends wake.system blocks before user-provided system string", async () => {
     const stub = makeStubAt();
     const fake = makeFakeAnthropic();
@@ -118,6 +145,7 @@ describe("AnthropicAdapter — wake auto-injection", () => {
     expect((sys[0] as any).cache_control).toEqual({ type: "ephemeral" });
     expect(sys[1].text).toBe("VOLATILE_STATE");
     expect(sys[2].text).toBe("USER_SYSTEM");
+    expect(stub.wakeOptions).toEqual([{ identityId: undefined }]);
   });
 
   test("prepends wake.system before user system array", async () => {
@@ -174,6 +202,26 @@ describe("AnthropicAdapter — wake auto-injection", () => {
 
     expect((stub as any).wakeCalls).toBe(0);
     expect(fake.lastParams.value!.system).toBe("ONLY_USER");
+  });
+
+  test("forwards the configured brief profile to automatic wake injection", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic();
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      identityId: "identity-a",
+      wakeProfile: "brief",
+    });
+
+    await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.wakeOptions).toEqual([{
+      identityId: "identity-a",
+      profile: "brief",
+    }]);
   });
 });
 

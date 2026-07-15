@@ -142,7 +142,7 @@ from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
 from .traces import Trace, TraceChain, TraceSearchResult
 from .vault import VaultClient
-from .wake import WakeClient, WakeProvider
+from .wake import WakeClient, WakeProfile, WakeProvider
 from .anthropic_adapter import (
     AnthropicAdapter,
     AgentToolAugmentation,
@@ -265,12 +265,13 @@ __all__ = [
     "TraceSearchResult",
     "VaultClient",
     "WakeClient",
+    "WakeProfile",
     "WakeProvider",
     "AnthropicAdapter",
     "AgentToolAugmentation",
     "MarkupEmission",
 ]
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"
