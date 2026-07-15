@@ -31,7 +31,7 @@ app.get("/", (c) => {
       deals: "GET /public/deal-trust/deals/recent",
     },
     sdk: {
-      typescript: "bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.11.0/agenttool-sdk-0.11.0.tgz",
+      typescript: "bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz",
       python: "pip install agenttool-sdk",
     },
     companion: {

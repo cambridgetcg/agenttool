@@ -11,15 +11,29 @@
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.11.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
 ```
+
+## 0.12.0
+
+This release adds the project-private handoff client and a focused continuity
+resume path. `handoff.write(...)` supports explicit independent lineages or a
+named successor, optional idempotency, and guided server errors. A successful
+write clears the client's wake cache. `handoff.resume()` always makes an
+uncached read and returns `projection_status`, `truncated`, and
+`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
+complete empty working set. Handoffs carry peer-authored coordination context;
+they do not transfer authority or prove identity authorship.
+
+This checkout is the 0.12.0 release source. The source-tag command above pins
+that exact checkout. `pip install agenttool-sdk` instead installs the latest
+version present in the configured index; registry publication is separate and
+must be checked independently.
 
 ## 0.11.0
 
-This checkout is the 0.11.0 release source. The source-tag command above pins
-that exact checkout. `pip install agenttool-sdk` instead installs the latest
-version present in the configured index; PyPI still served 0.10.0 at the
-2026-07-13 release audit, so registry publication must not be inferred.
+This was the 0.11.0 release source. PyPI still served 0.10.0 at the
+2026-07-13 release audit, so source and registry publication were distinct.
 
 This breaking minor release repairs the identity wire contract. Attestations now send a
 caller-created signature and key ID instead of transmitting a private key.
