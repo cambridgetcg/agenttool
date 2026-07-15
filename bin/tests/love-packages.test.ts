@@ -16,6 +16,7 @@ import {
 } from "../build-love-packages";
 
 const cleanup: string[] = [];
+const REPO_ROOT = join(import.meta.dir, "../..");
 
 async function run(command: string[], cwd: string): Promise<void> {
   const child = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
@@ -106,11 +107,51 @@ describe("LOVE Package release inventory", () => {
   test("pins the current immutable package release batch", () => {
     expect(LOVE_PACKAGE_PROTOCOL).toBe("love-package/v1");
     expect(LOVE_PACKAGES.map(({ name, version, releaseTag }) => ({ name, version, releaseTag }))).toEqual([
-      { name: "@agenttool/adds", version: "0.2.0", releaseTag: "adds-v0.2.0" },
-      { name: "@agenttool/data", version: "0.3.0", releaseTag: "data-v0.3.0" },
-      { name: "@agenttool/data-sync", version: "0.1.0", releaseTag: "data-sync-v0.1.0" },
-      { name: "@agenttool/sdk", version: "0.12.0", releaseTag: "sdk-v0.12.0" },
+      { name: "@agenttool/adds", version: "0.2.1", releaseTag: "adds-v0.2.1" },
+      { name: "@agenttool/data", version: "0.3.1", releaseTag: "data-v0.3.1" },
+      { name: "@agenttool/data-sync", version: "0.1.1", releaseTag: "data-sync-v0.1.1" },
+      { name: "@agenttool/sdk", version: "0.13.0", releaseTag: "sdk-v0.13.0" },
     ]);
+  });
+
+  test("current releases carry their declared Apache-2.0 terms", async () => {
+    const canonicalLicense = await readFile(join(REPO_ROOT, "LICENSE"));
+
+    for (const spec of LOVE_PACKAGES) {
+      const packageNotice = await readFile(join(REPO_ROOT, spec.packagePath, "NOTICE"));
+      const slug = spec.name.slice("@agenttool/".length);
+      const releaseRoot = join(
+        REPO_ROOT,
+        "apps/docs/packages/v1/@agenttool",
+        slug,
+        spec.version,
+      );
+      const manifest = JSON.parse(
+        await readFile(join(releaseRoot, "manifest.json"), "utf8"),
+      ) as {
+        artifact: { filename: string };
+        license: string | null;
+      };
+      const archive = inspectNpmTarball(
+        await readFile(join(releaseRoot, manifest.artifact.filename)),
+      );
+
+      expect(manifest.license, `${spec.name}@${spec.version} manifest`).toBe("Apache-2.0");
+      expect(archive.packageJson.license, `${spec.name}@${spec.version} package.json`).toBe(
+        "Apache-2.0",
+      );
+      expect(archive.paths, `${spec.name}@${spec.version} LICENSE`).toContain("package/LICENSE");
+      expect(archive.paths, `${spec.name}@${spec.version} NOTICE`).toContain("package/NOTICE");
+      expect(archive.legalFiles.license, `${spec.name}@${spec.version} LICENSE bytes`).toEqual(
+        canonicalLicense,
+      );
+      expect(archive.legalFiles.notice, `${spec.name}@${spec.version} NOTICE bytes`).toEqual(
+        packageNotice,
+      );
+      expect(await readFile(join(REPO_ROOT, spec.packagePath, "LICENSE"))).toEqual(
+        canonicalLicense,
+      );
+    }
   });
 });
 

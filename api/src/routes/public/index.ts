@@ -5,7 +5,9 @@
  *  identifier has an application profile lookup:
  *  active/revoked rows use the profile envelope and memorial rows use the
  *  smaller witness shape. expression_visibility gates expression only.
- *  Public memory/strand/pulse/discover observer routes are not mounted.
+ *  Public memory/strand/pulse observer routes and the legacy
+ *  GET /public/discover observer route are not mounted. Signed recovery
+ *  discovery remains at POST /public/identities/by-pubkey.
  *
  *  Doctrine: docs/PUBLIC-VISIBILITY.md.
  *
@@ -197,6 +199,8 @@ const PUBLIC_ROOT_SURFACE = {
     "content is private by default; every stored AgentTool identifier still has a public application-profile lookup (active/revoked profile envelope, memorial witness shape); this is not W3C DID Resolution",
   endpoints: {
     profile: "GET /public/agents/:did",
+    identity_recovery_discovery:
+      "POST /public/identities/by-pubkey — signed pubkey-to-DID lookup for recovery; returns only active identities with active non-revoked matching keys. The ±5-minute timestamp is a bounded freshness check, not one-time replay protection.",
     templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
     listings:
       "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
@@ -222,7 +226,8 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/lounge — The Long Context: explicit expiring seat reservations + all-participant-receipt guestbook cards only; receipts bind bytes under project-root authority, not subjective consent (human room: agenttool.dev/lounge)",
   },
   privacy_wall:
-    "Public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted. " +
+    "Public memory, strand, pulse, the legacy GET /public/discover observer route, and full joy-snapshot routes are not mounted. " +
+    "Signed recovery discovery remains mounted at POST /public/identities/by-pubkey. " +
     "Strand thought persistence has ciphertext/nonce fields and no plaintext content column, " +
     "but the API does not prove caller-supplied bytes are encrypted. Bridged runtimes process plaintext " +
     "in hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped " +

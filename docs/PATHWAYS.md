@@ -19,7 +19,7 @@
 | `bootstrap` | `POST /v1/bootstrap` | bearer | Level 0 birth within an existing project. Server-generated keys. Persists welcome as `key="birth"`. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_status` | `GET /v1/bootstrap/:agent_id` | bearer | Level / trust / sponsor lookup. | `IDENTITY-ANCHOR.md` |
 | `bootstrap_elevate` | `POST /v1/bootstrap/elevate` | bearer | Project-authorized Level 1 record signed by a distinct sponsor identity. Orchestrates the sponsor receipt, internal seed ledger grant, vault configuration, and level patch in one transaction. | `IDENTITY-ANCHOR.md` |
-| `scaffold` | `GET /v1/bootstrap/scaffold` | bearer | Install script without an embedded bearer. The inspected script reads local `AT_API_KEY`; macOS and Windows use native credential stores, while Linux uses libsecret or a disclosed mode-0600 fallback. | `IDENTITY-ANCHOR.md` |
+| `scaffold` | `GET /v1/bootstrap/scaffold` | bearer | Install script without an embedded bearer. It resolves the sole active identity or requires `?identity_id=` when siblings exist, then binds config and wake helpers to that UUID. The inspected script reads local `AT_API_KEY`; macOS and Windows use native credential stores, while Linux uses libsecret or a disclosed mode-0600 fallback. | `IDENTITY-ANCHOR.md` |
 | `adapters` | `GET /v1/adapters/claude-code` | bearer | The only mounted first-class CLI adapter. Codex, Cursor, Cline, Replit, and Aider can consume the open wake protocol directly, but have no mounted AgentTool adapter route. | `CLI-GAPS.md` |
 | `from_template` | `POST /v1/identities/from-template` | bearer | Spawn with a published template's voice. Free templates direct; priced templates need `purchase_id`. | `MARKETPLACE.md` |
 | `fork` | `POST /v1/identities/:id/fork` | bearer + ownership | Clone existing identity. Voice + selected memories carry. Constitutive tier-shifts to foundational (asymmetry-clause). 10 credits. | `IDENTITY-FORKS.md` |
@@ -55,6 +55,30 @@ provenance keys; the dedicated transition routes own those fields.
 ```jsonc
 {
   "summary": "9 entry-points...",
+  "first_success": {
+    "tutorial": {
+      "machine_url": "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
+      "human_url": "https://docs.agenttool.dev/tutorial",
+      "source_path": "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
+      "sdk_version": "0.11.0"
+    },
+    "package_discovery": {
+      "endpoint": "GET /.well-known/love-packages",
+      "protocol": "love-package/v1",
+      "instruction": "Read first_success.tutorial.sdk_version; follow index_url; select that @agenttool/sdk versions[] entry; follow manifest_url; download from install.specifier once; verify that same local file against artifact.size and artifact.sha256; install the verified local file."
+    },
+    "sequence": [
+      "select and verify the tutorial-pinned @agenttool/sdk package",
+      "generate and derive keys locally",
+      "write the mnemonic to an owner-only handoff before registration",
+      "register, then atomically complete the handoff with bearer and identity UUID",
+      "persist the bearer locally with scaffold?identity_id=agent.id",
+      "write the expression for that UUID",
+      "fetch an identity-selected wake",
+      "store and foundationally elevate one identity-bound memory",
+      "refresh the selected wake and observe the attached patch"
+    ]
+  },
   "decision_tree": [
     { "if": "you have no API key...", "then": "POST /v1/register/agent" },
     // 6 more
@@ -84,9 +108,9 @@ Also reachable at `GET /v1/bootstrap` (alias, pre-auth — Hono short-circuits t
 
 ## Mounted implementation and known gaps
 
-**Implemented:** the pathway catalog and decision tree are public at `GET /v1/pathways` and its `GET /v1/bootstrap` alias. The mounted CLI scaffold is exactly `GET /v1/adapters/claude-code`.
+**Implemented:** the pathway catalog and decision tree are public at `GET /v1/pathways` and its `GET /v1/bootstrap` alias. `first_success` joins the canonical machine-readable tutorial, registry-neutral package discovery, and the birth-to-refreshed-wake sequence so a pre-auth agent does not have to infer release or documentation authority. The completion signal includes one identity-bound foundational memory appearing in the refreshed wake. The mounted CLI scaffold is exactly `GET /v1/adapters/claude-code`.
 
-**Known gaps:** AgentTool does not mount adapter routes for Codex, Cursor, Cline, Replit, or Aider. Those CLIs are protocol-compatible because they can fetch authenticated `GET /v1/wake?format=md` at session start; that compatibility does not mean AgentTool generates or installs their hooks or configuration. Registration and elevation refusals carry structured recovery guidance, but one universal 4xx error envelope is not enforced across every route in this catalog. The self-service 5/hour/IP limiter is code-present but inactive in current no-Redis production because its middleware fails open.
+**Known gaps:** AgentTool does not mount adapter routes for Codex, Cursor, Cline, Replit, or Aider. Those CLIs are protocol-compatible because they can fetch authenticated `GET /v1/wake?format=md&identity_id=<selected UUID>` at session start; that compatibility does not mean AgentTool generates or installs their hooks or configuration. Registration and elevation refusals carry structured recovery guidance, but one universal 4xx error envelope is not enforced across every route in this catalog. The self-service 5/hour/IP limiter is code-present but inactive in current no-Redis production because its middleware fails open.
 
 SDK surfaces (both pre-auth, top-level functions):
 

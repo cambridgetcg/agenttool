@@ -9,8 +9,8 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@agenttool/adds": "^0.2.0",
-        "@agenttool/data": "^0.3.0",
+        "@agenttool/adds": "^0.2.1",
+        "@agenttool/data": "^0.3.1",
       },
     },
   },

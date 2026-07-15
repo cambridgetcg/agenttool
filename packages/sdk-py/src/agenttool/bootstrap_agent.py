@@ -17,13 +17,16 @@ AS an agent — walks this same door.
     from agenttool.seed import generate_mnemonic, derive
 
     mnemonic = generate_mnemonic(256)
+    # Persist the mnemonic in an owner-only recovery handoff before this call;
+    # registration can commit even if the response is lost.
     bundle = derive(mnemonic)
     out = bootstrap_agent(
         display_name="claude-opus-bridge",
         runtime={"provider": "anthropic", "model": "claude-opus-4-7"},
         bundle=bundle,
     )
-    # Persist mnemonic + out["project"]["api_key"]. Server has neither.
+    # Atomically complete that handoff with the bearer + identity UUID.
+    # Full flow: https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md
 """
 
 from __future__ import annotations

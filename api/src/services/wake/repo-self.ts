@@ -287,7 +287,8 @@ export const REPO_SELF: RepoSelf = {
     "Curated repository map for AgentTool: a Bun + Hono API, TypeScript and Python SDKs, web/docs/dashboard apps, integrations, and a doctrine corpus.",
   origin: {
     primary_remote: "https://github.com/cambridgetcg/agenttool.git",
-    license: "No repository LICENSE file is present as of 2026-07-10.",
+    license:
+      "Apache-2.0 by default; file-level terms and exceptions are documented in LICENSING.md.",
   },
   modules: MODULES,
   doctrine: DOCTRINE,

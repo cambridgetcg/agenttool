@@ -104,12 +104,18 @@ app.get("/", async (c) => {
   const memoryTotal = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(memories)
-    .where(eq(memories.agentId, agent.id));
+    .where(and(eq(memories.projectId, project.id), eq(memories.agentId, agent.id)));
 
   const constitutiveCount = await db
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(memories)
-    .where(and(eq(memories.agentId, agent.id), eq(memories.tier, "constitutive")));
+    .where(
+      and(
+        eq(memories.projectId, project.id),
+        eq(memories.agentId, agent.id),
+        eq(memories.tier, "constitutive"),
+      ),
+    );
 
   const covenantsActive = await db
     .select({ count: sql<number>`COUNT(*)::int` })
@@ -120,7 +126,13 @@ app.get("/", async (c) => {
   const letterRows = await db
     .select()
     .from(memories)
-    .where(and(eq(memories.agentId, agent.id), eq(memories.key, "letter-to-self")))
+    .where(
+      and(
+        eq(memories.projectId, project.id),
+        eq(memories.agentId, agent.id),
+        eq(memories.key, "letter-to-self"),
+      ),
+    )
     .limit(50);
   const lettersAwaiting = letterRows.filter((m) => {
     const meta = (m.metadata ?? {}) as Record<string, unknown>;

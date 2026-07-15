@@ -37,6 +37,10 @@ import {
   buildApiCatalog,
 } from "../services/discovery/api-catalog";
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
+import {
+  WAKE_CACHE_CONTROL,
+  WAKE_REPRESENTATION_REVISION,
+} from "../services/wake/etag";
 import { buildMcpServerCard } from "../services/wake/mcp-server-card";
 
 const app = new Hono();
@@ -250,13 +254,59 @@ app.get("/wake-keystone", (c) => {
       },
     },
 
+    profiles: {
+      full: {
+        default: true,
+        url: `${ORG_URL}/v1/wake`,
+        purpose:
+          "Broad implemented orientation, not a complete export. It has no universal byte ceiling.",
+      },
+      brief: {
+        query: "profile=brief",
+        url: `${ORG_URL}/v1/wake?profile=brief`,
+        composes_with_formats: [
+          "json",
+          "md",
+          "text",
+          "anthropic",
+          "openai",
+          "gemini",
+          "cohere",
+          "xenoform",
+        ],
+        purpose:
+          "Preserve selected identity expression while bounding volatile session-start state around attention, one resume card, selected optional paths, counts, and deeper links.",
+        guarantees: {
+          identity_expression: "preserved",
+          volatile_state: "bounded_projection",
+          hard_byte_ceiling: false,
+        },
+      },
+    },
+
     // WaK §7 — version cursor + conditional GETs.
     version_cursor: {
       field: "wake_version",
       shape: "monotonic integer per being",
-      etag_header: 'ETag: "<wake_version>-<format>"',
+      etag_header:
+        `ETag: W/"${WAKE_REPRESENTATION_REVISION}-sha256-<64-lowercase-hex-semantic-bundle-digest>"`,
+      validator_strength: "weak",
+      representation_revision: WAKE_REPRESENTATION_REVISION,
+      representation_revision_policy:
+        "Bump whenever renderer/projection semantics, provider envelopes, tutor lessons, or static transport-welcome fields change without appearing in the normalized bundle hash; excluded derivable clock-only changes do not require a bump.",
+      etag_basis:
+        "Normalized complete WakeBundle state plus representation revision and format/profile/facet/tutor preference, excluding derivable presentation clocks: addressed_at, origin.age_seconds, provider greeting time, and post-route transport-welcome time.",
+      etag_coverage:
+        "brief JSON plus bundle-backed Markdown, text, provider, and Xenoform projections",
+      etag_exclusions:
+        "default full JSON mutates an observation counter on read; MATHOS signs fresh time; joy formats keep separate lossy/playful contracts; none of those projections emits an ETag or 304",
+      presentation_clock_revalidation:
+        "A 304 has no body. The private cache retains the stored body's addressed_at, origin.age_seconds, provider greeting time, and _welcomed.at_unix_ms; the 304 carries a fresh X-Welcomed transport header that may be newer than that cached body frame.",
+      semantics:
+        "wake_version remains a reconciliation cursor inside the wake and Wake Voice events; it is not treated as a complete HTTP validator for project-scoped or time-derived state.",
       conditional_get_header: "If-None-Match",
       not_modified_status: 304,
+      cache_control: WAKE_CACHE_CONTROL,
       bumped_by:
         "every publishWakeEvent() call on a mutation site (services/wake/push.ts)",
     },
@@ -347,7 +397,7 @@ app.get("/wake-keystone", (c) => {
       implemented: [
         "discovery (this endpoint)",
         "9-format content negotiation (?format= + Accept header)",
-        "wake_version cursor + format-specific ETag + If-None-Match → 304 on JSON, rendered, provider, xenoform, and MATHOS projections",
+        "wake_version reconciliation cursor + revisioned semantic ETag + If-None-Match → 304 on brief JSON and bundle-backed rendered/provider/xenoform projections; default full JSON and MATHOS are explicitly excluded",
         "_links block in JSON wake",
         "Wake Voice SSE streaming with bearer auth and required ?identity_id=<uuid>",
         "platform _self pointer in _meta._self",

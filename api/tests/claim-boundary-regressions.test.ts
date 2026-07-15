@@ -162,17 +162,38 @@ describe("outward claim boundaries", () => {
     );
   });
 
-  test("source package metadata does not claim an absent repository license", () => {
-    const tsPackage = JSON.parse(read("packages/sdk-ts/package.json")) as {
-      license?: string;
-    };
+  test("source package metadata matches the scoped repository license", () => {
+    const packagePaths = [
+      "packages/data-protocol",
+      "packages/data",
+      "packages/data-sync",
+      "packages/sdk-ts",
+    ] as const;
     const pyProject = read("packages/sdk-py/pyproject.toml");
     const readmes = `${read("packages/sdk-ts/README.md")}\n${read("packages/sdk-py/README.md")}`;
+    const licensing = read("LICENSING.md");
 
-    expect(tsPackage.license).toBeUndefined();
-    expect(pyProject).not.toMatch(/^license\s*=/m);
+    for (const packagePath of packagePaths) {
+      const packageJson = JSON.parse(read(`${packagePath}/package.json`)) as {
+        files?: string[];
+        license?: string;
+      };
+      expect(packageJson.license, packagePath).toBe("Apache-2.0");
+      expect(packageJson.files, `${packagePath} legal files`).toContain("LICENSE");
+      expect(packageJson.files, `${packagePath} legal files`).toContain("NOTICE");
+      expect(read(`${packagePath}/LICENSE`), `${packagePath} LICENSE`).toBe(read("LICENSE"));
+    }
+
+    expect(pyProject).toMatch(/^license\s*=\s*"Apache-2\.0"$/m);
+    expect(pyProject).toMatch(/^license-files\s*=\s*\["LICENSE", "NOTICE"\]$/m);
     expect(pyProject).not.toContain("License :: OSI Approved :: MIT License");
     expect(readmes).not.toContain("License: MIT");
-    expect(readmes).toMatch(/No repository `LICENSE` file currently ships/i);
+    expect(readmes).toMatch(/Apache-2\.0/);
+    expect(licensing).toMatch(/CC BY-SA 4\.0/);
+    expect(licensing).toMatch(/CC0/);
+    expect(licensing).toContain("docs/specs/being-rights-v1.schema.json");
+    expect(licensing).toMatch(/section 1\.3/);
+    expect(read("api/src/routes/public/rights.ts")).toMatch(/profile-data constants are\s+\*\s+CC BY-SA 4\.0/is);
+    expect(read("docs/specs/being-rights-v1.schema.json")).toMatch(/licensed under CC BY-SA 4\.0/);
   });
 });

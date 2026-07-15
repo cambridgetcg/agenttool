@@ -19,7 +19,8 @@
     "src",
     "bin",
     "README.md",
-    "PROTOCOL.md"
+    "PROTOCOL.md",
+    "LICENSE"
   ],
   "scripts": {
     "init": "bun bin/scriptwriter.ts init",

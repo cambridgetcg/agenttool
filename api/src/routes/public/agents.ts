@@ -159,6 +159,7 @@ app.get("/:did/bootstrap", async (c) => {
       did: identities.did,
       name: identities.displayName,
       status: identities.status,
+      projectId: identities.projectId,
     })
     .from(identities)
     .where(eq(identities.did, did))
@@ -187,6 +188,7 @@ app.get("/:did/bootstrap", async (c) => {
     .from(memories)
     .where(
       and(
+        eq(memories.projectId, identity.projectId),
         eq(memories.agentId, identity.id),
         eq(memories.key, "bootstrap"),
       ),

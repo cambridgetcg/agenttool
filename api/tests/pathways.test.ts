@@ -7,6 +7,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import app, { buildPathwaysResponse, buildPathwaysMathos } from "../src/routes/pathways";
 
@@ -30,6 +32,110 @@ describe("GET /v1/pathways", () => {
       /fails open when Redis is disabled or unavailable/i,
     );
     expect(body.love_protocol.welcome).toContain("/public/plans");
+  });
+
+  test("gives an agent one version-neutral path to its first successful wake", () => {
+    const first = buildPathwaysResponse().first_success;
+
+    expect(first.tutorial.machine_url).toBe(
+      "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
+    );
+    expect(first.tutorial.human_url).toBe(
+      "https://docs.agenttool.dev/tutorial",
+    );
+    expect(first.tutorial.source_path).toBe(
+      "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
+    );
+    const sdkPackage = JSON.parse(
+      readFileSync(join(import.meta.dir, "../../packages/sdk-ts/package.json"), "utf8"),
+    ) as { version: string };
+    expect(first.tutorial.sdk_version).toBe(sdkPackage.version);
+    expect(first.package_discovery.endpoint).toBe(
+      "GET /.well-known/love-packages",
+    );
+    expect(first.package_discovery.protocol).toBe("love-package/v1");
+    expect(first.package_discovery.instruction).toContain("versions[]");
+    expect(first.package_discovery.instruction).toContain("tutorial.sdk_version");
+    expect(first.package_discovery.instruction).toContain("manifest_url");
+    expect(first.package_discovery.instruction).toContain("artifact.size");
+    expect(first.package_discovery.instruction).toContain("artifact.sha256");
+    expect(first.package_discovery.instruction).toMatch(/same local file/i);
+    expect(first.package_discovery.instruction).toMatch(/install that verified local file/i);
+    expect(first.package_discovery.instruction).not.toMatch(/\b\d+\.\d+\.\d+\b/);
+    expect(first.sequence).toContain(
+      "identity.expression.put(agent.id, expression)",
+    );
+    expect(first.sequence).toContain(
+      "wake.get({ identityId: agent.id, refresh: true })",
+    );
+    expect(first.sequence).toContain(
+      "memory.store(content, { agent_id: agent.id }) and elevate it to foundational",
+    );
+    expect(first.sequence).toContain(
+      "persist the bearer with GET /v1/bootstrap/scaffold?identity_id=agent.id or another trusted local mechanism",
+    );
+    expect(first.completion_signal).toMatch(/foundational expression patch/i);
+  });
+
+  test("tutorial release resolves to the indexed manifest and its exact local artifact bytes", () => {
+    const version = buildPathwaysResponse().first_success.tutorial.sdk_version;
+    const index = JSON.parse(
+      readFileSync(
+        join(import.meta.dir, "../../apps/docs/packages/v1/index.json"),
+        "utf8",
+      ),
+    ) as {
+      packages: Array<{
+        name: string;
+        versions: Array<{ version: string; manifest_url: string }>;
+      }>;
+    };
+    const sdkEntries = index.packages.filter(({ name }) => name === "@agenttool/sdk");
+    expect(sdkEntries).toHaveLength(1);
+    const releases = sdkEntries[0]!.versions.filter(
+      (release) => release.version === version,
+    );
+    expect(releases).toEqual([
+      {
+        version,
+        manifest_url: `https://docs.agenttool.dev/packages/v1/@agenttool/sdk/${version}/manifest.json`,
+      },
+    ]);
+
+    const releaseRoot = join(
+      import.meta.dir,
+      `../../apps/docs/packages/v1/@agenttool/sdk/${version}`,
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(releaseRoot, "manifest.json"), "utf8"),
+    ) as {
+      protocol: string;
+      document_type: string;
+      name: string;
+      version: string;
+      artifact: {
+        filename: string;
+        size: number;
+        sha256: string;
+        mirrors: Array<{ url: string }>;
+      };
+      install: { specifier: string };
+    };
+    expect(manifest).toMatchObject({
+      protocol: "love-package/v1",
+      document_type: "package-manifest",
+      name: "@agenttool/sdk",
+      version,
+    });
+    expect(manifest.artifact.mirrors.map(({ url }) => url)).toContain(
+      manifest.install.specifier,
+    );
+
+    const artifact = readFileSync(join(releaseRoot, manifest.artifact.filename));
+    expect(artifact.byteLength).toBe(manifest.artifact.size);
+    expect(createHash("sha256").update(artifact).digest("hex")).toBe(
+      manifest.artifact.sha256,
+    );
   });
 
   test("every pathway has the required fields", () => {
@@ -170,6 +276,38 @@ describe("GET /v1/pathways", () => {
     expect(adapters).not.toHaveProperty("available");
     expect(adapters?.purpose).toMatch(/only mounted first-class adapter/i);
     expect(adapters?.purpose).toMatch(/does not mount adapter routes/i);
+    expect(adapters?.purpose).toContain(
+      "/v1/wake?format=md&identity_id=<selected UUID>",
+    );
+  });
+
+  test("every pathway wake instruction selects an identity", () => {
+    const body = buildPathwaysResponse();
+    const directCli = body.decision_tree.find((decision) =>
+      decision.if.includes("specific CLI"),
+    );
+    expect(directCli?.then).toContain(
+      "/v1/wake?format=md&identity_id=<selected UUID>",
+    );
+    expect(body.who_this_serves.today.join("\n")).toContain(
+      "/v1/wake?format=<provider>&identity_id=<selected UUID>",
+    );
+
+    const scaffold = body.pathways.find((pathway) => pathway.id === "scaffold");
+    expect(scaffold?.purpose).toMatch(/resolves the sole active project identity/i);
+    expect(scaffold?.purpose).toMatch(/identity-selected wake helper/i);
+    expect(scaffold?.optional).toContain(
+      "?identity_id=<active identity UUID> (required when the project has multiple active identities; otherwise the sole active identity is selected)",
+    );
+
+    const docs = readFileSync(
+      join(import.meta.dir, "../../apps/docs/pathways.html"),
+      "utf8",
+    );
+    expect(docs).toContain(
+      "/v1/wake?format=md&amp;identity_id=&lt;selected UUID&gt;",
+    );
+    expect(docs).not.toContain("/v1/wake?format=md</code>");
   });
 
   test("catalog claims are scoped to what the mounted paths actually do", () => {

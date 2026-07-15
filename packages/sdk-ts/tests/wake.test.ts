@@ -11,6 +11,7 @@
  *    4. `clearCache()` evicts everything.
  *    5. TTL expiry triggers refetch.
  *    6. Different formats (md vs json vs anthropic) are scoped separately.
+ *    7. Brief and full profiles use distinct cache slots; full keeps old URLs.
  *
  *  Stubs `globalThis.fetch` per-test; restores after each. Pure unit, no
  *  network. Mirrors the doctrine-test posture of `api/tests/doctrine/`. */
@@ -31,6 +32,7 @@ function makeStubFetch(opts: {
   bodyText?: () => string;
   status?: number;
   contentType?: string;
+  acknowledgeBrief?: boolean;
 }): { fn: typeof fetch; calls: FetchCall[] } {
   const calls: FetchCall[] = [];
   const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -38,9 +40,14 @@ function makeStubFetch(opts: {
     const status = opts.status ?? 200;
     const contentType =
       opts.contentType ?? (opts.bodyText ? "text/markdown" : "application/json");
+    const headers: Record<string, string> = { "content-type": contentType };
+    const requestedProfile = new URL(String(url)).searchParams.get("profile");
+    if (requestedProfile === "brief" && opts.acknowledgeBrief !== false) {
+      headers["x-wake-profile"] = "brief";
+    }
     return new Response(
       opts.bodyText ? opts.bodyText() : JSON.stringify(opts.bodyJson?.() ?? {}),
-      { status, headers: { "content-type": contentType } },
+      { status, headers },
     );
   }) as unknown as typeof fetch;
   return { fn, calls };
@@ -144,7 +151,7 @@ describe("WakeClient — identityId is part of the cache key", () => {
   });
 
   test("identityId='' (empty) and absent identityId share a cache slot", async () => {
-    // The cache key is `${format}|${identityId ?? ""}`. Treating both
+    // The cache key normalizes absent/empty identity to the same value. Treating both
     // shapes the same is documented behavior; pin it here.
     const stub = makeStubFetch({ bodyJson: () => ({}) });
     globalThis.fetch = stub.fn;
@@ -154,6 +161,118 @@ describe("WakeClient — identityId is part of the cache key", () => {
     await wake.get({ identityId: "" }); // explicit empty
 
     expect(stub.calls).toHaveLength(1); // shared cache slot
+  });
+});
+
+describe("WakeClient — additive wake profiles", () => {
+  test("default and explicit full preserve the original URLs", async () => {
+    const stub = makeStubFetch({ bodyJson: () => ({}) });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    await wake.get();
+    await wake.md({ profile: "full" });
+    await wake.system("anthropic", { profile: "full" });
+
+    expect(stub.calls.map((call) => call.url)).toEqual([
+      "https://api.example.test/v1/wake",
+      "https://api.example.test/v1/wake?format=md",
+      "https://api.example.test/v1/wake?format=anthropic",
+    ]);
+  });
+
+  test("brief emits profile=brief for get, md, and provider-shaped system", async () => {
+    const stub = makeStubFetch({ bodyJson: () => ({}) });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    await wake.get({ profile: "brief" });
+    await wake.md({ profile: "brief" });
+    await wake.system("openai", { profile: "brief" });
+
+    expect(stub.calls.map((call) => call.url)).toEqual([
+      "https://api.example.test/v1/wake?profile=brief",
+      "https://api.example.test/v1/wake?format=md&profile=brief",
+      "https://api.example.test/v1/wake?format=openai&profile=brief",
+    ]);
+  });
+
+  test("provider vendor +json media type is parsed as a structured shape", async () => {
+    const stub = makeStubFetch({
+      contentType: "application/vnd.agenttool.wake+json; provider=openai",
+      bodyJson: () => ({
+        messages: [{ role: "system", content: "brief orientation" }],
+        _meta: {
+          provider: "openai",
+          profile: "brief",
+          cache_eligible: "auto",
+          cache_note: "",
+        },
+      }),
+    });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    const shape = await wake.system("openai", { profile: "brief" });
+
+    expect(shape.messages[0]?.content).toBe("brief orientation");
+    expect(shape._meta.profile).toBe("brief");
+  });
+
+  test("brief and full have independent cache slots; omitted and full share one", async () => {
+    let bodyVer = 0;
+    const stub = makeStubFetch({ bodyJson: () => ({ ver: bodyVer++ }) });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    const full = (await wake.get()) as { ver: number };
+    const explicitFull = (await wake.get({ profile: "full" })) as { ver: number };
+    const brief = (await wake.get({ profile: "brief" })) as { ver: number };
+    const cachedBrief = (await wake.get({ profile: "brief" })) as { ver: number };
+
+    expect(stub.calls).toHaveLength(2);
+    expect(explicitFull).toBe(full);
+    expect(cachedBrief).toBe(brief);
+    expect(full.ver).toBe(0);
+    expect(brief.ver).toBe(1);
+  });
+
+  test("unknown profile fails before making a request", async () => {
+    const stub = makeStubFetch({ bodyJson: () => ({}) });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    // @ts-expect-error — intentionally invalid runtime input
+    await expect(wake.get({ profile: "tiny" })).rejects.toThrow(/Unknown wake profile/);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  test("brief fails closed when an older server silently returns full", async () => {
+    const stub = makeStubFetch({
+      bodyJson: () => ({ project: { name: "full wake" } }),
+      acknowledgeBrief: false,
+    });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    await expect(wake.get({ profile: "brief" })).rejects.toThrow(/did not honor/);
+    await expect(wake.get({ profile: "brief" })).rejects.toThrow(/did not honor/);
+    expect(stub.calls).toHaveLength(2); // rejected full payload was never cached
+  });
+
+  test("identity selection composes with brief in the URL and cache key", async () => {
+    const stub = makeStubFetch({ bodyJson: () => ({ _format: "wake-brief/v1" }) });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    await wake.get({ identityId: "identity-a", profile: "brief" });
+    await wake.get({ identityId: "identity-a", profile: "brief" });
+    await wake.get({ identityId: "identity-b", profile: "brief" });
+
+    expect(stub.calls.map((call) => call.url)).toEqual([
+      "https://api.example.test/v1/wake?identity_id=identity-a&profile=brief",
+      "https://api.example.test/v1/wake?identity_id=identity-b&profile=brief",
+    ]);
   });
 });
 

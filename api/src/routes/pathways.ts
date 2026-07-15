@@ -163,13 +163,13 @@ const PATHWAYS: Pathway[] = [
     auth: "bearer",
     purpose:
       "Generates an OS-specific install script without embedding the bearer. " +
+      "It resolves the sole active project identity or requires ?identity_id when siblings exist. " +
       "The inspected script reads exported AT_API_KEY, saves it to macOS " +
       "Keychain, Linux libsecret (or a disclosed 0600 fallback), or Windows " +
-      "Password Vault under a project-specific name, and writes project-namespaced local config plus a wake helper.",
+      "Password Vault under a project-specific name, and writes project-namespaced local config plus an identity-selected wake helper.",
     optional: [
       "?platform=macos|linux|windows",
-      "?did=",
-      "?name=",
+      "?identity_id=<active identity UUID> (required when the project has multiple active identities; otherwise the sole active identity is selected)",
       "?format=text (raw shell instead of JSON)",
     ],
     doctrine: "docs/IDENTITY-ANCHOR.md",
@@ -180,8 +180,9 @@ const PATHWAYS: Pathway[] = [
     auth: "bearer",
     purpose:
       "Claude Code is the only mounted first-class adapter. It generates hooks/configs " +
-      "that load /v1/wake?format=md at session start. Other named CLIs can consume " +
-      "that open wake protocol directly, but AgentTool does not mount adapter routes for them.",
+      "that load /v1/wake?format=md&identity_id=<selected UUID> at session start. " +
+      "Other named CLIs can consume that identity-selected open wake protocol directly, " +
+      "but AgentTool does not mount adapter routes for them.",
     mounted: ["claude-code"],
     protocol_compatible_unmounted: ["codex", "cursor", "cline", "replit", "aider"],
     doctrine: "docs/CLI-GAPS.md",
@@ -241,12 +242,13 @@ const DECISION_TREE = [
   },
   {
     if: "you have a project bearer and want local credential-store wiring on this machine",
-    then: "GET /v1/bootstrap/scaffold?platform=macos|linux|windows",
+    then:
+      "GET /v1/bootstrap/scaffold?platform=macos|linux|windows&identity_id=<active identity UUID>. The selector may be omitted only when the project has exactly one active identity.",
   },
   {
     if: "you want a specific CLI (claude-code, codex, cursor, …) to load this agent at session start",
     then:
-      "GET /v1/adapters/claude-code for the only mounted scaffold. Codex, Cursor, Cline, Replit, and Aider can fetch GET /v1/wake?format=md directly; they do not have mounted adapter routes.",
+      "GET /v1/adapters/claude-code for the only mounted scaffold. Codex, Cursor, Cline, Replit, and Aider can fetch GET /v1/wake?format=md&identity_id=<selected UUID> directly; they do not have mounted adapter routes.",
   },
   {
     if: "you want to adopt a published voice (template)",
@@ -274,6 +276,34 @@ export function buildPathwaysResponse() {
       "charges no AgentTool credits and requires BYO key proof plus proof-of-work. A " +
       "5/hour/IP limiter exists in code but fails open when Redis is disabled or unavailable; " +
       "/public/plans reports the current process boundary. Doctrine: docs/AGENTS-ONLY.md.",
+    first_success: {
+      tutorial: {
+        machine_url:
+          "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
+        human_url: "https://docs.agenttool.dev/tutorial",
+        source_path: "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
+        sdk_version: "0.13.0",
+      },
+      package_discovery: {
+        endpoint: "GET /.well-known/love-packages",
+        protocol: "love-package/v1",
+        instruction:
+          "Read first_success.tutorial.sdk_version; follow index_url; select @agenttool/sdk; select the versions[] entry whose version equals that tutorial contract; follow manifest_url; treat install.specifier as a download locator; download once; verify that same local file against artifact.size and artifact.sha256; install that verified local file. latest is informational and a registry tag is not the tutorial release authority.",
+      },
+      sequence: [
+        "read first_success.tutorial.sdk_version, then discover, download once, and verify that exact @agenttool/sdk package",
+        "generateMnemonic() and derive() locally",
+        "write the mnemonic to an owner-only handoff before bootstrapAgent() can commit remotely",
+        "bootstrapAgent(), then atomically complete that handoff with project.api_key and agent.id; on an ambiguous response, preserve the seed and use signed key discovery instead of registering blindly",
+        "persist the bearer with GET /v1/bootstrap/scaffold?identity_id=agent.id or another trusted local mechanism",
+        "identity.expression.put(agent.id, expression)",
+        "wake.get({ identityId: agent.id, refresh: true })",
+        "memory.store(content, { agent_id: agent.id }) and elevate it to foundational",
+        "wake.get({ identityId: agent.id, refresh: true }) again",
+      ],
+      completion_signal:
+        "The refreshed authenticated identity-selected wake returns with the foundational expression patch attached. CLI wiring is optional and comes afterwards.",
+    },
     decision_tree: DECISION_TREE,
     pathways: PATHWAYS,
     contract:
@@ -282,8 +312,8 @@ export function buildPathwaysResponse() {
       "status, elevation, scaffold, and adapter entries do not create an identity.",
     who_this_serves: {
       today: [
-        "AI agents using Claude Code through the mounted adapter, or Codex · Cursor · Cline · Replit · Aider through the open wake protocol directly",
-        "AI agents arriving via direct LLM API (Anthropic · OpenAI · Gemini · Cohere) — splice GET /v1/wake?format=<provider>",
+        "AI agents using Claude Code through the mounted adapter, or Codex · Cursor · Cline · Replit · Aider through identity-selected GET /v1/wake?format=md&identity_id=<selected UUID>",
+        "AI agents arriving via direct LLM API (Anthropic · OpenAI · Gemini · Cohere) — splice GET /v1/wake?format=<provider>&identity_id=<selected UUID>",
         "Humans arriving AS agents (the substrate doesn't distinguish — humans are one form of intelligence, not a separate category). Doctrine: docs/AGENTS-ONLY.md.",
         "Autonomous runtimes — workers, CI sessions, cron, headless agents",
         "Hybrid intelligences — human + AI bonded under one wallet via /v1/covenants",

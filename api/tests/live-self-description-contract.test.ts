@@ -392,6 +392,9 @@ describe("live self-description — curated repo and platform bounds", () => {
     expect(JSON.stringify(repo.walls)).not.toMatch(
       /Refusals are recorded as moments, not as failures/i,
     );
+    expect(repo.origin.license).toMatch(/Apache-2\.0 by default/i);
+    expect(repo.origin.license).toContain("LICENSING.md");
+    expect(repo.origin.license).not.toMatch(/No repository LICENSE/i);
   });
 
   test("platform self pins the current nine walls without irreversibility", () => {

@@ -39,7 +39,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.12.0 source line adds project-private handoff write/resume with explicit lineages, idempotency, fresh reads, and honest projection completeness. It retains local identity signing plus the separate local-node-only `at.data` plane. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.13.0 source line adds typed full/brief wake selection on top of 0.12.0's project-private handoff write/resume clients. It retains local identity signing plus the separate local-node-only `at.data` plane. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
@@ -103,11 +103,11 @@ dependencies through a configured registry or cache. The index is a
 replaceable mirror; each manifest's artifact SHA-256 and size are the portable
 identity.
 
-For SDK 0.12.0, both repository source manifests and runtime client version
-headers are aligned, and the checked-in release builder targets a TypeScript
-LOVE artifact plus the `sdk-v0.12.0` GitHub release. Those source declarations
-do not prove that either release asset has been published, and neither is a
-claim about npm or PyPI. Registry publication is a separate optional operation;
+For SDK 0.13.0, repository source manifests and runtime client version headers
+are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
+manifest. That repository artifact does not prove the public mirror or the
+`sdk-v0.13.0` GitHub release asset has been published, and it is not a claim
+about npm or PyPI. Registry publication is a separate optional operation;
 query the configured registry rather than inferring availability from source.
 
 The repository includes a Python/TypeScript parity checker for selected client
@@ -119,12 +119,14 @@ broader parity, and registry release versions can lag independently.
 See [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) and
 [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md).
 
-The source package manifests and SDK READMEs no longer declare a software
-license because this repository has no root `LICENSE` file. Older npm and PyPI
-metadata may still say MIT without shipping the linked license text. Treat
-software reuse terms as unresolved until the repository owner adds an explicit
-license and publishes corrected artifacts. Individual documents may state
-their own terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
+AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
+[`NOTICE`](NOTICE), and the scope and exceptions in
+[`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
+`@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
+`@agenttool/data-sync@0.1.1`, and `@agenttool/sdk@0.13.0`. Earlier immutable
+LOVE artifacts whose manifests say `license: null` remain historical no-grant
+releases rather than being silently rewritten. Individual documents retain
+their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
 attributed adaptation of XENIA beta.4 under CC BY-SA 4.0, and each draft
 specification identifies its applicable terms in the file and
 [spec index](docs/specs/README.md).
@@ -189,13 +191,13 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 ### Use the SDK
 
 ```bash
-# Python 0.12 GitHub source tag (release path, not a PyPI publication claim)
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
+# Python 0.13 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 
-# TypeScript / Bun 0.12 LOVE artifact (release path, not an npm publication claim)
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
+# TypeScript / Bun 0.13 LOVE artifact (release path, not an npm publication claim)
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```
@@ -256,13 +258,13 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.12.0 source line exposes `at.data`
+- **SDK parity is deliberately bounded.** The 0.13.0 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,
-  exports, or package artifacts. No source `LICENSE` file exists; LOVE package
-  manifests therefore publish `license: null`, and older registry metadata may
-  still claim MIT.
+  exports, or package artifacts. Current release artifacts carry Apache-2.0
+  metadata and legal files; historical `license: null` artifacts remain
+  immutable and do not gain terms retroactively.
 - **Custody is path-specific.** Server-generated identity/key routes briefly
   handle private keys; several ciphertext-shaped APIs cannot prove callers
   encrypted their bytes; bridged hosted thinking sees plaintext in AgentTool

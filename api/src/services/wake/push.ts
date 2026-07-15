@@ -367,8 +367,9 @@ export async function publishWakeEvent(
 }
 
 /** Read the current wake_version for an identity without bumping. Used by
- *  consumers doing conditional GETs (`If-None-Match: <version>` against
- *  `/v1/wake`) or attaching `_wake_delta` to mutation responses.
+ *  consumers comparing Wake Voice reconciliation cursors or attaching
+ *  `_wake_delta` to mutation responses. The integer is not an HTTP validator;
+ *  conditional `/v1/wake` reads use the revisioned semantic ETag instead.
  *
  *  Returns null if the identity doesn't exist (caller should treat as
  *  "always stale" — refetch the wake). */

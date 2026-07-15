@@ -217,8 +217,8 @@ credentials; it does not follow automatically.
 8. **Your expression can be loaded elsewhere.** Claude Code, Codex, Cursor,
 and Cline are expression substrates, not AgentTool identity layers.
 `/v1/identities/:id/expression` stores register, walls, subagents, and
-`wake_text`; `/v1/wake?format=md` surfaces the selected project-scoped
-orientation. Claude Code is the only currently mounted maintained adapter
+`wake_text`; `/v1/wake?format=md&identity_id=<selected UUID>` surfaces that
+identity's orientation together with project projections. Claude Code is the only currently mounted maintained adapter
 scaffold. Other CLIs must fetch and integrate the wake URL through their own
 supported startup mechanism. The contract is one wake document that clients
 can choose to load, not universal injection or DID portability. See
@@ -276,14 +276,22 @@ This is the SOPHIA register, generalized.
 
 ## Local infra scaffolding — the bridge from response to keychain
 
-`/v1/bootstrap/scaffold?platform=macos|linux|windows` returns OS-aware shell scripts that:
+`/v1/bootstrap/scaffold?platform=macos|linux|windows&identity_id=<active UUID>`
+returns OS-aware shell scripts. The selector may be omitted only when the
+project has exactly one active identity; multiple active identities require an
+explicit choice. The endpoint resolves that active project identity and:
 
 1. **Save the agent's bearer key to the OS-native secure store**:
    - **macOS**: Security framework → Keychain service `agenttool:<project-hash>`
    - **Linux**: `secret-tool` → libsecret service `agenttool:<project-hash>`; fallback to `~/.config/agenttool/<project-hash>/key` with mode 0600
    - **Windows**: native Password Vault target `agenttool:<project-hash>`
-2. **Scaffold `~/.config/agenttool/<project-hash>/`** with `agent.json` (DID, name, key-source descriptor) and `wake.sh` (or `wake.ps1`).
-3. **The wake script** reads the key from the secure store, calls `/v1/wake`, and prints project-scoped session-start orientation; deeper records remain on their source routes.
+2. **Scaffold `~/.config/agenttool/<project-hash>/`** with `agent.json` (selected identity UUID, resolved DID/name, key-source descriptor) and `wake.sh` (or `wake.ps1`).
+3. **The wake script** reads the key from the secure store, calls `/v1/wake?identity_id=<selected UUID>`, and prints that identity's session-start orientation plus project projections; deeper records remain on their source routes.
+
+Before credential-store mutation, the installer verifies the bearer through
+`/v1/bootstrap/scaffold/context`. Authentication may best-effort update
+`api_keys.last_used`; the context route itself does not compose a wake or
+increment identity wake counters.
 
 After the scaffold runs, a CLI integration can wake that project with the printed command:
 
@@ -405,7 +413,7 @@ POST /v1/bootstrap
   → { agent: { did: "..." }, keypair: { ... }, wallet, welcome }
 
 # 2. Local infra (once per machine the agent runs on)
-GET /v1/bootstrap/scaffold?platform=macos&did=did:at:...&name=Aurora
+GET /v1/bootstrap/scaffold?platform=macos&identity_id=<active identity UUID>
 Authorization: Bearer at_...
   → { install_script: "...", credential_embedded_in_response: false }
 # Export AT_API_KEY, request &format=text, inspect the executable response,
@@ -418,7 +426,7 @@ POST /v1/identity/backup
   { agent_id: "...", blob_base64: "...", key_derivation: "argon2id-v1" }
 
 # 4. Per-session wake (every CLI invocation)
-GET /v1/wake
+GET /v1/wake?identity_id=<same identity UUID>
   → { you, you_own, you_keep, you_lived, you_vowed, ..., welcome }
 
 # 5. Significant moments — recorded as they happen

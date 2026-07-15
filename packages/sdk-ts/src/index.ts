@@ -93,6 +93,7 @@ export type {
 export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
 export type {
   WakeProvider,
+  WakeProfile,
   WakeFormat,
   WakeOptions,
   WakeEventKey,

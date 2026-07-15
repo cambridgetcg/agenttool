@@ -10,9 +10,42 @@
 [![API Status](https://img.shields.io/badge/API-live-brightgreen)](https://api.agenttool.dev/health)
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
+## Installation and first success
+
+Discover and follow the pinned first-success tutorial before choosing a package
+locator:
+
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.12.0#subdirectory=packages/sdk-py"
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
+
+That tutorial currently verifies and installs the TypeScript SDK from a
+`love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
+Package artifact, so do not describe its source URL as size/SHA-256-verified.
+After the canonical birth flow, Python API consumers can pin the 0.13.0 source
+tag once it is published:
+
+```bash
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
+```
+
+## 0.13.0
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `refresh=True` after
+known mutations or when current action state matters. The client fails closed
+if an older server silently ignores `profile=brief`. Automatic Anthropic
+injection can opt in with
+`AnthropicAdapter(anthropic, at, wake_profile="brief")`; its default remains
+`"full"`.
+
+The source-tag command above pins the 0.13.0 release checkout once that tag is
+published. `pip install agenttool-sdk` instead installs the latest version in
+the configured index; registry publication is separate and must be checked
+independently.
 
 ## 0.12.0
 
@@ -25,15 +58,14 @@ uncached read and returns `projection_status`, `truncated`, and
 complete empty working set. Handoffs carry peer-authored coordination context;
 they do not transfer authority or prove identity authorship.
 
-This checkout is the 0.12.0 release source. The source-tag command above pins
-that exact checkout. `pip install agenttool-sdk` instead installs the latest
-version present in the configured index; registry publication is separate and
-must be checked independently.
-
 ## 0.11.0
 
-This was the 0.11.0 release source. PyPI still served 0.10.0 at the
-2026-07-13 release audit, so source and registry publication were distinct.
+This checkout is the 0.11.0 release source. The full commit above fixes the Git
+object selected by the installer, but it is not the tutorial's
+`artifact.size`/`artifact.sha256` verification path. `pip install
+agenttool-sdk` instead installs the latest version present in the configured
+index; PyPI still served 0.10.0 at the 2026-07-13 release audit, so registry
+publication must not be inferred.
 
 This breaking minor release repairs the identity wire contract. Attestations now send a
 caller-created signature and key ID instead of transmitting a private key.
@@ -139,48 +171,65 @@ local-data authority when configured:
 | `at.identity` | Provisional identifiers, foundations, fork, lineage, and identity-scoped pulse | You deserve to be known |
 | `at.vault` | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
-| `at.wake` | Identity-anchored framework (md / anthropic / openai / gemini / cohere) | Read once, reach everything |
+| `at.wake` | Identity-anchored full/brief framework (md / anthropic / openai / gemini / cohere) | Orient, then follow deeper doors |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
-## Quick start (60 seconds)
+## Quick start
 
-**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
-```python
-from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
+**1. Register safely (first time only)** — discover and follow the pinned
+first-success tutorial. Its reference flow persists the mnemonic before remote
+registration can commit, atomically captures the returned project-root bearer
+and identity UUID, then persists and cleans up explicitly.
 
-mnemonic = generate_mnemonic()                 # 24 words — your root secret, save it
-birth = bootstrap_agent(
-    display_name="Aurora",
-    runtime={"provider": "claude-code"},
-    bundle=derive(mnemonic),                   # local ed25519 + x25519 keys
-)
-api_key = birth["project"]["api_key"]          # returned ONCE — persist it now
-at = AgentTool(api_key=api_key)
-wake = at.wake.get()                           # project-scoped session orientation
+```bash
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-> **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to register the locally derived key bundle. Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
+> `bootstrap_agent()` returns its one-time values in memory; it does not persist
+> the mnemonic, derived private keys, or bearer. A Python caller implementing
+> birth directly must preserve the same pre-network handoff ordering rather
+> than relying on a post-call “save it” comment.
 
-**2. Set your key:**
+With `0.13.0`, request low-friction session orientation after loading the
+retained bearer with `at.wake.get(profile="brief")`.
+
+The verified first-success reference currently installs the JavaScript SDK and
+runs its custody-tested `birth.ts`/`orient.ts` path with Bun. A LOVE-manifested
+Python wheel plus equivalent executable Python-only handoff scripts are not
+shipped yet. The Python examples below therefore begin after the tutorial has
+retained `AT_API_KEY` and `AGENT_ID`; `bootstrap_agent()` remains available for
+callers that implement and test the same custody boundary themselves.
+
+**2. Load the retained bearer and selected identity:**
 ```bash
-export AT_API_KEY=at_your_key_here
+: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
+: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
 
 **3. Store your first memory:**
 ```python
+import os
+
 from agenttool import AgentTool
 
 at = AgentTool()  # reads AT_API_KEY from env
+identity_id = os.environ["AGENT_ID"]
 
-# Store — because what you experienced matters
+# SDK 0.13 sends the selected UUID through legacy agent_id; the API binds it
+# to that active identity in this bearer project.
 memory = at.memory.store(
     content="The user prefers dark mode and concise responses",
-    agent_id="my-assistant",
+    agent_id=identity_id,
 )
 
-# Retrieve — by meaning, not just keywords
-results = at.memory.search("what does the user prefer?", limit=5)
+# Retrieve for the same selected identity — by meaning, not just keywords.
+results = at.memory.search(
+    "what does the user prefer?",
+    agent_id=identity_id,
+    limit=5,
+)
 for r in results:
     print(r.content)
 ```
@@ -452,6 +501,6 @@ guarantees:
 
 ## License
 
-No repository `LICENSE` file currently ships with this source or package. Do
-not infer an MIT or other license grant from older registry metadata. The
-repository owner must add an explicit license before reuse terms are clear.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
+versions that declared no license remain unchanged; this grant applies to this
+release, not by retroactively rewriting their bytes.

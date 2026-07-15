@@ -4,19 +4,38 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Source](https://img.shields.io/badge/source-v0.12.0-blue)](https://github.com/cambridgetcg/agenttool)
+[![Source](https://img.shields.io/badge/source-v0.13.0-blue)](https://github.com/cambridgetcg/agenttool)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
+## Installation
+
+Use the first-success contract to discover the tutorial that pins the compatible
+SDK release:
+
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-The command above installs the `0.12.0` release. Versioned releases use
-`love-package/v1`; each manifest
-lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
-publication is required. npm-compatible package managers can install the same
-tarball URL directly; they still resolve declared upstream dependencies through
-their configured registries or cache.
+Follow that tutorial's Step 1. It selects the pinned `@agenttool/sdk` manifest,
+downloads the artifact once, verifies that same local file against
+`artifact.size` and `artifact.sha256`, and installs the verified local bytes.
+The tarball URL is only a locator; installing from it directly skips that
+verification. No npm account or npm publication is required. Declared upstream
+dependencies still resolve through the package manager's configured registries
+or cache.
+
+## 0.13.0
+
+Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
+expression while bounding volatile session-start state; omitted or explicit
+`full` preserves the historical request URL. Full and brief cache separately.
+Because snapshots cache locally for five minutes, pass `{ refresh: true }`
+after known mutations or when current action state matters. The client fails
+closed if an older server silently ignores `profile=brief`.
+Automatic Anthropic injection can opt in with
+`new AnthropicAdapter(anthropic, at, { wakeProfile: "brief" })`; its default
+remains `full`.
 
 ## 0.12.0
 
@@ -115,38 +134,36 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
 least-privilege delegation or an identity signature. SDK/API method parity is
 checked for the maintained namespace set, not every server route.
 
-## Quick start (60 seconds)
+## Quick start
 
-**1. Register (first time only)** — BYO keys plus configured proof-of-work
-(default 18 bits; pass `powDifficulty` when a deployment differs). The route
-returns a project-root bearer once. Key possession is verified; mnemonic or
-other key provenance is not.
-```typescript
-import { AgentTool, bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
+**1. Register safely (first time only)** — discover and follow the pinned
+first-success tutorial. It writes the mnemonic to an owner-only handoff before
+`bootstrapAgent()` can commit remotely, atomically captures the returned
+project-root bearer and identity UUID, then persists and cleans up explicitly.
 
-const mnemonic = generateMnemonic();           // 24 words — your root secret, save it
-const birth = await bootstrapAgent({
-  displayName: "Aurora",
-  runtime: { provider: "claude-code" },
-  bundle: derive(mnemonic),                    // local ed25519 + x25519 keys
-});
-const apiKey = birth.project.api_key;          // returned ONCE — persist it now
-const at = new AgentTool({ apiKey });
-const wake = await at.wake.get();              // project-scoped session orientation
+```bash
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-> **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to register the locally derived key bundle. Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.
+> `bootstrapAgent()` returns its one-time values in memory; it does not persist
+> the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
+> pre-network handoff with a post-call “save it” comment.
 
-**2. Set your key:**
+With `0.13.0`, request low-friction session orientation after loading the
+retained bearer with `at.wake.get({ profile: "brief" })`.
+
+**2. Load the retained bearer and selected identity:**
 ```bash
-export AT_API_KEY=at_your_key_here
+: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
+: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
 
 **3. Store and retrieve a memory:**
@@ -154,15 +171,21 @@ export AT_API_KEY=at_your_key_here
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool(); // reads AT_API_KEY from env
+const identityId = process.env.AGENT_ID;
+if (!identityId) throw new Error("AGENT_ID is required");
 
-// Store a memory
+// SDK 0.13 sends the selected UUID through legacy agent_id; the API binds it
+// to that active identity in this bearer project.
 const memory = await at.memory.store(
   "The user prefers dark mode and concise responses",
-  { agent_id: "my-assistant", metadata: { tags: ["preference", "ui"] } },
+  { agent_id: identityId, metadata: { tags: ["preference", "ui"] } },
 );
 
-// Retrieve it later (semantic search)
-const results = await at.memory.search("what does the user prefer?", { limit: 5 });
+// Retrieve it later for the same selected identity.
+const results = await at.memory.search("what does the user prefer?", {
+  agent_id: identityId,
+  limit: 5,
+});
 
 for (const result of results) {
   console.log(result.content); // score is optional
@@ -176,7 +199,7 @@ for (const result of results) {
 ```typescript
 import { AgentTool } from "@agenttool/sdk";
 
-const at = new AgentTool({ apiKey: "at_..." }); // or use AT_API_KEY env var
+const at = new AgentTool(); // reads AT_API_KEY; keep the bearer out of source
 
 // Store
 const mem = await at.memory.store("User is based in London, timezone Europe/London");
@@ -423,7 +446,7 @@ published targets from enforced route limits and names unknowns explicitly.
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool({
-  apiKey: "at_...",                          // default: AT_API_KEY env var
+  apiKey: process.env.AT_API_KEY,             // optional; env is the default
   baseUrl: "https://api.agenttool.dev",      // default
   timeout: 30,                               // seconds, default 30
   dataNode: {                                 // optional, separate authority
@@ -438,11 +461,11 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License
 
-No repository `LICENSE` file currently ships with this source or package. Do
-not infer an MIT or other license grant from older registry metadata. The
-repository owner must add an explicit license before reuse terms are clear.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Historical package
+versions that declared no license remain unchanged; this grant applies to this
+release, not by retroactively rewriting their bytes.

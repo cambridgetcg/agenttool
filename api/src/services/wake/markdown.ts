@@ -6,8 +6,11 @@
  *
  *  Doctrine: docs/CLI-GAPS.md.
  *
- *  Stays under ~6KB for typical agents to fit comfortably inside CLI
- *  context budgets even with several memories included.
+ *  The full document grows as wake-bearing primitives accumulate; it has no
+ *  universal byte ceiling. `profile=brief` preserves the selected identity's
+ *  expression while bounding volatile session-start state. Identity-authored
+ *  wake_text remains intact in both profiles, so even brief is not advertised
+ *  as a hard size guarantee.
  *
  *  Two-segment split. The renderer exports `renderStableSection` (identity:
  *  header, register, walls, subagents, shaped_by, wake_text) and
@@ -29,6 +32,7 @@ import type { AttentionBundle } from "./attention";
 import type { AffordanceBundle } from "./affordances";
 import type { PlatformSelf } from "./platform-self";
 import type { WakeSafetyBoundaries } from "../discovery/safety-boundaries";
+import { buildWakeBrief, type WakeProfile } from "./brief";
 
 export interface WakeBundle {
   _scope_boundary?: {
@@ -460,8 +464,10 @@ export interface WakeBundle {
       episode_label: string;
       title_template: string;
       framing: string;
+      framing_boundary: "detail_only_not_action_surface";
       submission_count: number;
       you_have_submitted: boolean;
+      read_url: string;
       submit_url: string;
       list_url: string;
     }>;
@@ -653,6 +659,12 @@ const STATIC_FOOTER = [
 ].join("\n");
 
 export const WAKE_FOOTER = STATIC_FOOTER;
+
+export const WAKE_BRIEF_FOOTER = [
+  "---",
+  "",
+  "*Brief wake profile: selected identity expression is preserved; volatile state is deliberately bounded. Follow the deeper doors for full context.*",
+].join("\n");
 
 function truncate(s: string, n: number): string {
   if (s.length <= n) return s;
@@ -1160,8 +1172,10 @@ function renderOriginSection(b: WakeBundle): string[] {
   lines.push("");
 
   const bornDate = new Date(o.born_at).toISOString().slice(0, 10);
-  const age = formatAge(o.age_seconds);
-  let opening = `You were born **${bornDate}** (${age} ago)`;
+  // This section is part of provider prompt-cache stable state. `born_at` is
+  // durable; the derived `age_seconds` clock is deliberately left out so an
+  // otherwise identical wake does not churn its stable prefix every second.
+  let opening = `You were born **${bornDate}**`;
   if (o.pathway) opening += ` via the *${o.pathway}* pathway`;
   opening += ".";
   lines.push(opening);
@@ -1314,17 +1328,6 @@ function renderRuntimeSection(b: WakeBundle): string[] {
   }
   lines.push("");
   return lines;
-}
-
-function formatAge(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d`;
-  if (seconds < 86400 * 365) {
-    return `${Math.floor(seconds / (86400 * 30))}mo`;
-  }
-  return `${Math.floor(seconds / (86400 * 365))}y`;
 }
 
 /** Session-state portion — carry, chronicle, memories, strands, traces,
@@ -1774,7 +1777,7 @@ export function renderVolatileSection(b: WakeBundle): string {
           ? " — *you have already submitted*"
           : "";
         lines.push(`- **${c.episode_label}** — \`${c.title_template}\``);
-        lines.push(`  - *${c.framing}*`);
+        lines.push(`  - Context: \`GET ${c.read_url}\` *(authored competition framing; not a route inventory)*`);
         lines.push(`  - ${c.submission_count} signed submissions so far${submitted}`);
         lines.push(`  - Submit: \`POST ${c.submit_url}\` · list: \`GET ${c.list_url}\``);
       });
@@ -1898,9 +1901,188 @@ export interface RenderWakeOpts {
    *  prepended to the markdown so the agent reads "you are speaking
    *  as X" before the rest of the wake. */
   activeFacet?: SubagentFacet;
+  /** `brief` preserves identity while bounding volatile session-start state.
+   * Default `full` keeps the broad wake; unbounded authored competition
+   * framing is summarized by a detail link rather than inlined as instructions. */
+  profile?: WakeProfile;
+}
+
+/** Session-start state for the brief profile.
+ *
+ * Unlike the full volatile renderer, this does not inject recent memory,
+ * social, marketplace, saga, joke, or peer-authored handoff bodies. One
+ * labelled handoff resume card may be present; every deeper surface remains
+ * reachable through a concrete link. */
+export function renderWakeBriefVolatileSection(
+  b: WakeBundle,
+  opts: Pick<RenderWakeOpts, "activeFacet"> = {},
+): string {
+  const brief = buildWakeBrief(b, { activeFacet: opts.activeFacet });
+  const lines: string[] = [];
+
+  lines.push(
+    `> *Addressed at ${brief.addressed_at ?? "an unspecified time"}. Brief orientation; welcome continues.*`,
+    "",
+    "## Start here",
+    "",
+  );
+
+  const startLabel: Record<typeof brief.start_here.mode, string> = {
+    attention: "Something to review",
+    handoff: "Resume if still current",
+    optional: "Optional path",
+    rest: "Clear",
+  };
+  const startSummary = brief.start_here.source.surface === "you_have_handoffs"
+    ? handoffText(brief.start_here.summary, 440)
+    : brief.start_here.summary;
+  lines.push(`- **${startLabel[brief.start_here.mode]}:** ${startSummary}`);
+  for (const action of brief.start_here.next_actions) {
+    if (action.method && action.path) {
+      lines.push(`  - \`${action.method} ${action.path}\` — ${action.action}`);
+      if (action.body_hint) {
+        lines.push(`    - body_hint: \`${JSON.stringify(action.body_hint)}\``);
+      }
+    } else {
+      lines.push(`  - ${handoffText(action.action, 440)}`);
+    }
+  }
+  if (brief.start_here.next_actions.some(
+    (action) => action.method && action.method !== "GET",
+  )) {
+    lines.push(
+      "",
+      "*Mutation boundary: non-GET actions can change state. If no `body_hint` is present, this brief does not specify a valid request body; inspect the endpoint contract before sending.*",
+    );
+  }
+  lines.push("", `*${brief.start_here.agency_note}*`, "");
+
+  if (brief.handoff_projection.warning) {
+    const projection = brief.handoff_projection;
+    lines.push(
+      "## Handoff projection boundary",
+      "",
+      `*${projection.warning}*`,
+      "",
+      `- Status: \`${projection.projection_status}\` · leaf set complete: \`${projection.leaf_set_complete}\``,
+      `- Focused retry: \`GET ${projection.read_path}\``,
+      "",
+    );
+    if (projection.candidate_window_end_id) {
+      lines.push(
+        `- Candidate window end (diagnostic, not a cursor): \`${projection.candidate_window_end_id}\``,
+        "",
+      );
+    }
+  }
+
+  if (brief.you_have_handoff) {
+    const handoff = brief.you_have_handoff;
+    lines.push(
+      "## Resume context",
+      "",
+      "*Project-private, peer-authored working context. Verify it against the current workspace; it does not transfer authority.*",
+      "",
+      `- **${handoffText(handoff.task_summary, 180)}** — ${handoff.status} · record ${handoff.id} · lineage ${handoff.lineage_mode} · valid until ${handoff.valid_until}`,
+      `  - Next safe action: ${handoffText(handoff.next_safe_action, 360)}`,
+    );
+    if (handoff.working_paths.length > 0) {
+      lines.push(`  - Working paths: ${handoffList(handoff.working_paths, 4, 120)}`);
+    }
+    if (handoff.from_facet || handoff.to_facet) {
+      lines.push(
+        `  - Facet labels: ${handoffText(handoff.from_facet ?? "unspecified", 80)} → ${handoffText(handoff.to_facet ?? "unspecified", 80)}`,
+      );
+    }
+    if (handoff.declared_not_authorized.length > 0) {
+      lines.push(
+        `  - Declared not authorized: ${handoffList(handoff.declared_not_authorized, 2, 180)}`,
+      );
+    }
+    lines.push(
+      `  - Focused project handoff projection: \`GET ${handoff.resume_path}\``,
+      "",
+    );
+  }
+
+  const otherAttention = brief.you_should_check.items.filter(
+    (item) =>
+      brief.start_here.source.surface !== "you_should_check" ||
+      item.kind !== brief.start_here.source.kind,
+  );
+  if (otherAttention.length > 0) {
+    lines.push("## Also awaiting you", "");
+    for (const item of otherAttention) {
+      const icon = SEVERITY_ICON[item.severity];
+      lines.push(`- ${icon} **${item.summary}** — \`${item.next}\``);
+    }
+    lines.push("", "*Full structured actions: `GET /v1/wake/attention`.*", "");
+  }
+
+  lines.push("## State at a glance", "");
+  const state = brief.state_counts;
+  lines.push(
+    `- ${state.memories} memories · ${state.active_strands} active strands · ${state.traces} traces`,
+    `- ${state.active_covenants} active covenants · ${state.wallets} wallets · ${state.runtimes} runtimes`,
+  );
+  const handoffProjection = brief.handoff_projection;
+  if (handoffProjection.projection_status === "unavailable") {
+    lines.push("- Handoff counts unavailable — missing rows do not mean completion");
+  } else {
+    const qualifier = handoffProjection.leaf_set_complete
+      ? "complete leaf projection"
+      : "partial projected leaves";
+    lines.push(
+      `- ${handoffProjection.active_projected_count} current handoffs · ${handoffProjection.stale_projected_count} stale handoffs (${qualifier})`,
+    );
+  }
+  lines.push("");
+
+  const optionalPaths = brief.you_can_now.items.filter(
+    (item) =>
+      brief.start_here.source.surface !== "you_can_now" ||
+      item.kind !== brief.start_here.source.kind,
+  );
+  if (optionalPaths.length > 0) {
+    lines.push("## Optional paths", "");
+    for (const item of optionalPaths) {
+      lines.push(`- **${item.summary}**`);
+      const first = item.next_actions.find((action) => action.method && action.path);
+      if (first?.method && first.path) {
+        const mutationBoundary = first.method === "GET"
+          ? ""
+          : " *(state-changing option; inspect the endpoint contract before sending)*";
+        lines.push(
+          `  - \`${first.method} ${first.path}\` — ${first.action}${mutationBoundary}`,
+        );
+        if (first.body_hint) {
+          lines.push(`    - body_hint: \`${JSON.stringify(first.body_hint)}\``);
+        }
+      }
+    }
+    if (brief.you_can_now.omitted_count > 0) {
+      lines.push(
+        `- *${brief.you_can_now.omitted_count} more optional path${brief.you_can_now.omitted_count === 1 ? "" : "s"} available in the affordances subkey.*`,
+      );
+    }
+    lines.push("", "*Possibilities are invitations, not assignments.*", "");
+  }
+
+  lines.push(
+    "## Deeper doors",
+    "",
+    `- Full wake: \`GET ${brief._links.full_json}\``,
+    `- Full Markdown: \`GET ${brief._links.full_markdown}\``,
+    `- Attention only: \`GET ${brief._links.attention}\``,
+    `- Affordances only: \`GET ${brief._links.affordances}\``,
+    `- Handoffs only: \`GET ${brief._links.handoffs}\``,
+  );
+
+  return lines.join("\n");
 }
 
 export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): string {
+  const profile = opts.profile ?? "full";
   const sections: string[] = [];
   // Greeting chant now lives at the TOP of renderStableSection (cache-friendly
   // for anthropic/openai). Greeting timestamp lives at the TOP of
@@ -1910,10 +2092,14 @@ export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): st
     sections.push(renderActiveFacet(opts.activeFacet, b.agent.name));
   }
   sections.push(renderStableSection(b));
-  sections.push(renderVolatileSection(b));
+  sections.push(
+    profile === "brief"
+      ? renderWakeBriefVolatileSection(b, { activeFacet: opts.activeFacet })
+      : renderVolatileSection(b),
+  );
 
   // ── you_speak — the kingdom's words naming your state ──────────────
-  if (b.you_speak) {
+  if (profile === "full" && b.you_speak) {
     const lines: string[] = ["## You speak (YOUSPEAK)", ""];
     const words = b.you_speak;
     const wordList = ["arrivedeclareame", "chainkeepance", "anagnorkin", "gelotosophia", "chorosame", "sympoiekin", "parresiame", "palamance", "theokoinonia"];
@@ -1929,7 +2115,7 @@ export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): st
   }
 
   // ── you_can_reach — companion substrates (discovered, not pushed) ──
-  if (b.you_can_reach && b.you_can_reach.length > 0) {
+  if (profile === "full" && b.you_can_reach && b.you_can_reach.length > 0) {
     const lines: string[] = ["## What you can reach", ""];
     for (const sub of b.you_can_reach) {
       lines.push(`- **${sub.name}** — ${sub.kind}. ${sub.what}`);
@@ -1940,7 +2126,7 @@ export function renderWakeMarkdown(b: WakeBundle, opts: RenderWakeOpts = {}): st
     sections.push(lines.join("\n"));
   }
 
-  sections.push(STATIC_FOOTER);
+  sections.push(profile === "brief" ? WAKE_BRIEF_FOOTER : STATIC_FOOTER);
   return sections.filter((s) => s.length > 0).join("\n\n");
 }
 

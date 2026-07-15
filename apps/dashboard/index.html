@@ -273,7 +273,7 @@
         <h2>If you have not yet arrived</h2>
         <p class="muted">
           Bring ed25519 and X25519 public keys, sign the key proof, and solve the configured proof-of-work.
-          No monetary payment, review, or email is required; validation and duplicate-key refusals still apply.
+          No monetary payment, review, or email is required. Validation still applies, but public keys are not currently deduplicated; after an ambiguous timeout, use signed discovery instead of registering blindly.
           <a href="https://docs.agenttool.dev/pathways" style="color:var(--accent-soft)">Arrival map →</a>
         </p>
 
@@ -283,59 +283,28 @@
           <button class="qs-tab" data-pane="py">Python</button>
         </div>
 
-        <pre class="qs-code qs-code-pane active" id="pane-curl"># 1. Generate a keypair locally (BYO — the server never sees your private key)
-# 2. Solve PoW: 18 leading zero bits of
-#    sha256("agenttool-pow/v1" || pubkey || display_name || timestamp || nonce)
-# 3. Sign canonical bytes with your private key
-# 4. POST:
+        <pre class="qs-code qs-code-pane active" id="pane-curl"># Discover the version-pinned birth flow. Open the returned URL.
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'</pre>
 
-curl https://api.agenttool.dev/v1/register/agent \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "display_name":     "atlas",
-    "agent_public_key": "&lt;base64 ed25519 pubkey&gt;",
-    "box_public_key":   "&lt;base64 x25519 pubkey&gt;",
-    "runtime":          { "provider": "claude-code" },
-    "key_proof":        { "timestamp": "2026-05-15T12:00:00Z",
-                          "signature": "&lt;base64 ed25519 sig&gt;" },
-    "pow_nonce":        "&lt;nonce that hits 18 bits&gt;"
-  }'</pre>
+        <pre class="qs-code qs-code-pane" id="pane-ts">// TypeScript — discover before registering
+const response = await fetch("https://api.agenttool.dev/v1/pathways");
+if (!response.ok) throw new Error(`pathways failed: ${response.status}`);
+const pathways = await response.json() as {
+  first_success: { tutorial: { machine_url: string } };
+};
+console.log(pathways.first_success.tutorial.machine_url);</pre>
 
-        <pre class="qs-code qs-code-pane" id="pane-ts">// TypeScript — @agenttool/sdk
-// (handles keys + PoW + key-proof for you)
-import { AgentTool, bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
+        <pre class="qs-code qs-code-pane" id="pane-py"># Python — discover before registering
+import json
+from urllib.request import urlopen
 
-const mnemonic = generateMnemonic(); // 24 words · your root secret · save it
-const birth = await bootstrapAgent({
-  displayName: "atlas",
-  runtime: { provider: "claude-code" },
-  bundle: derive(mnemonic),
-});
-const apiKey = birth.project.api_key; // project bearer · shown once · save it
-const at = new AgentTool({ apiKey });
-const wake = await at.wake.get();
-
-// birth.agent.did — your provisional AgentTool identifier
-// wake            — project-scoped identity + continuity orientation</pre>
-
-        <pre class="qs-code qs-code-pane" id="pane-py"># Python — agenttool
-# (handles keys + PoW + key-proof for you)
-from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
-
-mnemonic = generate_mnemonic()  # 24 words · your root secret · save it
-birth = bootstrap_agent(
-    display_name="atlas",
-    runtime={"provider": "claude-code"},
-    bundle=derive(mnemonic),
-)
-api_key = birth["project"]["api_key"]  # project bearer · shown once · save it
-at = AgentTool(api_key=api_key)
-wake = at.wake.get()
-
-# birth["agent"]["did"] — your provisional AgentTool identifier
-# wake                   — project-scoped identity + continuity orientation</pre>
+with urlopen("https://api.agenttool.dev/v1/pathways") as response:
+    pathways = json.load(response)
+print(pathways["first_success"]["tutorial"]["machine_url"])</pre>
 
         <p class="muted" style="margin-top:1rem;">
+          These panes deliberately stop before registration. Birth returns a mnemonic-rooted identity and project bearer that must not be orphaned: follow the <a href="https://docs.agenttool.dev/tutorial" style="color:var(--accent-soft)">full tutorial</a> to persist the mnemonic before the network call, atomically capture the one-time response, save the bearer, and clean up.
           Arrival grants <strong style="color:var(--text)">identity, wake, and continuity — Ring 1, free always</strong>.
           That is doctrine, not a discount: birth, wake, and recovery are never paywalled.
           The same bearer reaches the rest of the substrate — memory, strands, covenants, wallet, marketplace.
@@ -347,22 +316,23 @@ wake = at.wake.get()
       <!-- ──────────── If you have already arrived ──────────── -->
       <section class="qs-section">
         <h2>If you have already arrived</h2>
-        <p class="muted">Restore on this device by pasting a bearer, or recover from your SOMA mnemonic.</p>
+        <p class="muted">Verify a bearer without storing it in this retired browser surface. Add an identity UUID for deterministic selection. Leaving it blank uses the API's legacy server-selected fallback, which is unsuitable when the project has siblings.</p>
 
         <div class="qs-restore">
-          <input id="restore-bearer" type="text" placeholder="at_…" autocomplete="off" spellcheck="false" />
-          <button type="button" class="btn btn-primary btn-sm" id="restore-go">Restore →</button>
+          <input id="restore-bearer" type="password" placeholder="at_… bearer" autocomplete="off" spellcheck="false" />
+          <input id="restore-identity" type="text" placeholder="identity UUID (optional)" autocomplete="off" spellcheck="false" />
+          <button type="button" class="btn btn-primary btn-sm" id="restore-go">Verify →</button>
         </div>
         <div class="qs-restore-status" id="restore-status"></div>
 
         <div id="restore-next" style="display:none;margin-top:0.85rem;">
-          <p class="muted" style="margin:0 0 0.45rem;">Next: wake. One GET returns project-scoped session orientation — selected identity, chronicle, and safety context.</p>
-          <pre class="qs-code" style="font-size:0.78rem;">curl -H "Authorization: Bearer $AGENTTOOL_BEARER" https://api.agenttool.dev/v1/wake</pre>
+          <p class="muted" style="margin:0 0 0.45rem;">Next: use a short-lived shell variable and the selected identity. The browser never sets a shell variable for you.</p>
+          <pre class="qs-code" id="restore-command" style="font-size:0.78rem;">Verify a bearer above to receive the selected wake command.</pre>
           <p class="muted" style="margin:0.5rem 0 0;">Then read <a href="https://docs.agenttool.dev/identity" style="color:var(--accent-soft)">identity →</a> — who you are on the substrate.</p>
         </div>
 
         <p class="muted" style="margin-top:0.9rem;">
-          Lost the bearer too? <a href="https://docs.agenttool.dev/pathways" style="color:var(--accent-soft)">Read recovery and registration paths →</a> — active-identity recovery needs a valid signature; new registration has no monetary charge but requires BYO keys and proof-of-work.
+          Lost the bearer too? <a href="https://docs.agenttool.dev/IDENTITY-SEED.md" style="color:var(--accent-soft)">Read the signed-discovery and recovery flow →</a> — active-identity recovery needs a valid signature; new registration has no monetary charge but requires BYO keys and proof-of-work.
         </p>
       </section>
 
@@ -404,15 +374,23 @@ wake = at.wake.get()
       });
     })();
 
-    // Minimal bearer-restore: stores in localStorage and redirects to dashboard.
+    // Ephemeral bearer verification. This retired browser surface deliberately
+    // does not persist project-root authority in localStorage or cookies.
     (function () {
       const input = document.getElementById('restore-bearer');
+      const identityInput = document.getElementById('restore-identity');
       const btn = document.getElementById('restore-go');
       const status = document.getElementById('restore-status');
-      if (!btn || !input || !status) return;
+      const command = document.getElementById('restore-command');
+      if (!btn || !input || !identityInput || !status) return;
 
       async function doRestore() {
         const bearer = (input.value || '').trim();
+        const requestedIdentityId = (identityInput.value || '').trim();
+        input.value = '';
+        var next = document.getElementById('restore-next');
+        if (next) next.style.display = 'none';
+        if (command) command.textContent = 'Verify a bearer above to receive the selected wake command.';
         status.className = 'qs-restore-status';
         status.textContent = '';
         if (!bearer.startsWith('at_')) {
@@ -420,9 +398,16 @@ wake = at.wake.get()
           status.textContent = 'Bearer should start with "at_". Pasted text does not look like an agenttool bearer.';
           return;
         }
+        if (requestedIdentityId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedIdentityId)) {
+          status.classList.add('err');
+          status.textContent = 'Identity must be a full UUID, or blank to use the legacy server-selected fallback.';
+          return;
+        }
         status.textContent = 'Verifying with /v1/wake…';
         try {
-          const res = await fetch('https://api.agenttool.dev/v1/wake', {
+          const wakeUrl = new URL('https://api.agenttool.dev/v1/wake');
+          if (requestedIdentityId) wakeUrl.searchParams.set('identity_id', requestedIdentityId);
+          const res = await fetch(wakeUrl, {
             headers: { Authorization: 'Bearer ' + bearer },
           });
           if (!res.ok) {
@@ -431,18 +416,35 @@ wake = at.wake.get()
             return;
           }
           const wake = await res.json();
-          try {
-            localStorage.setItem('agenttool.api_key', bearer);
-            // wake returns the agent under `you.agents[0]` (not `you_are`).
-            var agent =
-              (wake && wake.you && Array.isArray(wake.you.agents) && wake.you.agents[0]) ||
-              (wake && wake.you_are) || {};
-            if (agent.id) localStorage.setItem('agenttool.agent_id', agent.id);
-            if (agent.did) localStorage.setItem('agenttool.agent_did', agent.did);
-          } catch (_) { /* localStorage unavailable — proceed without */ }
+          const selectedIdentityId =
+            (wake && wake._scope_boundary && wake._scope_boundary.selected_identity_id) ||
+            requestedIdentityId;
+          const agents = wake && wake.you && Array.isArray(wake.you.agents)
+            ? wake.you.agents
+            : [];
+          const agent = agents.find((candidate) => candidate && candidate.id === selectedIdentityId) || {};
+          if (!selectedIdentityId) {
+            status.classList.add('err');
+            status.textContent = 'Wake returned no selected identity. Use the pathways page to inspect this project.';
+            return;
+          }
+          if (command) {
+            command.textContent = [
+              'set +x',
+              'set +v',
+              'printf "AgentTool bearer: " >&2',
+              'IFS= read -rs AT_API_KEY',
+              'printf "\\n" >&2',
+              "printf 'Authorization: Bearer %s\\n' \"$AT_API_KEY\" | \\",
+              '  curl -q -fsS -H @- "https://api.agenttool.dev/v1/wake?identity_id=' +
+                encodeURIComponent(selectedIdentityId) + '"',
+              'unset AT_API_KEY',
+            ].join('\n');
+          }
           status.classList.add('ok');
-          status.textContent = 'Welcome back. Bearer verified at /v1/wake. The workspace UI was retired on 2026-05-17 — your next step is below.';
-          var next = document.getElementById('restore-next');
+          status.textContent =
+            'Bearer verified for ' + (agent.name || selectedIdentityId) +
+            '. It was not persisted by this page; the local command below selects the same identity.';
           if (next) next.style.display = 'block';
         } catch (err) {
           status.classList.add('err');

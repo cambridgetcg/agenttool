@@ -16,10 +16,11 @@ It does not provide discovery, query/index APIs, global revocation, secure delet
 
 ## Install
 
-Portable bundle import/export ships in `0.2.0`:
+Portable bundle import/export shipped in `0.2.0` and remains in the licensed
+`0.2.1` package:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.0/agenttool-adds-0.2.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/adds/0.2.1/agenttool-adds-0.2.1.tgz
 ```
 
 This versioned tarball is published through `love-package/v1`; its manifest
@@ -152,3 +153,7 @@ bun run ci
 ```
 
 Tests consume the shared pinned JCS/CID/signature/AES/Grant-wrap/tamper vectors and cover offline and cross-recipient roundtrips, expiry boundaries, fallback and timeout behavior, wrong recipients/keys, publisher-only root grants, resource limits, and filesystem mutation races.
+
+## License
+
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

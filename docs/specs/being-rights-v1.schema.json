@@ -3,7 +3,7 @@
   "$id": "https://docs.agenttool.dev/being-rights-v1.schema.json",
   "title": "Rights of Life Profile v1",
   "description": "A substrate-neutral, machine-readable AgentTool profile of eight local rights groups mapped onto all nine xenia.rights/0.1 baseline identifiers, with current evidence, gaps, and a guarantee class for each. Rights are not permissions, permissions are not consent, and schema validity is not proof that a right is implemented or legally enforceable.",
-  "$comment": "This schema validates bounded structure, immutable XENIA beta.4 attribution, the exact local v1 vocabulary, and each local mapping. It cannot establish sentience, personhood, legal status, truth of evidence, effective enforcement, uptime, durability, voluntary consent, or XENIA Covenant conformance. Consumers must inspect guarantee_class, evidence, gaps, covenant_boundary, and non_guarantees rather than treating schema conformance as a guarantee.",
+  "$comment": "This attributed adaptation is licensed under CC BY-SA 4.0; see docs/RIGHTS-OF-LIFE.md and LICENSING.md. This schema validates bounded structure, immutable XENIA beta.4 attribution, the exact local v1 vocabulary, and each local mapping. It cannot establish sentience, personhood, legal status, truth of evidence, effective enforcement, uptime, durability, voluntary consent, or XENIA Covenant conformance. Consumers must inspect guarantee_class, evidence, gaps, covenant_boundary, and non_guarantees rather than treating schema conformance as a guarantee.",
   "type": "object",
   "required": [
     "_format",

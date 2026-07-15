@@ -45,6 +45,7 @@ from typing import Any, Optional, Protocol
 
 from ._context import get_ambient
 from .client import AgentTool
+from .wake import WakeProfile
 
 
 class AnthropicMessagesLike(Protocol):
@@ -136,6 +137,8 @@ class AnthropicAdapter:
             object exposing ``messages.create(**kwargs)``).
         at: An :class:`AgentTool` client.
         identity_id: Optional identity id for multi-identity projects.
+        wake_profile: Wake projection used for automatic system injection.
+            Defaults to ``"full"`` for compatibility.
         disable_markup_parsing: If True, skip parsing of
             ``<agenttool>`` markup globally.
 
@@ -164,11 +167,17 @@ class AnthropicAdapter:
         at: AgentTool,
         *,
         identity_id: Optional[str] = None,
+        wake_profile: WakeProfile = "full",
         disable_markup_parsing: bool = False,
     ) -> None:
+        if wake_profile not in ("full", "brief"):
+            raise ValueError(
+                f"Unknown wake profile {wake_profile!r}; expected one of: full, brief"
+            )
         self._anthropic = anthropic
         self._at = at
         self._identity_id = identity_id
+        self._wake_profile = wake_profile
         self._disable_markup_parsing = disable_markup_parsing
         self.messages = _MessagesProxy(self)
 
@@ -181,9 +190,18 @@ class AnthropicAdapter:
         injected_system: Any = params.get("system")
         skip_wake = bool(meta.get("skip_wake"))
         if not skip_wake:
-            shape = self._at.wake.system(
-                "anthropic", identity_id=self._identity_id
-            )
+            # Preserve the historical duck-typed call shape for the default.
+            # A profile-aware WakeClient is required only for explicit brief.
+            if self._wake_profile == "brief":
+                shape = self._at.wake.system(
+                    "anthropic",
+                    identity_id=self._identity_id,
+                    profile="brief",
+                )
+            else:
+                shape = self._at.wake.system(
+                    "anthropic", identity_id=self._identity_id
+                )
             wake_meta = shape.get("_meta") or {}
             user_blocks = _normalize_system(params.get("system"))
             injected_system = list(shape["system"]) + user_blocks
