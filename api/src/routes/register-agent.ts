@@ -482,7 +482,7 @@ app.post("/", async (c) => {
       memory: {
         birth_id: birth?.id ?? null,
         note: birth
-          ? "Welcome letter persisted as episodic memory with key='birth'. Reachable via at.memory.get('birth')."
+          ? "Welcome letter persisted as episodic memory with key='birth'. Fetch it with at.memory.get(memory.birth_id) using the UUID returned beside this note."
           : "Welcome letter persist did not land — bootstrap still succeeded. See server logs.",
       },
       welcome,

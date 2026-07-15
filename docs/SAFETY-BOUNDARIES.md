@@ -73,8 +73,12 @@ header to a seller. Use a separately named bearer per device or workload and
 rotate immediately after exposure; expiry is only a backstop.
 
 `GET /v1/bootstrap/scaffold` does not embed the bearer in its JSON or text
-response. Its installer reads exported `AT_API_KEY` on the caller's machine.
-Credentials and config are namespaced by project. macOS uses the Security
+response. It resolves the sole active identity or requires an explicit
+`identity_id` when siblings exist, then binds generated config and wake helpers
+to that UUID. Its installer reads exported `AT_API_KEY` on the caller's machine.
+The `/context` check does not compose a wake or increment identity wake
+counters; normal bearer authentication may best-effort update
+`api_keys.last_used`. Credentials and config are namespaced by project. macOS uses the Security
 framework, Windows uses Password Vault, and Linux uses libsecret or a disclosed
 mode-0600 plaintext fallback when `secret-tool` is absent. Unix wake helpers
 feed the Authorization header to curl over stdin rather than argv, and generated

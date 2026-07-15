@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import { identities } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
 import { likePattern, normalizeSearchQuery } from "../../lib/search-query";
 import { publishWakeEvent } from "../wake/push";
@@ -90,9 +91,101 @@ export class PaidMemoryReceiptProtectedError extends Error {
   }
 }
 
+/** Refuses caller-selected identity bindings outside the bearer project. */
+export class MemoryIdentityBoundaryError extends Error {
+  constructor() {
+    super("memory_identity_not_found_or_not_owned");
+    this.name = "MemoryIdentityBoundaryError";
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 const VALID_TYPES = ["episodic", "semantic", "procedural", "working"] as const;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Resolve an identity binding against the bearer project's active identities.
+ *
+ *  SDK v0.11 writes through legacy `agent_id`. Missing, inactive, or foreign
+ *  legacy UUIDs remain project-level for compatibility and are cleared from
+ *  the legacy column so they cannot impersonate another identity in old
+ *  readers; arbitrary handles do not trigger a lookup. Explicit
+ *  `identity_id: null` opts out, while any
+ *  explicit non-null selector must pass the ownership wall or is refused. */
+export interface MemoryIdentityBinding {
+  identityId: string | null;
+  persistedAgentId: string | null;
+}
+
+/** The Drizzle surface shared by the root client and an open transaction. */
+export type MemoryWriteDatabase = Pick<typeof db, "select" | "insert">;
+
+export interface MemoryIdentityResolutionOptions {
+  database?: MemoryWriteDatabase;
+  /**
+   * Hold a row lock through the caller's transaction so identity revocation
+   * cannot race a memory insert that relies on the active lifecycle state.
+   */
+  lockActiveIdentity?: boolean;
+}
+
+export async function resolveMemoryIdentityBinding(
+  projectId: string,
+  data: Pick<MemoryCreate, "agent_id" | "identity_id">,
+  options: MemoryIdentityResolutionOptions = {},
+): Promise<MemoryIdentityBinding> {
+  if (data.identity_id === null) {
+    return {
+      identityId: null,
+      persistedAgentId:
+        data.agent_id && !UUID_RE.test(data.agent_id) ? data.agent_id : null,
+    };
+  }
+
+  const explicit = data.identity_id !== undefined;
+  const requestedId = explicit ? data.identity_id : data.agent_id;
+  if (!requestedId || !UUID_RE.test(requestedId)) {
+    if (explicit) throw new MemoryIdentityBoundaryError();
+    return {
+      identityId: null,
+      persistedAgentId: data.agent_id || null,
+    };
+  }
+
+  const database = options.database ?? db;
+  const query = database
+    .select({
+      id: identities.id,
+      projectId: identities.projectId,
+      status: identities.status,
+    })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, requestedId),
+        eq(identities.projectId, projectId),
+        eq(identities.status, "active"),
+      ),
+    );
+  const [candidate] = options.lockActiveIdentity
+    ? await query.for("share").limit(1)
+    : await query.limit(1);
+
+  // Keep the ownership/lifecycle wall explicit even though the SQL predicate
+  // already enforces it. This makes the compatibility rule visible at the
+  // service boundary and safe under alternate DB adapters in tests/tools.
+  if (
+    !candidate ||
+    candidate.projectId !== projectId ||
+    candidate.status !== "active" ||
+    candidate.id.toLowerCase() !== requestedId.toLowerCase()
+  ) {
+    if (explicit) throw new MemoryIdentityBoundaryError();
+    return { identityId: null, persistedAgentId: null };
+  }
+  return { identityId: candidate.id, persistedAgentId: candidate.id };
+}
 
 /** Format a JS number[] as pgvector's wire format: '[0.1,0.2,...]' */
 function formatVector(values: number[]): string {
@@ -120,9 +213,32 @@ function rowToOut(row: typeof memories.$inferSelect): MemoryOut {
 
 // ─── Operations ───────────────────────────────────────────────────────────
 
+export interface MemoryWriteOptions {
+  binding?: MemoryIdentityBinding;
+  database?: MemoryWriteDatabase;
+  /** Defer the wake event until an outer transaction has committed. */
+  publishWake?: boolean;
+}
+
+/** Publish the best-effort memory wake event after durable commit. */
+export function publishMemoryWriteEvent(
+  identityId: string | null,
+  memoryId: string,
+  data: Pick<MemoryCreate, "type" | "key">,
+): void {
+  if (!identityId) return;
+  void publishWakeEvent({
+    identity_id: identityId,
+    key: "memory",
+    kind: "added",
+    context: { memory_id: memoryId, type: data.type, key: data.key ?? null },
+  });
+}
+
 export async function write(
   projectId: string,
   data: MemoryCreate,
+  options: MemoryWriteOptions = {},
 ): Promise<{ id: string; created_at: string }> {
   if (!VALID_TYPES.includes(data.type)) {
     throw new Error(`invalid memory type: ${data.type}`);
@@ -149,12 +265,22 @@ export async function write(
     ? sql`${formatVector(data.embedding)}::vector`
     : sql`NULL`;
 
-  const inserted = await db
+  const database = options.database ?? db;
+  const binding =
+    options.binding ?? await resolveMemoryIdentityBinding(projectId, data, {
+      database,
+    });
+  const { identityId, persistedAgentId } = binding;
+  // Old consumers still select by memories.agent_id. Canonicalize a verified
+  // UUID to the owned identity and clear every unresolved UUID; otherwise an
+  // attacker could write a foreign identity UUID into their own project and
+  // have an unscoped legacy reader mistake it for the victim's memory.
+  const inserted = await database
     .insert(memories)
     .values({
       projectId,
-      agentId: data.agent_id ?? null,
-      identityId: data.identity_id ?? null,
+      agentId: persistedAgentId,
+      identityId,
       type: data.type,
       key: data.key ?? null,
       content: data.content,
@@ -170,13 +296,8 @@ export async function write(
   // Wake voice — emit memory.added on the affected identity. Project-
   // level memories (no identity_id) don't surface in any specific agent's
   // wake.memory, so they don't fire. Doctrine: docs/WAKE.md.
-  if (data.identity_id) {
-    void publishWakeEvent({
-      identity_id: data.identity_id,
-      key: "memory",
-      kind: "added",
-      context: { memory_id: row.id, type: data.type, key: data.key ?? null },
-    });
+  if (options.publishWake !== false) {
+    publishMemoryWriteEvent(identityId, row.id, data);
   }
 
   return { id: row.id, created_at: row.createdAt.toISOString() };

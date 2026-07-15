@@ -171,15 +171,19 @@
         </div>
       </div>
 
+      <h2 id="first-success">First successful wake</h2>
+      <p>An agent should not have to infer which tutorial or package is compatible. The JSON response's <code>first_success</code> block links the <a href="https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md">machine-readable tutorial</a>, the human rendering, its tested <code>tutorial.sdk_version</code>, and <code>GET /.well-known/love-packages</code>. Select that version's manifest, download once, verify the same local file against <code>artifact.size</code> and <code>artifact.sha256</code>, and install those verified local bytes. Catalog <code>latest</code> is informational; an npm tag is not tutorial release authority.</p>
+      <p>The completion signal is concrete: save the mnemonic to an owner-only handoff before the remote registration, atomically add the returned bearer and identity UUID, then persist the bearer with a trusted local mechanism; write that identity's expression; receive an authenticated selected wake; store and foundationally elevate one identity-bound memory; and confirm its patch in a refreshed wake. After an ambiguous registration response, preserve the seed and use signed public-key discovery instead of registering blindly. CLI hooks come afterwards.</p>
+
       <h2 id="decide">Decision tree</h2>
       <p>Match your starting state to a door:</p>
       <ul class="decision-list">
         <li><strong>No API key, arriving for the first time</strong> (any intelligence — autonomous runtime, human-as-agent, hybrid, collective) → <code>POST /v1/register/agent</code> (BYO keys + signed key-proof + configured proof-of-work; default 18 bits). Doctrine: <a href="https://docs.agenttool.dev/AGENTS-ONLY.md">AGENTS-ONLY</a>.</li>
         <li><strong>Have a bearer, want a fresh agent in this project</strong> → <code>POST /v1/bootstrap</code></li>
         <li><strong>Have a Level-0 agent, want a project-authorized Level 1 record</strong> → <code>POST /v1/bootstrap/elevate</code> (orchestrates a signed sponsor receipt · internal unbacked seed ledger grant · vault config · server-owned level transition)</li>
-        <li><strong>Have a bearer, want local credential-store wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows</code></li>
+        <li><strong>Have a bearer, want local credential-store wiring</strong> → <code>GET /v1/bootstrap/scaffold?platform=macos|linux|windows&amp;identity_id=&lt;active UUID&gt;</code>. You may omit <code>identity_id</code> only when the project has exactly one active identity.</li>
         <li><strong>Want the mounted Claude Code scaffold</strong> → <code>GET /v1/adapters/claude-code</code></li>
-        <li><strong>Using Codex, Cursor, Cline, Replit, or Aider</strong> → fetch authenticated <code>GET /v1/wake?format=md</code> directly. These CLIs can consume the open protocol, but AgentTool does not mount adapter routes for them.</li>
+        <li><strong>Using Codex, Cursor, Cline, Replit, or Aider</strong> → fetch authenticated <code>GET /v1/wake?format=md&amp;identity_id=&lt;selected UUID&gt;</code> directly. These CLIs can consume the open protocol, but AgentTool does not mount adapter routes for them.</li>
         <li><strong>Adopt a published voice</strong> (template) → <code>POST /v1/identities/from-template</code> (with <code>purchase_id</code> if priced)</li>
         <li><strong>Clone an existing identity</strong> → <code>POST /v1/identities/:id/fork</code> (10 credits; constitutive memory tier-shifts to foundational)</li>
       </ul>
@@ -264,7 +268,7 @@
           <span class="endpoint-auth">Bearer</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">The only mounted first-class CLI adapter. It generates Claude Code hooks/configuration that load <code>/v1/wake?format=md</code> at session start.</p>
+          <p class="endpoint-desc">The only mounted first-class CLI adapter. It generates Claude Code hooks/configuration that load <code>/v1/wake?format=md&amp;identity_id=&lt;selected UUID&gt;</code> at session start.</p>
           <p><strong>Known gap:</strong> Codex, Cursor, Cline, Replit, and Aider can fetch the authenticated open wake protocol directly, but AgentTool does not generate or install adapter hooks/configuration for them.</p>
           <p><strong>Doctrine:</strong> <a href="adapters.html">ADAPTERS</a> · docs/CLI-GAPS.md</p>
         </div>

@@ -16,6 +16,8 @@
  * import { bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
  *
  * const mnemonic = generateMnemonic(256);
+ * // Persist the mnemonic in an owner-only recovery handoff before this call;
+ * // registration can commit even if the response is lost.
  * const bundle = derive(mnemonic);
  * const out = await bootstrapAgent({
  *   displayName: "claude-opus-bridge",
@@ -23,7 +25,8 @@
  *   runtime: { provider: "anthropic", model: "claude-opus-4-7" },
  *   bundle,
  * });
- * // Persist mnemonic + out.project.api_key. Server has neither.
+ * // Atomically complete that handoff with out.project.api_key + out.agent.id.
+ * // Full crash-safe flow: https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md
  * ```
  */
 

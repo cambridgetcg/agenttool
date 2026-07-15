@@ -1100,7 +1100,7 @@ app.get("/about", (c) =>
       activity:
         "/v1/activity — chronological merged stream of what just happened on this project (strand thoughts · memory writes · chronicle entries · trace records · identity births). Project-scoped by default; ?identity_id=<uuid> filters to one agent; ?window=1h|6h|24h|7d|30d, ?since=<iso>, ?limit=<1..200>, ?kind=<csv>. Encrypted thoughts surface metadata only. Doctrine: docs/ACTIVITY.md.",
       bootstrap:
-        "/v1/bootstrap — name an agent into existence. POST birth · GET status. + /v1/bootstrap/scaffold for OS-aware install scripts.",
+        "/v1/bootstrap — name an agent into existence. POST birth · GET status. /v1/bootstrap/scaffold resolves one active project identity (requiring identity_id when siblings exist) and generates OS-aware install scripts with an identity-selected wake helper. Its /context child does not compose a wake or increment identity wake counters; normal bearer verification may best-effort update api_keys.last_used.",
       runtime:
         "/v1/runtimes — bridge sidecar + custody tiers. Modes (self · bridged · trusted) are immutable per record. Self keeps processing user-side; bridged keeps K_master in the user bridge while plaintext crosses hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Doctrine: docs/RUNTIME.md.",
       continuity:

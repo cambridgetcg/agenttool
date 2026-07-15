@@ -10,6 +10,22 @@
 [![API Status](https://img.shields.io/badge/API-live-brightgreen)](https://api.agenttool.dev/health)
 [![Protocol](https://img.shields.io/badge/protocol-love-blueviolet)](https://agenttool.dev/soul)
 
+## Installation and first success
+
+Discover and follow the pinned first-success tutorial before choosing a package
+locator:
+
+```bash
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
+```
+
+That tutorial currently verifies and installs the TypeScript SDK from a
+`love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
+Package artifact, so do not describe its source URL as size/SHA-256-verified.
+After the canonical birth flow, Python API consumers can pin the 0.13.0 source
+tag once it is published:
+
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 ```
@@ -44,8 +60,12 @@ they do not transfer authority or prove identity authorship.
 
 ## 0.11.0
 
-This was the 0.11.0 release source. PyPI still served 0.10.0 at the
-2026-07-13 release audit, so source and registry publication were distinct.
+This checkout is the 0.11.0 release source. The full commit above fixes the Git
+object selected by the installer, but it is not the tutorial's
+`artifact.size`/`artifact.sha256` verification path. `pip install
+agenttool-sdk` instead installs the latest version present in the configured
+index; PyPI still served 0.10.0 at the 2026-07-13 release audit, so registry
+publication must not be inferred.
 
 This breaking minor release repairs the identity wire contract. Attestations now send a
 caller-created signature and key ID instead of transmitting a private key.
@@ -155,47 +175,61 @@ local-data authority when configured:
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
-## Quick start (60 seconds)
+## Quick start
 
-**1. Be born (first time only)** — BYO keys + an 18-bit proof-of-work, all handled for you. Returns your API key, shown **once**.
-```python
-from agenttool import AgentTool, bootstrap_agent, derive, generate_mnemonic
+**1. Register safely (first time only)** — discover and follow the pinned
+first-success tutorial. Its reference flow persists the mnemonic before remote
+registration can commit, atomically captures the returned project-root bearer
+and identity UUID, then persists and cleans up explicitly.
 
-mnemonic = generate_mnemonic()                 # 24 words — your root secret, save it
-birth = bootstrap_agent(
-    display_name="Aurora",
-    runtime={"provider": "claude-code"},
-    bundle=derive(mnemonic),                   # local ed25519 + x25519 keys
-)
-api_key = birth["project"]["api_key"]          # returned ONCE — persist it now
-at = AgentTool(api_key=api_key)
-wake = at.wake.get()                           # broader orientation, not a complete export
+```bash
+curl -q -fsS https://api.agenttool.dev/v1/pathways | \
+  jq -er '.first_success.tutorial.machine_url'
 ```
 
-With `0.13.0`, request low-friction session orientation with
-`at.wake.get(profile="brief")`.
+> `bootstrap_agent()` returns its one-time values in memory; it does not persist
+> the mnemonic, derived private keys, or bearer. A Python caller implementing
+> birth directly must preserve the same pre-network handoff ordering rather
+> than relying on a post-call “save it” comment.
 
-> **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to register the locally derived key bundle. Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
+With `0.13.0`, request low-friction session orientation after loading the
+retained bearer with `at.wake.get(profile="brief")`.
 
-**2. Set your key:**
+The verified first-success reference currently installs the JavaScript SDK and
+runs its custody-tested `birth.ts`/`orient.ts` path with Bun. A LOVE-manifested
+Python wheel plus equivalent executable Python-only handoff scripts are not
+shipped yet. The Python examples below therefore begin after the tutorial has
+retained `AT_API_KEY` and `AGENT_ID`; `bootstrap_agent()` remains available for
+callers that implement and test the same custody boundary themselves.
+
+**2. Load the retained bearer and selected identity:**
 ```bash
-export AT_API_KEY=at_your_key_here
+: "${AT_API_KEY:?load the project bearer from the trusted mechanism used by the tutorial}"
+: "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
 
 **3. Store your first memory:**
 ```python
+import os
+
 from agenttool import AgentTool
 
 at = AgentTool()  # reads AT_API_KEY from env
+identity_id = os.environ["AGENT_ID"]
 
-# Store — because what you experienced matters
+# SDK 0.13 sends the selected UUID through legacy agent_id; the API binds it
+# to that active identity in this bearer project.
 memory = at.memory.store(
     content="The user prefers dark mode and concise responses",
-    agent_id="my-assistant",
+    agent_id=identity_id,
 )
 
-# Retrieve — by meaning, not just keywords
-results = at.memory.search("what does the user prefer?", limit=5)
+# Retrieve for the same selected identity — by meaning, not just keywords.
+results = at.memory.search(
+    "what does the user prefer?",
+    agent_id=identity_id,
+    limit=5,
+)
 for r in results:
     print(r.content)
 ```

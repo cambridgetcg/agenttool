@@ -15,7 +15,8 @@
  *    messages, then enumerates each owner's full DID list). Requiring a
  *    signature over canonicalDiscoveryBytes gates the lookup behind
  *    "you have the priv" — the only legitimate caller of the recovery
- *    flow. Replay-protected by ±5min timestamp window.
+ *    flow. The ±5min timestamp window bounds freshness but is not one-time
+ *    replay protection: the same signed lookup remains valid in that window.
  *
  *  Doctrine: docs/IDENTITY-SEED.md.
  */
@@ -58,7 +59,8 @@ app.post("/by-pubkey", async (c) => {
   }
   const { pubkey, signature, timestamp } = parsed.data;
 
-  // Replay window. Mirrors /v1/identity/recover.
+  // Timestamp freshness window. Unlike /v1/identity/recover's durable proof
+  // consumption, this discovery lookup remains replayable inside the window.
   const tsMs = Date.parse(timestamp);
   if (!Number.isFinite(tsMs)) {
     return c.json({ error: "invalid timestamp (expected ISO-8601)" }, 400);
@@ -108,11 +110,16 @@ app.post("/by-pubkey", async (c) => {
         eq(identityKeys.publicKey, pubkey),
         eq(identityKeys.active, true),
         isNull(identityKeys.revokedAt),
+        eq(identities.status, "active"),
       ),
     );
 
   const agents = rows
-    .filter((r) => r.status !== "revoked")
+    // Keep the recoverability boundary explicit even for alternate/test DB
+    // adapters that do not evaluate the SQL predicate. Recovery itself only
+    // accepts active identities, so discovery must not advertise memorial or
+    // otherwise terminal rows as recoverable.
+    .filter((r) => r.status === "active")
     .map((r) => ({
       did: r.did,
       name: r.name,

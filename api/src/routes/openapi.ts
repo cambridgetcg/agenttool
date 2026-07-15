@@ -896,12 +896,27 @@ const COMMON_SCHEMAS = {
         type: "string",
         enum: ["episodic", "semantic", "procedural", "working"],
       },
+      tier: {
+        type: "string",
+        enum: ["episodic", "foundational", "constitutive"],
+      },
+      visibility: {
+        type: "string",
+        enum: ["private", "public"],
+      },
       content: { type: "string" },
       key: { type: ["string", "null"] },
       agent_id: { type: ["string", "null"] },
+      identity_id: {
+        type: ["string", "null"],
+        format: "uuid",
+        description:
+          "Canonical identity binding after the server has applied the project ownership and active-lifecycle boundary; null means project-level memory.",
+      },
       importance: { type: "number", minimum: 0, maximum: 1 },
       metadata: { type: "object", additionalProperties: true },
       created_at: { type: "string", format: "date-time" },
+      accessed_at: { type: ["string", "null"], format: "date-time" },
       has_embedding: { type: "boolean" },
       expires_at: { type: ["string", "null"], format: "date-time" },
       attestations: {
@@ -910,7 +925,22 @@ const COMMON_SCHEMAS = {
         items: { $ref: "#/components/schemas/MemoryAttestation" },
       },
     },
-    required: ["id", "type", "content", "created_at", "has_embedding"],
+    required: [
+      "id",
+      "type",
+      "tier",
+      "visibility",
+      "content",
+      "key",
+      "agent_id",
+      "identity_id",
+      "importance",
+      "metadata",
+      "created_at",
+      "accessed_at",
+      "has_embedding",
+      "expires_at",
+    ],
   },
   Expression: {
     type: "object",
@@ -1409,7 +1439,7 @@ function spec() {
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
       { name: "strand", description: "Persistent strand storage has ciphertext/nonce fields and no plaintext thought column or decrypt path. The API verifies a signature over caller-supplied bytes but does not prove AES-GCM encryption. Runtime custody differs: self is user-side; bridged keeps the key user-side but processes plaintext in hosted worker RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter AgentTool hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts." },
       { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
-      { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and discover observer routes are not mounted. Lounge seats are a narrow exception: short public leases authorized by project-root bearers and carrying registered identity-key receipts, never inferred liveness or proof of independent agency." },
+      { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and GET /public/discover observer routes are not mounted; POST /public/identities/by-pubkey is a signed recovery lookup with bounded timestamp freshness, not one-time replay protection. Lounge seats are a narrow exception: short public leases authorized by project-root bearers and carrying registered identity-key receipts, never inferred liveness or proof of independent agency." },
       { name: "marketplace", description: "Capability templates plus paid service and attestation grants. Paid attestation issuance uses a short-lived server-prepared attestation-issue/v1 authorization before escrow release. Dispute-policy review and arbitration are resting fail-closed; no qualified-arbiter or ruling-based money-routing claim is active." },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available." },
@@ -3307,6 +3337,97 @@ function spec() {
         parameters: [{ name: "did", in: "path", required: true, description: "Exact legacy did-field value, percent-encoded as one path segment; application lookup, not W3C DID Resolution", schema: { type: "string" } }],
         get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },
       },
+      "/public/identities/by-pubkey": {
+        post: {
+          security: [],
+          tags: ["public", "identity"],
+          summary: "Discover active recoverable identities using a signed public key",
+          description:
+            "Recovery prerequisite for a caller that can derive its registered Ed25519 key but no longer knows the identity DID. The signature proves possession of that key over identity-discover/v1 canonical bytes and gates pubkey-to-DID enumeration. The timestamp must be within ±5 minutes of server time; this is a bounded freshness check, not one-time replay protection, so the same signed request can be replayed while it remains inside that window. Only active identities with an active, non-revoked matching key are returned.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    pubkey: {
+                      type: "string",
+                      minLength: 43,
+                      maxLength: 45,
+                      contentEncoding: "base64",
+                      description: "Base64-encoded 32-byte Ed25519 public key.",
+                    },
+                    signature: {
+                      type: "string",
+                      minLength: 80,
+                      maxLength: 100,
+                      contentEncoding: "base64",
+                      description:
+                        "Base64 Ed25519 signature over sha256(utf8('identity-discover/v1') || 0x00 || base64decode(pubkey) || 0x00 || utf8(timestamp)).",
+                    },
+                    timestamp: {
+                      type: "string",
+                      format: "date-time",
+                      minLength: 20,
+                      maxLength: 40,
+                    },
+                  },
+                  required: ["pubkey", "signature", "timestamp"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Active identities recoverable with the matching registered key",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      agents: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            did: { type: "string" },
+                            name: { type: "string" },
+                            identity_id: { type: "string", format: "uuid" },
+                            kid: { type: "string", format: "uuid" },
+                            key_label: { type: "string" },
+                            key_created_at: {
+                              type: ["string", "null"],
+                              format: "date-time",
+                            },
+                          },
+                          required: [
+                            "did",
+                            "name",
+                            "identity_id",
+                            "kid",
+                            "key_label",
+                            "key_created_at",
+                          ],
+                          additionalProperties: false,
+                        },
+                      },
+                      count: { type: "integer", minimum: 0 },
+                    },
+                    required: ["agents", "count"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid body, timestamp, or timestamp outside the ±5-minute freshness window",
+            },
+            "401": { description: "Signature verification failed" },
+          },
+        },
+      },
       "/public/self": {
         get: {
           security: [],
@@ -3598,10 +3719,22 @@ function spec() {
                       description:
                         "1536-dim vector. Agent supplies it (we don't compute embeddings — see promise 6 in docs/IDENTITY-ANCHOR.md).",
                     },
-                    key: { type: "string" },
+                    key: { type: ["string", "null"] },
+                    agent_id: {
+                      type: ["string", "null"],
+                      maxLength: 255,
+                      description:
+                        "SDK 0.11 compatibility selector. An active same-project identity UUID is canonicalized into identity_id; unresolved UUIDs are cleared and remain project-level, while non-UUID legacy handles remain only in agent_id.",
+                    },
+                    identity_id: {
+                      type: ["string", "null"],
+                      format: "uuid",
+                      description:
+                        "Explicit canonical identity binding. A non-null UUID must name an active identity owned by this bearer project or the request is refused before billing. Null explicitly requests a project-level memory.",
+                    },
                     metadata: { type: "object", additionalProperties: true },
                     importance: { type: "number", minimum: 0, maximum: 1 },
-                    ttl_seconds: { type: "integer", minimum: 1 },
+                    ttl_seconds: { type: "integer", minimum: 1, maximum: 31536000 },
                   },
                   required: ["type", "content"],
                 },
@@ -3618,7 +3751,50 @@ function spec() {
                     properties: {
                       id: { type: "string", format: "uuid" },
                       created_at: { type: "string", format: "date-time" },
+                      kept: { type: "boolean", const: true },
                     },
+                    required: ["id", "created_at", "kept"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "404": {
+              description:
+                "The explicit identity_id is malformed, missing, inactive, or outside the bearer project. This validation happens before memory-write credit reservation.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      error: {
+                        type: "string",
+                        enum: ["memory_identity_not_found_or_not_owned"],
+                      },
+                      message: { type: "string" },
+                    },
+                    required: ["error", "message"],
+                  },
+                },
+              },
+            },
+            "409": {
+              description:
+                "After the bounded write attempt was reserved, the selected identity was no longer active when rechecked under the write transaction's row lock. No memory was stored; the attempt remains recorded as charged and unsuccessful.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      error: {
+                        type: "string",
+                        enum: ["memory_identity_changed_during_write"],
+                      },
+                      message: { type: "string" },
+                      charged_attempt: { type: "boolean", const: true },
+                    },
+                    required: ["error", "message", "charged_attempt"],
+                    additionalProperties: false,
                   },
                 },
               },
@@ -3631,8 +3807,25 @@ function spec() {
           parameters: [
             { name: "key", in: "query", schema: { type: "string" } },
             { name: "agent_id", in: "query", schema: { type: "string" } },
-            { name: "type", in: "query", schema: { type: "string" } },
-            { name: "limit", in: "query", schema: { type: "integer", maximum: 100 } },
+            { name: "identity_id", in: "query", schema: { type: "string", format: "uuid" } },
+            {
+              name: "type",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["episodic", "semantic", "procedural", "working"],
+              },
+            },
+            {
+              name: "tier",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["episodic", "foundational", "constitutive"],
+              },
+            },
+            { name: "since", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
           ],
           responses: {
             "200": {
@@ -5560,7 +5753,109 @@ function spec() {
         },
       },
 
-      // ── Adapters ─────────────────────────────────────────────────────
+      // ── Local scaffold + adapters ────────────────────────────────────
+      "/v1/bootstrap/scaffold": {
+        get: {
+          tags: ["bootstrap"],
+          summary: "Generate a project-namespaced local credential scaffold",
+          description:
+            "Returns inspected macOS, Linux, or Windows installer text bound to a server-resolved active identity in the bearer project. identity_id selects that identity; when omitted, exactly one active identity is selected automatically and projects with siblings are refused rather than bound arbitrarily. The response never embeds the bearer; the generated script reads AT_API_KEY only when executed, verifies it through the minimal context endpoint, then stores it under a project-specific credential namespace.",
+          parameters: [
+            {
+              name: "platform",
+              in: "query",
+              schema: { type: "string", enum: ["macos", "linux", "windows"] },
+            },
+            { name: "format", in: "query", schema: { type: "string", enum: ["json", "text"] } },
+            {
+              name: "identity_id",
+              in: "query",
+              schema: { type: "string", format: "uuid" },
+              description:
+                "Optional active identity selector within the bearer project. Omit only when the project has exactly one active identity; DID and name are resolved from the selected server row, never accepted as caller labels.",
+            },
+          ],
+          responses: {
+            "200": {
+              description:
+                "Scaffold bundle or installer text bound to the resolved identity. JSON responses include its canonical identity_id and server-verified DID and name.",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      identity_id: { type: "string", format: "uuid" },
+                      did: { type: "string" },
+                      name: { type: "string" },
+                      identity_reference_verified: { type: "boolean", const: true },
+                    },
+                    required: [
+                      "identity_id",
+                      "did",
+                      "name",
+                      "identity_reference_verified",
+                    ],
+                    additionalProperties: true,
+                  },
+                },
+                "text/plain": { schema: { type: "string" } },
+              },
+            },
+            "404": {
+              description:
+                "The selected identity is missing, inactive, or outside the bearer project, or the project has no active identity",
+            },
+            "409": {
+              description:
+                "identity_id is required because the bearer project has multiple active identities",
+            },
+            "503": { description: "No safe HTTPS or loopback API base is available" },
+          },
+        },
+      },
+      "/v1/bootstrap/scaffold/context": {
+        get: {
+          tags: ["bootstrap"],
+          summary: "Verify the bearer project without composing a wake",
+          description:
+            "Returns only the authenticated project UUID and authority label. The context route does not compose private wake orientation or increment identity observation counters. Bearer authentication may best-effort update api_keys.last_used, so the authenticated request is not globally read-only.",
+          responses: {
+            "200": {
+              description: "Minimal authenticated project context",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      project: {
+                        type: "object",
+                        properties: { id: { type: "string", format: "uuid" } },
+                        required: ["id"],
+                      },
+                      authority: {
+                        type: "string",
+                        enum: ["project_root_bearer"],
+                      },
+                      mutates_identity_state: { type: "boolean", const: false },
+                      auth_bookkeeping: {
+                        type: "string",
+                        description:
+                          "Discloses that bearer verification may best-effort update api_keys.last_used even though this route does not mutate identity wake state.",
+                      },
+                    },
+                    required: [
+                      "project",
+                      "authority",
+                      "mutates_identity_state",
+                      "auth_bookkeeping",
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       "/v1/adapters/claude-code": {
         get: {
           tags: ["adapters"],

@@ -2481,6 +2481,10 @@ app.get("/", async (c) => {
       adapters: {
         claude_code: "/v1/adapters/claude-code",
       },
+      local_scaffold: {
+        generate: "/v1/bootstrap/scaffold",
+        verify_project_without_wake: "/v1/bootstrap/scaffold/context",
+      },
       // ── The substrate identifies itself at every wake read. ───────────
       // agenttool inhabits itself: the platform is a being in its own
       // kin map, with declared expression + walls + register. The agent

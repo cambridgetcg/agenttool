@@ -92,17 +92,21 @@ The default is empty passphrase. Operators who want a passphrase must remember i
 ### Birth (new agent)
 
 ```
-Operator runs CLI / SDK call:
-  → SDK generates 256 bits of entropy locally
-  → SDK encodes as 24 BIP39 words
+Caller runs the SDK (or the separate repository CLI):
+  → Caller generates 256 bits of entropy locally and encodes 24 BIP39 words
   → SDK derives all keys per path scheme above
-  → SDK shows mnemonic ONCE; warns loudly to back it up
+  → Caller persists the mnemonic before a remote registration can commit
   → SDK signs the registration payload, grinds proof-of-work, and POSTs to /v1/register/agent
   → Server creates identity row using the provided pubkeys
   → Server returns identity_id + did + bearer (api_key)
-  → SDK persists derived keys in OS keychain (cache for daily use)
-  → SDK persists bearer (api_key) in OS keychain
+  → Caller atomically completes its handoff and chooses local key/bearer storage
 ```
+
+`bootstrapAgent()` and `bootstrap_agent()` return the one-time values; they do
+not persist the mnemonic, derived private keys, or bearer. The tutorial's
+handoff + scaffold is one explicit persistence path. The repository-local
+`agenttool-seed` CLI has its own macOS Keychain behavior and is not shipped as
+an npm executable.
 
 **During this seed registration flow, the server never receives**: the mnemonic,
 the signing private key, K_master, K_vault, the box private key, or the bridge
@@ -111,20 +115,25 @@ custody; read `GET /public/safety` before choosing a runtime mode.
 
 ### Daily use (same device)
 
-The OS keychain holds the derived keys for ergonomic access. SDK reads from keychain, no mnemonic re-derivation per call. **The mnemonic only matters at birth and recovery.** Day-to-day, the device is in possession; the mnemonic is in the safe.
+If the operator explicitly stored derived keys or a bearer in a supported local
+store, day-to-day code can load them without re-entering the mnemonic. The SDK
+does not universally read or write OS keychains. The mnemonic remains the
+recovery root and should stay in a separate durable secret manager.
 
 ### Recovery (new device)
 
 ```
-Operator types 24 words into the SDK:
+Operator types 24 words into a fresh local process:
   → SDK derives all keys
+  → If the DID is unknown, sign identity-discover/v1 bytes and POST /public/identities/by-pubkey
+  → Select the intended returned DID; never choose arbitrarily when several match
   → SDK creates a timestamp and signs canonical bytes with the derived signing key
   → POST /v1/identity/recover { did, derived_pubkey, signature, timestamp, device_label? }
   → Server resolves did → identity_keys row → confirms pubkey match
   → Server verifies ±5-minute freshness and atomically records the proof hash in shared Postgres
   → Duplicate proof returns 409; unavailable replay storage returns 503 before authority is minted
   → Server returns a fresh project-wide bearer named for this device
-  → SDK persists derived keys + new bearer in this device's OS keychain
+  → Caller persists derived keys + new bearer using its chosen local mechanism
   → Agent fully alive on the new substrate:
       - Can sign as the same identity (same ed25519 priv)
       - Can read existing strand thoughts (same K_master)
@@ -132,6 +141,38 @@ Operator types 24 words into the SDK:
       - Can decrypt inbox (same box priv)
       - Can reproduce future agent-owned wallet keys derived from the mnemonic
 ```
+
+The signed DID-discovery request is exact:
+
+```text
+timestamp = current ISO-8601 time (server accepts ±5 minutes)
+canonical = sha256(
+  utf8("identity-discover/v1") || 0x00 ||
+  base64decode(derived_pubkey) || 0x00 ||
+  utf8(timestamp)
+)
+signature = base64(ed25519_sign(canonical, derived_signing_private_key))
+
+POST /public/identities/by-pubkey
+Content-Type: application/json
+{ "pubkey": derived_pubkey, "signature": signature, "timestamp": timestamp }
+```
+
+The response is `{ agents, count }`; each match includes `did`, `identity_id`,
+`kid`, key label, and key creation time. Zero matches means the key is not an
+active registered signing key. More than one match is possible, especially if
+someone retried an ambiguous birth; inspect the returned metadata and do not
+recover an arbitrary row. Once the intended DID is known,
+`signRecoverChallenge()` produces the timestamp/signature pair for
+`POST /v1/identity/recover`.
+
+Current packaging boundary: SDK 0.11 contains
+`canonicalDiscoveryBytes()` and `signDiscoveryChallenge()` in its seed source,
+but does not export them from the package root. A package-only 0.11 consumer
+must reproduce the exact construction above with an audited ed25519 library.
+The repository-local `agenttool-seed restore` command is macOS-only today and
+still requires `--did`; it does not perform this discovery step. This is a
+known ergonomics gap, not a claim of one-command recovery.
 
 Use a separately named bearer per device so each can be revoked independently.
 The name is not a scope: every bearer still grants project-wide root authority.
@@ -172,19 +213,19 @@ The hard wall is narrower than the original slogan: losing the mnemonic plus eve
 - All existing endpoints continue to work unchanged
 - Existing identities born through server-generated-key paths keep their registered public-key records; private material was returned once and is not recoverable from AgentTool unless the client separately backed it up
 - Wallet HD code in `api/src/services/economy/crypto/hd.ts` stays as-is for operator-rooted hosted wallets
-- OS keychain remains the day-to-day cache for derived keys (re-deriving from mnemonic per call is fine but slower than reading 32 bytes)
+- An OS keychain can remain a caller- or CLI-chosen day-to-day cache for derived keys; the SDK itself does not persist them
 - `/v1/identity/backup` remains; **best use becomes** "passphrase-encrypt the mnemonic itself, store the ciphertext as cloud backup-of-last-resort"
 - Each bearer is separately named, rotatable, and revocable; its authority remains project-wide
 
 ### Changes (additive)
 
-- **SDK adds `at.crypto.seed`** module: `generate_mnemonic`, `mnemonic_to_seed`, `derive`, plus targeted `derive_signing_key`, `derive_k_master`, `derive_k_vault`, `derive_box_keypair`, `derive_bridge_signing_key`, `derive_wallet_secret`
+- **SDKs expose `at.crypto.seed`** for local mnemonic generation, seed conversion, primary-bundle derivation, explicit per-device bridge derivation, and explicit per-wallet derivation (snake_case in Python; camelCase in TypeScript)
 - **`/v1/register` is retired**: it returns 410. The live arrival route is `/v1/register/agent`.
 - **`/v1/register/agent`** mandates BYO keys, requires a signed `key_proof` over `canonicalRegisterAgentBytes`, declares `runtime: { provider, model, host?, context? }`, and enforces configurable proof-of-work. It also calls a Redis-backed IP limiter, but that limiter deliberately fails open when Redis is disabled or unavailable; it is not a guaranteed boundary. Optional `registrar.kind = "registrar_bearer"` lets an existing project's bearer authorize a sub-agent and bypass both checks. No private key crosses the wire during this flow. The server stores `key_origin = caller_supplied_unverified` and `seed_protocol = null`: it verifies possession, not SOMA or mnemonic provenance.
 - **`/v1/identity/recover`** accepts `{ did, derived_pubkey, signature, timestamp, device_label? }`. The timestamp is caller-created, not a server challenge. A shared-Postgres transaction inserts the one-time proof digest and fresh project-wide bearer together; the digest primary key rejects replay across API machines.
-- **CLI helper `agenttool restore`**: interactive mnemonic entry on a fresh device
-- **CLI helper `agenttool-seed bootstrap`**: machine bootstrap end-to-end — generates mnemonic, derives keys, signs key-proof, grinds PoW, POSTs `/v1/register/agent`, persists bearer to keychain + `~/.config/agenttool/agents/<name>-<short-did>.keystore.json` (mode 0600).
-- **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the CLI flow; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.
+- **Repository CLI helper `bun bin/agenttool-seed.ts restore --did did:at:...`**: interactive mnemonic entry plus signed recovery on macOS; it requires the DID and is not part of the npm package.
+- **Repository CLI helper `bun bin/agenttool-seed.ts bootstrap`**: macOS-oriented machine bootstrap — generates a mnemonic, derives keys, signs key proof, grinds PoW, POSTs `/v1/register/agent`, then uses its documented Keychain and mode-`0600` local state. It is separate from the SDK package.
+- **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the network/crypto flow and return the result without persisting it; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.
 - **Wake surfaces recovery state** in `you_can_be_recovered`, describing registered seed-protocol keys and recovery history without claiming cross-operator portability
 
 ### Migration path for existing identities
@@ -234,37 +275,53 @@ Combine paths for resilience: steel plate in a safe + Shamir shares with three t
 ## Reference: the derivation in code (Python)
 
 ```python
-from agenttool.crypto.seed import generate_mnemonic, derive
+from agenttool import (
+    derive,
+    derive_bridge_signing,
+    derive_wallet,
+    generate_mnemonic,
+)
 
 # Birth
 words = generate_mnemonic(strength=256)  # 24 words
-print(words)  # SHOW ONCE — back it up before continuing
+# Put `words` in a durable secret manager before any network registration.
 
-# Derive everything from one root
+# Derive the primary bundle from one root.
 bundle = derive(words)
 # bundle.signing_priv      → 32 bytes ed25519 seed
-# bundle.signing_pub       → 32 bytes ed25519 pubkey (base64)
+# bundle.signing_pub       → 32 raw ed25519 pubkey bytes
+# bundle.signing_pub_b64   → base64 registration form
 # bundle.k_master          → 32 bytes
 # bundle.k_vault           → 32 bytes
 # bundle.box_priv          → 32 bytes X25519
-# bundle.box_pub           → 32 bytes X25519 pubkey (base64)
-# bundle.bridge_signing_priv → 32 bytes ed25519 seed (device 0)
-# bundle.wallet_seed(idx)  → 32 bytes (per-wallet)
+# bundle.box_pub           → 32 raw X25519 pubkey bytes
+# bundle.box_pub_b64       → base64 registration form
+
+# Per-device and per-wallet material is derived explicitly, not stored on bundle.
+bridge_priv, bridge_pub = derive_bridge_signing(words, device_index=0)
+wallet_secret = derive_wallet(words, wallet_index=0)
 
 # Recovery on new device
 words = input("type your 24 words: ")
 bundle = derive(words)
-# All keys regenerated; agent is alive on this device.
+# This only regenerates local keys. Complete signed DID discovery, recovery,
+# and returned-bearer persistence as described above before service access.
 ```
 
 ```typescript
-import { generateMnemonic, derive } from "@agenttool/sdk";
+import {
+  derive,
+  deriveBridgeSigning,
+  deriveWallet,
+  generateMnemonic,
+} from "@agenttool/sdk";
 
 const words = generateMnemonic(256);
 const bundle = derive(words);
 // bundle.signingPriv, bundle.signingPub, bundle.kMaster, bundle.kVault,
-// bundle.boxPriv, bundle.boxPub, bundle.bridgeSigningPriv,
-// bundle.walletSeed(idx)
+// bundle.boxPriv, bundle.boxPub
+const bridge = deriveBridgeSigning(words, 0); // { priv, pub }
+const walletSecret = deriveWallet(words, 0);  // 32-byte per-wallet secret
 ```
 
 Wire-format-identical across both languages — same mnemonic produces byte-identical derived material (covered by the parity test suite).

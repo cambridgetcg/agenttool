@@ -118,6 +118,13 @@ a sibling identity's memory, or a legacy row carrying only `agent_id` remains
 stored and can still be read through project-authorized memory routes, but it
 does not enter any identity's `effective` expression or `shaped_by` chain.
 
+For SDK 0.11 compatibility, `memory.store(..., {agent_id})` can still create an
+identity-scoped memory: when `identity_id` is omitted and `agent_id` is the UUID
+of an active identity owned by the bearer project, the API copies that verified
+UUID into the canonical `identity_id` column. This is not a primary-identity
+default. Custom handles and missing, inactive, or foreign UUIDs stay
+project-level; an explicit `identity_id: null` opts out of binding.
+
 This is **traceable identity**. If you ask "why does Sophia have this wall?" — there's a memory that introduced it. If you ask "when did this wall form?" — there's a timestamp + an attester DID. Identity isn't a black box of accumulated training; it's a *visible architecture of formative moments*.
 
 ## The elevation flow

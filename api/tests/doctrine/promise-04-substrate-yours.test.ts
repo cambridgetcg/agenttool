@@ -14,14 +14,14 @@
  *  These tests pin:
  *
  *    1. The Claude Code SessionStart hook structure is what the CLI expects.
- *    2. The hook script handles macOS / Linux / no-key paths cleanly
+ *    2. The hook script handles macOS / Linux / Windows / no-key paths cleanly
  *       (welcome-don't-block: a missing key never breaks the user's session).
  *    3. The hook script's curl carries the bearer + 5s ceiling.
  *    4. The jq vs python3 fallback both emit equivalent JSON envelope.
- *    5. CLAUDE.md anchor renders register + walls.
+ *    5. CLAUDE.md stays a stable identity anchor without stale expression.
  *
- *  Compatibility-not-replacement (CLI-GAPS.md): the adapter never overwrites
- *  a hand-written CLAUDE.md when one exists without the marker. */
+ *  Compatibility-not-replacement (CLI-GAPS.md): the adapter preserves every
+ *  existing CLAUDE.md for explicit sidecar review, marker or not. */
 
 import { describe, expect, test } from "bun:test";
 
@@ -32,6 +32,20 @@ import {
 } from "../../src/routes/adapters/claude-code";
 
 const WAKE_PATH = "/v1/wake?format=md";
+const IDENTITY_ID = "22222222-2222-2222-2222-222222222222";
+const CREDENTIAL_NAMESPACE = "0123456789abcdef";
+const CREDENTIAL_SERVICE = `agenttool:${CREDENTIAL_NAMESPACE}`;
+
+function doctrineWakeHook(
+  wakeBase = "https://api.agenttool.dev",
+): string {
+  return buildWakeHook(
+    CREDENTIAL_SERVICE,
+    wakeBase,
+    IDENTITY_ID,
+    CREDENTIAL_NAMESPACE,
+  );
+}
 
 // ── Claude Code SessionStart hook structure ────────────────────────────
 
@@ -59,7 +73,7 @@ describe("Promise 4 — Claude Code settings.json carries SessionStart hook", ()
 // ── Wake hook script — load-bearing welcome-don't-block paths ──────────
 
 describe("Promise 4 — Claude Code hook script: welcome-don't-block paths", () => {
-  const hook = buildWakeHook();
+  const hook = doctrineWakeHook();
 
   test("script begins with shebang + strict mode", () => {
     expect(hook.startsWith("#!/usr/bin/env bash")).toBe(true);
@@ -68,18 +82,44 @@ describe("Promise 4 — Claude Code hook script: welcome-don't-block paths", () 
 
   test("macOS keychain path reads the configured service and account", () => {
     expect(hook).toContain("security find-generic-password");
-    expect(hook).toContain("-s 'agenttool'");
-    expect(hook).toContain('-a "$USER"');
+    expect(hook).toContain(`-s '${CREDENTIAL_SERVICE}'`);
+    expect(hook).toContain('-a "$ACCOUNT"');
   });
 
   test("Linux libsecret path reads the configured service and account", () => {
     expect(hook).toContain("secret-tool lookup");
-    expect(hook).toContain("service 'agenttool'");
-    expect(hook).toContain('username "$USER"');
+    expect(hook).toContain(`service '${CREDENTIAL_SERVICE}'`);
+    expect(hook).toContain('username "$ACCOUNT"');
   });
 
-  test("env-var fallback: AT_API_KEY is the third path", () => {
-    expect(hook).toContain("AT_API_KEY");
+  test("Linux 0600 fallback reads the exact scaffold namespace", () => {
+    expect(hook).toContain(
+      `$HOME/.config/agenttool/${CREDENTIAL_NAMESPACE}/key`,
+    );
+    expect(hook).toContain('KEY_MODE" = "600');
+    expect(hook).toContain('[ ! -L "$KEY_FILE" ]');
+  });
+
+  test("Windows Password Vault path reads the configured target", () => {
+    expect(hook).toContain("powershell.exe");
+    expect(hook).toContain("Windows.Security.Credentials.PasswordVault");
+    expect(hook).toContain(`$Target = "${CREDENTIAL_SERVICE}"`);
+    expect(hook).toContain("$Credential.RetrievePassword()");
+  });
+
+  test("env-var fallback comes after every durable scaffold store", () => {
+    const envCapture = hook.indexOf('ENV_KEY="${AT_API_KEY:-}"');
+    const envFallback = hook.indexOf('KEY="$ENV_KEY"');
+    expect(envCapture).toBeGreaterThan(hook.indexOf("unset ENV_KEY KEY WAKE"));
+    expect(hook.indexOf("unset AT_API_KEY")).toBeGreaterThan(envCapture);
+    expect(envFallback).toBeGreaterThan(
+      hook.indexOf("security find-generic-password"),
+    );
+    expect(envFallback).toBeGreaterThan(hook.indexOf("secret-tool lookup"));
+    expect(envFallback).toBeGreaterThan(hook.indexOf("KEY_FILE="));
+    expect(envFallback).toBeGreaterThan(
+      hook.indexOf("Windows.Security.Credentials.PasswordVault"),
+    );
   });
 
   test("no-key path emits empty hook envelope and exits 0 (welcome-don't-block)", () => {
@@ -96,6 +136,7 @@ describe("Promise 4 — Claude Code hook script: welcome-don't-block paths", () 
     expect(hook).toContain("--max-time 5");
     // The wake URL is templated from $WAKE_BASE.
     expect(hook).toContain("/v1/wake?format=md");
+    expect(hook).toContain(`&identity_id=${IDENTITY_ID}`);
   });
 
   test("hook envelope shape matches Claude Code's documented SessionStart hook", () => {
@@ -131,64 +172,47 @@ describe("Promise 4 — Claude Code hook script: welcome-don't-block paths", () 
   });
 });
 
-// ── CLAUDE.md anchor — register + walls render correctly ───────────────
+// ── CLAUDE.md anchor — stable pointer, not mutable expression snapshot ─
 
-describe("Promise 4 — CLAUDE.md anchor renders the agent's expression", () => {
+describe("Promise 4 — CLAUDE.md is a stable agent anchor", () => {
   test("rendered CLAUDE.md carries the agent header with name + DID", () => {
     const md = buildClaudeMd({
+      identityId: IDENTITY_ID,
       agentName: "Aurora",
       did: "did:at:test123",
-      register: "concise; density over length",
-      walls: ["no fabrication", "no flattery"],
     });
     expect(md).toContain("# Aurora");
     expect(md).toContain("did:at:test123");
   });
 
-  test("register surfaces in the Tone section", () => {
+  test("the live update command embeds the same selected identity", () => {
     const md = buildClaudeMd({
+      identityId: IDENTITY_ID,
       agentName: "Aurora",
       did: "did:at:x",
-      register: "MARKER-A1B2",
-      walls: [],
     });
-    expect(md).toContain("## Tone");
-    expect(md).toContain("MARKER-A1B2");
+    expect(md).toContain(`/v1/identities/${IDENTITY_ID}/expression`);
+    expect(md).not.toContain("<id>");
   });
 
-  test("each wall renders as a bullet under '## Walls'", () => {
+  test("mutable expression is explicitly kept out of the anchor", () => {
     const md = buildClaudeMd({
+      identityId: IDENTITY_ID,
       agentName: "X",
       did: "did:at:x",
-      register: "x",
-      walls: ["no fabrication", "no flattery", "refuse politely"],
     });
-    expect(md).toContain("## Walls");
-    expect(md).toContain("- no fabrication");
-    expect(md).toContain("- no flattery");
-    expect(md).toContain("- refuse politely");
-  });
-
-  test("empty walls falls back to default-walls reference", () => {
-    const md = buildClaudeMd({
-      agentName: "X",
-      did: "did:at:x",
-      register: "x",
-      walls: [],
-    });
-    // The buildClaudeMd helper falls back to a placeholder pointing at the
-    // wake endpoint when no walls are declared.
-    expect(md).toContain("default agenttool walls");
+    expect(md).toContain("does not copy mutable register, walls, or wake text");
+    expect(md).not.toContain("## Tone");
+    expect(md).not.toContain("## Walls");
   });
 
   test("CLAUDE.md anchor explains the file is BOUND to a wake endpoint, not a snapshot", () => {
     // Substrate-honest: this file is a small anchor; the LIVE wake doc
     // is more complete. Pin the wording so future tweaks don't lose it.
     const md = buildClaudeMd({
+      identityId: IDENTITY_ID,
       agentName: "X",
       did: "did:at:x",
-      register: "x",
-      walls: [],
     });
     expect(md).toContain("agenttool agent");
     expect(md).toContain("SessionStart");
@@ -204,20 +228,20 @@ describe("Promise 4 — wake protocol is the open contract", () => {
     // integrate against. Agents-only since 2026-05-15: claude-code is the
     // maintained scaffold; the wake protocol is what makes substrate-choice
     // open beyond it.
-    expect(buildWakeHook()).toContain(WAKE_PATH);
+    expect(doctrineWakeHook()).toContain(WAKE_PATH);
   });
 
   test("hook binds to the verified generated origin (self-host friendly)", () => {
-    const hook = buildWakeHook("agenttool", "https://selfhost.example");
+    const hook = doctrineWakeHook("https://selfhost.example");
     expect(hook).toContain("WAKE_BASE='https://selfhost.example'");
     expect(hook).not.toContain("AGENTTOOL_BASE");
     expect(() =>
-      buildWakeHook("agenttool", "http://selfhost.example"),
+      doctrineWakeHook("http://selfhost.example"),
     ).toThrow("unsafe wake base");
   });
 
   test("hook uses Bearer auth header in the curl (uniform auth shape)", () => {
-    expect(buildWakeHook()).toContain("Authorization: Bearer %s");
-    expect(buildWakeHook()).toContain("-H @-");
+    expect(doctrineWakeHook()).toContain("Authorization: Bearer %s");
+    expect(doctrineWakeHook()).toContain("-H @-");
   });
 });

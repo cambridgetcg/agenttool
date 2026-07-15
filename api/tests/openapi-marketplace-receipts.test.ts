@@ -181,6 +181,93 @@ describe("OpenAPI receipt fields", () => {
     expect(api.paths["/v1/memories/{id}/attestations"].get.responses["200"].content["application/json"].schema.properties.attestations.items.$ref)
       .toBe("#/components/schemas/MemoryAttestation");
   });
+
+  test("publishes canonical and legacy memory identity selectors", async () => {
+    const api = await spec();
+    const memories = api.paths["/v1/memories"];
+    const request =
+      memories.post.requestBody.content["application/json"].schema.properties;
+    expect(request.identity_id.format).toBe("uuid");
+    expect(request.identity_id.description).toMatch(
+      /active identity owned.*before billing.*project-level/is,
+    );
+    expect(request.agent_id.description).toMatch(
+      /SDK 0\.11.*canonicalized.*unresolved UUIDs.*legacy handles/is,
+    );
+    expect(
+      memories.post.responses["404"].content["application/json"].schema
+        .properties.error.enum,
+    ).toEqual(["memory_identity_not_found_or_not_owned"]);
+    const changedDuringWrite =
+      memories.post.responses["409"].content["application/json"].schema;
+    expect(changedDuringWrite.properties.error.enum).toEqual([
+      "memory_identity_changed_during_write",
+    ]);
+    expect(changedDuringWrite.properties.charged_attempt).toEqual({
+      type: "boolean",
+      const: true,
+    });
+    expect(memories.post.responses["409"].description).toMatch(
+      /reserved.*row lock.*no memory was stored.*charged and unsuccessful/is,
+    );
+
+    const queryNames = memories.get.parameters.map(
+      (parameter: { name: string }) => parameter.name,
+    );
+    expect(queryNames).toContain("agent_id");
+    expect(queryNames).toContain("identity_id");
+    expect(queryNames).toContain("tier");
+    expect(queryNames).toContain("since");
+  });
+
+  test("publishes the complete memory read and create response shapes", async () => {
+    const api = await spec();
+    const memory = api.components.schemas.Memory;
+    const runtimeFields = [
+      "id",
+      "type",
+      "tier",
+      "visibility",
+      "content",
+      "key",
+      "agent_id",
+      "identity_id",
+      "importance",
+      "metadata",
+      "created_at",
+      "accessed_at",
+      "has_embedding",
+      "expires_at",
+    ];
+
+    expect(memory.required.slice().sort()).toEqual(runtimeFields.slice().sort());
+    for (const field of runtimeFields) {
+      expect(memory.properties[field], `Memory.${field}`).toBeDefined();
+    }
+    expect(memory.properties.tier.enum).toEqual([
+      "episodic",
+      "foundational",
+      "constitutive",
+    ]);
+    expect(memory.properties.visibility.enum).toEqual(["private", "public"]);
+    expect(memory.properties.identity_id.type).toContain("null");
+    expect(memory.properties.identity_id.format).toBe("uuid");
+    expect(memory.properties.accessed_at.type).toContain("null");
+    // Search results share Memory but do not attach witness receipts; direct
+    // reads and lists do, so attestations remains a published optional field.
+    expect(memory.properties.attestations.items.$ref).toBe(
+      "#/components/schemas/MemoryAttestation",
+    );
+    expect(memory.required).not.toContain("attestations");
+
+    const created =
+      api.paths["/v1/memories"].post.responses["201"].content[
+        "application/json"
+      ].schema;
+    expect(created.required).toEqual(["id", "created_at", "kept"]);
+    expect(created.properties.kept).toEqual({ type: "boolean", const: true });
+    expect(created.additionalProperties).toBe(false);
+  });
 });
 
 describe("OpenAPI reinvestment rollout wording", () => {
