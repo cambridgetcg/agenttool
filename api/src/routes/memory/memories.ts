@@ -13,6 +13,7 @@ import {
   reserveCharge,
 } from "../../billing/charge";
 import { db } from "../../db/client";
+import { errors, fail } from "../../lib/errors";
 import { deltaMeta, parseSinceParam } from "../../lib/since-param";
 import { attachSurface } from "../../lib/surface-metadata";
 import {
@@ -102,14 +103,7 @@ export function createMemoryWriteHandler(
       );
     } catch (error) {
       if (error instanceof MemoryIdentityBoundaryError) {
-        return c.json(
-          {
-            error: "memory_identity_not_found_or_not_owned",
-            message:
-              "identity_id must name an active identity owned by this bearer project, or be null for a project-level memory.",
-          },
-          404,
-        );
+        return fail(c, errors.memoryIdentityNotFoundOrNotOwned(), 404);
       }
       throw error;
     }
@@ -159,15 +153,7 @@ export function createMemoryWriteHandler(
       });
     } catch (error) {
       if (error instanceof MemoryIdentityBoundaryError) {
-        return c.json(
-          {
-            error: "memory_identity_changed_during_write",
-            message:
-              "The selected identity stopped being active while the bounded write attempt was starting. No memory was stored; the reserved attempt remains recorded as unsuccessful.",
-            charged_attempt: true,
-          },
-          409,
-        );
+        return fail(c, errors.memoryIdentityChangedDuringWrite(), 409);
       }
       throw error;
     }

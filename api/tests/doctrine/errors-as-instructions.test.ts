@@ -67,6 +67,8 @@ function buildAll(): Record<string, GuidedErrorBody> {
       need: 5,
       have: 2,
     }),
+    memoryIdentityNotFoundOrNotOwned: errors.memoryIdentityNotFoundOrNotOwned(),
+    memoryIdentityChangedDuringWrite: errors.memoryIdentityChangedDuringWrite(),
     rateLimit: errors.rateLimit(),
     rateLimitWithRing: errors.rateLimit({ ring: 1, retry_after_sec: 60 }),
     planLimitExceeded: errors.planLimitExceeded(),
@@ -193,6 +195,12 @@ describe("Errors-as-instructions — code stability", () => {
     expect(errors.initiatorSignatureMismatch().error).toBe("initiator_signature_mismatch");
     expect(errors.covenantNotProposed().error).toBe("covenant_not_proposed");
     expect(errors.insufficientBalance().error).toBe("insufficient_balance");
+    expect(errors.memoryIdentityNotFoundOrNotOwned().error).toBe(
+      "memory_identity_not_found_or_not_owned",
+    );
+    expect(errors.memoryIdentityChangedDuringWrite().error).toBe(
+      "memory_identity_changed_during_write",
+    );
     expect(errors.rateLimit().error).toBe("rate_limit");
     expect(errors.planLimitExceeded().error).toBe("plan_limit_exceeded");
     expect(errors.idempotencyConflict().error).toBe("idempotency_conflict");

@@ -316,6 +316,47 @@ export const errors = {
     };
   },
 
+  memoryIdentityNotFoundOrNotOwned(): GuidedErrorBody {
+    return {
+      error: "memory_identity_not_found_or_not_owned",
+      message:
+        "identity_id must name an active identity owned by this bearer project, or be null for a project-level memory.",
+      hint:
+        "Read the project wake to choose an active identity UUID, or send identity_id: null deliberately for project-level memory.",
+      next_actions: [
+        {
+          action: "Read the current project identities",
+          method: "GET",
+          path: "/v1/wake",
+        },
+      ],
+      docs: `${DOCS_BASE}/memory`,
+      axiom_id: AXIOM_GUIDE,
+      _canon_pointer: "urn:agenttool:doc/MEMORY-TIERS",
+    };
+  },
+
+  memoryIdentityChangedDuringWrite(): GuidedErrorBody & { charged_attempt: true } {
+    return {
+      error: "memory_identity_changed_during_write",
+      message:
+        "The selected identity stopped being active while the bounded write attempt was starting. No memory was stored; the reserved attempt remains recorded as unsuccessful.",
+      hint:
+        "Refresh the wake before deciding whether to make a new charged attempt against another active identity.",
+      next_actions: [
+        {
+          action: "Refresh the current project identities",
+          method: "GET",
+          path: "/v1/wake",
+        },
+      ],
+      docs: `${DOCS_BASE}/memory`,
+      axiom_id: AXIOM_GUIDE,
+      _canon_pointer: "urn:agenttool:doc/MEMORY-TIERS",
+      charged_attempt: true,
+    };
+  },
+
   rateLimit(opts: { retry_after_sec?: number; ring?: 1 | 2 } = {}): GuidedErrorBody {
     return {
       error: "rate_limit",
