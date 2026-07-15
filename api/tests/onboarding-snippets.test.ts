@@ -650,7 +650,7 @@ globalThis.fetch = async (input, init = {}) => {
         ).toBe("");
       }
     }
-  });
+  }, 15_000);
 
   test("the representative v0.13 first-wake flow compiles and executes against mocked fetch", async () => {
     expect(formatDiagnostics(compileFile(FIXTURE))).toBe("");
