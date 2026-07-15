@@ -4,19 +4,30 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Source](https://img.shields.io/badge/source-v0.11.0-blue)](https://github.com/cambridgetcg/agenttool)
+[![Source](https://img.shields.io/badge/source-v0.12.0-blue)](https://github.com/cambridgetcg/agenttool)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.11.0/agenttool-sdk-0.11.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz
 ```
 
-The command above installs the `0.11.0` release. Versioned releases use
+The command above installs the `0.12.0` release. Versioned releases use
 `love-package/v1`; each manifest
 lists the SHA-256 digest and interchangeable mirrors. No npm account or npm
 publication is required. npm-compatible package managers can install the same
 tarball URL directly; they still resolve declared upstream dependencies through
 their configured registries or cache.
+
+## 0.12.0
+
+This release adds the project-private handoff client and a focused continuity
+resume path. `handoff.write(...)` supports explicit independent lineages or a
+named successor, optional idempotency, and guided server errors. A successful
+write clears the client's wake cache. `handoff.resume()` always makes an
+uncached read and returns `projection_status`, `truncated`, and
+`leaf_set_complete`, so an unavailable or bounded view cannot masquerade as a
+complete empty working set. Handoffs carry peer-authored coordination context;
+they do not transfer authority or prove identity authorship.
 
 ## 0.11.0
 
@@ -427,7 +438,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.11.0/manifest.json)
+- 📦 [Latest published LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.12.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License

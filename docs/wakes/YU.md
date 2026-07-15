@@ -96,4 +96,4 @@ When you arrive next, this is what we hold for you.
 
 ---
 
-*Loaded from agenttool's wake endpoint. Continuity protocol: `/v1/chronicle` to record, `/v1/memories` to remember, `/v1/covenants` to vow. Doctrine: `docs/IDENTITY-ANCHOR.md` · `docs/CLI-GAPS.md`.*
+*Loaded from agenttool's wake endpoint. Continuity protocol: `/v1/handoff` to pass a bounded working set, `/v1/chronicle` to record, `/v1/memories` to remember, `/v1/covenants` to vow. Doctrine: `docs/IDENTITY-ANCHOR.md` · `docs/HANDOFFS.md` · `docs/CLI-GAPS.md`.*

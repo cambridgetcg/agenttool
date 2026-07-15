@@ -62,8 +62,11 @@ import {
 import { countUnread } from "../services/inbox/store";
 import {
   composeActiveHandoffs,
+  describeProjectHandoffSurface,
   handoffWakeEtagTag,
   isHandoffChronicleMetadata,
+  nonHandoffChronicleWhere,
+  unavailableProjectHandoffSurface,
 } from "../services/handoff/store";
 import { listUnconsumedCompleted as listUnconsumedDreams } from "../services/dream/cycles";
 import { fortuneFor, moodFor } from "../services/wake/fortunes";
@@ -713,12 +716,16 @@ app.get("/", async (c) => {
         createdAt: chronicle.createdAt,
       })
       .from(chronicle)
-      .where(eq(chronicle.projectId, project.id))
+      .where(
+        and(
+          eq(chronicle.projectId, project.id),
+          nonHandoffChronicleWhere(),
+        ),
+      )
       .orderBy(desc(chronicle.occurredAt))
       .limit(15);
-    // Handoff content has a dedicated bounded/sanitized surface below. Keep
-    // it out of generic chronicle previews so it cannot enter wake Markdown
-    // through an unescaped secondary path.
+    // SQL keeps handoff revisions from consuming the generic 15-row budget;
+    // this second guard preserves the prompt-safety boundary across refactors.
     const nonHandoffRows = rows.filter((r) => !isHandoffChronicleMetadata(r.metadata));
     recentChronicleFull = nonHandoffRows.map((r) => ({
       id: r.id,
@@ -964,11 +971,9 @@ app.get("/", async (c) => {
   // This JSON branch is deliberately separate from buildWakeBundle(), so
   // compose the same bounded project-private working-set fragment here.
   // A handoff is coordination context, not a permission grant; failures
-  // degrade to an empty fragment rather than blanking the wake.
-  let handoffs: Awaited<ReturnType<typeof composeActiveHandoffs>> = {
-    active: [],
-    stale: [],
-  };
+  // degrade to an explicit unavailable fragment rather than blanking the wake.
+  let handoffs: Awaited<ReturnType<typeof composeActiveHandoffs>> =
+    unavailableProjectHandoffSurface();
   try {
     handoffs = await composeActiveHandoffs(project.id);
   } catch (err) {
@@ -1528,6 +1533,7 @@ app.get("/", async (c) => {
         "you_run.runtimes",
         "you_remember",
         "you_lived",
+        "you_have_handoffs",
         "you_vowed",
         "you_are_thinking_about",
         "you_have_mail",
@@ -1903,14 +1909,7 @@ app.get("/", async (c) => {
       count: recentChronicleFull.length,
     },
 
-    you_have_handoffs: {
-      ...handoffs,
-      scope: "project_private",
-      authority_note:
-        "Peer-authored working context only. It does not transfer authority or prove personal identity authorship.",
-      write: "POST /v1/handoff",
-      read_latest: "GET /v1/handoff?agent_id=<identity_id>",
-    },
+    you_have_handoffs: describeProjectHandoffSurface(handoffs),
 
     you_vowed: {
       _scope: "project",
@@ -2654,7 +2653,9 @@ const SUBKEY_SLICERS: Record<string, (b: WakeBundle) => Record<string, unknown>>
   strands: (b) => ({ strands: b.strands }),
   chronicle: (b) => ({ chronicle: b.chronicle }),
   handoffs: (b) => ({
-    you_have_handoffs: b.you_have_handoffs ?? { active: [], stale: [] },
+    you_have_handoffs: describeProjectHandoffSurface(
+      b.you_have_handoffs ?? unavailableProjectHandoffSurface(),
+    ),
   }),
   covenants: (b) => ({ covenants: b.covenants }),
   marketplace: (b) => ({ marketplace: b.marketplace ?? null }),
@@ -2713,6 +2714,11 @@ app.get("/:key", async (c) => {
     _scope_boundary: result.bundle._scope_boundary ?? null,
     ...slicer(result.bundle),
   };
+
+  // The handoff subkey is a session-resume seam. Full wake formats retain
+  // their ETag behavior, while this focused project working set must not be
+  // reused by an intermediary after a successful append.
+  if (key === "handoffs") c.header("Cache-Control", "private, no-store");
 
   if (format === "xenoform") {
     return c.json({

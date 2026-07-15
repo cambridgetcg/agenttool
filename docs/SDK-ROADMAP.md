@@ -6,18 +6,26 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current release — 2026-07-13
+## Current release — 2026-07-15
 
 The Python and TypeScript source manifests and runtime client version headers
-are aligned at **0.11.0**. The checked-in release builder targets a TypeScript
-LOVE artifact and the `sdk-v0.11.0` GitHub release tag. Building, committing,
+are aligned at **0.12.0**. The checked-in release builder targets a TypeScript
+LOVE artifact and the `sdk-v0.12.0` GitHub release tag. Building, committing,
 and publishing those assets is a release operation; the source version alone
 does not prove that either asset is available. CI builds and smoke-tests the
 Python wheel, but npm and PyPI publication are separate optional operator
-steps. As audited on 2026-07-13, npm serves `@agenttool/sdk@0.8.0` and PyPI
-serves `agenttool-sdk==0.10.0`. Registry versions can therefore lag the source
-and LOVE/GitHub release. This breaking minor source line repairs identity
-contracts:
+steps; registry versions can lag the source and LOVE/GitHub release.
+
+This additive release introduces the project-private handoff client in both
+languages. Writes can explicitly start independent work or supersede one named
+snapshot, accept an idempotency key, preserve guided server errors, and clear
+the local wake cache. Focused `handoff.resume()` reads bypass that cache and
+return `projection_status`, `truncated`, and `leaf_set_complete`, so bounded or
+unavailable projections cannot masquerade as complete empty work. Handoffs are
+peer-authored coordination context: they do not transfer authority or prove
+identity authorship.
+
+The previous 0.11.0 breaking source line repaired identity contracts:
 attestations carry a caller-created signature and key ID, agent JWTs are signed
 locally, verification requires the intended audience and binds the token
 subject to the signing key's identity, and the retired server-side token issue
@@ -327,7 +335,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.9.0** | Phase 6 (inbox sealed-box) | no — additive |
 | **0.10.0** | Correct tools wire contracts and strict local validation; add local-node-only `at.data.sync.pull/status` | **yes** |
 | **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
-| **0.12.0** | Deliberate public/federation/org/template/dashboard coverage plus selected wake extensions | no |
+| **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

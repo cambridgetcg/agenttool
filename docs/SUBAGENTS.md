@@ -121,9 +121,13 @@ the next safe action, and a mandatory expiry:
 ```
 
 The route persists a versioned `chronicle.type = "note"` with
-`metadata.kind = "handoff"`; a successor names `supersedes_handoff_id` so
-the old snapshot remains in history. Current and stale project handoffs
-surface in the wake and at `GET /v1/wake/handoffs`.
+`metadata.kind = "handoff"`. Omitted lineage fields preserve the legacy single
+newest-per-author lane. `starts_new_lineage: true` explicitly starts a parallel
+lineage; a successor names `supersedes_handoff_id` and replaces only that
+parent. Explicit parallel roots and concurrent forks stay visible within the
+wake's bounded candidate scan. JSON completeness fields distinguish complete,
+truncated, and unavailable projections, so failure never looks like no work.
+Both SDKs expose the uncached focused read as `handoff.resume()`.
 
 No chronicle entry is automatically written by `/v1/wake?facet=`. A facet is
 a rendering choice; handoff bookkeeping remains explicit. Nor does a handoff

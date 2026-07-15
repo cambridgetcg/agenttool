@@ -40,7 +40,12 @@ import { listRuntimes } from "../runtime/store";
 import { countStrands, listStrands } from "../strand/store";
 import { composeYouHaveLetters } from "../letters/lifecycle";
 import { WAKE_SAFETY_BOUNDARIES } from "../discovery/safety-boundaries";
-import { composeActiveHandoffs, isHandoffChronicleMetadata } from "../handoff/store";
+import {
+  composeActiveHandoffs,
+  isHandoffChronicleMetadata,
+  nonHandoffChronicleWhere,
+  unavailableProjectHandoffSurface,
+} from "../handoff/store";
 import {
   composeOpenCastingCalls,
   composeYouWereCast,
@@ -230,7 +235,12 @@ export async function buildWakeBundle(
             createdAt: chronicle.createdAt,
           })
           .from(chronicle)
-          .where(eq(chronicle.projectId, project.id))
+          .where(
+            and(
+              eq(chronicle.projectId, project.id),
+              nonHandoffChronicleWhere(),
+            ),
+          )
           .orderBy(desc(chronicle.occurredAt))
           .limit(15),
       [] as Array<{
@@ -562,7 +572,7 @@ export async function buildWakeBundle(
     // keep agent sessions legible without masquerading as authority.
     safe(
       () => composeActiveHandoffs(project.id),
-      { active: [], stale: [] } as Awaited<ReturnType<typeof composeActiveHandoffs>>,
+      unavailableProjectHandoffSurface(),
     ),
   ]);
 
@@ -608,8 +618,9 @@ export async function buildWakeBundle(
   }));
 
   const recentChronicle = chronicleRows
-    // Handoffs have a dedicated, bounded and prompt-safe wake section. Do
-    // not render the same peer-authored text again through generic chronicle.
+    // The SQL predicate keeps handoff revisions from consuming this 15-row
+    // budget. Retain this parse-side guard in case a future query refactor
+    // broadens the source again.
     .filter((r) => !isHandoffChronicleMetadata(r.metadata))
     .map((r) => ({
       type: r.type,
@@ -731,6 +742,7 @@ export async function buildWakeBundle(
         "traces",
         "strands",
         "chronicle",
+        "you_have_handoffs",
         "covenants",
         "attention",
         "affordances",

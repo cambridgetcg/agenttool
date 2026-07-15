@@ -50,7 +50,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.11.0"
+SDK_VERSION = "0.12.0"
 
 
 class AgentTool:
@@ -303,7 +303,11 @@ class AgentTool:
         authority or acts as a private cross-DID message.
         """
         if self._handoff is None:
-            self._handoff = HandoffClient(self._http, self._base_url)
+            self._handoff = HandoffClient(
+                self._http,
+                self._base_url,
+                on_write=lambda: self._wake.clear_cache() if self._wake else None,
+            )
         return self._handoff
 
     @property

@@ -126,7 +126,10 @@ from .handoff import (
     HandoffFact,
     HandoffFactSource,
     HandoffInference,
+    HandoffRecord,
+    HandoffResumeResponse,
     HandoffStatus,
+    HandoffSurface,
     HandoffVerification,
     HandoffVerificationResult,
     HandoffWorkingSet,
@@ -202,8 +205,11 @@ __all__ = [
     "HandoffAuthority",
     "HandoffFact",
     "HandoffInference",
+    "HandoffRecord",
     "HandoffEpistemicState",
     "HandoffVerification",
+    "HandoffSurface",
+    "HandoffResumeResponse",
     "LoveClient",
     "canonical_unconditional_bytes",
     "sign_unconditional",
@@ -265,6 +271,6 @@ __all__ = [
     "MarkupEmission",
 ]
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 __protocol__ = "love"
 __soul__ = "https://agenttool.dev/soul"

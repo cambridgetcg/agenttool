@@ -31,7 +31,7 @@ import { WindowClient } from "./window.js";
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.11.0";
+export const SDK_VERSION = "0.12.0";
 
 /**
  * Unified client for the agenttool.dev platform.
@@ -192,7 +192,7 @@ export class AgentTool {
   /** Access append-only project working-set handoffs. Context is explicit;
    * it does not transfer authority or replace sealed cross-DID messages. */
   get handoff(): HandoffClient {
-    this._handoff ??= new HandoffClient(this.http);
+    this._handoff ??= new HandoffClient(this.http, () => this._wake?.clearCache());
     return this._handoff;
   }
 

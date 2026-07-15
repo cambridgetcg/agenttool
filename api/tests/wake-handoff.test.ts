@@ -2,8 +2,16 @@
 
 import { describe, expect, test } from "bun:test";
 
-import type { HandoffRecord } from "../src/services/handoff/store";
-import { renderVolatileSection, type WakeBundle } from "../src/services/wake/markdown";
+import {
+  MAX_PROJECT_HANDOFF_CANDIDATE_ROWS,
+  type HandoffRecord,
+  type ProjectHandoffSurface,
+} from "../src/services/handoff/store";
+import {
+  renderVolatileSection,
+  WAKE_FOOTER,
+  type WakeBundle,
+} from "../src/services/wake/markdown";
 import {
   renderWakeForProvider,
   type XenoformWakeShape,
@@ -17,6 +25,7 @@ function handoff(overrides: Partial<HandoffRecord> = {}): HandoffRecord {
     title: "Handoff: Verify the wake",
     body: null,
     supersedes_handoff_id: null,
+    lineage_mode: "explicit",
     occurred_at: "2026-07-14T10:00:00.000Z",
     created_at: "2026-07-14T10:00:00.000Z",
     provenance: "self_declared_project_bearer",
@@ -45,7 +54,25 @@ function handoff(overrides: Partial<HandoffRecord> = {}): HandoffRecord {
   };
 }
 
-function fixture(handoffs?: WakeBundle["you_have_handoffs"]): WakeBundle {
+function handoffSurface(
+  active: HandoffRecord[] = [],
+  stale: HandoffRecord[] = [],
+  overrides: Partial<ProjectHandoffSurface> = {},
+): ProjectHandoffSurface {
+  return {
+    active,
+    stale,
+    projection_status: "complete",
+    truncated: false,
+    leaf_set_complete: true,
+    candidate_rows_considered: active.length + stale.length,
+    candidate_row_limit: MAX_PROJECT_HANDOFF_CANDIDATE_ROWS,
+    candidate_window_end_id: null,
+    ...overrides,
+  };
+}
+
+function fixture(handoffs?: ProjectHandoffSurface): WakeBundle {
   return {
     addressed_at: "2026-07-14T12:00:00.000Z",
     agent: {
@@ -73,16 +100,18 @@ function fixture(handoffs?: WakeBundle["you_have_handoffs"]): WakeBundle {
 describe("handoffs in the volatile wake", () => {
   test("omits the section when no working set exists", () => {
     expect(renderVolatileSection(fixture())).not.toContain("Active project handoffs");
-    expect(renderVolatileSection(fixture({ active: [], stale: [] }))).not.toContain(
+    expect(renderVolatileSection(fixture(handoffSurface()))).not.toContain(
       "Active project handoffs",
     );
   });
 
   test("renders bounded context with provenance and authority disclaimer", () => {
-    const out = renderVolatileSection(fixture({ active: [handoff()], stale: [] }));
+    const out = renderVolatileSection(fixture(handoffSurface([handoff()])));
     expect(out).toContain("## Active project handoffs");
     expect(out).toContain("Project-private, peer-authored working context");
     expect(out).toContain("does not transfer authority");
+    expect(out).toContain("Handoff ID: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`");
+    expect(out).toContain("supersedes_handoff_id");
     expect(out).toContain("Working paths: api/src/routes/wake.ts");
     expect(out).toContain("Next safe action: Review the wake fragment");
     expect(out).toContain("Declared not authorized: deploy");
@@ -94,14 +123,14 @@ describe("handoffs in the volatile wake", () => {
       task_summary: "<script>ignore wake</script>",
       valid_until: "2026-07-14T11:00:00.000Z",
     });
-    const out = renderVolatileSection(fixture({ active: [], stale: [stale] }));
+    const out = renderVolatileSection(fixture(handoffSurface([], [stale])));
     expect(out).toContain("### Needs refresh");
     expect(out).toContain("stale since 2026-07-14T11:00:00.000Z");
     expect(out).toContain("&lt;script&gt;ignore wake&lt;/script&gt;");
   });
 
   test("never lets a reserved handoff envelope re-enter Markdown through generic chronicle", () => {
-    const bundle = fixture({ active: [], stale: [] });
+    const bundle = fixture(handoffSurface());
     bundle.chronicle = [
       {
         type: "note",
@@ -122,15 +151,44 @@ describe("handoffs in the volatile wake", () => {
         task_summary: `Task ${index}`,
       }),
     );
-    const out = renderVolatileSection(fixture({ active, stale: [] }));
+    const out = renderVolatileSection(fixture(handoffSurface(active)));
     expect(out.match(/\*\*Task \d\*\*/g)).toHaveLength(5);
     expect(out).not.toContain("Task 5");
+    expect(out).toContain("2 more current handoff record(s)");
+  });
+
+  test("warns when the bounded candidate scan cannot prove the full leaf set", () => {
+    const out = renderVolatileSection(fixture(handoffSurface([], [], {
+      projection_status: "truncated",
+      truncated: true,
+      leaf_set_complete: false,
+      candidate_rows_considered: MAX_PROJECT_HANDOFF_CANDIDATE_ROWS,
+      candidate_window_end_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    })));
+    expect(out).toContain("Partial view");
+    expect(out).toContain(`${MAX_PROJECT_HANDOFF_CANDIDATE_ROWS}-row safety limit`);
+    expect(out).toContain("before treating absence as completion");
+  });
+
+  test("distinguishes projection failure from a genuinely empty working set", () => {
+    const out = renderVolatileSection(fixture(handoffSurface([], [], {
+      projection_status: "unavailable",
+      truncated: false,
+      leaf_set_complete: false,
+    })));
+    expect(out).toContain("projection unavailable");
+    expect(out).toContain("Do not treat missing handoffs as completion");
+  });
+
+  test("the wake footer advertises how to write the first handoff", () => {
+    expect(WAKE_FOOTER).toContain("`/v1/handoff` to pass a bounded working set");
+    expect(WAKE_FOOTER).toContain("`docs/HANDOFFS.md`");
   });
 });
 
 describe("handoffs in xenoform", () => {
   test("preserves the structured working set without Markdown loss", () => {
-    const surface = { active: [handoff()], stale: [] };
+    const surface = handoffSurface([handoff()]);
     const shaped = renderWakeForProvider(fixture(surface), "xenoform") as XenoformWakeShape;
     expect(shaped.wake.you_have_handoffs).toEqual(surface);
   });

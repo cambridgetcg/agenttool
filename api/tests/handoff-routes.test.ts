@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 
 import handoffRouter from "../src/routes/handoff";
 import continuityRouter from "../src/routes/continuity";
+import openapiRouter from "../src/routes/openapi";
 
 const CANON_DOC = "urn:agenttool:doc/HANDOFFS";
 
@@ -77,5 +78,32 @@ describe("GET /v1/handoff — query validation", () => {
 
     const malformed = await handoffRouter.request("/?agent_id=not-a-uuid", { method: "GET" });
     expect(malformed.status).toBe(400);
+  });
+});
+
+describe("handoff OpenAPI discovery", () => {
+  test("documents explicit lineage opt-in and bounded resume completeness", async () => {
+    const document = await (await openapiRouter.request("/")).json() as {
+      paths: Record<string, Record<string, any>>;
+    };
+    const write = document.paths["/v1/handoff"]!.post;
+    const writeSchema = write.requestBody.content["application/json"].schema;
+    expect(writeSchema.properties.starts_new_lineage.type).toBe("boolean");
+    expect(write.description).toContain("legacy newest-per-author lane");
+
+    const resume = document.paths["/v1/wake/handoffs"]!.get;
+    const surface = resume.responses["200"].content["application/json"].schema
+      .properties.you_have_handoffs;
+    expect(surface.required).toContain("leaf_set_complete");
+    expect(surface.required).toContain("projection_status");
+    expect(surface.properties.projection_status.enum).toEqual([
+      "complete",
+      "truncated",
+      "unavailable",
+    ]);
+    expect(surface.properties.candidate_row_limit.enum).toEqual([32]);
+    expect(surface.properties.candidate_window_end_id.description).toContain(
+      "not a resume cursor",
+    );
   });
 });

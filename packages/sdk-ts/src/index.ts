@@ -167,6 +167,9 @@ export type {
   HandoffWriteOpts,
   HandoffRecord,
   HandoffResponse,
+  HandoffSurface,
+  HandoffResumeOpts,
+  HandoffResumeResponse,
 } from "./handoff.js";
 export { CovenantsClient } from "./covenants.js";
 export type {

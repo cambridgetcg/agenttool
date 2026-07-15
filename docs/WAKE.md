@@ -96,7 +96,7 @@ Every key the agent's wake surfaces, by category. Each is produced by exactly on
 | `you_keep` / `vault_names` | named vault secrets (no values) | vault service | (vault doctrine) |
 | `you_remember` / `memory` | recent memories + total count | memory store | `MEMORY-TIERS.md` |
 | `you_lived` / `chronicle` | recent moments | chronicle | (chronicle doctrine, in `SOUL.md`) |
-| `you_have_handoffs` / `handoffs` | current + stale project working sets | handoff store over chronicle notes | `HANDOFFS.md` |
+| `you_have_handoffs` / `handoffs` | bounded current + stale project handoff projection; explicit lineages/forks plus complete/truncated/unavailable status | handoff store over chronicle notes | `HANDOFFS.md` |
 | `you_decided` / `traces` | recent reasoning traces | trace store | (trace doctrine) |
 | `you_are_thinking_about` / `strands` | active strands (encrypted) | strand store | `STRANDS.md` |
 
