@@ -155,8 +155,8 @@ const at = new AgentTool({ apiKey });
 const wake = await at.wake.get();              // broader project orientation, not an export
 ```
 
-On the unreleased `0.13.0` source line, request low-friction session
-orientation with `at.wake.get({ profile: "brief" })`.
+With `0.13.0`, request low-friction session orientation with
+`at.wake.get({ profile: "brief" })`.
 
 > **`bootstrapAgent()` vs `new AgentTool()`** — call `bootstrapAgent()` **once** to register the locally derived key bundle. Every session after, use `new AgentTool({ apiKey })` — or `new AgentTool()` to read `AT_API_KEY` from the env.
 

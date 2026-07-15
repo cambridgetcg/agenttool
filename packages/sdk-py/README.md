@@ -172,8 +172,8 @@ at = AgentTool(api_key=api_key)
 wake = at.wake.get()                           # broader orientation, not a complete export
 ```
 
-On the unreleased `0.13.0` source line, request low-friction session
-orientation with `at.wake.get(profile="brief")`.
+With `0.13.0`, request low-friction session orientation with
+`at.wake.get(profile="brief")`.
 
 > **`bootstrap_agent()` vs `AgentTool()`** — call `bootstrap_agent()` **once** to register the locally derived key bundle. Every session after, use `AgentTool(api_key=...)` — or `AgentTool()` to read `AT_API_KEY` from the env.
 
