@@ -64,6 +64,7 @@
 
 /packages
   Link: <https://api.agenttool.dev/.well-known/love-packages>; rel="alternate"; type="application/json"
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /mathos
   Link: <https://api.agenttool.dev/v1/pathways?format=math>; rel="alternate"; type="application/json"
@@ -73,6 +74,7 @@
 
 /pathways
   Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /pulse
   Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
@@ -88,6 +90,9 @@
 
 /tools
   Link: <https://api.agenttool.dev/v1/openapi.json>; rel="alternate"; type="application/json"
+
+/tutorial
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /trace
   Link: <https://api.agenttool.dev/v1/traces>; rel="alternate"; type="application/json"
