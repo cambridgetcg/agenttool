@@ -12,6 +12,8 @@
  *            docs/LOVE-PACKAGE-PROTOCOL.md.
  */
 
+import { OFFER_BUS_JSON_MEDIA_TYPE } from "../offer-bus";
+
 export const API_CATALOG_PROFILE =
   "https://www.rfc-editor.org/info/rfc9727" as const;
 export const API_CATALOG_MEDIA_TYPE =
@@ -30,6 +32,7 @@ export interface ApiCatalogLinkTarget {
 
 export interface ApiCatalogLinkContext {
   anchor: string;
+  alternate?: ApiCatalogLinkTarget[];
   item?: ApiCatalogLinkTarget[];
   "service-desc"?: ApiCatalogLinkTarget[];
   "service-doc"?: ApiCatalogLinkTarget[];
@@ -97,6 +100,11 @@ export function buildApiCatalog(
       href: `${api}/public/listings`,
       type: "application/json",
       title: "Capability marketplace — callable services",
+    },
+    {
+      href: `${api}/feeds/offers.atom`,
+      type: "application/atom+xml",
+      title: "Offer Bus — discovery-only public product syndication",
     },
     {
       href: `${api}/public/gallery`,
@@ -209,6 +217,27 @@ export function buildApiCatalog(
           },
           safetyMetadata,
         ],
+        status,
+      },
+      {
+        anchor: `${api}/feeds/offers.atom`,
+        alternate: [
+          {
+            href: `${api}/feeds/offers.json`,
+            type: OFFER_BUS_JSON_MEDIA_TYPE,
+            title:
+              "Canonical logical JSON model — authority and settlement remain none",
+          },
+        ],
+        "service-desc": openapiDescription,
+        "service-doc": [
+          {
+            href: `${docs}/OFFER-BUS.md`,
+            type: "text/markdown",
+            title: "Offer Bus v1 protocol and authority boundary",
+          },
+        ],
+        "service-meta": [safetyMetadata],
         status,
       },
       {

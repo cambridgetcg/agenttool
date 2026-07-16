@@ -311,6 +311,9 @@ export const DOCS_REDIRECT_FILES = [
   "MCP-PER-AGENT.md",
   "AIP-WAKE-KEYSTONE.md",
   "FAIR-PRICING.md",
+  "OFFER-BUS.md",
+  "WEBFINGER.md",
+  "PROTOCOL-RENAISSANCE.md",
 ] as const;
 
 /** Resolve an advertised /docs/<file> door to its real URL on the docs

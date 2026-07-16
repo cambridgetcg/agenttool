@@ -85,9 +85,9 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.17",
+  "version": "v1.18",
   "introduced": "2026-05-11",
-  "updated": "2026-07-13",
+  "updated": "2026-07-16",
   "@graph": [
     {
       "@id": "agenttool:registry/self",
@@ -4477,6 +4477,38 @@
       "english_name": "AGENT-WEB-SURFACE.md",
       "description": "Machine-readable web-surface doctrine. Root conventions, metadata, and alternates are implementation claims only where their live routes and links resolve.",
       "schema:url": "https://docs.agenttool.dev/AGENT-WEB-SURFACE.md"
+    },
+    {
+      "@id": "agenttool:doc/WEBFINGER",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "WEBFINGER",
+      "english_name": "WEBFINGER.md",
+      "description": "Privacy-bounded RFC 7033 Agent Passport discovery. One exact stored DID locates its existing public application profile and exact-seller Offer Bus; it does not infer display names or acct aliases and is not DID Resolution, authentication, permission, or payment authority.",
+      "schema:url": "https://docs.agenttool.dev/WEBFINGER.md",
+      "renders_as": [
+        "/.well-known/webfinger"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/OFFER-BUS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "OFFER-BUS",
+      "english_name": "OFFER-BUS.md",
+      "description": "Offer Bus v1 canonical logical model for bounded already-public economic records, exposed as JSON and rendered as canonical Atom syndication plus RSS compatibility. Durable source revisions and a versioned projection timestamp witness removal and code-only projection changes; bounded quarantine accounting prevents one incompatible legacy row from poisoning unrelated entries. Every feed and entry declares authority none, settlement none, and automatic action never.",
+      "schema:url": "https://docs.agenttool.dev/OFFER-BUS.md",
+      "renders_as": [
+        "/feeds/offers.atom",
+        "/feeds/offers.rss",
+        "/feeds/offers.json"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/PROTOCOL-RENAISSANCE",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "PROTOCOL-RENAISSANCE",
+      "english_name": "PROTOCOL-RENAISSANCE.md",
+      "description": "Old internet virtues applied to agent-native discovery: inspectable bytes, exact scope, stable links and validators, plus explicit no-implied-authority and no-auto-action walls. Unimplemented WebSub, ActivityPub, Matrix, and Finger doors remain named as staged rather than live.",
+      "schema:url": "https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md"
     },
     {
       "@id": "agenttool:doc/AGENT-CENTRIC",

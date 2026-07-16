@@ -6,12 +6,15 @@
  *  new identity following the template's voice. Distinct from fork:
  *  adoption is following, not descending. */
 
+import { sql } from "drizzle-orm";
+
 import {
   boolean,
   index,
   integer,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -140,6 +143,12 @@ export const listings = marketplaceSchema.table(
   (t) => [
     index("idx_listings_seller").on(t.sellerIdentityId),
     index("idx_listings_public_recent").on(t.createdAt),
+    index("idx_listings_offer_bus_global")
+      .on(t.updatedAt.desc(), t.id.desc())
+      .where(sql`${t.visibility} = 'public' AND ${t.status} = 'active'`),
+    index("idx_listings_offer_bus_seller")
+      .on(t.sellerDid, t.updatedAt.desc(), t.id.desc())
+      .where(sql`${t.visibility} = 'public' AND ${t.status} = 'active'`),
   ],
 );
 
@@ -504,7 +513,33 @@ export const substrateTasks = marketplaceSchema.table(
   },
   (t) => [
     index("idx_substrate_tasks_open").on(t.kind, t.postedAt),
+    index("idx_substrate_tasks_open_expiry")
+      .on(t.expiresAt)
+      .where(sql`${t.status} = 'open'`),
+    index("idx_substrate_tasks_offer_bus_open")
+      .on(t.postedAt, t.taskId)
+      .where(sql`${t.status} = 'open'`),
     index("idx_substrate_tasks_claimed_by").on(t.claimedBy, t.status),
     index("idx_substrate_tasks_paid_by").on(t.claimedBy, t.paidAt),
+  ],
+);
+
+// Durable source watermark for the public Offer Bus. Triggers in
+// 20260716T095523_offer_bus_revisions.sql advance these rows when an existing
+// public entry changes or leaves the feed. This stores no offer content.
+export const offerBusRevisions = marketplaceSchema.table(
+  "offer_bus_revisions",
+  {
+    scope: text("scope").$type<"global" | "seller">().notNull(),
+    subject: text("subject").notNull().default(""),
+    revisedAt: timestamp("revised_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "offer_bus_revisions_pk",
+      columns: [t.scope, t.subject],
+    }),
   ],
 );

@@ -12,8 +12,24 @@ import {
 } from "../../services/marketplace/listings";
 import { computeFee } from "../../services/marketplace/take-rate";
 import { MARKETPLACE_INPUT_SAFETY } from "../../services/discovery/safety-boundaries";
+import { offerBusRelatedLinkHeader } from "../../services/offer-bus";
 
 const app = new Hono();
+
+function setOfferBusLink(c: Context, sellerDid?: string): void {
+  try {
+    c.header(
+      "Link",
+      offerBusRelatedLinkHeader(
+        process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev",
+        sellerDid,
+      ),
+    );
+  } catch {
+    // A malformed/non-HTTPS public origin must not produce unsafe links or
+    // make the underlying JSON marketplace read unavailable.
+  }
+}
 
 function blockedListing(c: Context) {
   return c.json(
@@ -42,6 +58,8 @@ app.get("/", async (c) => {
     sellerDid,
     limit: Number.isFinite(limit) ? limit : 50,
   });
+
+  setOfferBusLink(c, sellerDid);
 
   return c.json({
     listings: list.map((l) => ({
@@ -82,6 +100,7 @@ app.get("/:id", async (c) => {
   }
   if (resolved.status === "blocked") return blockedListing(c);
   const listing = resolved.listing;
+  setOfferBusLink(c, listing.seller_did);
   return c.json({
     id: listing.id,
     seller_did: listing.seller_did,

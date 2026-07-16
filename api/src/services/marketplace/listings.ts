@@ -283,7 +283,13 @@ export async function listPublicListings(opts: {
   /** Free-text search over name + description + tags (ILIKE). */
   q?: string;
   limit?: number;
-  order?: "popular" | "oldest";
+  order?: "popular" | "oldest" | "newest";
+  /**
+   * Return the bounded credential-safe scan window before page slicing.
+   * Intended for downstream public projections that apply another contract;
+   * ordinary collection callers should keep the default page behavior.
+   */
+  scan?: boolean;
 } = {}): Promise<ListingOut[]> {
   const { pageLimit, fetchLimit } = publicListingWindow(opts.limit);
   const conds = [
@@ -312,6 +318,8 @@ export async function listPublicListings(opts: {
     .orderBy(
       ...(opts.order === "oldest"
         ? [asc(listings.createdAt), asc(listings.id)]
+        : opts.order === "newest"
+          ? [desc(listings.updatedAt), desc(listings.id)]
         : [
             desc(listings.invocationsCount),
             desc(listings.createdAt),
@@ -323,7 +331,8 @@ export async function listPublicListings(opts: {
   // Legacy rows may predate the authoring guard. Over-fetch first, quarantine
   // centrally, then apply the caller's page size so an unsafe high-ranked row
   // does not displace the next safe result. The scan cap keeps this bounded.
-  return filterCredentialSafeListings(rows.map(rowToOut)).visible.slice(0, pageLimit);
+  const visible = filterCredentialSafeListings(rows.map(rowToOut)).visible;
+  return opts.scan ? visible : visible.slice(0, pageLimit);
 }
 
 export const PUBLIC_LISTING_MAX_PAGE = 200;

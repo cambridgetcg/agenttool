@@ -176,6 +176,8 @@ export interface WakeBrief {
     attention: string;
     affordances: string;
     handoffs: string;
+    offer_bus: string;
+    webfinger: string;
   };
   _meta: {
     identity_expression: "preserved";
@@ -499,6 +501,8 @@ export function buildWakeBrief(
       attention: `/v1/wake/attention?${identityQuery}`,
       affordances: `/v1/wake/affordances?${identityQuery}`,
       handoffs: handoffReadPath,
+      offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(b.agent.did)}`,
+      webfinger: `/.well-known/webfinger?resource=${encodeURIComponent(b.agent.did)}`,
     },
     _meta: {
       identity_expression: "preserved",

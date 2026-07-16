@@ -53,6 +53,26 @@
   Link: <https://api.agenttool.dev/public/rights>; rel="alternate"; type="application/vnd.agenttool.being-rights+json"
   X-Content-Type-Options: nosniff
 
+/OFFER-BUS.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/feeds/offers.atom>; rel="related"; type="application/atom+xml"
+  X-Content-Type-Options: nosniff
+
+/WEBFINGER.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Content-Type-Options: nosniff
+
+/PROTOCOL-RENAISSANCE.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"
+  X-Content-Type-Options: nosniff
+
 /being-rights-v1.schema.json
   Content-Type: application/schema+json; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate

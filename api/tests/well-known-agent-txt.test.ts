@@ -202,7 +202,7 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-13");
+    expect(kv.get("Last-Modified")).toBe("2026-07-16");
   });
 });
 
