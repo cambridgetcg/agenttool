@@ -527,18 +527,22 @@ describe("deploy release provenance spine", () => {
     expect((await stat(lockPath)).ino).toBe((await stat(ownerRecord)).ino);
   }, 15_000);
 
-  test("keeps the rendered data reference byte-identical at the edge", async () => {
+  test("keeps scoped-package reference pages byte-identical at the edge", async () => {
     const [deploy, headers] = await Promise.all([
       readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
       readFile(join(projectRoot, "apps/docs/_headers"), "utf8"),
     ]);
 
-    expect(deploy).toContain(
-      '"apps/docs/data.html|https://docs.agenttool.dev/data"',
-    );
-    expect(headers).toMatch(
-      /\/data\n\s+Cache-Control: public, max-age=0, must-revalidate, no-transform/,
-    );
+    for (const page of ["data", "packages", "pathways", "tutorial"]) {
+      expect(deploy).toContain(
+        `"apps/docs/${page}.html|https://docs.agenttool.dev/${page}"`,
+      );
+      expect(headers).toMatch(
+        new RegExp(
+          `/${page}\\n(?:  [^\\n]+\\n)*?  Cache-Control: public, max-age=0, must-revalidate, no-transform`,
+        ),
+      );
+    }
   });
 
   test("publishes Rights of Life prerequisites before API discovery and verifies exact static contracts", async () => {
