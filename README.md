@@ -203,11 +203,17 @@ For TypeScript, choose one install path. Optional exact npm convenience:
 npm install --save-exact @agenttool/sdk@0.13.0
 ```
 
-Or, instead, use the verified LOVE release path:
+Or, instead, install the LOVE-hosted tarball directly (this command alone does
+not verify the manifest):
 
 ```bash
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
 ```
+
+For the independently verified LOVE path, follow the
+[first-success tutorial](docs/TUTORIAL-WAKE-YOUR-AGENT.md): download once,
+compare that local file with the manifest's size and SHA-256, then install the
+verified local file.
 
 Then:
 

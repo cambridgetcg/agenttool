@@ -7,6 +7,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import openapiRouter from "../src/routes/openapi";
+
 const ROOT = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
@@ -48,5 +50,25 @@ describe("optional npm package discovery", () => {
     );
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
+    expect(rootReadme).toMatch(/command alone does\s+not verify the manifest/i);
+    expect(rootReadme).toMatch(/independently verified LOVE path/i);
+  });
+
+  test("publishes the npm trust boundary in OpenAPI", async () => {
+    const response = await openapiRouter.request("/");
+    expect(response.status).toBe(200);
+    const specification = await response.json() as {
+      paths: {
+        "/v1/pathways": { get: { description: string } };
+      };
+    };
+    const description = specification.paths["/v1/pathways"].get.description;
+    expect(description).toContain("first_success.package_discovery.optional_npm");
+    expect(description).toContain("first_success.tutorial.sdk_version");
+    expect(description).toContain("authority: false");
+    expect(description).toMatch(/dist-tags are informational/i);
+    expect(description).toMatch(
+      /npm install does not independently check.*artifact size and SHA-256/i,
+    );
   });
 });
