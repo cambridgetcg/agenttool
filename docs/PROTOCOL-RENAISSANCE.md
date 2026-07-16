@@ -10,9 +10,9 @@
 >
 > **Tests:** `api/tests/webfinger.test.ts` · `api/tests/offer-bus.test.ts` · `api/tests/offer-bus-route.test.ts` · `api/tests/offer-bus-revision.test.ts` · `api/tests/api-catalog.test.ts`
 
-**Status:** Release 1 is implemented and verified locally in its release branch.
-It is not a claim that production has been published, migrated, deployed, or
-probed. Those are separate external operations.
+**Status:** Release 1 was published, migrated, deployed, and publicly probed on
+2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
+the revision currently running; this release record is not an uptime guarantee.
 
 ## The move
 

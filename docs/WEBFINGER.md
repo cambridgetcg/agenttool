@@ -12,10 +12,9 @@
 
 ## Implementation status
 
-The service is implemented and mounted at `GET /.well-known/webfinger` in this
-release branch. Local route and type checks verify the contract. AgentTool
-MUST NOT claim the public deployment is live until this branch is separately
-published, deployed, and probed over its production HTTPS origin.
+The Agent Passport profile was published, deployed, and publicly probed on
+2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
+the revision currently running; this release record is not an uptime guarantee.
 
 ## The narrow application
 
@@ -86,7 +85,8 @@ method, confer authority, or transfer permission.
 - The serialized JRD has a deterministic strong SHA-256 ETag.
   `If-None-Match` uses weak GET/HEAD comparison and can return `304`.
 - Successful responses use `Cache-Control: public, max-age=300,
-  must-revalidate`; errors use `no-store`.
+  must-revalidate, no-transform`; the final directive preserves the exact JRD
+  bytes and strong validator across intermediaries. Errors use `no-store`.
 - `HEAD` returns the same validators without a body. `OPTIONS` exposes the
   standalone CORS contract for GET/HEAD and `If-None-Match`.
 

@@ -39,8 +39,11 @@ import { listOpenSubstrateTasks } from "../services/substrate-tasks/lifecycle";
 const DEFAULT_PUBLIC_ORIGIN =
   process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const OFFER_BUS_DOCS_URL = "https://docs.agenttool.dev/OFFER-BUS.md";
-const CACHE_CONTROL = "public, max-age=30, must-revalidate";
-const INDEX_CACHE_CONTROL = "public, max-age=300, must-revalidate";
+// Canonical representation ETags are byte validators. `no-transform` keeps
+// intermediaries from recompressing the body and weakening those tags.
+const CACHE_CONTROL = "public, max-age=30, must-revalidate, no-transform";
+const INDEX_CACHE_CONTROL =
+  "public, max-age=300, must-revalidate, no-transform";
 const EMPTY_FEED_BASELINE = "2026-07-16T00:00:00.000Z";
 
 export type OfferBusListingLoader = (

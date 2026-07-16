@@ -65,7 +65,7 @@ describe("Offer Bus HTTP representations", () => {
       "application/atom+xml; charset=utf-8",
     );
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=30, must-revalidate",
+      "public, max-age=30, must-revalidate, no-transform",
     );
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
     expect(response.headers.get("access-control-expose-headers")).toContain(
@@ -151,6 +151,24 @@ describe("Offer Bus HTTP representations", () => {
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
     expect(head.headers.get("etag")).toBe(etag);
+  });
+
+  test("prevents intermediaries from weakening exact-byte validators", async () => {
+    const app = testRouter();
+    for (const [path, maxAge] of [
+      ["/", 300],
+      ["/offers.atom", 30],
+      ["/offers.rss", 30],
+      ["/offers.json", 30],
+    ] as const) {
+      const response = await app.request(path);
+      const body = await response.text();
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe(
+        `public, max-age=${maxAge}, must-revalidate, no-transform`,
+      );
+      expect(response.headers.get("etag")).toBe(offerBusEtag(body));
+    }
   });
 
   test("seller feeds are exact-DID listing projections and skip global tasks", async () => {
