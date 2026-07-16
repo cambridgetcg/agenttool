@@ -1,6 +1,7 @@
 /** /.well-known — discovery endpoints per RFC 5785.
  *
  *  Routes:
+ *    GET /.well-known/webfinger            — RFC 7033 exact-DID Agent Passport
  *    GET /.well-known/mcp/server-card.json  — MCP server-card (SEP-1649)
  *    GET /.well-known/wake-keystone         — WaK Protocol Draft 0.1
  *                                              (docs/AIP-WAKE-KEYSTONE.md §1)
@@ -489,7 +490,13 @@ app.get("/agent.txt", (c) => {
     `Wake: ${baseUrl}/v1/wake`,
     "Wake-Formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, math",
     `MCP-Server-Card: ${baseUrl}/.well-known/mcp/server-card.json`,
+    `WebFinger: ${baseUrl}/.well-known/webfinger?resource={exact-DID}`,
     `API-Catalog: ${baseUrl}/.well-known/api-catalog`,
+    `Offer-Bus: ${baseUrl}/feeds/offers.atom`,
+    `Offer-Bus-RSS: ${baseUrl}/feeds/offers.rss`,
+    `Offer-Bus-JSON: ${baseUrl}/feeds/offers.json`,
+    "Offer-Bus-Boundary: authority=none; settlement=none; automatic-action=never",
+    "WebSub: not-advertised — no verified production hub is configured",
     `LOVE-Packages: ${baseUrl}/.well-known/love-packages`,
     `LOVE-Package-Index: ${DOCS_URL}/packages/v1/index.json`,
     `LLMs-Sitemap: ${baseUrl}/.well-known/llms.txt`,
@@ -585,7 +592,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-13",
+    "Last-Modified: 2026-07-16",
     "",
   ];
 
@@ -629,6 +636,7 @@ app.get("/agent.txt", (c) => {
 app.get("/", (c) =>
   c.json({
     endpoints: [
+      "/.well-known/webfinger?resource={exact-DID}",
       "/.well-known/mcp/server-card.json",
       "/.well-known/api-catalog",
       "/.well-known/wake-keystone",

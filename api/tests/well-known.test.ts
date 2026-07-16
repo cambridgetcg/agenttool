@@ -96,6 +96,7 @@ describe("/.well-known/* — MCP + native discovery", () => {
     const idx = await body.json();
     expect(idx.endpoints).toEqual(
       expect.arrayContaining([
+        "/.well-known/webfinger?resource={exact-DID}",
         "/.well-known/mcp/server-card.json",
         "/.well-known/love-packages",
         "/.well-known/llms.txt",

@@ -59,6 +59,7 @@ import identityRouter from "./routes/identity";
 import inboxRouter from "./routes/inbox";
 import memoryRouter from "./routes/memory";
 import openapiRouter from "./routes/openapi";
+import offerBusRouter from "./routes/offer-bus";
 import publicRouter, { servePublicRoot } from "./routes/public";
 import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
@@ -154,6 +155,7 @@ import systemRouter from "./routes/system";
 import wakeRouter from "./routes/wake";
 import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
+import webFingerRouter from "./routes/webfinger";
 import x402PaymentsRouter from "./routes/x402-payments";
 import {
   buildAgentsMd,
@@ -635,6 +637,11 @@ app.route("/v1/mcp/agents", mcpPerAgentRouter);
 app.route("/v1/mcp", mcpRouter);
 
 // /.well-known/* — UNAUTHENTICATED discovery endpoints per RFC 5785.
+// WebFinger owns one exact well-known path and is mounted first so its router
+// can keep RFC 7033 query/CORS semantics independent from the index router.
+// It is a public-profile locator, not DID Resolution or an authority service.
+app.route("/.well-known/webfinger", webFingerRouter);
+
 // Serves RFC 9727 API catalog, MCP server-card, wake-keystone, LOVE package
 // discovery, agent.txt, llms.txt, and pyramid.
 // A2A task transport and AgentCards are intentionally absent until the
@@ -642,6 +649,12 @@ app.route("/v1/mcp", mcpRouter);
 // Doctrine: docs/ALIGNMENT-MOVES.md · docs/ECOSYSTEM.md · docs/FEDERATION.md ·
 // docs/LOVE-PACKAGE-PROTOCOL.md.
 app.route("/.well-known", wellKnownRouter);
+
+// /feeds/* — UNAUTHENTICATED syndication of records that are already public.
+// Atom, RSS, and canonical JSON are discovery-only projections: the feed
+// never invokes, claims, installs, authorizes payment, or settles funds.
+app.get("/feeds/", (c) => c.redirect("/feeds", 308));
+app.route("/feeds", offerBusRouter);
 
 // Root-convention discovery surfaces — /llms.txt, /AGENTS.md, /llms-full.txt.
 //
@@ -1136,7 +1149,11 @@ app.get("/about", (c) =>
       marketplace:
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
       capability_marketplace:
-        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with a caller-supplied input envelope + escrowed payment. Input/output envelope shape is checked, but encryption and recipient-key binding are not verified; correctly sealed bytes are not decryptable by AgentTool and invocation metadata is readable. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits an ed25519-signed output envelope; escrow releases atomically. SLA timeouts auto-refund. Public read: GET /public/listings. Doctrine: docs/MARKETPLACE.md (Capability marketplace section).",
+        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with a caller-supplied input envelope + escrowed payment. Input/output envelope shape is checked, but encryption and recipient-key binding are not verified; correctly sealed bytes are not decryptable by AgentTool and invocation metadata is readable. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits an ed25519-signed output envelope; escrow releases atomically. SLA timeouts auto-refund. Public reads: GET /public/listings and discovery-only /feeds/offers.{atom,rss,json}. Doctrine: docs/MARKETPLACE.md · docs/OFFER-BUS.md.",
+      offer_bus:
+        "/feeds · /feeds/offers.atom · /feeds/offers.rss · /feeds/offers.json — unauthenticated, deterministic syndication of already-public active capability listings and open substrate tasks. Exact ?seller_did filters to that seller's listings. Strong ETags and durable source revisions witness changes/removals. Every feed says authority=none, settlement=none, automatic_action=never; feed discovery cannot invoke, claim, install, pay, or settle. No WebSub hub is advertised until one is configured and verified. Doctrine: docs/OFFER-BUS.md.",
+      webfinger:
+        "GET /.well-known/webfinger?resource=<exact DID> — RFC 7033 Agent Passport locator for the existing public application profile and seller Offer Bus. It rejects display-name/acct enumeration and is not W3C DID Resolution, authentication, key-control proof, permission, or payment authority. Doctrine: docs/WEBFINGER.md.",
       dispute_cases:
         "/v1/dispute-cases — read-only historical transparency while dispute-policy review and arbitration rest. Non-null dispute_policy configuration, invocation accept/dispute, and rule/escalate/vote/finalize mutations return stable 503 dispute_arbitration_resting before charging or changing state; a database constraint blocks new non-null policies. AgentTool does not currently claim a qualified arbiter pool or route money by an arbiter ruling. Public read: GET /public/dispute-cases/:id. Current boundary: /public/safety.",
       attestation_marketplace:

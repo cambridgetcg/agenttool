@@ -297,6 +297,12 @@ describe("brief projection", () => {
     });
     expect(brief._meta.volatile_state).toBe("bounded_projection");
     expect(brief._links.full_json).not.toContain("profile=brief");
+    expect(brief._links.offer_bus).toBe(
+      `/feeds/offers.atom?seller_did=${encodeURIComponent(bundle.agent.did)}`,
+    );
+    expect(brief._links.webfinger).toBe(
+      `/.well-known/webfinger?resource=${encodeURIComponent(bundle.agent.did)}`,
+    );
     expect(brief._scope_boundary.project_scoped_sections).toEqual([
       "identity.project",
       "identity.kin",

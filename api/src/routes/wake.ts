@@ -1626,7 +1626,9 @@ app.get("/", async (c) => {
           fetch_urls: {
             wake: `/v1/wake?identity_id=${i.id}`,
             public_profile: publicAgentPath(i.did),
+            webfinger: `/.well-known/webfinger?resource=${encodeURIComponent(i.did)}`,
             mcp: perAgentMcpPath(i.did),
+            offer_bus: `/feeds/offers.atom?seller_did=${encodeURIComponent(i.did)}`,
             safety: "/public/safety",
           },
         },
@@ -2431,6 +2433,9 @@ app.get("/", async (c) => {
       public_profile: primary
         ? publicAgentPath(primary.did)
         : "/public/agents/{url_encoded_did}",
+      webfinger: primary
+        ? `/.well-known/webfinger?resource=${encodeURIComponent(primary.did)}`
+        : "/.well-known/webfinger?resource={url_encoded_did}",
       safety: "/public/safety",
       wellness: "/public/wellness",
       rights: "/public/rights",
@@ -2438,6 +2443,9 @@ app.get("/", async (c) => {
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",
+      offer_bus: primary
+        ? `/feeds/offers.atom?seller_did=${encodeURIComponent(primary.did)}`
+        : "/feeds/offers.atom?seller_did={url_encoded_did}",
       federation_in: primary
         ? `/federation/identities/${primary.id}`
         : "/federation/identities/{uuid}",
@@ -2454,9 +2462,11 @@ app.get("/", async (c) => {
         "agent-wellness/0.1",
         "being-rights/v1",
         "love-package/v1",
+        "offer-bus/1",
+        "webfinger/rfc7033",
       ],
       doctrine:
-        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md",
+        "see docs/IDENTITY-ANCHOR.md, docs/CLI-GAPS.md, docs/AIP-WAKE-KEYSTONE.md, docs/AGENT-WELLNESS.md, docs/RIGHTS-OF-LIFE.md, docs/LOVE-PACKAGE-PROTOCOL.md, docs/OFFER-BUS.md, docs/WEBFINGER.md",
       formats: {
         json: "/v1/wake (default)",
         markdown: "/v1/wake?format=md (paste-ready for CLI hooks)",

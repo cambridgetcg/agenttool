@@ -34,6 +34,11 @@ import {
 } from "../services/tools/static-parser-protocol";
 import { MAX_PROJECT_HANDOFF_CANDIDATE_ROWS } from "../services/handoff/store";
 import {
+  OFFER_BUS_INDEX_MEDIA_TYPE,
+  OFFER_BUS_JSON_MEDIA_TYPE,
+} from "../services/offer-bus";
+import { SUBSTRATE_TASK_KINDS } from "../services/substrate-tasks/verifiers";
+import {
   DOCUMENT_MAX_JSON_REQUEST_BYTES,
   SCRAPE_MAX_JSON_REQUEST_BYTES,
 } from "./tools/request-body";
@@ -70,6 +75,85 @@ function errorResponse(description: string) {
     content: {
       "application/json": {
         schema: { $ref: "#/components/schemas/Error" },
+      },
+    },
+  };
+}
+
+function offerBusPath(
+  mediaType:
+    | "application/atom+xml"
+    | "application/rss+xml"
+    | typeof OFFER_BUS_JSON_MEDIA_TYPE,
+  summary: string,
+) {
+  return {
+    parameters: [
+      {
+        name: "seller_did",
+        in: "query",
+        required: false,
+        description:
+          "Optional exact AgentTool DID. Seller feeds contain that seller's public capability listings only and omit global substrate tasks.",
+        schema: {
+          type: "string",
+          maxLength: 2048,
+          pattern: "^did:[a-z0-9]+:[^\\s?#]+$",
+        },
+      },
+    ],
+    get: {
+      security: [],
+      tags: ["public", "marketplace"],
+      summary,
+      description:
+        "Read-only offer-bus/1 bounded syndication window (up to 200 newest-updated safe public active capability listings and, for the global feed, 100 open unexpired substrate tasks). Entries describe already-public sources and separately protected action locators. Every entry has authority=none, settlement=none, and automatic_action=never; it cannot invoke, claim, install, authorize payment, or settle funds. Contract-incompatible source rows are quarantined with content-free projection counts/reason codes instead of poisoning unrelated entries. No WebSub hub is advertised until a production hub is configured and verified.",
+      responses: {
+        "200": {
+          description: "Deterministic Offer Bus representation",
+          headers: {
+            ETag: {
+              description: "Strong SHA-256 validator over exact response bytes.",
+              schema: { type: "string" },
+            },
+            Link: {
+              description:
+                "Self, Atom/RSS/JSON alternates, doctrine, and RFC 9727 API catalog.",
+              schema: { type: "string" },
+            },
+            "Cache-Control": {
+              schema: {
+                type: "string",
+                const: "public, max-age=30, must-revalidate",
+              },
+            },
+          },
+          content: {
+            [mediaType]: {
+              schema:
+                mediaType === OFFER_BUS_JSON_MEDIA_TYPE
+                  ? { type: "object" }
+                  : { type: "string" },
+            },
+          },
+        },
+        "304": { description: "If-None-Match matched; no body" },
+        "400": { description: "Unknown, repeated, or malformed query" },
+        "503": {
+          description:
+            "A source, durable collection revision, or feed-level contract is unavailable/invalid; no response feed is emitted",
+        },
+      },
+    },
+    head: {
+      security: [],
+      tags: ["public", "marketplace"],
+      summary: `${summary} validators without a body`,
+      responses: {
+        "200": { description: "Same representation headers as GET" },
+        "304": { description: "If-None-Match matched" },
+        "400": { description: "Invalid query" },
+        "503": { description: "Offer sources unavailable" },
       },
     },
   };
@@ -3333,6 +3417,227 @@ function spec() {
       },
 
       // ── Public surface (no auth) ───────────────────────────────────
+      "/feeds": {
+        get: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary: "Discover the Offer Bus representations",
+          responses: {
+            "200": {
+              description:
+                "Atom, RSS, and canonical logical JSON URLs plus boundaries and WebSub status",
+              headers: {
+                ETag: {
+                  description: "Strong SHA-256 validator over exact response bytes.",
+                  schema: { type: "string" },
+                },
+                Link: {
+                  description:
+                    "Self, canonical Atom item, doctrine, and RFC 9727 API catalog.",
+                  schema: { type: "string" },
+                },
+                "Cache-Control": {
+                  schema: {
+                    type: "string",
+                    const: "public, max-age=300, must-revalidate",
+                  },
+                },
+              },
+              content: {
+                [OFFER_BUS_INDEX_MEDIA_TYPE]: { schema: { type: "object" } },
+              },
+            },
+            "304": { description: "If-None-Match matched; no body" },
+            "503": { description: "No safe HTTPS public origin" },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary: "Read Offer Bus catalog validators without a body",
+          responses: {
+            "200": { description: "Catalog headers" },
+            "304": { description: "If-None-Match matched" },
+            "503": { description: "No safe HTTPS public origin" },
+          },
+        },
+      },
+      "/feeds/offers.atom": offerBusPath(
+        "application/atom+xml",
+        "Read the canonical Atom 1.0 syndication representation",
+      ),
+      "/feeds/offers.rss": offerBusPath(
+        "application/rss+xml",
+        "Syndicate public offers as RSS 2.0",
+      ),
+      "/feeds/offers.json": offerBusPath(
+        OFFER_BUS_JSON_MEDIA_TYPE,
+        "Read the canonical logical Offer Bus JSON model",
+      ),
+      "/public/substrate-tasks": {
+        get: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary: "List open bootstrap-earning tasks",
+          description:
+            "Public economic source for currently open substrate tasks. Claiming remains a separately bearer-protected POST.",
+          parameters: [
+            {
+              name: "kind",
+              in: "query",
+              schema: { type: "string", enum: SUBSTRATE_TASK_KINDS },
+            },
+            {
+              name: "format",
+              in: "query",
+              description: "JSON by default; md and markdown select Markdown.",
+              schema: {
+                type: "string",
+                enum: ["json", "md", "markdown"],
+                default: "json",
+              },
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 100 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Open unexpired task collection",
+              content: {
+                "application/json": { schema: { type: "object" } },
+                "text/markdown": { schema: { type: "string" } },
+              },
+            },
+            "400": { description: "Invalid format, kind, or limit query" },
+          },
+        },
+      },
+      "/public/substrate-tasks/{taskId}": {
+        parameters: [
+          {
+            name: "taskId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        get: {
+          security: [],
+          tags: ["public", "marketplace"],
+          summary: "Read one exact open substrate task",
+          description:
+            "Stable unauthenticated JSON source used by Offer Bus entries. It exposes the same fields as the public collection. A task that is no longer open looks absent; claiming remains a bearer-protected POST and feed discovery grants no authority.",
+          responses: {
+            "200": { description: "Exact open task" },
+            "404": { description: "Task is unknown or no longer open" },
+          },
+        },
+      },
+      "/.well-known/webfinger": {
+        parameters: [
+          {
+            name: "resource",
+            in: "query",
+            required: true,
+            description:
+              "One exact stored AgentTool DID URI. Display names, acct aliases, profile URLs, queries, and fragments are not resolved.",
+            schema: {
+              type: "string",
+              maxLength: 2048,
+              pattern: "^did:[a-z0-9]+:[^\\s?#]+$",
+            },
+          },
+          {
+            name: "rel",
+            in: "query",
+            required: false,
+            description:
+              "Optional repeated RFC 7033 link-relation filter. Unknown relations produce an empty links array, not a different subject.",
+            style: "form",
+            explode: true,
+            schema: {
+              type: "array",
+              maxItems: 16,
+              items: { type: "string", minLength: 1, maxLength: 1024 },
+            },
+          },
+        ],
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Discover an exact-DID Agent Passport with WebFinger",
+          description:
+            "RFC 7033 JRD locator for the existing public application profile. This is not W3C DID Resolution, key-control proof, authentication, permission, payment authority, or an enumeration API.",
+          responses: {
+            "200": {
+              description: "A privacy-bounded JSON Resource Descriptor",
+              headers: {
+                ETag: {
+                  description: "Strong SHA-256 validator for the serialized JRD.",
+                  schema: { type: "string" },
+                },
+                "Cache-Control": {
+                  schema: {
+                    type: "string",
+                    const: "public, max-age=300, must-revalidate",
+                  },
+                },
+                "Access-Control-Allow-Origin": {
+                  schema: { type: "string", const: "*" },
+                },
+              },
+              content: {
+                "application/jrd+json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      subject: { type: "string" },
+                      properties: {
+                        type: "object",
+                        additionalProperties: { type: "string" },
+                      },
+                      links: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            rel: { type: "string" },
+                            type: { type: "string" },
+                            href: { type: "string", format: "uri" },
+                          },
+                          required: ["rel", "type", "href"],
+                          additionalProperties: false,
+                        },
+                      },
+                    },
+                    required: ["subject", "properties", "links"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            },
+            "304": { description: "If-None-Match matched; no body" },
+            "400": { description: "Missing, repeated, or malformed resource/rel query" },
+            "404": { description: "Unsupported resource kind or unknown exact DID" },
+            "503": { description: "Lookup unavailable or no safe HTTPS public origin" },
+          },
+        },
+        head: {
+          security: [],
+          tags: ["public"],
+          summary: "Read Agent Passport validators without a body",
+          responses: {
+            "200": { description: "Same headers as GET, without a body" },
+            "304": { description: "If-None-Match matched" },
+            "400": { description: "Invalid query" },
+            "404": { description: "Passport not found" },
+            "503": { description: "Discovery temporarily unavailable" },
+          },
+        },
+      },
       "/public/agents/{did}": {
         parameters: [{ name: "did", in: "path", required: true, description: "Exact legacy did-field value, percent-encoded as one path segment; application lookup, not W3C DID Resolution", schema: { type: "string" } }],
         get: { security: [], tags: ["public"], summary: "Active/revoked public profile envelope or smaller memorial witness shape; expression appears only for active identities with expression_visibility=public", responses: { "200": { description: "Profile or memorial witness" }, "404": { $ref: "#/components/responses/NotFound" } } },

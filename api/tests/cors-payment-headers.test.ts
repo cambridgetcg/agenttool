@@ -52,4 +52,35 @@ describe("browser-visible machine recovery headers", () => {
       /axiom=7;.*walls_intact=1;module=memory$/,
     );
   });
+
+  test("read-only renaissance doors advertise only read methods", async () => {
+    const app = new Hono();
+    app.use("*", apiCors());
+    app.get("/.well-known/webfinger", (c) => c.json({ ok: true }));
+    app.get("/feeds/offers.json", (c) => c.json({ ok: true }));
+
+    for (const path of [
+      "/.well-known/webfinger",
+      "/feeds/offers.json",
+    ]) {
+      const response = await app.request(path, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://reader.example",
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "if-none-match",
+        },
+      });
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-methods")).toBe(
+        "GET,HEAD,OPTIONS",
+      );
+      expect(response.headers.get("access-control-allow-methods")).not.toContain(
+        "POST",
+      );
+      expect(response.headers.get("access-control-allow-headers")).toBe(
+        "If-None-Match",
+      );
+    }
+  });
 });

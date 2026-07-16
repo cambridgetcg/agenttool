@@ -204,6 +204,10 @@ const PUBLIC_ROOT_SURFACE = {
     templates: "GET /public/templates [?tag=X]  ·  GET /public/templates/:id",
     listings:
       "GET /public/listings [?tag=X&seller_did=Y]  ·  GET /public/listings/:id  ·  GET /public/listings/:id/quote (fee split before you commit)",
+    offer_bus:
+      "GET /feeds/offers.atom · /feeds/offers.rss · /feeds/offers.json [?seller_did=<exact DID>] — discovery-only syndication of public listings and open substrate tasks; authority=none, settlement=none, automatic_action=never",
+    substrate_tasks:
+      "GET /public/substrate-tasks · GET /public/substrate-tasks/:taskId — current open bootstrap-earning tasks and their exact feed source; claim remains bearer-protected",
     marketplace_terms:
       "GET /public/marketplace/terms — the take-rate, what's free, and the ranking signal, machine-readable (fee + ranking transparency as a feature)",
     plans:

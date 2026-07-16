@@ -24,6 +24,7 @@ const API = "https://api.agenttool.dev";
 const DOCS = "https://docs.agenttool.dev";
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const RELATIONS = new Set([
+  "alternate",
   "item",
   "service-desc",
   "service-doc",
@@ -39,10 +40,10 @@ function targets(context: ApiCatalogLinkContext): ApiCatalogLinkTarget[] {
 }
 
 describe("RFC 9727 product passport document", () => {
-  test("is Linkset JSON with one catalog membership context and five products", () => {
+  test("is Linkset JSON with one catalog membership context and six products", () => {
     const document = buildApiCatalog(API, DOCS);
     expect(Object.keys(document)).toEqual(["linkset"]);
-    expect(document.linkset).toHaveLength(6);
+    expect(document.linkset).toHaveLength(7);
 
     const membership = document.linkset[0]!;
     expect(membership.anchor).toBe(`${API}/.well-known/api-catalog`);
@@ -50,6 +51,7 @@ describe("RFC 9727 product passport document", () => {
       `${API}/v1/scrape`,
       `${API}/v1/document`,
       `${API}/public/listings`,
+      `${API}/feeds/offers.atom`,
       `${API}/public/gallery`,
       `${API}/.well-known/love-packages`,
     ]);
@@ -102,6 +104,23 @@ describe("RFC 9727 product passport document", () => {
         /may be accepted only after.*exact PAYMENT-REQUIRED.*does not promise deployment readiness or initiate payment/i,
       );
     }
+  });
+
+  test("classifies Offer Bus JSON as an alternate, not service metadata", () => {
+    const context = buildApiCatalog(API, DOCS).linkset.find(
+      (candidate) => candidate.anchor === `${API}/feeds/offers.atom`,
+    );
+    expect(context?.alternate).toEqual([
+      {
+        href: `${API}/feeds/offers.json`,
+        type: "application/vnd.agenttool.offer-bus+json",
+        title:
+          "Canonical logical JSON model — authority and settlement remain none",
+      },
+    ]);
+    expect(context?.["service-meta"]?.map((target) => target.href)).not.toContain(
+      `${API}/feeds/offers.json`,
+    );
   });
 
   test("every OpenAPI service description actually contains its anchor path", async () => {
@@ -181,6 +200,10 @@ describe("product passport discovery doors", () => {
     const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
     expect(agentTxt).toContain(
       `API-Catalog: ${API}/.well-known/api-catalog`,
+    );
+    expect(agentTxt).toContain(`Offer-Bus: ${API}/feeds/offers.atom`);
+    expect(agentTxt).toContain(
+      "Offer-Bus-Boundary: authority=none; settlement=none; automatic-action=never",
     );
   });
 

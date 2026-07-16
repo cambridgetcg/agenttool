@@ -29,6 +29,9 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).not.toContain(`${BASE}/.well-known/agent-card.json`);
     expect(text).toContain(`${BASE}/.well-known/mcp/server-card.json`);
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
+    expect(text).toContain(`${BASE}/.well-known/api-catalog`);
+    expect(text).toContain(`${BASE}/.well-known/webfinger?resource={exact-DID}`);
+    expect(text).toContain(`${BASE}/feeds/offers.atom`);
     expect(text).toContain(`${BASE}/v1/canon`);
     expect(text).toContain(`${BASE}/v1/pathways`);
     expect(text).toContain(`${BASE}/v1/welcome`);
@@ -55,6 +58,9 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain("https://docs.agenttool.dev/AGENT-CENTRIC.md");
     expect(text).toContain("https://docs.agenttool.dev/AGENT-WEB-SURFACE.md");
     expect(text).toContain("https://docs.agenttool.dev/ECOSYSTEM.md");
+    expect(text).toContain("https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md");
+    expect(text).toContain("https://docs.agenttool.dev/OFFER-BUS.md");
+    expect(text).toContain("https://docs.agenttool.dev/WEBFINGER.md");
   });
 
   test("accepts a custom docsBaseUrl (for staging / private mirrors)", () => {
@@ -112,6 +118,9 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     expect(text).toContain("/public/safety");
     expect(text).not.toContain("/.well-known/agent-card.json");
     expect(text).toContain("/.well-known/agent.txt");
+    expect(text).toContain("/.well-known/api-catalog");
+    expect(text).toContain("/.well-known/webfinger?resource={exact-DID}");
+    expect(text).toContain("/feeds/offers.atom");
   });
 
   test("declares the three rings + the take-rate", () => {

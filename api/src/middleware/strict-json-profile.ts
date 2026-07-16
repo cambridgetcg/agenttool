@@ -5,7 +5,10 @@
  * because an extra field makes their normative schema invalid. */
 
 export const STRICT_JSON_PROFILE_MEDIA_TYPES = new Set([
+  "application/jrd+json",
   "application/vnd.agenttool.being-rights+json",
+  "application/vnd.agenttool.offer-bus+json",
+  "application/vnd.agenttool.offer-bus-index+json",
 ]);
 
 export function isStrictJsonProfileResponse(response: Response): boolean {
