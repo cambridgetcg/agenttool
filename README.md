@@ -95,20 +95,20 @@ The source packages are `agenttool-sdk` (Python) and `@agenttool/sdk`
 (TypeScript). Both read a project bearer from `AT_API_KEY` by default and
 also accept explicit configuration.
 
-The JavaScript SDK, local data node, and ADDS package ship first through
-`love-package/v1` manifests and ordinary HTTPS tarballs. Bun and other
-npm-compatible package managers can install those URLs directly without an
-npm account or npm publication. They may still resolve declared upstream
-dependencies through a configured registry or cache. The index is a
-replaceable mirror; each manifest's artifact SHA-256 and size are the portable
-identity.
+The JavaScript SDK, local data node, encrypted pull bridge, and ADDS package
+ship first through `love-package/v1` manifests and ordinary HTTPS tarballs.
+The current licensed release line is also published on npm as an optional
+exact-version convenience. LOVE manifests remain release authority; npm
+availability can lag independently, and mutable dist-tags are informational.
+Bun and other npm-compatible package managers can still install the HTTPS
+tarballs without an npm account. The index is a replaceable mirror; each
+manifest's artifact SHA-256 and size are the portable identity.
 
 For SDK 0.13.0, repository source manifests and runtime client version headers
 are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
-manifest. That repository artifact does not prove the public mirror or the
-`sdk-v0.13.0` GitHub release asset has been published, and it is not a claim
-about npm or PyPI. Registry publication is a separate optional operation;
-query the configured registry rather than inferring availability from source.
+manifest. The exact npm release is a convenience channel, not evidence that a
+future source version or another registry has been published. Query the
+configured registry rather than inferring availability from source.
 
 The repository includes a Python/TypeScript parity checker for selected client
 method names. It does not compare types, behavior, package exports, or
@@ -195,9 +195,23 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
+```
 
-# TypeScript / Bun 0.13 LOVE artifact (release path, not an npm publication claim)
+For TypeScript, choose one install path. Optional exact npm convenience:
+
+```bash
+npm install --save-exact @agenttool/sdk@0.13.0
+```
+
+Or, instead, use the verified LOVE release path:
+
+```bash
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
+```
+
+Then:
+
+```bash
 export AT_API_KEY=...
 bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentTool().wake.get())"
 ```

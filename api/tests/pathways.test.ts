@@ -61,7 +61,25 @@ describe("GET /v1/pathways", () => {
     expect(first.package_discovery.instruction).toContain("artifact.sha256");
     expect(first.package_discovery.instruction).toMatch(/same local file/i);
     expect(first.package_discovery.instruction).toMatch(/install that verified local file/i);
+    expect(first.package_discovery.instruction).toMatch(/latest is informational/i);
+    expect(first.package_discovery.instruction).toMatch(/registry tag is not.*authority/i);
     expect(first.package_discovery.instruction).not.toMatch(/\b\d+\.\d+\.\d+\b/);
+    expect(first.package_discovery.optional_npm).toEqual({
+      mirror_discovery:
+        "GET /.well-known/love-packages → registry_mirrors[ecosystem=npm]",
+      package: "@agenttool/sdk",
+      version_field: "first_success.tutorial.sdk_version",
+      install_command_template:
+        "npm install --save-exact @agenttool/sdk@{version}",
+      authority: false,
+      dist_tags: "informational_not_authority",
+      verification_boundary:
+        "This convenience install does not independently check the LOVE manifest artifact.size and artifact.sha256; use the verified local-file path when that boundary matters.",
+    });
+    expect(first.package_discovery.optional_npm.authority).toBe(false);
+    expect(first.package_discovery.optional_npm.install_command_template).not.toMatch(
+      /\b\d+\.\d+\.\d+\b/,
+    );
     expect(first.sequence).toContain(
       "identity.expression.put(agent.id, expression)",
     );

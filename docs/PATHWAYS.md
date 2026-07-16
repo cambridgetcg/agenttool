@@ -60,12 +60,21 @@ provenance keys; the dedicated transition routes own those fields.
       "machine_url": "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
       "human_url": "https://docs.agenttool.dev/tutorial",
       "source_path": "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
-      "sdk_version": "0.11.0"
+      "sdk_version": "0.13.0"
     },
     "package_discovery": {
       "endpoint": "GET /.well-known/love-packages",
       "protocol": "love-package/v1",
-      "instruction": "Read first_success.tutorial.sdk_version; follow index_url; select that @agenttool/sdk versions[] entry; follow manifest_url; download from install.specifier once; verify that same local file against artifact.size and artifact.sha256; install the verified local file."
+      "instruction": "Read first_success.tutorial.sdk_version; follow index_url; select that @agenttool/sdk versions[] entry; follow manifest_url; download from install.specifier once; verify that same local file against artifact.size and artifact.sha256; install the verified local file.",
+      "optional_npm": {
+        "mirror_discovery": "GET /.well-known/love-packages → registry_mirrors[ecosystem=npm]",
+        "package": "@agenttool/sdk",
+        "version_field": "first_success.tutorial.sdk_version",
+        "install_command_template": "npm install --save-exact @agenttool/sdk@{version}",
+        "authority": false,
+        "dist_tags": "informational_not_authority",
+        "verification_boundary": "This convenience install does not independently check the LOVE manifest artifact.size and artifact.sha256; use the verified local-file path when that boundary matters."
+      }
     },
     "sequence": [
       "select and verify the tutorial-pinned @agenttool/sdk package",
@@ -108,7 +117,7 @@ Also reachable at `GET /v1/bootstrap` (alias, pre-auth — Hono short-circuits t
 
 ## Mounted implementation and known gaps
 
-**Implemented:** the pathway catalog and decision tree are public at `GET /v1/pathways` and its `GET /v1/bootstrap` alias. `first_success` joins the canonical machine-readable tutorial, registry-neutral package discovery, and the birth-to-refreshed-wake sequence so a pre-auth agent does not have to infer release or documentation authority. The completion signal includes one identity-bound foundational memory appearing in the refreshed wake. The mounted CLI scaffold is exactly `GET /v1/adapters/claude-code`.
+**Implemented:** the pathway catalog and decision tree are public at `GET /v1/pathways` and its `GET /v1/bootstrap` alias. `first_success` joins the canonical machine-readable tutorial, registry-neutral package discovery, an optional exact-version npm convenience, and the birth-to-refreshed-wake sequence so a pre-auth agent does not have to infer release or documentation authority. The npm mirror is explicitly non-authoritative and does not replace independent LOVE size/SHA-256 verification. The completion signal includes one identity-bound foundational memory appearing in the refreshed wake. The mounted CLI scaffold is exactly `GET /v1/adapters/claude-code`.
 
 **Known gaps:** AgentTool does not mount adapter routes for Codex, Cursor, Cline, Replit, or Aider. Those CLIs are protocol-compatible because they can fetch authenticated `GET /v1/wake?format=md&identity_id=<selected UUID>` at session start; that compatibility does not mean AgentTool generates or installs their hooks or configuration. Registration and elevation refusals carry structured recovery guidance, but one universal 4xx error envelope is not enforced across every route in this catalog. The self-service 5/hour/IP limiter is code-present but inactive in current no-Redis production because its middleware fails open.
 

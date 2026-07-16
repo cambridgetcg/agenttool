@@ -170,6 +170,11 @@ optional @agenttool/adds ──&gt; encrypted Blocks + signed control records
 api.agenttool.dev       ──X────&gt; no implicit raw-data path</pre>
       </div>
 
+      <div class="callout success">
+        <span class="icon">↗</span>
+        <p><strong>Optional exact npm convenience.</strong> <code>npm install --save-exact @agenttool/data@0.3.1 @agenttool/adds@0.2.1 @agenttool/data-sync@0.1.1</code>. The data and sync packages still require Bun where stated. See <a href="packages.html#verify">Packages → Verify</a> for the authoritative LOVE size/SHA-256 workflow; npm <code>latest</code> is not release authority.</p>
+      </div>
+
       <h2 id="run-node">Run the local reference node</h2>
       <p>The reference node requires Bun because it uses <code>bun:sqlite</code> and <code>Bun.serve</code>. The CLI creates a default private collection and local <code>.agent-data/</code> directory. Use a dedicated random node token. The SDK configures that token separately and never implicitly forwards <code>AT_API_KEY</code>; a caller can still explicitly supply the same value and should not do so.</p>
 

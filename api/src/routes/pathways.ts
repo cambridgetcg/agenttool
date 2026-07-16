@@ -289,6 +289,18 @@ export function buildPathwaysResponse() {
         protocol: "love-package/v1",
         instruction:
           "Read first_success.tutorial.sdk_version; follow index_url; select @agenttool/sdk; select the versions[] entry whose version equals that tutorial contract; follow manifest_url; treat install.specifier as a download locator; download once; verify that same local file against artifact.size and artifact.sha256; install that verified local file. latest is informational and a registry tag is not the tutorial release authority.",
+        optional_npm: {
+          mirror_discovery:
+            "GET /.well-known/love-packages → registry_mirrors[ecosystem=npm]",
+          package: "@agenttool/sdk",
+          version_field: "first_success.tutorial.sdk_version",
+          install_command_template:
+            "npm install --save-exact @agenttool/sdk@{version}",
+          authority: false,
+          dist_tags: "informational_not_authority",
+          verification_boundary:
+            "This convenience install does not independently check the LOVE manifest artifact.size and artifact.sha256; use the verified local-file path when that boundary matters.",
+        },
       },
       sequence: [
         "read first_success.tutorial.sdk_version, then discover, download once, and verify that exact @agenttool/sdk package",
