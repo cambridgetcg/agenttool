@@ -23,8 +23,9 @@ import {
 
 const DEFAULT_PUBLIC_ORIGIN =
   process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
-// The JRD ETag covers exact response bytes, so intermediaries must not
-// recompress the representation and silently weaken the validator.
+// The JRD ETag covers exact response bytes. `no-transform` asks intermediaries
+// not to recompress it; CDN deployments must separately enable strong-ETag
+// preservation and probe the public edge.
 const CACHE_CONTROL =
   "public, max-age=300, must-revalidate, no-transform";
 const MAX_RELATIONS = 16;

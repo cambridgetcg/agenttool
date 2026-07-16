@@ -36,6 +36,8 @@ describe("protocol renaissance public doctrine", () => {
   test("doctrine repeats authority and unfinished-protocol boundaries", () => {
     const offerBus = read("docs/OFFER-BUS.md");
     const renaissance = read("docs/PROTOCOL-RENAISSANCE.md");
+    const webFinger = read("docs/WEBFINGER.md");
+    const stack = read("docs/STACK.md");
     expect(offerBus).toMatch(/authority="none"/);
     expect(offerBus).toMatch(/settlement="none"/);
     expect(offerBus).toMatch(/canonical logical data model/i);
@@ -47,9 +49,16 @@ describe("protocol renaissance public doctrine", () => {
       "Cache-Control: public, max-age=30,\nmust-revalidate, no-transform",
     );
     expect(offerBus).toMatch(/catalog uses the same\s+policy with `max-age=300`/i);
-    expect(offerBus).toMatch(
-      /no-transform[\s\S]*weakening\s+their\s+validator/i,
+    expect(offerBus).toMatch(/no-transform[\s\S]*does not[\s\S]*guarantee/i);
+    expect(offerBus).toMatch(/full query-string cache key/i);
+    expect(webFinger).toMatch(/does not configure or[\s\S]*guarantee/i);
+    expect(renaissance).toMatch(
+      /Cloudflare hostname[\s\S]*weakened the larger feed validators/i,
     );
+    expect(stack).toMatch(/Respect Strong ETags:\*\* On/i);
+    expect(stack).toContain('edge_ttl.mode = "bypass_by_default"');
+    expect(stack).toMatch(/Never ignore the[\s\S]*query string/i);
+    expect(stack).toMatch(/Cache Rules: Edit/i);
     expect(renaissance).toContain("automatic_action=never");
     expect(renaissance).toMatch(/WebSub:.*emits none/is);
     expect(renaissance).toMatch(/A JSON profile alone is not ActivityPub/i);

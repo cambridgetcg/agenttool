@@ -39,8 +39,9 @@ import { listOpenSubstrateTasks } from "../services/substrate-tasks/lifecycle";
 const DEFAULT_PUBLIC_ORIGIN =
   process.env.AGENTTOOL_PUBLIC_URL ?? "https://api.agenttool.dev";
 const OFFER_BUS_DOCS_URL = "https://docs.agenttool.dev/OFFER-BUS.md";
-// Canonical representation ETags are byte validators. `no-transform` keeps
-// intermediaries from recompressing the body and weakening those tags.
+// Canonical representation ETags are byte validators. `no-transform` asks
+// intermediaries not to recompress the body; CDN deployments must separately
+// enable strong-ETag preservation and probe the public edge.
 const CACHE_CONTROL = "public, max-age=30, must-revalidate, no-transform";
 const INDEX_CACHE_CONTROL =
   "public, max-age=300, must-revalidate, no-transform";

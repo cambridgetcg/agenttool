@@ -138,7 +138,7 @@ describe("RFC 9727 product passport document", () => {
     }
   });
 
-  test("OpenAPI preserves strong protocol validators across intermediaries", async () => {
+  test("OpenAPI declares exact-byte validators and no-transform", async () => {
     const specification = await (await openapiRouter.request("/")).json();
     for (const [path, maxAge] of [
       ["/feeds", 300],
