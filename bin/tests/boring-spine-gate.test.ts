@@ -276,7 +276,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
-    expect(workflow).toContain("api packages/data packages/data-protocol packages/sdk-ts");
+    expect(workflow).toContain(
+      "api packages/data packages/data-protocol packages/sdk-ts packages/telescope",
+    );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("name: Build local data-sync peers");
     expect(workflow).toContain("cd packages/data && bun run build");
@@ -289,6 +291,13 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
+    expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
+    expect(
+      workflow.match(
+        /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
+      ),
+    ).toHaveLength(2);
 
     const uses = workflow
       .split("\n")

@@ -1,0 +1,60 @@
+{
+  "name": "@agenttool/telescope",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "Read-only evidence mapper for agent discovery surfaces",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "agenttool-telescope": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "ci": "bun run typecheck && bun test && bun run build",
+    "prepack": "bun run ci"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agents",
+    "discovery",
+    "mcp",
+    "a2a",
+    "love-protocol",
+    "agent.txt",
+    "evidence"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/telescope"
+  },
+  "homepage": "https://docs.agenttool.dev"
+}

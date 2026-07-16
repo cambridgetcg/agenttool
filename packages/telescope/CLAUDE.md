@@ -1,0 +1,68 @@
+# @agenttool/telescope
+
+Read-only agent discovery evidence mapper. This package does not own hosted API
+routes, production egress, protocol invocation, npm publication, or the LOVE
+release inventory.
+
+## Commands
+
+```bash
+bun install --frozen-lockfile
+bun run ci
+node dist/cli.js scan api.agenttool.dev --json
+npm pack --ignore-scripts --dry-run
+```
+
+## Invariants
+
+- Keep the core at zero runtime dependencies and compatible with Node 20.19+
+  and Bun 1.3.5+.
+- Default scanning is bounded public HTTPS GET only. Never read ambient bearer,
+  cookie, npm, or project credentials.
+- DNS preflight is not socket pinning. Do not describe the native-fetch client
+  as DNS-rebinding-proof or suitable for a hosted arbitrary-URL scanner.
+- Fixed core probes are `/.well-known/agent.txt`, `/v1/pathways`,
+  `/.well-known/love-packages`, and `/.well-known/agent-card.json`. Follow only
+  a uniquely advertised MCP card and the explicit LOVE index → exact manifest
+  chain. Do not recursively crawl remote locators.
+- Preserve ordered `agent.txt` duplicates. Never silently overwrite or choose a
+  duplicated selected key.
+- Remote documents are tainted publisher assertions. Do not copy remote shell
+  commands, instructions, `latest`, or dist-tags into executable plans.
+- MCP and A2A cards are advertisements. Telescope performs no handshake,
+  initialization, task, tool, auth, feed, payment, or settlement call.
+- npm is a convenience action only when explicitly declared `authority: false`;
+  its exact version comes from the Pathways tutorial selection.
+- LOVE index and mirrors are locators. The manifest supplies an expected size
+  and SHA-256; only checking the same downloaded local file establishes that
+  content identity. Before generating package machinery, the verifier must also
+  reject unsafe/unsupported tar structure and bind embedded package name/version.
+  LOVE v1 does not authenticate a publisher.
+- Returned actions use validated locally reconstructed argv, remain
+  `automatic: false`, and require explicit consent. Telescope never executes
+  them or downloads artifacts during scan. npm plans disable lifecycle scripts,
+  audit submission, and funding output, while naming that dependency resolution
+  may still use caller-configured registry credentials.
+- Generated artifact retrieval has a finite 120-second fetch/body deadline but
+  does not repeat DNS preflight or pin the later connection to an address.
+- DNS-AID and PKARR remain opt-in caller adapters. Core claims neither DNSSEC
+  validation nor PKARR relay/signature behavior.
+- Human formatting must escape terminal and bidi controls. Core JSON reports do
+  not include remote bodies, request headers, caller/ambient credentials, or raw
+  exception text. Caller-owned adapters own their returned report facts and must
+  not put secrets in them; structural validation is not a credential classifier.
+  Rejected/query-bearing remote locators are omitted or explicitly redacted
+  rather than echoed as actionable URLs.
+- Keep the report schema, TypeScript report type, formatter, and tests aligned.
+- The package stays `0.0.0-development` and `private: true` until a separately
+  authorized release. Do not touch `LOVE_PACKAGES`, package manifests/tarballs,
+  release tags, npm workflows, or production deploys in a source-only change.
+
+## Tests
+
+Hermetic tests inject fetch and DNS. Cover target policy, mixed DNS answers,
+manual redirects, byte/deadline budgets, duplicate `agent.txt`, exact Pathways
+selection, ignored `latest`, invalid manifests, MCP/A2A advertisement boundaries,
+shell-safe reconstruction, deterministic report ordering, CLI exits, and packed
+Node/Bun import/help. Live dogfood is evidence about one observation time, not a
+replacement for fixtures.

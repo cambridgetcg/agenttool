@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/sdk-ts; do
+          for workspace in api packages/data packages/data-protocol packages/sdk-ts packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
@@ -69,7 +69,7 @@ jobs:
       - name: Install data-sync dependencies from lockfile
         working-directory: packages/data-sync
         run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, and SDK gate
+      - name: Run hermetic data, ADDS, sync, SDK, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -79,10 +79,31 @@ jobs:
           tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir" "$tarball"' EXIT
-          npm install --ignore-scripts --prefix "$install_dir" "$PWD/$tarball"
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
           smoke='import("@agenttool/sdk").then(m=>{const p={subject_id:"550e8400-e29b-41d4-a716-446655440002",attester_id:"550e8400-e29b-41d4-a716-446655440001",kid:"550e8400-e29b-41d4-a716-446655440010",claim:"packed"};if(typeof m.AgentTool!=="function"||m.canonicalIdentityAttestationBytes(p).length!==32)process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke packed Telescope under Node and Bun
+        working-directory: packages/telescope
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          node "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
+          bun "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
+          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.13.0/manifest.json"
+          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz"
+          size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
+          sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
+          cli="$install_dir/node_modules/@agenttool/telescope/dist/cli.js"
+          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.13.0 --json >/dev/null
+          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.13.0 --json >/dev/null
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 

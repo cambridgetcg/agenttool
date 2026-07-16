@@ -8,6 +8,9 @@ A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
+The source-only `packages/telescope` CLI/library maps public agent discovery
+evidence without invoking protocols or actions; it is not yet an npm or LOVE
+release and is not exposed as a hosted arbitrary-target scanner.
 JavaScript artifacts are distributed through the registry-neutral
 `love-package/v1` protocol; npm is an optional mirror rather than a gate.
 The apex worker sends API paths and machine-readable root requests to
@@ -43,6 +46,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
+| **Telescope** | `packages/telescope` | Source-only read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. No npm/LOVE release or hosted scan route exists yet. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -155,7 +159,7 @@ and docs carry local guidance files; `apps/web` does not.
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/TypeScript SDK jobs from
+dependencies for the API/protocol and data/ADDS/TypeScript SDK/Telescope jobs from
 frozen Bun lockfiles. The Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not
