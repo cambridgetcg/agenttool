@@ -138,6 +138,23 @@ describe("RFC 9727 product passport document", () => {
     }
   });
 
+  test("OpenAPI preserves strong protocol validators across intermediaries", async () => {
+    const specification = await (await openapiRouter.request("/")).json();
+    for (const [path, maxAge] of [
+      ["/feeds", 300],
+      ["/feeds/offers.atom", 30],
+      ["/feeds/offers.rss", 30],
+      ["/feeds/offers.json", 30],
+      ["/.well-known/webfinger", 300],
+    ] as const) {
+      expect(
+        specification.paths[path].get.responses["200"].headers[
+          "Cache-Control"
+        ].schema.const,
+      ).toBe(`public, max-age=${maxAge}, must-revalidate, no-transform`);
+    }
+  });
+
   test("does not invent legal policy, privacy, or repository licence links", () => {
     const serialized = JSON.stringify(buildApiCatalog(API, DOCS));
     expect(serialized).not.toContain('"privacy-policy"');

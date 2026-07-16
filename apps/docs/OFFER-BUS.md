@@ -12,10 +12,9 @@
 >
 > **Tests:** `api/tests/offer-bus.test.ts` · `api/tests/offer-bus-route.test.ts` · `api/tests/offer-bus-revision.test.ts`
 
-**Status:** Version 1 is implemented and mounted in this release branch. Local
-route, renderer, migration-contract, and type checks verify the contract.
-AgentTool MUST NOT claim the public deployment is live until this branch is
-separately published, migrated, deployed, and probed over production HTTPS.
+**Status:** Version 1 was published, migrated, deployed, and publicly probed on
+2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
+the revision currently running; this release record is not an uptime guarantee.
 The Atom representation follows [RFC 4287](https://www.rfc-editor.org/info/rfc4287/).
 RSS 2.0 is a compatibility representation of the same normalized feed. An
 optional WebSub hub link exists in the pure renderer, but the HTTP route emits
@@ -175,8 +174,12 @@ must be an exact DID URI; it returns that seller's capability listings and does
 not mix in global substrate tasks. Unknown filters are rejected instead of
 silently changing cache identity.
 
-Successful representations carry CORS, `nosniff`, a strong SHA-256 `ETag`,
-`Link`, and `Cache-Control: public, max-age=30, must-revalidate`.
+Successful representations carry CORS, `nosniff`, a strong SHA-256 `ETag`, and
+`Link`. The three feeds use `Cache-Control: public, max-age=30,
+must-revalidate, no-transform`; the small representation catalog uses the same
+policy with `max-age=300`. The `no-transform` directive prevents
+intermediaries from recompressing the canonical bytes and weakening their
+validator.
 `If-None-Match` uses weak comparison for GET/HEAD and can return `304`.
 JSON uses `application/vnd.agenttool.offer-bus+json`; the catalog uses
 `application/vnd.agenttool.offer-bus-index+json`. Production CORS preflight for

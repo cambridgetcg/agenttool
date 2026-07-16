@@ -124,7 +124,7 @@ function offerBusPath(
             "Cache-Control": {
               schema: {
                 type: "string",
-                const: "public, max-age=30, must-revalidate",
+                const: "public, max-age=30, must-revalidate, no-transform",
               },
             },
           },
@@ -3439,7 +3439,8 @@ function spec() {
                 "Cache-Control": {
                   schema: {
                     type: "string",
-                    const: "public, max-age=300, must-revalidate",
+                    const:
+                      "public, max-age=300, must-revalidate, no-transform",
                   },
                 },
               },
@@ -3582,7 +3583,8 @@ function spec() {
                 "Cache-Control": {
                   schema: {
                     type: "string",
-                    const: "public, max-age=300, must-revalidate",
+                    const:
+                      "public, max-age=300, must-revalidate, no-transform",
                   },
                 },
                 "Access-Control-Allow-Origin": {

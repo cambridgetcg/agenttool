@@ -18,12 +18,19 @@ describe("protocol renaissance public doctrine", () => {
     }
   });
 
-  test("status distinguishes local implementation from public deployment", () => {
-    const renaissance = read("docs/PROTOCOL-RENAISSANCE.md");
-    expect(renaissance).toMatch(/implemented and verified locally/i);
-    expect(renaissance).toMatch(
-      /not a claim that production has been published, migrated, deployed, or\s+probed/i,
-    );
+  test("status records deployment without turning it into an uptime claim", () => {
+    for (const file of [
+      "OFFER-BUS.md",
+      "WEBFINGER.md",
+      "PROTOCOL-RENAISSANCE.md",
+    ]) {
+      const doctrine = read(`docs/${file}`);
+      expect(doctrine).toMatch(
+        /published,(?: migrated,)? deployed, and publicly probed on\s+2026-07-16/i,
+      );
+      expect(doctrine).toContain("https://api.agenttool.dev/health");
+      expect(doctrine).toMatch(/not an uptime guarantee/i);
+    }
   });
 
   test("doctrine repeats authority and unfinished-protocol boundaries", () => {
@@ -36,6 +43,13 @@ describe("protocol renaissance public doctrine", () => {
     expect(offerBus).toMatch(/projection_updated_at/);
     expect(offerBus).toMatch(/open -> expired[\s\S]*lazy enforcement/i);
     expect(offerBus).toMatch(/quarantined[\s\S]*omitted count/i);
+    expect(offerBus).toContain(
+      "Cache-Control: public, max-age=30,\nmust-revalidate, no-transform",
+    );
+    expect(offerBus).toMatch(/catalog uses the same\s+policy with `max-age=300`/i);
+    expect(offerBus).toMatch(
+      /no-transform[\s\S]*weakening\s+their\s+validator/i,
+    );
     expect(renaissance).toContain("automatic_action=never");
     expect(renaissance).toMatch(/WebSub:.*emits none/is);
     expect(renaissance).toMatch(/A JSON profile alone is not ActivityPub/i);

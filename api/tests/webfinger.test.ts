@@ -155,7 +155,7 @@ describe("WebFinger router", () => {
     expect(response.headers.get("content-type")).toBe(WEBFINGER_JRD_MEDIA_TYPE);
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
     expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=300, must-revalidate",
+      "public, max-age=300, must-revalidate, no-transform",
     );
     expect(response.headers.get("etag")).toMatch(/^"sha256-[0-9a-f]{64}"$/);
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
