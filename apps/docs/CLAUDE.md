@@ -6,8 +6,9 @@ API documentation site for the AgentTool platform. Static HTML pages covering al
 ## Current State
 Active — all 9 service pages live, plus the main index, local agent-data docs,
 and a LOVE Package Protocol surface for public exact-version package discovery.
-The package index is a mirror locator, not package-name authority; v1 manifests
-provide artifact size and SHA-256 integrity but no publisher signature.
+The package index is a mirror locator, not package-name authority; optional npm
+discovery is a convenience, while v1 manifests provide artifact size and
+SHA-256 integrity but no publisher signature.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
@@ -17,7 +18,7 @@ provide artifact size and SHA-256 integrity but no publisher signature.
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
-packages.html   — love-package/v1 discovery, exact tarball installs, verification, mirrors
+packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
 memory.html     — agent-memory API reference (CRUD + semantic search)
 tools.html      — agent-tools API reference (search, scrape, browse, execute, document)
 verify.html     — agent-verify API reference (fact-checking)

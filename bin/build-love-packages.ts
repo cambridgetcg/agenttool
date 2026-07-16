@@ -640,6 +640,13 @@ function discoveryDocument(primaryOrigin: string): unknown {
     index_url: `${primaryOrigin}${INDEX_PATH}`,
     access: "public_read",
     registry_role: "mirror_index_not_authority",
+    registry_mirrors: [
+      {
+        ecosystem: "npm",
+        registry_url: "https://registry.npmjs.org/",
+        authority: false,
+      },
+    ],
   };
 }
 

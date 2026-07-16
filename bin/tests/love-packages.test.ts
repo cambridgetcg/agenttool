@@ -176,6 +176,13 @@ describe("LOVE Package builder and verifier", () => {
       index_url: "https://docs.agenttool.dev/packages/v1/index.json",
       access: "public_read",
       registry_role: "mirror_index_not_authority",
+      registry_mirrors: [
+        {
+          ecosystem: "npm",
+          registry_url: "https://registry.npmjs.org/",
+          authority: false,
+        },
+      ],
     });
     const index = JSON.parse((await readFile(join(setup.firstOutput, INDEX_PATH.slice(1)))).toString());
     expect(index.document_type).toBe("package-index");

@@ -113,6 +113,11 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 
 The installed tutorial contract is currently SDK 0.13. Python's separately distributed 0.13 source tag is `sdk-v0.13.0`; it is not part of the LOVE JavaScript catalog.
 
+Optional shorter install: `npm install --save-exact @agenttool/sdk@0.13.0`.
+This pins the compatible npm release but skips Step 1's independent LOVE
+size/SHA-256 verification; never substitute npm `latest` for the version
+selected by `/v1/pathways`.
+
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 
 ```bash
