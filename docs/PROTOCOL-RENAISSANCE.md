@@ -13,6 +13,10 @@
 **Status:** Release 1 was published, migrated, deployed, and publicly probed on
 2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
 the revision currently running; this release record is not an uptime guarantee.
+The Fly origin emitted strong exact-byte ETags, but the Cloudflare hostname
+weakened the larger feed validators. End-to-end strong validation therefore
+remains a deployment setting and probe, not a property inferred from source
+headers alone.
 
 ## The move
 

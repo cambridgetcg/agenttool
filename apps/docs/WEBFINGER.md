@@ -15,6 +15,8 @@
 The Agent Passport profile was published, deployed, and publicly probed on
 2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
 the revision currently running; this release record is not an uptime guarantee.
+The route emits a strong validator at the Fly origin. End-to-end validator
+strength still depends on the public CDN configuration described in `STACK.md`.
 
 ## The narrow application
 
@@ -85,8 +87,9 @@ method, confer authority, or transfer permission.
 - The serialized JRD has a deterministic strong SHA-256 ETag.
   `If-None-Match` uses weak GET/HEAD comparison and can return `304`.
 - Successful responses use `Cache-Control: public, max-age=300,
-  must-revalidate, no-transform`; the final directive preserves the exact JRD
-  bytes and strong validator across intermediaries. Errors use `no-store`.
+  must-revalidate, no-transform`; the final directive asks compliant
+  intermediaries to preserve the exact JRD bytes. It does not configure or
+  guarantee a CDN's strong-ETag behavior. Errors use `no-store`.
 - `HEAD` returns the same validators without a body. `OPTIONS` exposes the
   standalone CORS contract for GET/HEAD and `If-None-Match`.
 

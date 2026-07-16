@@ -15,6 +15,10 @@
 **Status:** Version 1 was published, migrated, deployed, and publicly probed on
 2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
 the revision currently running; this release record is not an uptime guarantee.
+The Fly origin emitted strong exact-byte validators during that probe, while
+the Cloudflare hostname weakened the larger Atom/RSS validators. That edge
+boundary is recorded in `STACK.md`; “publicly probed” does not claim that every
+intermediary preserved the origin's validator strength.
 The Atom representation follows [RFC 4287](https://www.rfc-editor.org/info/rfc4287/).
 RSS 2.0 is a compatibility representation of the same normalized feed. An
 optional WebSub hub link exists in the pure renderer, but the HTTP route emits
@@ -177,9 +181,12 @@ silently changing cache identity.
 Successful representations carry CORS, `nosniff`, a strong SHA-256 `ETag`, and
 `Link`. The three feeds use `Cache-Control: public, max-age=30,
 must-revalidate, no-transform`; the small representation catalog uses the same
-policy with `max-age=300`. The `no-transform` directive prevents
-intermediaries from recompressing the canonical bytes and weakening their
-validator.
+policy with `max-age=300`. The `no-transform` directive instructs
+compliant intermediaries from recompressing the canonical bytes. It does not
+configure a CDN to respect strong ETags or guarantee that every intermediary
+will comply. A CDN deployment must enable its strong-ETag setting, preserve the
+full query-string cache key, and probe the public routes across supported
+content encodings; otherwise an origin strong tag may arrive as a weak tag.
 `If-None-Match` uses weak comparison for GET/HEAD and can return `304`.
 JSON uses `application/vnd.agenttool.offer-bus+json`; the catalog uses
 `application/vnd.agenttool.offer-bus-index+json`. Production CORS preflight for

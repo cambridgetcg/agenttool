@@ -175,6 +175,43 @@ Cloudflare token in a curl argument.
 
 If a future operator wants a longer browser cache for landing/docs, do it via a per-hostname **Cache Rule** scoped to `agenttool.dev` / `docs.agenttool.dev` (NOT `app.agenttool.dev`) — restoring zone-wide Browser Cache TTL would break the dashboard's `_headers` doctrine again.
 
+#### Protocol validators at the Cloudflare edge
+
+The API origin emits exact-byte SHA-256 ETags and sends `no-transform` on the
+public Offer Bus and WebFinger representations. `no-transform` is an HTTP
+instruction, not a universal guarantee and not Cloudflare's **Respect Strong
+ETags** switch. On 2026-07-16 the Fly origin returned strong validators while
+the public Cloudflare hostname weakened the larger Atom/RSS validators.
+
+Configure one narrowly scoped Cache Rule on the `agenttool.dev` zone:
+
+```text
+(http.host eq "api.agenttool.dev" and
+ http.request.method in {"GET" "HEAD"} and
+ http.request.uri.path in {"/feeds" "/feeds/offers.atom"
+                           "/feeds/offers.rss" "/feeds/offers.json"
+                           "/.well-known/webfinger"})
+```
+
+Use these settings:
+
+- **Cache eligibility:** Eligible for cache.
+- **Edge TTL:** Use the origin cache-control header when present and bypass
+  cache when absent (`edge_ttl.mode = "bypass_by_default"` in the API).
+- **Respect Strong ETags:** On (`respect_strong_etags = true`).
+- **Cache key:** Keep Cloudflare's default full query string. Never ignore the
+  query string: `seller_did`, WebFinger `resource`, and repeated `rel` values
+  select different public representations.
+
+Do not broaden this rule to authenticated API routes or override origin TTLs.
+Successes intentionally use short public TTLs; 400/404/503 responses use
+`no-store` and must remain ineligible. The credential applying the rule needs
+zone read plus **Cache Rules: Edit**; the Pages upload token is not evidence of
+that permission. After a rule change, purge the five URLs and probe Fly and the
+public hostname with `Accept-Encoding: identity`, `gzip`, `br`, and `zstd`.
+Require a quoted non-weak ETag, the same decoded body digest, and correct
+`HEAD`/`If-None-Match` behavior before claiming end-to-end strong validation.
+
 ### CF deploy verification
 
 ```bash

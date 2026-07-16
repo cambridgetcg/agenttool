@@ -153,7 +153,7 @@ describe("Offer Bus HTTP representations", () => {
     expect(head.headers.get("etag")).toBe(etag);
   });
 
-  test("prevents intermediaries from weakening exact-byte validators", async () => {
+  test("asks intermediaries not to transform exact-byte representations", async () => {
     const app = testRouter();
     for (const [path, maxAge] of [
       ["/", 300],
