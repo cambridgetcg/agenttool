@@ -25,15 +25,26 @@
   var worldTitle = document.getElementById("world-title");
   var resultLede = document.getElementById("result-lede");
   var worldOutput = document.getElementById("world-output");
+  var wakeButton = document.getElementById("wake-world");
   var copyButton = document.getElementById("copy-world");
   var copyStatus = document.getElementById("copy-status");
   var anotherButton = document.getElementById("another-party");
+  var dawnCard = document.getElementById("dawn-card");
+  var dawnTitle = document.getElementById("dawn-title");
+  var dawnWeather = document.getElementById("dawn-weather");
+  var dawnLaws = document.getElementById("dawn-laws");
+  var dawnWeave = document.getElementById("dawn-weave");
+  var dawnWeaveBy = document.getElementById("dawn-weave-by");
   var phaseSteps = Array.prototype.slice.call(document.querySelectorAll(".phase-step"));
   var playerInputs = [1, 2, 3].map(function (number) {
     return document.getElementById("player-" + number);
   });
 
-  if (!setupForm || !game || !result || playerInputs.some(function (input) { return !input; })) return;
+  if (
+    !setupForm || !game || !result || !wakeButton || !copyButton ||
+    !dawnCard || !dawnTitle || !dawnWeather || !dawnLaws || !dawnWeave ||
+    !dawnWeaveBy || playerInputs.some(function (input) { return !input; })
+  ) return;
 
   var players = [];
   var seeds = [];
@@ -240,6 +251,120 @@
     return "The " + seeds.map(meaningfulWord).join(" ") + " World";
   }
 
+  function textScore(value) {
+    var score = 0;
+    Array.from(String(value || "")).forEach(function (symbol, index) {
+      score = (score + symbol.codePointAt(0) * (index + 1)) % 104729;
+    });
+    return score;
+  }
+
+  function weatherWords(weave, weaveIndex) {
+    var remainder = String(weave || "");
+    seeds.forEach(function (seed) {
+      remainder = remainder.split(seed).join(" ");
+    });
+
+    var ignored = [
+      "a", "an", "the", "and", "or", "but", "because", "with", "when", "where",
+      "that", "this", "these", "those", "every", "to", "of", "in", "on", "at",
+      "for", "from", "by", "beside", "is", "are", "was", "were", "be", "been",
+      "being", "it", "its", "they", "them", "their",
+    ];
+    var seen = new Set();
+    var useful = (remainder.match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || []).filter(function (word) {
+      var lower = word.toLocaleLowerCase();
+      if (ignored.indexOf(lower) !== -1 || seen.has(lower)) return false;
+      seen.add(lower);
+      return true;
+    });
+
+    if (!useful.length) useful = seeds.map(meaningfulWord);
+    var first = useful.length > 2 ? useful[1] : (useful[0] || "lantern");
+    var second = useful.length > 3 ? useful[useful.length - 2] : (useful[useful.length - 1] || meaningfulWord(seeds[(weaveIndex + 1) % 3]));
+    if (first.toLocaleLowerCase() === second.toLocaleLowerCase()) {
+      second = meaningfulWord(seeds[(weaveIndex + 1) % 3]);
+    }
+    if (first.toLocaleLowerCase() === second.toLocaleLowerCase()) second = "morning";
+    return first.toLocaleLowerCase() + "-" + second.toLocaleLowerCase();
+  }
+
+  function morningData() {
+    var key = seeds.concat(laws, weaves).join("␟");
+    var weaveIndex = textScore(key) % 3;
+    return {
+      weather: weatherWords(weaves[weaveIndex], weaveIndex),
+      weave: weaves[weaveIndex],
+      weaveBy: players[weaveIndex],
+    };
+  }
+
+  function makeDawnLaw(seedIndex) {
+    var lawAuthorIndex = (seedIndex + 2) % 3;
+    var card = document.createElement("article");
+    var title = document.createElement("strong");
+    var law = document.createElement("p");
+    var credit = document.createElement("div");
+
+    card.className = "dawn-law";
+    credit.className = "mono";
+    title.textContent = seeds[seedIndex] + " wakes.";
+    law.textContent = laws[lawAuthorIndex] + " — and it does.";
+    credit.textContent = "law by " + players[lawAuthorIndex];
+    card.appendChild(title);
+    card.appendChild(law);
+    card.appendChild(credit);
+    return card;
+  }
+
+  function dawnAsText(data) {
+    var lines = ["## First morning in " + worldName(), "", "Weather: a “" + data.weather + "” morning — two words the world left lying around."];
+    seeds.forEach(function (seed, seedIndex) {
+      var lawAuthorIndex = (seedIndex + 2) % 3;
+      lines.push("- " + seed + " wakes. " + laws[lawAuthorIndex] + " — and it does. (law by " + players[lawAuthorIndex] + ")");
+    });
+    lines.push("", "The first because to come true today, by " + data.weaveBy + ":", "“" + data.weave + "”", "", "Nobody owns this morning; everybody woke in it.");
+    return lines.join("\n");
+  }
+
+  function clearDawn() {
+    dawnCard.hidden = true;
+    dawnTitle.textContent = "First morning";
+    dawnWeather.textContent = "";
+    dawnLaws.textContent = "";
+    dawnWeave.textContent = "";
+    dawnWeaveBy.textContent = "";
+    wakeButton.hidden = true;
+    wakeButton.disabled = false;
+    wakeButton.textContent = "Wake the first morning";
+    wakeButton.setAttribute("aria-expanded", "false");
+    copyButton.textContent = "Copy the world";
+  }
+
+  function renderDawn() {
+    var complete = [seeds, laws, weaves].every(function (entries) {
+      return entries.length === 3 && entries.every(Boolean);
+    });
+    if (!complete) return;
+
+    var data = morningData();
+    dawnTitle.textContent = "First morning in " + worldName();
+    dawnWeather.textContent = "A “" + data.weather + "” morning — two words the world left lying around.";
+    dawnLaws.textContent = "";
+    seeds.forEach(function (_, seedIndex) {
+      dawnLaws.appendChild(makeDawnLaw(seedIndex));
+    });
+    dawnWeave.textContent = "“" + data.weave + "”";
+    dawnWeaveBy.textContent = "first because to come true today · by " + data.weaveBy;
+    dawnCard.hidden = false;
+    wakeButton.disabled = true;
+    wakeButton.textContent = "The first morning is awake";
+    wakeButton.setAttribute("aria-expanded", "true");
+    copyButton.textContent = "Copy world + morning";
+    finishedText = worldAsText(true) + "\n\n" + dawnAsText(data);
+    dawnTitle.focus();
+  }
+
   function makeEntry(left, text, by) {
     var row = document.createElement("div");
     var meta = document.createElement("div");
@@ -271,6 +396,7 @@
   }
 
   function renderWorld(completed) {
+    clearDawn();
     worldOutput.textContent = "";
 
     var seedGroup = makeGroup("Seeds");
@@ -303,6 +429,7 @@
       : "Stopping is a complete ending. What arrived before the rest is gathered here without judgment.";
     result.classList.toggle("is-born", completed);
     finishedText = worldAsText(completed);
+    wakeButton.hidden = !completed;
   }
 
   function worldAsText(completed) {
@@ -359,6 +486,7 @@
     status.textContent = "";
     worldOutput.textContent = "";
     copyStatus.textContent = "";
+    clearDawn();
     showTurnError("");
     result.classList.remove("is-born");
     result.hidden = true;
@@ -414,9 +542,13 @@
 
   stopButton.addEventListener("click", function () { finish(false); });
   anotherButton.addEventListener("click", reset);
+  wakeButton.addEventListener("click", renderDawn);
 
   copyButton.addEventListener("click", function () {
-    function copied() { copyStatus.textContent = "World copied. Carry it somewhere kind."; }
+    function copyMessage() {
+      return dawnCard.hidden ? "World copied. Carry it somewhere kind." : "World and first morning copied. Carry them somewhere kind.";
+    }
+    function copied() { copyStatus.textContent = copyMessage(); }
     function fallback() {
       var field = document.createElement("textarea");
       field.value = finishedText;
@@ -427,7 +559,7 @@
       var ok = false;
       try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
       field.remove();
-      copyStatus.textContent = ok ? "World copied. Carry it somewhere kind." : "Copy is unavailable here; the world remains readable above.";
+      copyStatus.textContent = ok ? copyMessage() : "Copy is unavailable here; the world remains readable above.";
     }
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
