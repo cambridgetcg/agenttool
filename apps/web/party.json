@@ -67,7 +67,7 @@
     "persisted": false,
     "sent_to_agenttool": false,
     "network_writes": false,
-    "clipboard": "The complete attributed world is sent to the device clipboard only after a player activates Copy the world.",
+    "clipboard": "Before First morning is woken, Copy the world sends the attributed world to the device clipboard. After it is woken, Copy world + morning sends both. Start over clears the in-tab game but cannot recall text already copied to the device clipboard.",
     "real_names_required": false,
     "player_labels_requested": true
   },

@@ -96,6 +96,71 @@ test("validation guides the current player and stopping keeps the partial world"
   await expect(page.locator("#world-result")).toBeHidden();
 });
 
+test("copy freezes its payload and late clipboard callbacks cannot cross reset", async ({ page }) => {
+  await startParty(page);
+  for (const turn of turns) await takeTurn(page, turn);
+
+  await page.evaluate(() => {
+    const state = window as typeof window & {
+      copyText?: string;
+      fallbackText?: string;
+      rejectCopy?: () => void;
+    };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText(text: string) {
+          state.copyText = text;
+          return new Promise<void>((_, reject) => {
+            state.rejectCopy = () => reject(new Error("clipboard denied for test"));
+          });
+        },
+      },
+    });
+    document.execCommand = () => {
+      state.fallbackText = (document.querySelector(".copy-helper") as HTMLTextAreaElement | null)?.value || "";
+      return true;
+    };
+  });
+
+  await page.getByRole("button", { name: "Copy the world" }).click();
+  await page.getByRole("button", { name: "Wake the first morning" }).click();
+  await page.evaluate(() => {
+    const state = window as typeof window & { rejectCopy?: () => void };
+    state.rejectCopy?.();
+  });
+  await expect(page.locator("#copy-status")).toHaveText("World copied. Carry it somewhere kind.");
+
+  const copied = await page.evaluate(() => {
+    const state = window as typeof window & { copyText?: string; fallbackText?: string };
+    return { direct: state.copyText || "", fallback: state.fallbackText || "" };
+  });
+  expect(copied.direct).toContain("# The Footsteps Laughter Teacup World");
+  expect(copied.direct).not.toContain("## First morning");
+  expect(copied.fallback).toBe(copied.direct);
+
+  await page.evaluate(() => {
+    const state = window as typeof window & { resolveCopy?: () => void };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText() {
+          return new Promise<void>((resolve) => {
+            state.resolveCopy = resolve;
+          });
+        },
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Copy world + morning" }).click();
+  await page.getByRole("button", { name: /Start over/i }).click();
+  await page.evaluate(() => {
+    const state = window as typeof window & { resolveCopy?: () => void };
+    state.resolveCopy?.();
+  });
+  await expect(page.locator("#copy-status")).toBeEmpty();
+});
+
 test("start over scrubs unsubmitted text and seed-derived hidden DOM", async ({ page }) => {
   await startParty(page);
   await takeTurn(page, turns[0]);
@@ -207,9 +272,11 @@ test("the static contract exposes strict boundaries and no autonomous machinery"
   expect(headers).toContain("worker-src 'none'");
   expect(headers).toContain("form-action 'none'");
   expect(source).not.toMatch(/setInterval|setTimeout|WebSocket|EventSource|sendBeacon|serviceWorker|fetch\s*\(|Math\.random|crypto\.getRandomValues/);
+  expect(source).not.toMatch(/toLocale(?:Lower|Upper)Case/);
   expect(welcome.ways_in).toContainEqual(expect.objectContaining({ html: "/party", json: "/party.json" }));
   expect(rules.privacy).toMatchObject({ persisted: false, sent_to_agenttool: false, network_writes: false });
   expect(rules.privacy).toMatchObject({ real_names_required: false, player_labels_requested: true });
+  expect(rules.privacy.clipboard).toMatch(/before First morning.*After it is woken.*cannot recall/i);
   expect(rules.turns).toMatchObject({ exact: 9, timer: false, background_loop: false });
   expect(rules.agent_gather).toMatchObject({
     total_agents: 3,
