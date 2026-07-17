@@ -8,6 +8,9 @@ A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
 object protocol package (`packages/data-protocol`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
+The public `@agenttool/telescope` CLI/library maps agent discovery evidence
+without invoking protocols or actions. It ships through LOVE/npm as a local
+client and is not exposed as a hosted arbitrary-target scanner.
 JavaScript artifacts are distributed through the registry-neutral
 `love-package/v1` protocol; npm is an optional mirror rather than a gate.
 The apex worker sends API paths and machine-readable root requests to
@@ -43,6 +46,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
+| **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
 | **Infra** | `api/fly.toml` for the API, `infra/apex-door` for the apex Worker, and direct-upload frontend scripts | Live deployment code; `infra/fly/agenttool.toml` is a snapshot, not the canonical API config |
 | **Lineage** | Former `agent-*` per-service apps retired | The API monolith carries the active service domains; cutover history is in `docs/CUTOVER.md` |
@@ -95,8 +99,8 @@ The source packages are `agenttool-sdk` (Python) and `@agenttool/sdk`
 (TypeScript). Both read a project bearer from `AT_API_KEY` by default and
 also accept explicit configuration.
 
-The JavaScript SDK, local data node, encrypted pull bridge, and ADDS package
-ship first through `love-package/v1` manifests and ordinary HTTPS tarballs.
+The JavaScript SDK, local data node, encrypted pull bridge, ADDS package, and
+Telescope ship first through `love-package/v1` manifests and ordinary HTTPS tarballs.
 The current licensed release line is also published on npm as an optional
 exact-version convenience. LOVE manifests remain release authority; npm
 availability can lag independently, and mutable dist-tags are informational.
@@ -123,7 +127,8 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, and `@agenttool/sdk@0.13.0`. Earlier immutable
+`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.13.0`, and
+`@agenttool/telescope@0.1.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
 releases rather than being silently rewritten. Individual documents retain
 their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
@@ -155,7 +160,7 @@ and docs carry local guidance files; `apps/web` does not.
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/TypeScript SDK jobs from
+dependencies for the API/protocol and data/ADDS/TypeScript SDK/Telescope jobs from
 frozen Bun lockfiles. The Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not

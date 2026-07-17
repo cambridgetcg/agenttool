@@ -2,11 +2,17 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-13 (THE LONG CONTEXT, wallet reinvestment resting, and SDK 0.11.0 identity and settlement integrity)
+> Updated: 2026-07-17 (Telescope 0.1.0 public package release)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-17)
+
+| Ship | Commit | What |
+|---|---|---|
+| **TELESCOPE 0.1.0 — bounded discovery evidence for local agents** | catalog release | Public `@agenttool/telescope` CLI/library probes a fixed, bounded set of public-HTTPS agent discovery surfaces and separates transport observations from publisher assertions. It maps `agent.txt`, Pathways, exact LOVE/npm selections, MCP and A2A advertisements, plus opt-in WebFinger/Offer Bus adapter facts; it never invokes protocols, installs packages, executes generated commands, sends credentials, pays, or settles. LOVE verification binds one downloaded tarball's size, SHA-256, safe archive shape, and embedded package identity before install. The package has zero runtime dependencies and supports Node 20.19+ or Bun 1.3.5+. DNS preflight is not socket pinning, so this remains a local client and is deliberately not a hosted arbitrary-target scanner. The immutable LOVE artifact is release authority; GitHub and exact npm versions are optional mirrors rather than trust authorities. |
 
 ## Just landed (2026-07-13)
 

@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + data sync + TypeScript SDK gate
+#   bin/preflight.sh packages        # data + ADDS + data sync + TypeScript SDK + Telescope gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -92,6 +92,8 @@ packages_gate() {
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "TypeScript SDK, Python surface parity, build, and tests" \
     bash -c 'cd packages/sdk-ts && bun run ci'
+  run "Telescope read-only discovery library and CLI" \
+    bash -c 'cd packages/telescope && bun run ci'
 }
 
 case "$MODE" in

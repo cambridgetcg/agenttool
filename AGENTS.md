@@ -16,7 +16,10 @@ node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
 node (`packages/data/`), the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
 (`packages/data-sync/`), the registry-neutral `love-package/v1`
-distribution protocol, and three static apps (`apps/`). It is live at
+distribution protocol, a public read-only discovery evidence mapper
+(`packages/telescope/`), and three static apps (`apps/`). Telescope 0.1.0 is a
+public npm/LOVE package, but it remains a local client and does not add a hosted
+scan route. The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
 orientation surface with links into many primitives; it is not a complete
@@ -32,6 +35,7 @@ cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/sdk-ts && bun install              # TS SDK
+cd packages/telescope && bun install           # read-only discovery evidence mapper
 cd packages/sdk-py && pip install -e .         # Python SDK
 ```
 
@@ -82,6 +86,11 @@ bun run ci                                     # parity + build + test
 cd packages/sdk-py
 pytest                                         # Python SDK tests
 
+# Telescope (public local client; no hosted scanner) ────────────────
+cd packages/telescope
+bun run ci                                     # typecheck + hermetic tests + build
+node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood
+
 # Frontends ──────────────────────────────────────────────────────────
 # Vanilla HTML/CSS/JS — no build step. Open files directly or:
 cd apps/dashboard && npx serve .
@@ -92,7 +101,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + data sync + SDK only
+bin/preflight.sh packages                      # data + ADDS + data sync + SDK + Telescope
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -152,7 +161,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py}/`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{data,sdk-ts,sdk-py,telescope}/`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 

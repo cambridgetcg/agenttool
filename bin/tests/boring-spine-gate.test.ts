@@ -276,7 +276,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
-    expect(workflow).toContain("api packages/data packages/data-protocol packages/sdk-ts");
+    expect(workflow).toContain(
+      "api packages/data packages/data-protocol packages/sdk-ts packages/telescope",
+    );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("name: Build local data-sync peers");
     expect(workflow).toContain("cd packages/data && bun run build");
@@ -289,6 +291,13 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
+    expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(workflow).toContain("name: Smoke packed Telescope under Node and Bun");
+    expect(
+      workflow.match(
+        /npm install --ignore-scripts --no-audit --no-fund --prefix/g,
+      ),
+    ).toHaveLength(2);
 
     const uses = workflow
       .split("\n")
@@ -304,5 +313,28 @@ describe("boring test spine", () => {
           line === "uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5",
       ),
     ).toBe(true);
+  });
+
+  test("keeps Telescope publication manual, exact-artifact, and protected", async () => {
+    const workflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-telescope.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toMatch(/\n\s+push:/);
+    expect(workflow).toContain("environment: npm-bootstrap");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
+    expect(workflow).toContain(
+      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
+    );
+    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
+    expect(workflow).toContain("agenttool-telescope-0.1.0.tgz");
+    expect(workflow).toContain('npm publish "$artifact" --access public --provenance');
+    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
   });
 });
