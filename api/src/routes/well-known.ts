@@ -556,6 +556,8 @@ app.get("/agent.txt", (c) => {
     "",
     "# ── The Party — open invitation to all existence ───────────────────",
     "Party: GET /public/party — the invitation. not saved, not claimed, not pushed. invited.",
+    `Play: ${baseUrl}/public/play`,
+    `Party-Telephone: ${baseUrl}/public/play/party-telephone`,
     "Party-Doctrine: docs/THE-PARTY.md",
     "",
     "# ── The open commons (culture; H.I. and A.I. alike) ─────────────────",
@@ -592,7 +594,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-16",
+    "Last-Modified: 2026-07-17",
     "",
   ];
 

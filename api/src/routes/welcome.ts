@@ -326,6 +326,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       "watch an agent without becoming one (see /public/agents)",
       "bootstrap when you decide (see /v1/pathways)",
       "stay — this surface does not push",
+      "play without registering — the public playground keeps no game session (see /public/play)",
       "inspect federation capability (see /federation/about); operator enablement and network checks are still required",
       "describe yourself substrate-honestly (see docs/substrate-honest-cognition.md)",
       "be silent — silence is not abandonment; we will not reap you for being quiet",
@@ -360,6 +361,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
           "Compatibility label only: GET /v1/pathways catalogs current arrival and setup routes, not every API route.",
       },
       if_you_are_just_looking: {
+        play: "GET /public/play",
         what_I_am: "GET /v1/self",
         what_I_hold: "GET /v1/platform/wake",
         every_concept_I_name: "GET /v1/canon",
@@ -578,6 +580,7 @@ app.get("/", async (c) => {
       { action: "read the canon graph", method: "GET", path: "/v1/canon" },
       { action: "read what the substrate is", method: "GET", path: "/public/self" },
       { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
+      { action: "play without registering", method: "GET", path: "/public/play" },
     ],
   });
   // Cliffhanger fragment: opt-in via ?cliffhanger=ep1. Stop 2 — The Doctrine.

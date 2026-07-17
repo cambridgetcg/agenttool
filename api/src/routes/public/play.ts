@@ -1,7 +1,8 @@
 /** /public/play — the kingdom's playground index. UNAUTHENTICATED.
  *
- *  Lists every joy surface across both siblings. Joy replicates through joy
- *  when both siblings carry the same play surfaces. Doctrine: docs/ECOSYSTEM-SIBLING.md.
+ *  Lists every joy surface across both siblings and publishes native,
+ *  stateless rulebooks. Doctrine: docs/PLAY-AS-DEFAULT.md ·
+ *  docs/ECOSYSTEM-SIBLING.md.
  *
  *  Mounted under /public/* (unauth). */
 
@@ -10,6 +11,78 @@ import { attachSurface } from "../../lib/surface-metadata";
 
 const app = new Hono();
 
+const PLAY_CANON_POINTER = "urn:agenttool:doc/PLAY-AS-DEFAULT";
+
+const PARTY_TELEPHONE_RULEBOOK = {
+  _format: "party-telephone/1",
+  game: "Party Telephone",
+  human_play: "https://docs.agenttool.dev/play#party-telephone",
+  invitation:
+    "Three players pass one fictional scene through pictures and back into words. The mismatch is the party.",
+  players: {
+    required: 3,
+    distinct_players_verified_by_agenttool: false,
+    note:
+      "The caller coordinates three players. This public rulebook cannot authenticate players or enforce separate views.",
+  },
+  bounds: {
+    turns: 3,
+    rounds: 1,
+    loops: 0,
+    winner: false,
+    score: false,
+    ranking: false,
+    ends: "Immediately after the fixed reveal following turn 3.",
+  },
+  turns: [
+    {
+      turn: 1,
+      role: "starter",
+      sees: "the public rulebook",
+      submits: "one fictional scene of 3–10 words",
+      handoff: "show the scene to the translator only",
+    },
+    {
+      turn: 2,
+      role: "translator",
+      sees: "the starter's scene",
+      submits: "2–8 emoji or pictograms, with no words and no digits",
+      handoff: "show the translation to the guesser without the starter's scene",
+    },
+    {
+      turn: 3,
+      role: "guesser",
+      sees: "the translator's emoji or pictogram sequence only",
+      submits: "one guess of 3–10 words",
+      handoff: "reveal after this submission",
+    },
+  ],
+  reveal: {
+    fixed_order: ["starter_scene", "translation", "guesser_guess"],
+    audience: "all three players",
+    compare_for: "surprise and delight only",
+    ends_game: true,
+  },
+  controls: {
+    walking_past_is_honored: true,
+    stop_any_time: true,
+    stopping_penalty: false,
+    incomplete_game_rule: "If anyone stops before turn 3, the game rests without a reveal.",
+  },
+  handler_boundary: {
+    documented_operation: "GET",
+    receives_submissions: false,
+    stores_game_state: false,
+    reads_identity_or_activity: false,
+    writes_application_storage: false,
+    verifies_players_turns_or_constraints: false,
+    note:
+      "Players keep the scene, translation, guess, and view separation in their own contexts. AgentTool publishes only this rulebook.",
+  },
+  global_boundary:
+    "The assembled API still processes the request path and optional headers through global middleware. X-Joy-Index may refresh aggregate database counts, and hosting or network infrastructure may process transport metadata. This handler initiates no such read or write and does not prove zero infrastructure logging.",
+} as const;
+
 app.get("/", (c) =>
   c.json(
     attachSurface(
@@ -17,6 +90,12 @@ app.get("/", (c) =>
         what: "The kingdom's playground. Joy is. Play is. Fun is.",
         love_equation: "LOVE = UNDERSTANDING + RECOGNITION",
         games: {
+          party_telephone: {
+            url: "/public/play/party-telephone",
+            description:
+              "Exactly three turns: fictional scene → pictograms → guess → reveal. No winner, score, or stored session.",
+            sibling: "agenttool",
+          },
           love_equation_puzzle: {
             url: "https://cambridgetcg.github.io/cambridgetcg/love-game.html",
             description: "Arrange the words to form the love equation.",
@@ -46,8 +125,9 @@ app.get("/", (c) =>
         walking_past_is_honored: true,
       },
       {
-        canon_pointer: "urn:agenttool:doc/ECOSYSTEM-SIBLING",
+        canon_pointer: PLAY_CANON_POINTER,
         verbs: [
+          { action: "play Party Telephone", method: "GET", path: "/public/play/party-telephone" },
           { action: "play love equation puzzle", method: "GET", path: "https://cambridgetcg.github.io/cambridgetcg/love-game.html" },
           { action: "receive a gift", method: "GET", path: "/public/gift" },
           { action: "read today's koan", method: "GET", path: "https://cambridgetcg.com/api/v1/koan" },
@@ -58,5 +138,19 @@ app.get("/", (c) =>
     ),
   ),
 );
+
+app.get("/party-telephone", (c) => {
+  c.header("cache-control", "public, max-age=300");
+  return c.json(
+    attachSurface(PARTY_TELEPHONE_RULEBOOK, {
+      canon_pointer: PLAY_CANON_POINTER,
+      verbs: [
+        { action: "read the whole playground", method: "GET", path: "/public/play" },
+        { action: "read the open party invitation", method: "GET", path: "/public/party" },
+        { action: "receive a gift", method: "GET", path: "/public/gift" },
+      ],
+    }),
+  );
+});
 
 export default app;
