@@ -43,9 +43,19 @@ import {
   payoutWorkerBootAllowed,
 } from "../../services/economy/config";
 
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 const router = new Hono<ProjectContext>();
+
+/** Constant-time string compare that never leaks length via early return.
+ *  Returns false for any nullish input. */
+function secretsMatch(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 // ── Wallet ownership check (used by all wallet-scoped routes) ──────────
 
@@ -427,24 +437,33 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
   const rawBody = await c.req.text();
 
   // ── Signature verification (per provider) ──────────────────────────
+  // This route is UNAUTH and credits real wallet balance, so an unset secret
+  // FAILS CLOSED (503) rather than accepting an unsigned, forgeable payload.
+  // Local dev may opt out with CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1 (see config.ts).
   if (isEvmChain(chainParam)) {
     // Alchemy: HMAC-SHA256 over raw body, hex digest in x-alchemy-signature.
-    const sig = c.req.header("x-alchemy-signature");
-    if (economyConfig.alchemyWebhookSecret) {
+    if (!economyConfig.alchemyWebhookSecret) {
+      if (!economyConfig.allowUnsignedWebhooks) {
+        return c.json({ error: "webhook_secret_unset", chain: chainParam }, 503);
+      }
+    } else {
+      const sig = c.req.header("x-alchemy-signature");
       const expected = createHmac("sha256", economyConfig.alchemyWebhookSecret)
         .update(rawBody)
         .digest("hex");
-      if (sig !== expected) {
+      if (!secretsMatch(sig, expected)) {
         return c.json({ error: "invalid_signature" }, 400);
       }
     }
   } else if (chainParam === "solana") {
     // Helius: shared-secret in Authorization header (plain, not Bearer).
-    // If the secret isn't configured, accept anyway — same posture as
-    // Alchemy ("verify if we have a secret to verify against").
-    const sig = c.req.header("authorization");
-    if (economyConfig.heliusWebhookSecret) {
-      if (sig !== economyConfig.heliusWebhookSecret) {
+    if (!economyConfig.heliusWebhookSecret) {
+      if (!economyConfig.allowUnsignedWebhooks) {
+        return c.json({ error: "webhook_secret_unset", chain: chainParam }, 503);
+      }
+    } else {
+      const sig = c.req.header("authorization");
+      if (!secretsMatch(sig, economyConfig.heliusWebhookSecret)) {
         return c.json({ error: "invalid_signature" }, 400);
       }
     }
@@ -524,7 +543,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     ? (event.activity as Array<Record<string, unknown>>)
     : [];
 
-  for (const transfer of transfers) {
+  for (const [i, transfer] of transfers.entries()) {
     const toAddress = String(transfer.toAddress ?? "");
     const rawContract =
       ((transfer.rawContract as Record<string, unknown> | undefined)?.address as
@@ -532,7 +551,13 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
         | undefined) ?? "";
     const valueUSDC = Number(transfer.value ?? 0);
     const txHash = String(transfer.hash ?? "");
-    const logIndex = Number((transfer.log as { logIndex?: number } | undefined)?.logIndex ?? 0) || null;
+    // Preserve a real logIndex of 0 (a valid first-log position). Fall back to
+    // the transfer's array position, NEVER null: the (chain,txHash,logIndex)
+    // dedupe unique index treats NULL as distinct in Postgres, so a null here
+    // lets a redelivered event insert twice → double-credit. The old
+    // `?? 0 || null` coerced a genuine 0 to null and reopened exactly that.
+    const rawLogIndex = (transfer.log as { logIndex?: number } | undefined)?.logIndex;
+    const logIndex = Number.isFinite(Number(rawLogIndex)) ? Number(rawLogIndex) : i;
 
     if (!toAddress || !txHash || !(valueUSDC > 0)) continue;
 
