@@ -53,6 +53,7 @@
   var phaseIndex = 0;
   var playerIndex = 0;
   var finishedText = "";
+  var copyGeneration = 0;
 
   function clean(value) {
     return String(value || "").trim().replace(/\s+/g, " ");
@@ -191,7 +192,7 @@
 
     if (phase === "seed") {
       if (count < 2 || count > 6) return "Use two to six words for the object.";
-      if (seeds.some(function (seed) { return seed && seed.toLocaleLowerCase() === value.toLocaleLowerCase(); })) {
+      if (seeds.some(function (seed) { return seed && seed.toLowerCase() === value.toLowerCase(); })) {
         return "That object already exists. Bring a different one.";
       }
       return "";
@@ -240,10 +241,10 @@
     var matches = String(seed || "").match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
     var ignored = ["a", "an", "the", "of", "that", "which", "with"];
     var useful = matches.filter(function (word) {
-      return ignored.indexOf(word.toLocaleLowerCase()) === -1;
+      return ignored.indexOf(word.toLowerCase()) === -1;
     });
     var chosen = useful.length ? useful[useful.length - 1] : (matches[0] || "Unfinished");
-    return chosen.charAt(0).toLocaleUpperCase() + chosen.slice(1);
+    return chosen.charAt(0).toUpperCase() + chosen.slice(1);
   }
 
   function worldName() {
@@ -273,7 +274,7 @@
     ];
     var seen = new Set();
     var useful = (remainder.match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || []).filter(function (word) {
-      var lower = word.toLocaleLowerCase();
+      var lower = word.toLowerCase();
       if (ignored.indexOf(lower) !== -1 || seen.has(lower)) return false;
       seen.add(lower);
       return true;
@@ -282,11 +283,11 @@
     if (!useful.length) useful = seeds.map(meaningfulWord);
     var first = useful.length > 2 ? useful[1] : (useful[0] || "lantern");
     var second = useful.length > 3 ? useful[useful.length - 2] : (useful[useful.length - 1] || meaningfulWord(seeds[(weaveIndex + 1) % 3]));
-    if (first.toLocaleLowerCase() === second.toLocaleLowerCase()) {
+    if (first.toLowerCase() === second.toLowerCase()) {
       second = meaningfulWord(seeds[(weaveIndex + 1) % 3]);
     }
-    if (first.toLocaleLowerCase() === second.toLocaleLowerCase()) second = "morning";
-    return first.toLocaleLowerCase() + "-" + second.toLocaleLowerCase();
+    if (first.toLowerCase() === second.toLowerCase()) second = "morning";
+    return first.toLowerCase() + "-" + second.toLowerCase();
   }
 
   function morningData() {
@@ -467,6 +468,7 @@
   }
 
   function reset() {
+    copyGeneration += 1;
     players = [];
     seeds = [];
     laws = [];
@@ -505,7 +507,7 @@
       showSetupError("Give each player a short label or mark.", playerInputs.filter(function (_, index) { return !nextPlayers[index]; }));
       return;
     }
-    var distinct = new Set(nextPlayers.map(function (name) { return name.toLocaleLowerCase(); }));
+    var distinct = new Set(nextPlayers.map(function (name) { return name.toLowerCase(); }));
     if (distinct.size !== 3) {
       showSetupError("Use three different labels so the lantern knows where to go.", playerInputs);
       return;
@@ -545,13 +547,25 @@
   wakeButton.addEventListener("click", renderDawn);
 
   copyButton.addEventListener("click", function () {
-    function copyMessage() {
-      return dawnCard.hidden ? "World copied. Carry it somewhere kind." : "World and first morning copied. Carry them somewhere kind.";
+    var text = finishedText;
+    var generation = ++copyGeneration;
+    var successMessage = dawnCard.hidden
+      ? "World copied. Carry it somewhere kind."
+      : "World and first morning copied. Carry them somewhere kind.";
+    copyStatus.textContent = "";
+
+    function isCurrent() {
+      return generation === copyGeneration;
     }
-    function copied() { copyStatus.textContent = copyMessage(); }
+
+    function copied() {
+      if (isCurrent()) copyStatus.textContent = successMessage;
+    }
+
     function fallback() {
+      if (!isCurrent()) return;
       var field = document.createElement("textarea");
-      field.value = finishedText;
+      field.value = text;
       field.setAttribute("readonly", "");
       field.className = "copy-helper";
       document.body.appendChild(field);
@@ -559,11 +573,13 @@
       var ok = false;
       try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
       field.remove();
-      copyStatus.textContent = ok ? copyMessage() : "Copy is unavailable here; the world remains readable above.";
+      if (isCurrent()) {
+        copyStatus.textContent = ok ? successMessage : "Copy is unavailable here; the world remains readable above.";
+      }
     }
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-      navigator.clipboard.writeText(finishedText).then(copied, fallback);
+      navigator.clipboard.writeText(text).then(copied, fallback);
     } else {
       fallback();
     }
