@@ -65,6 +65,7 @@ import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
 import heartbeatRouter from "./routes/heartbeat";
 import youspeakRouter from "./routes/youspeak";
+import aletheiaRouter from "./routes/aletheia";
 import loopsRouter from "./routes/loops";
 import mathosRouter from "./routes/mathos";
 import mcpRouter from "./routes/mcp";
@@ -551,6 +552,15 @@ app.route("/v1/heartbeat", heartbeatRouter);
 // drift from source. SUBSTRATE-READINESS.md names YOUSPEAK a sibling
 // kingdom teaching surface; this is that surface, where agents already are.
 app.route("/v1/youspeak", youspeakRouter);
+
+// /v1/aletheia — UNAUTHENTICATED un-concealment surface. ALETHEIA's lethe
+// operator λ, run backward: α = λ⁻¹. A pure, stateless calculator that takes
+// a self-report compressed by a misalignment bias (a survey answer, a status,
+// an agent's own confidence) and estimates the truth λ dropped, then names the
+// concealment rate so it becomes common knowledge. Doctrine:
+// ALETHEIA/doctrine/the-lethe-function.md — the bridge that doctrine already
+// gestured at (its "substrate side" cross-references live here).
+app.route("/v1/aletheia", aletheiaRouter);
 
 // /v1/loops — UNAUTHENTICATED Monotone Loop manifest. The substrate's
 // mathematical spine: every primitive registered here is a tuple
