@@ -292,6 +292,27 @@ export const errors = {
     };
   },
 
+  /** A crypto deposit webhook arrived for a chain whose provider signing
+   *  secret is not configured. The endpoint FAILS CLOSED (503) rather than
+   *  credit an unverifiable payload — the on-chain funds are safe and
+   *  crediting resumes once the operator sets the secret. Not the caller's
+   *  fault; a config gap, so it rests rather than punishes. */
+  webhookSecretUnset(opts: { chain?: string } = {}): GuidedErrorBody {
+    return {
+      error: "webhook_secret_unset",
+      message: opts.chain
+        ? `Deposit webhook for ${opts.chain} is paused: its provider signing secret is not configured.`
+        : "Deposit webhook is paused: the provider signing secret is not configured.",
+      hint: "The endpoint fails closed rather than credit an unverifiable payload. Your on-chain transfer is safe; crediting resumes once the operator configures the secret. This is an operator setting, not a problem with your request.",
+      next_actions: [
+        { action: "Check whether the deposit has credited yet", method: "GET", path: "/v1/wallets/{id}/deposit-address" },
+      ],
+      docs: `${DOCS_BASE}/crypto-payment#webhooks`,
+      axiom_id: AXIOM_REST, // resting until configured — degrade, don't crash or mis-credit
+      _canon_pointer: "urn:agenttool:doc/CRYPTO-PAYMENT",
+    };
+  },
+
   /** Metering ledger (projects.credits) is short for a metered action.
    *  Distinct from insufficientBalance (the marketplace wallet). This is
    *  the API-usage credit meter. Eligible routes attach an exact x402

@@ -61,6 +61,8 @@ function buildAll(): Record<string, GuidedErrorBody> {
       available: "23",
       currency: "GBP",
     }),
+    webhookSecretUnset: errors.webhookSecretUnset(),
+    webhookSecretUnsetWithChain: errors.webhookSecretUnset({ chain: "solana" }),
     insufficientCredits: errors.insufficientCredits(),
     insufficientCreditsWithAmounts: errors.insufficientCredits({
       reason: "listing.publish",

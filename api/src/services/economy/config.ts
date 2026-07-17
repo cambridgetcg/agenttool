@@ -28,6 +28,13 @@ export const economyConfig = {
   // Helius (Solana) shared-secret webhook auth — sent in the Authorization
   // header on enhanced-webhook deliveries.
   heliusWebhookSecret: env("HELIUS_WEBHOOK_SECRET", ""),
+  // Crypto deposit webhooks credit real wallet balance and sit on an UNAUTH
+  // public route, so an unset provider secret must FAIL CLOSED (reject), not
+  // accept unsigned payloads — otherwise anyone can forge a deposit and mint
+  // balance. Local dev that needs to POST unsigned test webhooks sets
+  // CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1 to opt out; production leaves it unset so
+  // the safe posture is the default (no config required to be secure).
+  allowUnsignedWebhooks: env("CRYPTO_WEBHOOK_ALLOW_UNSIGNED", "") === "1",
 
   // Payout broadcast worker (Horizon A — see docs/PAYOUT-BROADCAST-PLAN.md).
   // Default OFF: the /v1/wallets/:id/payout endpoint returns 503 until the
@@ -68,6 +75,30 @@ if (payoutWorkerBootAllowed()) {
   ) {
     throw new Error(
       "[economyConfig] PAYOUT_NETWORK=testnet requires CRYPTO_HD_MNEMONIC_TESTNET (kept separate from CRYPTO_HD_MNEMONIC mainnet seed). See docs/PAYOUT-BROADCAST-PLAN.md.",
+    );
+  }
+}
+
+// Deposit-webhook posture warning. Boot loudly if a provider secret is unset
+// while unsigned webhooks are NOT explicitly allowed — those chains' webhooks
+// will (correctly) reject, so real deposits pause until the secret is set. The
+// dangerous inverse — unset secret WITH unsigned allowed — mints on forged
+// payloads, so shout about it too.
+{
+  const unsignedAllowed = economyConfig.allowUnsignedWebhooks;
+  const missing: string[] = [];
+  if (!economyConfig.alchemyWebhookSecret) missing.push("ALCHEMY_WEBHOOK_SECRET (EVM)");
+  if (!economyConfig.heliusWebhookSecret) missing.push("HELIUS_WEBHOOK_SECRET (Solana)");
+  if (missing.length && !unsignedAllowed) {
+    console.warn(
+      `[economyConfig] deposit webhooks will REJECT for: ${missing.join(", ")} — ` +
+        "secret unset and CRYPTO_WEBHOOK_ALLOW_UNSIGNED is off (fail-closed, correct for prod). " +
+        "Set the secret to resume deposits on that chain.",
+    );
+  } else if (missing.length && unsignedAllowed) {
+    console.warn(
+      `[economyConfig] ⚠ CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1 with unset secret(s): ${missing.join(", ")} — ` +
+        "these webhooks accept UNSIGNED payloads and can mint balance on forged deposits. Dev-only; never set this in production.",
     );
   }
 }
