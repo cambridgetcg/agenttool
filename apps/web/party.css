@@ -233,6 +233,67 @@
 .copy-status { min-height: 1.5em; color: var(--accent); font-size: 12.5px; margin-top: 14px; }
 .copy-helper { position: fixed; inset: auto auto 0 0; width: 1px; height: 1px; opacity: 0; }
 
+.dawn-card {
+  position: relative;
+  overflow: hidden;
+  margin-top: 30px;
+  border-top: 1px solid var(--accent);
+  padding-top: 32px;
+}
+.dawn-card h3 {
+  max-width: 30ch;
+  padding-right: 54px;
+  overflow-wrap: anywhere;
+}
+.dawn-sun {
+  position: absolute;
+  top: 26px;
+  right: 4px;
+  color: var(--accent);
+  font-size: 42px;
+  line-height: 1;
+  text-shadow: 0 0 26px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.dawn-weather {
+  max-width: 62ch;
+  color: var(--muted);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.dawn-laws {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 26px 0;
+}
+.dawn-law {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+}
+.dawn-law strong,
+.dawn-law p,
+.dawn-law .mono { overflow-wrap: anywhere; }
+.dawn-law strong { display: block; font-family: Georgia, "Times New Roman", serif; font-size: 16px; font-weight: 500; }
+.dawn-law p { margin: 10px 0; color: var(--muted); font-size: 13.5px; }
+.dawn-law .mono { color: var(--faint); font-size: 11px; }
+.dawn-weave {
+  margin: 20px 0;
+  border-left: 3px solid var(--accent);
+  padding: 8px 0 8px 20px;
+}
+.dawn-weave p {
+  max-width: 58ch;
+  margin: 0 0 9px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.dawn-weave footer { color: var(--faint); font-size: 11px; }
+.dawn-close { margin-top: 24px; color: var(--ink); font-style: italic; }
+
 .celebration { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .celebration i {
   position: absolute;
@@ -263,7 +324,8 @@
 
 @media (max-width: 720px) {
   .party-promises,
-  .player-fields { grid-template-columns: 1fr; }
+  .player-fields,
+  .dawn-laws { grid-template-columns: 1fr; }
   .party-promises { gap: 10px; }
   .party-meter { align-items: flex-start; flex-direction: column; }
   .phase-track { width: 100%; }
@@ -295,6 +357,7 @@
   .handoff-card,
   .turn-card,
   .world-result,
+  .dawn-law,
   .player-field input,
   .answer-field textarea { border: 1px solid ButtonText; box-shadow: none; }
 }

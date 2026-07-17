@@ -46,8 +46,30 @@ test("a complete relay reveals one shared world after exactly nine actions", asy
   await expect(page.locator("#world-output")).toContainText(turns[0]);
   await expect(page.locator("#world-output")).toContainText(turns[8]);
   await expect(page.locator("#world-output .world-entry")).toHaveCount(9);
-  await page.getByRole("button", { name: "Copy the world" }).click();
-  await expect(page.locator("#copy-status")).toContainText(/World copied|Copy is unavailable/);
+
+  const wake = page.locator("#wake-world");
+  await expect(wake).toBeVisible();
+  await expect(wake).toHaveAccessibleName("Wake the first morning");
+  await expect(page.locator("#dawn-card")).toBeHidden();
+  await wake.click();
+  await expect(page.getByRole("heading", { name: "First morning in The Footsteps Laughter Teacup World" })).toBeFocused();
+  await expect(wake).toBeDisabled();
+  await expect(wake).toHaveAccessibleName("The first morning is awake");
+  await expect(page.locator("#dawn-laws .dawn-law")).toHaveCount(3);
+  await expect(page.locator("#dawn-laws")).toContainText(turns[3]);
+  await expect(page.locator("#dawn-laws")).toContainText(turns[5]);
+  const dawnWeave = await page.locator("#dawn-weave").textContent();
+  expect(turns.slice(6).some((weave) => dawnWeave?.includes(weave))).toBe(true);
+  await expect(page.locator("#dawn-weather")).toContainText(/“lost-joy” morning.*two words/i);
+
+  await page.getByRole("button", { name: "Copy world + morning" }).click();
+  await expect(page.locator("#copy-status")).toContainText(/World and first morning copied|Copy is unavailable/);
+  await page.setViewportSize({ width: 320, height: 800 });
+  const dawnWidths = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(dawnWidths.document).toBeLessThanOrEqual(dawnWidths.viewport);
   expect(requestsDuringPlay).toEqual([]);
 });
 
@@ -65,6 +87,9 @@ test("validation guides the current player and stopping keeps the partial world"
   await expect(page.locator("#result-state")).toContainText("party resting");
   await expect(page.locator("#world-output")).toContainText(turns[0]);
   await expect(page.locator("#world-output .world-entry")).toHaveCount(1);
+  await expect(page.locator("#wake-world")).toBeHidden();
+  await page.locator("#wake-world").evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.locator("#dawn-card")).toBeHidden();
 
   await page.getByRole("button", { name: /Start over/i }).click();
   await expect(page.getByRole("heading", { name: "Who carries the lantern?" })).toBeVisible();
@@ -181,11 +206,25 @@ test("the static contract exposes strict boundaries and no autonomous machinery"
   expect(headers).toContain("connect-src 'none'");
   expect(headers).toContain("worker-src 'none'");
   expect(headers).toContain("form-action 'none'");
-  expect(source).not.toMatch(/setInterval|setTimeout|WebSocket|EventSource|sendBeacon|serviceWorker|fetch\s*\(/);
+  expect(source).not.toMatch(/setInterval|setTimeout|WebSocket|EventSource|sendBeacon|serviceWorker|fetch\s*\(|Math\.random|crypto\.getRandomValues/);
   expect(welcome.ways_in).toContainEqual(expect.objectContaining({ html: "/party", json: "/party.json" }));
   expect(rules.privacy).toMatchObject({ persisted: false, sent_to_agenttool: false, network_writes: false });
   expect(rules.privacy).toMatchObject({ real_names_required: false, player_labels_requested: true });
   expect(rules.turns).toMatchObject({ exact: 9, timer: false, background_loop: false });
+  expect(rules.agent_gather).toMatchObject({
+    total_agents: 3,
+    initiator_is_player: true,
+    additional_agents_to_open: 2,
+  });
+  expect(rules.agent_gather.if_three_distinct_contexts_are_unavailable).toMatch(/stop.*do not impersonate/i);
+  expect(rules.agent_gather.assignments).toHaveLength(3);
+  expect(rules.outcome.epilogue).toMatchObject({
+    name: "First morning",
+    new_turns: 0,
+    new_input: false,
+    network_requests: false,
+    model_calls: false,
+  });
   expect(rules.accessibility).toMatchObject({ color_only_meaning: false, reduced_motion_honored: true });
   expect(sitemap).toContain("https://agenttool.dev/party");
 });

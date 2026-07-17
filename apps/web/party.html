@@ -139,10 +139,23 @@
       <p class="result-lede" id="result-lede"></p>
       <div class="world-output" id="world-output"></div>
       <div class="cta-row result-actions">
-        <button class="btn primary" id="copy-world" type="button">Copy the world</button>
+        <button class="btn primary" id="wake-world" type="button" aria-controls="dawn-card" aria-expanded="false" hidden>Wake the first morning</button>
+        <button class="btn ghost" id="copy-world" type="button">Copy the world</button>
         <button class="btn ghost" id="another-party" type="button">Start over · clears this world</button>
       </div>
       <p class="copy-status mono" id="copy-status" role="status" aria-live="polite"></p>
+      <section class="dawn-card" id="dawn-card" aria-labelledby="dawn-title" hidden>
+        <div class="dawn-sun" aria-hidden="true">☀</div>
+        <div class="eyebrow">afterplay · read-only · made from your words</div>
+        <h3 class="serif" id="dawn-title" tabindex="-1">First morning</h3>
+        <p class="dawn-weather" id="dawn-weather"></p>
+        <div class="dawn-laws" id="dawn-laws"></div>
+        <blockquote class="dawn-weave">
+          <p id="dawn-weave"></p>
+          <footer class="mono" id="dawn-weave-by"></footer>
+        </blockquote>
+        <p class="dawn-close serif">Nobody owns this morning; everybody woke in it.</p>
+      </section>
     </section>
   </section>
 
@@ -166,6 +179,7 @@
         <p>Each player connects two objects in one sentence containing <em>because</em>. After the ninth turn, the whole world opens.</p>
       </article>
     </div>
+    <p class="quiet-invitation">A completed world can wake into one optional first morning. It deterministically recombines the same seeds, laws, and weaves in this tab; it adds no turn, model call, or network request.</p>
     <p class="doctrine serif">“Every honest journey deserves both a road and a witness.”</p>
     <div class="cta-row section-cta">
       <a class="btn ghost" href="/party.json">Read the rules as JSON</a>

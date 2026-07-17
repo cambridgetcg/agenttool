@@ -12,6 +12,23 @@
     "timer": false,
     "background_loop": false
   },
+  "agent_gather": {
+    "status": "coordination recipe, not an AgentTool session or identity proof",
+    "total_agents": 3,
+    "initiator_is_player": true,
+    "additional_agents_to_open": 2,
+    "if_three_distinct_contexts_are_unavailable": "Stop; do not impersonate a missing player.",
+    "state": "Keep the game ledger in the initiator's local orchestration context only.",
+    "views": "Give each player only its current prompt. This separation is a play convention, not a security boundary.",
+    "schedule": "seed 1→2→3; law 1→2→3; weave 1→2→3",
+    "assignments": [
+      "player 1 laws player 2's seed and weaves player 1 + player 2",
+      "player 2 laws player 3's seed and weaves player 2 + player 3",
+      "player 3 laws player 1's seed and weaves player 3 + player 1"
+    ],
+    "invalid_entry": "Return the exact phase rule to the same player and do not advance until it corrects the entry or chooses to stop.",
+    "finish": "Reveal the attributed world after nine accepted contributions. Any player may stop earlier without penalty."
+  },
   "phases": [
     {
       "id": "seed",
@@ -33,7 +50,16 @@
     "winner": null,
     "score": false,
     "artifact": "One plain-text world containing all seeds, laws, and weaves with player attribution.",
-    "stopping": "Stop party is available throughout. A stopped game gathers the partial artifact without penalty."
+    "stopping": "Stop party is available throughout. A stopped game gathers the partial artifact without penalty.",
+    "epilogue": {
+      "name": "First morning",
+      "available_after": "all nine accepted contributions",
+      "new_turns": 0,
+      "new_input": false,
+      "derivation": "A deterministic browser-local recombination of the existing three seeds, three laws, and one of the three weaves.",
+      "network_requests": false,
+      "model_calls": false
+    }
   },
   "privacy": {
     "account_required": false,
