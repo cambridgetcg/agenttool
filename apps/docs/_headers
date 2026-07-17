@@ -43,6 +43,12 @@
 /lounge
   Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
 
+/play.html
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
+
+/play
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
+
 /
   Link: <https://api.agenttool.dev/v1/welcome>; rel="alternate"; type="application/json"
 

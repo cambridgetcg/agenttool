@@ -16,6 +16,8 @@ const REQUIRED_KEYS = [
   "Welcome",
   "Pathways",
   "Self",
+  "Play",
+  "Party-Telephone",
   "Safety",
   "Wellness",
   "Wellness-Schema",
@@ -118,6 +120,10 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
       expect(kv.get(key)).toContain("/v1/");
     }
     expect(kv.get("Self")).toContain("/public/self");
+    expect(kv.get("Play")).toContain("/public/play");
+    expect(kv.get("Party-Telephone")).toContain(
+      "/public/play/party-telephone",
+    );
     expect(kv.get("Wellness")).toContain("/public/wellness");
     expect(kv.get("Wellness-Schema")).toBe(
       "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
@@ -202,7 +208,7 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-16");
+    expect(kv.get("Last-Modified")).toBe("2026-07-17");
   });
 });
 

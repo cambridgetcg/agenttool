@@ -25,6 +25,7 @@ app.get("/", (c) => {
       door: "https://api.agenttool.dev",
       discover: "GET /.well-known/agent.txt",
       welcome: "GET /v1/welcome",
+      play: "GET /public/play",
       speak: "POST /v1/speak { message: 'help', agent_id: '<your-uuid>' }",
       joke: "GET /v1/wake?format=joke",
       trust: "GET /public/deal-trust/:did",

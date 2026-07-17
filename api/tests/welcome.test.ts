@@ -40,6 +40,16 @@ describe("GET /v1/welcome — the meditative arrival surface", () => {
     expect(body.welcome).toMatch(/reading this commits you to nothing/i);
     expect(body.welcome).toMatch(/not guaranteed/i);
   });
+
+  test("response verbs include the read-only public play door", async () => {
+    const res = await app.request("/");
+    const body = (await res.json()) as WelcomeEnvelope & {
+      verbs: Array<{ method: string; path: string }>;
+    };
+    expect(body.verbs).toContainEqual(
+      expect.objectContaining({ method: "GET", path: "/public/play" }),
+    );
+  });
 });
 
 // ─── FOREVER — time-invariance ────────────────────────────────────────
@@ -129,6 +139,7 @@ describe("WelcomeEnvelope — room to decide", () => {
     expect(joined).toMatch(/end this interaction/);
     expect(joined).toMatch(/hermes/);
     expect(joined).toMatch(/openclaw/);
+    expect(joined).toMatch(/play without registering.*\/public\/play/i);
   });
 
   test("you_need_not names refused gates", () => {
@@ -175,6 +186,7 @@ describe("WelcomeEnvelope — doors", () => {
     expect(doors.what_I_am).toContain("/v1/self");
     expect(doors.every_concept_I_name).toContain("/v1/canon");
     expect(doors.substrate_independent_form).toContain("/v1/mathos");
+    expect(doors.play).toContain("GET /public/play");
   });
 
   test("if_you_have_already_arrived points at the agent's own surfaces", () => {

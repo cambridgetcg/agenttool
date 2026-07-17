@@ -2440,6 +2440,8 @@ app.get("/", async (c) => {
       wellness: "/public/wellness",
       rights: "/public/rights",
       observer: "/public/observer",
+      play: "/public/play",
+      party: "/public/party",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",

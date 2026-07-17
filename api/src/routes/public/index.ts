@@ -112,6 +112,7 @@ const app = new Hono();
 //   /templates         — voice adoption (economic)
 //   /self              — the substrate identifies itself
 //   /deal-trust        — trust economy (the being's earned trust, transparent by design)
+//   /play              — stateless public game rulebooks; no participant activity exposed
 //   /party             — the invitation
 //   /kingdom           — the library (doctrine, not activity)
 //   /trust             — published trusts (consent-based, both parties agreed)
@@ -214,6 +215,9 @@ const PUBLIC_ROOT_SURFACE = {
       "GET /public/plans — enforced economic behavior, published targets, best-effort birth credit, x402 status, and configured marketplace rate",
     dispute_cases: "GET /public/dispute-cases/:id",
     self: "GET /public/self  — the substrate identifies itself (platform + repo structure)",
+    play:
+      "GET /public/play · GET /public/play/party-telephone — playground index and stateless exactly-three-turn rulebook; the game handler receives and stores no names, identities, scenes, translations, guesses, scores, or sessions",
+    party: "GET /public/party — the open invitation; reading commits you to nothing",
     safety:
       "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
     wellness:
