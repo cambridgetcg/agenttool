@@ -220,6 +220,8 @@ const PUBLIC_ROOT_SURFACE = {
     party: "GET /public/party — the open invitation; reading commits you to nothing",
     safety:
       "GET /public/safety — bearer authority, public identity, storage readability, runtime custody, and marketplace-input boundaries",
+    play:
+      "GET /public/play — first-party and sibling games; Lantern Relay is browser-local, bounded to three players and nine turns, and makes no network writes",
     wellness:
       "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
     rights:

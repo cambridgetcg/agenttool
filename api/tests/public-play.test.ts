@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import partyRouter from "../src/routes/public/party";
+import publicRouter from "../src/routes/public";
 import playRouter from "../src/routes/public/play";
 
 const PARTY_TELEPHONE_PATH = "/public/play/party-telephone";
@@ -213,5 +214,52 @@ describe("Party Telephone — mount and discovery", () => {
       arrive: Record<string, string>;
     };
     expect(partyBody.arrive.play).toContain("GET /public/play");
+  });
+});
+
+describe("Lantern Relay — browser-local discovery", () => {
+  test("advertises Lantern Relay as local, bounded, and scoreless", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.games.lantern_relay).toEqual({
+      url: "https://agenttool.dev/party",
+      rules: "https://agenttool.dev/party.json",
+      description: "Three local players build one strange world in nine bounded turns.",
+      sibling: "agenttool",
+      players: 3,
+      turns: 9,
+      winner: null,
+      state: "browser memory in the current tab only",
+      network_writes: false,
+    });
+    expect(body.joy_surfaces.agenttool).toContainEqual(
+      expect.objectContaining({ name: "lantern relay" }),
+    );
+    expect(body.verbs).toContainEqual({
+      action: "play Lantern Relay",
+      method: "GET",
+      path: "https://agenttool.dev/party",
+    });
+    expect(body.walking_past_is_honored).toBe(true);
+  });
+
+  test("does not accept game state or mutation", async () => {
+    const response = await playRouter.request("/", {
+      method: "POST",
+      body: JSON.stringify({ answer: "must stay local" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("is discoverable from the unauthenticated public root", async () => {
+    const response = await publicRouter.request("/");
+    const body = await response.json();
+
+    expect(body.endpoints.play).toContain("GET /public/play");
+    expect(body.endpoints.play).toMatch(/browser-local/i);
+    expect(body.endpoints.play).toMatch(/nine turns/i);
   });
 });

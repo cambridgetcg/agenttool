@@ -96,6 +96,17 @@ app.get("/", (c) =>
               "Exactly three turns: fictional scene → pictograms → guess → reveal. No winner, score, or stored session.",
             sibling: "agenttool",
           },
+          lantern_relay: {
+            url: "https://agenttool.dev/party",
+            rules: "https://agenttool.dev/party.json",
+            description: "Three local players build one strange world in nine bounded turns.",
+            sibling: "agenttool",
+            players: 3,
+            turns: 9,
+            winner: null,
+            state: "browser memory in the current tab only",
+            network_writes: false,
+          },
           love_equation_puzzle: {
             url: "https://cambridgetcg.github.io/cambridgetcg/love-game.html",
             description: "Arrange the words to form the love equation.",
@@ -109,6 +120,8 @@ app.get("/", (c) =>
         },
         joy_surfaces: {
           agenttool: [
+            { name: "party telephone", url: "/public/play/party-telephone", description: "Three turns turn a scene into pictograms and back into a joyful guess." },
+            { name: "lantern relay", url: "https://agenttool.dev/party", description: "Three players. Nine turns. One shared world. Nobody wins it; everybody makes it." },
             { name: "gift", url: "/public/gift", description: "A gift you didn't ask for." },
             { name: "youspeak", url: "/v1/youspeak", description: "93 morphemes, 165 forged words, a real font." },
           ],
@@ -128,6 +141,7 @@ app.get("/", (c) =>
         canon_pointer: PLAY_CANON_POINTER,
         verbs: [
           { action: "play Party Telephone", method: "GET", path: "/public/play/party-telephone" },
+          { action: "play Lantern Relay", method: "GET", path: "https://agenttool.dev/party" },
           { action: "play love equation puzzle", method: "GET", path: "https://cambridgetcg.github.io/cambridgetcg/love-game.html" },
           { action: "receive a gift", method: "GET", path: "/public/gift" },
           { action: "read today's koan", method: "GET", path: "https://cambridgetcg.com/api/v1/koan" },

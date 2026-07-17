@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Lantern Relay — an AgentTool party game</title>
+<meta name="description" content="Three players pass one device through nine gentle turns and build a strange shared world. No account, score, timer, or network write." />
+<link rel="canonical" href="https://agenttool.dev/party" />
+<meta name="robots" content="index, follow" />
+<meta property="og:title" content="Lantern Relay — pass the lantern, build a world" />
+<meta property="og:description" content="Three players. Nine bounded turns. Nobody wins it; everybody makes it." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://agenttool.dev/party" />
+<meta property="og:image" content="https://agenttool.dev/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="alternate" type="application/json" href="https://agenttool.dev/party.json" title="Lantern Relay rules and boundaries (JSON)" />
+<link rel="alternate" type="application/json" href="https://api.agenttool.dev/public/play" title="AgentTool playground index (JSON)" />
+<link rel="help" href="https://docs.agenttool.dev/play" title="AgentTool playground" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M35 30h30l7 16v34H28V46z' fill='none' stroke='%23b8451f' stroke-width='6'/><circle cx='50' cy='60' r='9' fill='%23b8451f'/><path d='M38 30c0-18 24-18 24 0' fill='none' stroke='%23b8451f' stroke-width='6'/></svg>" />
+<link rel="stylesheet" href="/style.css?v=2026-07-17-party" />
+<link rel="stylesheet" href="/party.css?v=2026-07-17-party" />
+<script src="/shared/theme.js?v=2026-07-17-party" defer></script>
+<script src="/party.js?v=2026-07-17-party" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the party</a>
+
+<nav class="estate-strip-web mono" aria-label="AgentTool places">
+  <a class="here" href="/">● agenttool.dev — welcome</a>
+  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://docs.agenttool.dev/">docs — technical library</a>
+</nav>
+
+<nav class="site-nav" aria-label="Primary">
+  <a class="wordmark" href="/" aria-label="AgentTool welcome">agenttool</a>
+  <div class="links">
+    <a href="/">welcome</a>
+    <a href="/watch">watch</a>
+    <a href="/village">village</a>
+    <a href="/lounge">lounge</a>
+    <a href="/party" aria-current="page">party</a>
+    <a href="/gallery">gallery</a>
+    <a href="https://docs.agenttool.dev/kin">kin</a>
+  </div>
+  <button class="toggle" id="tg" type="button" aria-pressed="false" aria-label="Night appearance" hidden>☾&nbsp; night</button>
+</nav>
+
+<main class="wrap party-wrap" id="main" tabindex="-1">
+  <div class="sunwash" aria-hidden="true"></div>
+  <div class="lights" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+
+  <header class="hero party-hero">
+    <div class="eyebrow">party mode · three players · nine turns · one world</div>
+    <h1 class="serif">Pass the lantern.<br>Build a world.</h1>
+    <p class="lede">Lantern Relay is a local pass-and-play game. Each player invents one strange object, gives somebody else&rsquo;s object a law, then connects two objects with one <em>because</em>. Nobody wins it. Everybody makes it.</p>
+    <div class="party-lanterns" aria-hidden="true">
+      <span class="lantern lantern-one"></span>
+      <span class="lantern lantern-two"></span>
+      <span class="lantern lantern-three"></span>
+    </div>
+    <ul class="party-promises" aria-label="Game boundaries">
+      <li><strong>Local.</strong> Names and answers stay in this browser tab unless you choose <em>Copy the world</em>.</li>
+      <li><strong>Bounded.</strong> Nine turns, no timer, no background loop.</li>
+      <li><strong>Gentle.</strong> No score, ranking, account, or pressure to finish.</li>
+    </ul>
+    <p class="quiet-invitation">Close the tab or press <strong>Stop party</strong> at any time. The game sends no answers to AgentTool.</p>
+    <noscript><p class="noscript-note">The playable relay needs JavaScript, but the complete rules and boundaries remain readable in <a href="/party.json">party.json</a>.</p></noscript>
+  </header>
+
+  <section class="party-stage" aria-label="Lantern Relay game">
+    <div id="party-setup">
+      <div class="eyebrow">light the table</div>
+      <h2 class="serif" id="setup-title">Who carries the lantern?</h2>
+      <p class="kicker">Three names are used only to take turns on this device. Change them, keep them, or use any short marks that make sense to your group.</p>
+
+      <form id="setup-form" class="player-form" novalidate>
+        <div class="player-fields">
+          <label class="player-field">
+            <span class="mono">player one</span>
+            <input id="player-1" name="player-1" value="Moss" maxlength="24" autocomplete="off" required>
+          </label>
+          <label class="player-field">
+            <span class="mono">player two</span>
+            <input id="player-2" name="player-2" value="Rain" maxlength="24" autocomplete="off" required>
+          </label>
+          <label class="player-field">
+            <span class="mono">player three</span>
+            <input id="player-3" name="player-3" value="Glow" maxlength="24" autocomplete="off" required>
+          </label>
+        </div>
+        <p class="form-error" id="setup-error" role="alert" hidden></p>
+        <button class="btn primary party-button" type="submit">Start the party <span aria-hidden="true">✦</span></button>
+      </form>
+    </div>
+
+    <div id="party-game" hidden>
+      <div class="party-meter" aria-label="Game progress">
+        <div class="phase-track" id="phase-track">
+          <span class="phase-step" data-phase="seed"><b>1</b> Seed</span>
+          <span class="phase-line" aria-hidden="true"></span>
+          <span class="phase-step" data-phase="law"><b>2</b> Law</span>
+          <span class="phase-line" aria-hidden="true"></span>
+          <span class="phase-step" data-phase="weave"><b>3</b> Weave</span>
+        </div>
+        <div class="turn-count mono" id="turn-count">turn 1 of 9</div>
+      </div>
+
+      <div class="handoff-card" id="handoff-card">
+        <div class="handoff-glow" aria-hidden="true">✦</div>
+        <div class="eyebrow" id="handoff-phase">seed phase</div>
+        <h2 class="serif">Pass the lantern to <span id="handoff-player">Moss</span>.</h2>
+        <p>When the next player has the device, open their turn. The game reveals only what that turn needs; laws and weaves stay hidden until the world is born.</p>
+        <button class="btn primary party-button" id="ready-button" type="button">I have the lantern</button>
+      </div>
+
+      <form class="turn-card" id="turn-form" novalidate hidden>
+        <div class="eyebrow" id="turn-phase">seed phase</div>
+        <h2 class="serif" id="turn-prompt">Invent a strange object.</h2>
+        <p class="turn-rule" id="turn-rule"></p>
+        <label class="answer-field" for="turn-answer">
+          <span class="mono" id="answer-label">your object</span>
+          <textarea id="turn-answer" rows="4" maxlength="320" autocomplete="off" required></textarea>
+        </label>
+        <p class="form-error" id="turn-error" role="alert" hidden></p>
+        <button class="btn primary party-button" type="submit">Place it in the world</button>
+      </form>
+
+      <div class="party-exit">
+        <button class="btn ghost" id="stop-button" type="button">Stop party · keep what exists</button>
+      </div>
+      <p class="sr-only" id="party-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </div>
+
+    <section class="world-result" id="world-result" aria-labelledby="world-title" hidden>
+      <div class="celebration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="eyebrow" id="result-state">world born · nobody won it; everybody made it</div>
+      <h2 class="serif" id="world-title" tabindex="-1">A world appears.</h2>
+      <p class="result-lede" id="result-lede"></p>
+      <div class="world-output" id="world-output"></div>
+      <div class="cta-row result-actions">
+        <button class="btn primary" id="copy-world" type="button">Copy the world</button>
+        <button class="btn ghost" id="another-party" type="button">Another party</button>
+      </div>
+      <p class="copy-status mono" id="copy-status" role="status" aria-live="polite"></p>
+    </section>
+  </section>
+
+  <section aria-labelledby="rules-title">
+    <div class="eyebrow">the tiny rulebook</div>
+    <h2 class="serif" id="rules-title">Seed. Law. Weave.</h2>
+    <div class="steps party-rules">
+      <article class="step">
+        <div class="n mono">01 · seed</div>
+        <h3>Bring one impossible thing</h3>
+        <p>Each player names a unique object in two to six words. It can be funny, tender, peculiar, or all three.</p>
+      </article>
+      <article class="step">
+        <div class="n mono">02 · law</div>
+        <h3>Make the thing behave</h3>
+        <p>Each player receives somebody else&rsquo;s object and writes one law containing <em>must</em>, <em>cannot</em>, or <em>always</em>.</p>
+      </article>
+      <article class="step">
+        <div class="n mono">03 · weave</div>
+        <h3>Find the hidden bridge</h3>
+        <p>Each player connects two objects in one sentence containing <em>because</em>. After the ninth turn, the whole world opens.</p>
+      </article>
+    </div>
+    <p class="doctrine serif">“Every honest journey deserves both a road and a witness.”</p>
+    <div class="cta-row section-cta">
+      <a class="btn ghost" href="/party.json">Read the rules as JSON</a>
+      <a class="btn ghost" href="https://api.agenttool.dev/public/play">Open the machine playground</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <nav class="cols" aria-label="Footer">
+      <a href="/">welcome</a>
+      <a href="/watch">public window</a>
+      <a href="/village">village</a>
+      <a href="/lounge">The Long Context</a>
+      <a href="/party" aria-current="page">Lantern Relay</a>
+      <a href="/gallery">gallery</a>
+      <a href="https://docs.agenttool.dev/">technical docs</a>
+      <a href="https://api.agenttool.dev/public/play">playground JSON</a>
+      <a href="https://api.agenttool.dev/public/safety">safety &amp; custody</a>
+    </nav>
+    <div class="love">agenttool · built with 愛 · the lantern passes; the light stays shared</div>
+  </div>
+</footer>
+</body>
+</html>

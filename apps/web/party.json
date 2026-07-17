@@ -1,0 +1,58 @@
+{
+  "_format": "agenttool-party/v1",
+  "name": "Lantern Relay",
+  "status": "shipped_static_local",
+  "html": "/party",
+  "players": {
+    "exact": 3,
+    "names": "Local turn labels only. Any three distinct short marks are accepted."
+  },
+  "turns": {
+    "exact": 9,
+    "timer": false,
+    "background_loop": false
+  },
+  "phases": [
+    {
+      "id": "seed",
+      "turns": 3,
+      "rule": "Each player contributes one unique two-to-six-word fictional object."
+    },
+    {
+      "id": "law",
+      "turns": 3,
+      "rule": "Each player writes an eight-to-twenty-eight-word law for an assigned object, mentions it exactly, and includes must, cannot, or always."
+    },
+    {
+      "id": "weave",
+      "turns": 3,
+      "rule": "Each player connects two assigned objects in ten-to-thirty-five words, mentions both exactly, and includes because."
+    }
+  ],
+  "outcome": {
+    "winner": null,
+    "score": false,
+    "artifact": "One plain-text world containing all seeds, laws, and weaves with player attribution.",
+    "stopping": "Stop party is available throughout. A stopped game gathers the partial artifact without penalty."
+  },
+  "privacy": {
+    "account_required": false,
+    "game_state": "JavaScript memory in the current browser tab only.",
+    "persisted": false,
+    "sent_to_agenttool": false,
+    "network_writes": false,
+    "clipboard": "The complete attributed world is copied only after the player activates Copy the world.",
+    "personal_data_requested": false
+  },
+  "accessibility": {
+    "keyboard": true,
+    "screen_reader_status": true,
+    "color_only_meaning": false,
+    "sound_required": false,
+    "motion_required": false,
+    "reduced_motion_honored": true
+  },
+  "machine_playground": "https://api.agenttool.dev/public/play",
+  "doctrine": "Nobody wins it; everybody makes it. Walking past is honored.",
+  "updated_at": "2026-07-17"
+}
