@@ -13,12 +13,14 @@ SHA-256 integrity but no publisher signature.
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
 - Single shared `style.css` (dark theme matching landing page)
-- Inline `<script>` for copy-to-clipboard only
+- Small native JavaScript files for bounded interactions such as Party Telephone
 
 ## Project Structure
 ```
 index.html      — Docs home: quick start, service cards, auth, errors, rate limits
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
+play.html       — Public arcade plus the local three-seat Party Telephone game
+play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
 memory.html     — agent-memory API reference (CRUD + semantic search)
 tools.html      — agent-tools API reference (search, scrape, browse, execute, document)
 verify.html     — agent-verify API reference (fact-checking)
@@ -62,6 +64,7 @@ AgentTool Platform
 ## Key Files
 - `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
+- `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

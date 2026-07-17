@@ -29,8 +29,11 @@
   var copyStatus = document.getElementById("copy-status");
   var anotherButton = document.getElementById("another-party");
   var phaseSteps = Array.prototype.slice.call(document.querySelectorAll(".phase-step"));
+  var playerInputs = [1, 2, 3].map(function (number) {
+    return document.getElementById("player-" + number);
+  });
 
-  if (!setupForm || !game || !result) return;
+  if (!setupForm || !game || !result || playerInputs.some(function (input) { return !input; })) return;
 
   var players = [];
   var seeds = [];
@@ -52,6 +55,28 @@
   function setError(element, message) {
     element.textContent = message || "";
     element.hidden = !message;
+  }
+
+  function markInvalid(fields, invalid) {
+    fields.forEach(function (field) {
+      field.setAttribute("aria-invalid", invalid ? "true" : "false");
+    });
+  }
+
+  function clearSetupError() {
+    setError(setupError, "");
+    markInvalid(playerInputs, false);
+  }
+
+  function showSetupError(message, fields) {
+    clearSetupError();
+    setError(setupError, message);
+    markInvalid(fields, true);
+  }
+
+  function showTurnError(message) {
+    setError(turnError, message);
+    answer.setAttribute("aria-invalid", message ? "true" : "false");
   }
 
   function phaseName() {
@@ -79,7 +104,9 @@
     phaseSteps.forEach(function (step) {
       var index = PHASES.indexOf(step.getAttribute("data-phase"));
       var stateName = index < phaseIndex ? "done" : (index === phaseIndex ? "current" : "waiting");
+      var phaseLabel = step.getAttribute("data-phase");
       step.setAttribute("data-state", stateName);
+      step.setAttribute("aria-label", phaseLabel.charAt(0).toUpperCase() + phaseLabel.slice(1) + " " + (stateName === "done" ? "complete" : stateName));
       if (stateName === "current") step.setAttribute("aria-current", "step");
       else step.removeAttribute("aria-current");
     });
@@ -98,7 +125,7 @@
     handoff.hidden = false;
     turnForm.hidden = true;
     answer.value = "";
-    setError(turnError, "");
+    showTurnError("");
     announce(currentPlayer() + " carries the lantern next: " + phaseName() + " phase, turn " + currentTurn() + " of 9.");
     readyButton.focus();
   }
@@ -272,7 +299,7 @@
       : "party resting · the partial world stays yours";
     worldTitle.textContent = worldName();
     resultLede.textContent = completed
-      ? "Nine turns became one place. Each turn saw only what it needed; now every hand is visible."
+      ? "Each handoff cleared the last entry; later prompts revealed only the object names they needed. Now every hand is visible."
       : "Stopping is a complete ending. What arrived before the rest is gathered here without judgment.";
     result.classList.toggle("is-born", completed);
     finishedText = worldAsText(completed);
@@ -320,28 +347,39 @@
     phaseIndex = 0;
     playerIndex = 0;
     finishedText = "";
+    answer.value = "";
+    answer.placeholder = "";
+    handoffPlayer.textContent = "";
+    turnPhase.textContent = "";
+    turnPrompt.textContent = "Your next turn will appear here.";
+    turnRule.textContent = "";
+    answerLabel.textContent = "your answer";
+    worldTitle.textContent = "A world appears.";
+    resultLede.textContent = "";
+    status.textContent = "";
     worldOutput.textContent = "";
     copyStatus.textContent = "";
+    showTurnError("");
     result.classList.remove("is-born");
     result.hidden = true;
     game.hidden = true;
     setup.hidden = false;
-    setError(setupError, "");
+    clearSetupError();
     document.getElementById("player-1").focus();
   }
 
   setupForm.addEventListener("submit", function (event) {
     event.preventDefault();
-    var nextPlayers = [1, 2, 3].map(function (number) {
-      return clean(document.getElementById("player-" + number).value);
+    var nextPlayers = playerInputs.map(function (input) {
+      return clean(input.value);
     });
     if (nextPlayers.some(function (name) { return !name; })) {
-      setError(setupError, "Give each player a short name or mark.");
+      showSetupError("Give each player a short label or mark.", playerInputs.filter(function (_, index) { return !nextPlayers[index]; }));
       return;
     }
     var distinct = new Set(nextPlayers.map(function (name) { return name.toLocaleLowerCase(); }));
     if (distinct.size !== 3) {
-      setError(setupError, "Use three different names so the lantern knows where to go.");
+      showSetupError("Use three different labels so the lantern knows where to go.", playerInputs);
       return;
     }
 
@@ -351,7 +389,7 @@
     weaves = [null, null, null];
     phaseIndex = 0;
     playerIndex = 0;
-    setError(setupError, "");
+    clearSetupError();
     setup.hidden = true;
     result.hidden = true;
     game.hidden = false;
@@ -365,11 +403,11 @@
     var value = clean(answer.value);
     var error = validateEntry(value);
     if (error) {
-      setError(turnError, error);
+      showTurnError(error);
       answer.focus();
       return;
     }
-    setError(turnError, "");
+    showTurnError("");
     storeEntry(value);
     advance();
   });
@@ -398,4 +436,8 @@
       fallback();
     }
   });
+
+  // Keep the no-script surface inert. The form appears only after every
+  // game control above has been found and bound successfully.
+  setupForm.hidden = false;
 })();

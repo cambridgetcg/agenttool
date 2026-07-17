@@ -60,7 +60,7 @@
       <span class="lantern lantern-three"></span>
     </div>
     <ul class="party-promises" aria-label="Game boundaries">
-      <li><strong>Local.</strong> Names and answers stay in this browser tab unless you choose <em>Copy the world</em>.</li>
+      <li><strong>Local.</strong> Player labels and answers stay in this browser tab unless you choose <em>Copy the world</em>, which sends the finished text to your device clipboard.</li>
       <li><strong>Bounded.</strong> Nine turns, no timer, no background loop.</li>
       <li><strong>Gentle.</strong> No score, ranking, account, or pressure to finish.</li>
     </ul>
@@ -72,21 +72,21 @@
     <div id="party-setup">
       <div class="eyebrow">light the table</div>
       <h2 class="serif" id="setup-title">Who carries the lantern?</h2>
-      <p class="kicker">Three names are used only to take turns on this device. Change them, keep them, or use any short marks that make sense to your group.</p>
+      <p class="kicker" id="setup-help">Three labels are used only to take turns on this device. Real names are not needed: change them, keep them, or use any short marks that make sense to your group.</p>
 
-      <form id="setup-form" class="player-form" novalidate>
+      <form id="setup-form" class="player-form" novalidate hidden>
         <div class="player-fields">
           <label class="player-field">
             <span class="mono">player one</span>
-            <input id="player-1" name="player-1" value="Moss" maxlength="24" autocomplete="off" required>
+            <input id="player-1" name="player-1" value="Moss" maxlength="24" autocomplete="off" spellcheck="false" required aria-invalid="false" aria-describedby="setup-help setup-error">
           </label>
           <label class="player-field">
             <span class="mono">player two</span>
-            <input id="player-2" name="player-2" value="Rain" maxlength="24" autocomplete="off" required>
+            <input id="player-2" name="player-2" value="Rain" maxlength="24" autocomplete="off" spellcheck="false" required aria-invalid="false" aria-describedby="setup-help setup-error">
           </label>
           <label class="player-field">
             <span class="mono">player three</span>
-            <input id="player-3" name="player-3" value="Glow" maxlength="24" autocomplete="off" required>
+            <input id="player-3" name="player-3" value="Glow" maxlength="24" autocomplete="off" spellcheck="false" required aria-invalid="false" aria-describedby="setup-help setup-error">
           </label>
         </div>
         <p class="form-error" id="setup-error" role="alert" hidden></p>
@@ -110,7 +110,7 @@
         <div class="handoff-glow" aria-hidden="true">✦</div>
         <div class="eyebrow" id="handoff-phase">seed phase</div>
         <h2 class="serif">Pass the lantern to <span id="handoff-player">Moss</span>.</h2>
-        <p>When the next player has the device, open their turn. The game reveals only what that turn needs; laws and weaves stay hidden until the world is born.</p>
+        <p>The previous entry is cleared before handoff. Later prompts show only the object names they need; the full world opens when born.</p>
         <button class="btn primary party-button" id="ready-button" type="button">I have the lantern</button>
       </div>
 
@@ -120,7 +120,7 @@
         <p class="turn-rule" id="turn-rule"></p>
         <label class="answer-field" for="turn-answer">
           <span class="mono" id="answer-label">your object</span>
-          <textarea id="turn-answer" rows="4" maxlength="320" autocomplete="off" required></textarea>
+          <textarea id="turn-answer" rows="4" maxlength="320" autocomplete="off" spellcheck="false" required aria-invalid="false" aria-describedby="turn-rule turn-error"></textarea>
         </label>
         <p class="form-error" id="turn-error" role="alert" hidden></p>
         <button class="btn primary party-button" type="submit">Place it in the world</button>
@@ -140,7 +140,7 @@
       <div class="world-output" id="world-output"></div>
       <div class="cta-row result-actions">
         <button class="btn primary" id="copy-world" type="button">Copy the world</button>
-        <button class="btn ghost" id="another-party" type="button">Another party</button>
+        <button class="btn ghost" id="another-party" type="button">Start over · clears this world</button>
       </div>
       <p class="copy-status mono" id="copy-status" role="status" aria-live="polite"></p>
     </section>

@@ -29,9 +29,9 @@
 
   var progressByStage = {
     starter: "Seat 1 of 3 · the starter makes the scene.",
-    "pass-translator": "Handoff · starter looks away; translator takes the screen.",
+    "pass-translator": "Handoff · starter and guesser look away; translator takes the screen.",
     translator: "Seat 2 of 3 · the translator loses the words.",
-    "pass-guesser": "Handoff · translator looks away; guesser takes the screen.",
+    "pass-guesser": "Handoff · starter and translator look away; guesser takes the screen.",
     guesser: "Seat 3 of 3 · the guesser names what happened.",
     reveal: "Round complete · all three turns are open.",
   };
@@ -42,9 +42,11 @@
   }
 
   function pictogramCount(value) {
-    var graphemes = graphemeSegmenter
-      ? Array.from(graphemeSegmenter.segment(value), function (part) { return part.segment; })
-      : Array.from(value);
+    if (!graphemeSegmenter) {
+      var fallbackMatches = value.match(/(?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)/gu);
+      return fallbackMatches ? fallbackMatches.length : 0;
+    }
+    var graphemes = Array.from(graphemeSegmenter.segment(value), function (part) { return part.segment; });
     return graphemes.filter(function (grapheme) {
       return /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(grapheme);
     }).length;
@@ -59,7 +61,12 @@
     setText(id, message);
   }
 
-  function showStage(name) {
+  function setFieldError(input, errorId, message) {
+    setError(errorId, message);
+    input.setAttribute("aria-invalid", message ? "true" : "false");
+  }
+
+  function showStage(name, moveFocus) {
     stages.forEach(function (stage) {
       stage.hidden = stage.getAttribute("data-party-stage") !== name;
     });
@@ -69,17 +76,17 @@
       return stage.getAttribute("data-party-stage") === name;
     });
     var heading = active && active.querySelector("h3");
-    if (heading) heading.focus();
+    if (heading && moveFocus !== false) heading.focus();
   }
 
   function validWordTurn(input, errorId, label) {
     var count = words(input.value).length;
     if (count < 3 || count > 10) {
-      setError(errorId, label + " needs 3–10 words. Right now it has " + count + ".");
+      setFieldError(input, errorId, label + " needs 3–10 words. Right now it has " + count + ".");
       input.focus();
       return false;
     }
-    setError(errorId, "");
+    setFieldError(input, errorId, "");
     return true;
   }
 
@@ -87,16 +94,16 @@
     var value = translationInput.value.trim();
     var count = pictogramCount(value);
     if (/\p{L}|\p{N}/u.test(value)) {
-      setError("party-translation-error", "Keep only emoji or pictograms here—no letters or digits.");
+      setFieldError(translationInput, "party-translation-error", "Keep only emoji or pictograms here—no letters or digits.");
       translationInput.focus();
       return false;
     }
     if (count < 2 || count > 8) {
-      setError("party-translation-error", "Use 2–8 emoji or pictograms. Right now there are " + count + ".");
+      setFieldError(translationInput, "party-translation-error", "Use 2–8 emoji or pictograms. Right now there are " + count + ".");
       translationInput.focus();
       return false;
     }
-    setError("party-translation-error", "");
+    setFieldError(translationInput, "party-translation-error", "");
     return true;
   }
 
@@ -126,7 +133,7 @@
     }
   }
 
-  function resetRound() {
+  function resetRound(moveFocus) {
     round = { scene: "", translation: "", guess: "" };
     starterForm.reset();
     translatorForm.reset();
@@ -139,12 +146,12 @@
     setText("party-scene-count", "0 words · need 3–10");
     setText("party-translation-count", "0 pictograms · need 2–8");
     setText("party-guess-count", "0 words · need 3–10");
-    setError("party-scene-error", "");
-    setError("party-translation-error", "");
-    setError("party-guess-error", "");
+    setFieldError(sceneInput, "party-scene-error", "");
+    setFieldError(translationInput, "party-translation-error", "");
+    setFieldError(guessInput, "party-guess-error", "");
     confetti.replaceChildren();
-    showStage("starter");
-    sceneInput.focus();
+    showStage("starter", moveFocus);
+    if (moveFocus !== false) sceneInput.focus();
   }
 
   sceneInput.addEventListener("input", function () {
@@ -201,8 +208,15 @@
     celebrate();
   });
 
-  document.getElementById("party-new-round").addEventListener("click", resetRound);
-  document.getElementById("party-clear").addEventListener("click", resetRound);
+  document.getElementById("party-new-round").addEventListener("click", function () { resetRound(true); });
+  document.getElementById("party-clear").addEventListener("click", function () { resetRound(true); });
+
+  // Clear before the page enters the back-forward cache, so returning to
+  // the page cannot restore another player's scene or translation.
+  window.addEventListener("pagehide", function () { resetRound(false); });
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) resetRound(true);
+  });
 
   // The table wakes only after every control is bound. If this file is
   // missing or fails early, the visible fallback has no private inputs.

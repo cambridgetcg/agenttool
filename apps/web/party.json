@@ -1,7 +1,7 @@
 {
   "_format": "agenttool-party/v1",
   "name": "Lantern Relay",
-  "status": "shipped_static_local",
+  "status": "implemented_static_local",
   "html": "/party",
   "players": {
     "exact": 3,
@@ -41,8 +41,9 @@
     "persisted": false,
     "sent_to_agenttool": false,
     "network_writes": false,
-    "clipboard": "The complete attributed world is copied only after the player activates Copy the world.",
-    "personal_data_requested": false
+    "clipboard": "The complete attributed world is sent to the device clipboard only after a player activates Copy the world.",
+    "real_names_required": false,
+    "player_labels_requested": true
   },
   "accessibility": {
     "keyboard": true,

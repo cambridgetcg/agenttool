@@ -111,7 +111,7 @@
 .answer-field textarea:focus { border-color: var(--accent); }
 .party-button { border: 0; cursor: pointer; }
 .form-error {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 650;
   margin: -4px 0 18px;
   max-width: 66ch;
@@ -152,6 +152,11 @@
 .phase-step[data-state="current"] b { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .phase-step[data-state="done"] { color: var(--accent); }
 .phase-step[data-state="done"] b { border-color: var(--accent); }
+.phase-step[data-state="done"]::after {
+  content: "✓";
+  color: var(--ink);
+  font-weight: 800;
+}
 .phase-line { height: 1px; background: var(--line); margin: 0 10px; }
 .turn-count { color: var(--faint); font-size: 12px; white-space: nowrap; }
 

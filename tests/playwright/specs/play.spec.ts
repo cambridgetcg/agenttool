@@ -17,10 +17,12 @@ test("Party Telephone ends after three isolated turns and renders input as text"
   await page.locator("#party-scene").fill("too short");
   await page.getByRole("button", { name: /Seal scene/i }).click();
   await expect(page.locator("#party-scene-error")).toContainText("3–10 words");
+  await expect(page.locator("#party-scene")).toHaveAttribute("aria-invalid", "true");
 
   await page.locator("#party-scene").fill(scene);
   await page.getByRole("button", { name: /Seal scene/i }).click();
-  await expect(page.getByRole("heading", { name: "Pass to the translator" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pass to the translator" })).toBeFocused();
+  await expect(page.getByText("Starter and Guesser, look away.")).toBeVisible();
   await expect(page.locator("#party-scene-secret")).toBeHidden();
 
   await page.getByRole("button", { name: "Translator is ready" }).click();
@@ -42,7 +44,8 @@ test("Party Telephone ends after three isolated turns and renders input as text"
 
   await page.locator("#party-translation").fill("🌙 🍵 🎉");
   await page.getByRole("button", { name: /Seal symbols/i }).click();
-  await expect(page.getByRole("heading", { name: "Pass to the guesser" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pass to the guesser" })).toBeFocused();
+  await expect(page.getByText("Starter and Translator, look away.")).toBeVisible();
   await expect(page.locator("#party-scene-secret")).toBeHidden();
 
   await page.getByRole("button", { name: "Guesser is ready" }).click();
@@ -61,7 +64,7 @@ test("Party Telephone ends after three isolated turns and renders input as text"
   expect(requestsDuringRound).toEqual([]);
 });
 
-test("clear and reload both erase the unfinished round", async ({ page }) => {
+test("clear, reload, and leaving the page erase the unfinished round", async ({ page }) => {
   await openTelephone(page);
   await page.locator("#party-scene").fill("Lantern crabs dance under rainbows");
   await page.getByRole("button", { name: /Seal scene/i }).click();
@@ -77,6 +80,33 @@ test("clear and reload both erase the unfinished round", async ({ page }) => {
     local: localStorage.length,
     session: sessionStorage.length,
   }))).toEqual({ local: 0, session: 0 });
+
+  await page.locator("#party-scene").fill("Comets teach the kettle dancing");
+  await page.getByRole("button", { name: /Seal scene/i }).click();
+  await page.goto(`${DOCS}/index.html`);
+  await page.goBack();
+  await expect(page.locator("#party-scene")).toBeVisible();
+  await expect(page.locator("#party-scene")).toHaveValue("");
+  await expect(page.getByRole("heading", { name: "Pass to the translator" })).toBeHidden();
+});
+
+test("the pictogram fallback counts flags and eight joined-family emoji as graphemes", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Intl, "Segmenter", { value: undefined, configurable: true });
+  });
+  await openTelephone(page);
+  await page.locator("#party-scene").fill("Moon families picnic under silver trees");
+  await page.getByRole("button", { name: /Seal scene/i }).click();
+  await page.getByRole("button", { name: "Translator is ready" }).click();
+
+  await page.locator("#party-translation").fill("🇨🇭 🇯🇵");
+  await expect(page.locator("#party-translation-count")).toContainText("2 pictograms");
+
+  const eightFamilies = Array(8).fill("👩‍👩‍👧‍👧").join(" ");
+  await page.locator("#party-translation").fill(eightFamilies);
+  await expect(page.locator("#party-translation-count")).toContainText("8 pictograms");
+  await page.getByRole("button", { name: /Seal symbols/i }).click();
+  await expect(page.getByRole("heading", { name: "Pass to the guesser" })).toBeVisible();
 });
 
 test("the cabinet fits a small screen and honors reduced motion", async ({ page }) => {

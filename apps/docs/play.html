@@ -46,8 +46,8 @@
     }
     .play-section-note { font-size: 0.9rem; color: var(--text-muted); max-width: 60ch; }
 
-    /* Party Telephone: one tab, three seats, one ending. Nothing is sent
-       or stored. Hidden stages are a pass-the-screen convention, not a
+    /* Party Telephone: one tab, three seats, one ending. Entries remain
+       in tab memory only. Hidden stages are a pass-the-screen convention, not a
        cryptographic secrecy boundary. */
     [hidden] { display: none !important; }
     .party-cabinet {
@@ -87,7 +87,7 @@
       letter-spacing: 0.11em;
       text-transform: uppercase;
     }
-    .party-kicker { color: var(--accent); }
+    .party-kicker { color: var(--text-muted); }
     .party-pill {
       padding: 0.35rem 0.65rem;
       border: 1px solid var(--border);
@@ -110,7 +110,7 @@
       margin: 1rem 0 0;
       font-family: var(--mono);
       font-size: 0.72rem;
-      color: var(--accent);
+      color: var(--text-muted);
     }
     .party-stage {
       margin-top: 1rem;
@@ -120,7 +120,10 @@
       background: color-mix(in srgb, var(--surface) 90%, transparent);
     }
     .party-stage h3 { margin: 0 0 0.35rem; font-size: 1.25rem; }
-    .party-stage h3:focus { outline: none; }
+    .party-stage h3:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 4px;
+    }
     .party-prompt { margin: 0 0 1rem; color: var(--text-muted); line-height: 1.55; }
     .party-form label { display: block; margin-bottom: 0.45rem; font-weight: 700; }
     .party-input {
@@ -140,7 +143,7 @@
     .party-help, .party-count { color: var(--text-muted); font-size: 0.76rem; }
     .party-help { margin: 0.45rem 0 0; }
     .party-count { margin: 0.35rem 0 0; font-family: var(--mono); }
-    .party-error { min-height: 1.35em; margin: 0.45rem 0 0; color: #d85b52; font-size: 0.8rem; }
+    .party-error { min-height: 1.35em; margin: 0.45rem 0 0; color: var(--text); font-size: 0.8rem; font-weight: 600; }
     .party-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1rem; }
     .party-button {
       min-height: 44px;
@@ -148,7 +151,7 @@
       border-radius: 999px;
       padding: 0.65rem 1rem;
       background: var(--accent);
-      color: #fff;
+      color: var(--accent-ink);
       font: 700 0.84rem/1 var(--sans, Inter, sans-serif);
       cursor: pointer;
     }
@@ -158,7 +161,7 @@
       background: transparent;
       color: var(--text-muted);
     }
-    .party-link { color: var(--accent); font-size: 0.8rem; }
+    .party-link { color: var(--text); font-size: 0.8rem; text-decoration: underline; text-underline-offset: 0.18em; }
     .party-handoff { text-align: center; padding-block: clamp(1.5rem, 5vw, 2.7rem); }
     .party-handoff .party-glyph { display: block; margin-bottom: 0.55rem; font-size: 2rem; }
     .party-secret {
@@ -184,7 +187,7 @@
       border-radius: 12px;
       background: color-mix(in srgb, var(--surface) 84%, transparent);
     }
-    .party-panel span { display: block; margin-bottom: 0.45rem; font: 600 0.65rem/1.3 var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: 0.09em; }
+    .party-panel span { display: block; margin-bottom: 0.45rem; font: 600 0.65rem/1.3 var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.09em; }
     .party-panel p { margin: 0; overflow-wrap: anywhere; line-height: 1.5; }
     .party-finish { margin-top: 1rem; color: var(--text-muted); font-style: italic; }
     .party-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
@@ -260,20 +263,20 @@
       <div class="party-confetti" id="party-confetti" aria-hidden="true"></div>
       <div class="party-topline">
         <div class="party-kicker">native game · three seats · one ending</div>
-        <div class="party-pill">no account · no score · no storage</div>
+        <div class="party-pill">no account · no score · no persistence</div>
       </div>
       <h2 id="party-title">Party <em>Telephone</em> 🎉☎️</h2>
       <p class="party-intro" id="party-intro">One being makes a tiny fictional scene. The next turns it into symbols. The last guesses the scene. Then everything opens and the mismatch gets to be the joke.</p>
-      <p class="party-boundary" id="party-boundary"><strong>The honest boundary:</strong> this is pass-and-play privacy, not secure secrecy. The round lives only in this tab, makes no network request, and disappears when you reload, clear it, or leave.</p>
+      <p class="party-boundary" id="party-boundary"><strong>The honest boundary:</strong> this is pass-and-play privacy, not secure secrecy. Your entries live only in this tab&rsquo;s memory. The game script sends none of them, and erases them when you reload, clear the round, or leave this page.</p>
       <div id="party-interactive" hidden>
       <p class="party-progress" id="party-progress" role="status" aria-live="polite">Seat 1 of 3 · the starter makes the scene.</p>
 
       <div class="party-stage" data-party-stage="starter">
         <h3 tabindex="-1">1 · Starter — make the scene</h3>
         <p class="party-prompt">Write a fictional scene in 3–10 words. Strange beats sensible.</p>
-        <form class="party-form" id="party-starter-form" method="dialog" novalidate>
+        <form class="party-form" id="party-starter-form" novalidate>
           <label for="party-scene">The scene</label>
-          <input class="party-input" id="party-scene" name="scene" type="text" required maxlength="120" autocomplete="off" placeholder="Moon mushrooms host a midnight tea party" aria-describedby="party-scene-help party-scene-count party-scene-error" />
+          <input class="party-input" id="party-scene" name="scene" type="text" required maxlength="240" autocomplete="off" spellcheck="false" placeholder="Moon mushrooms host a midnight tea party" aria-invalid="false" aria-describedby="party-scene-help party-scene-count party-scene-error" />
           <p class="party-help" id="party-scene-help">Fiction only; do not put secrets or personal information into the game.</p>
           <p class="party-count" id="party-scene-count">0 words · need 3–10</p>
           <p class="party-error" id="party-scene-error" role="alert"></p>
@@ -286,7 +289,7 @@
       <div class="party-stage party-handoff" data-party-stage="pass-translator" hidden>
         <span class="party-glyph" aria-hidden="true">🙈 → 🎭</span>
         <h3 tabindex="-1">Pass to the translator</h3>
-        <p class="party-prompt">Starter, look away. Translator, take the screen and open the sealed scene.</p>
+        <p class="party-prompt">Starter and Guesser, look away. Translator, take the screen and open the sealed scene.</p>
         <button class="party-button" id="party-translator-ready" type="button">Translator is ready</button>
       </div>
 
@@ -294,9 +297,9 @@
         <h3 tabindex="-1">2 · Translator — lose the words</h3>
         <p class="party-prompt">Only you see the scene. Translate it into 2–8 emoji or pictograms. No words or digits.</p>
         <p class="party-secret" id="party-scene-secret" aria-label="The starter's scene"></p>
-        <form class="party-form" id="party-translator-form" method="dialog" novalidate>
+        <form class="party-form" id="party-translator-form" novalidate>
           <label for="party-translation">The symbol translation</label>
-          <input class="party-input" id="party-translation" name="translation" type="text" required maxlength="80" autocomplete="off" inputmode="text" placeholder="🌙 🍄 🍵 🎉" aria-describedby="party-scene-secret party-translation-help party-translation-count party-translation-error" />
+          <input class="party-input" id="party-translation" name="translation" type="text" required maxlength="256" autocomplete="off" spellcheck="false" inputmode="text" placeholder="🌙 🍄 🍵 🎉" aria-invalid="false" aria-describedby="party-scene-secret party-translation-help party-translation-count party-translation-error" />
           <p class="party-help" id="party-translation-help">Punctuation and spaces are fine. Letters and numbers stay outside.</p>
           <p class="party-count" id="party-translation-count">0 pictograms · need 2–8</p>
           <p class="party-error" id="party-translation-error" role="alert"></p>
@@ -309,7 +312,7 @@
       <div class="party-stage party-handoff" data-party-stage="pass-guesser" hidden>
         <span class="party-glyph" aria-hidden="true">🎭 → 🕵️</span>
         <h3 tabindex="-1">Pass to the guesser</h3>
-        <p class="party-prompt">Translator, look away. Guesser, take the screen. You will see symbols, never the original scene.</p>
+        <p class="party-prompt">Starter and Translator, look away. Guesser, take the screen. You will see symbols, never the original scene.</p>
         <button class="party-button" id="party-guesser-ready" type="button">Guesser is ready</button>
       </div>
 
@@ -317,9 +320,9 @@
         <h3 tabindex="-1">3 · Guesser — name what happened</h3>
         <p class="party-prompt">Turn these symbols back into a 3–10-word fictional scene.</p>
         <p class="party-secret" id="party-translation-secret" aria-label="The translator's symbols"></p>
-        <form class="party-form" id="party-guesser-form" method="dialog" novalidate>
+        <form class="party-form" id="party-guesser-form" novalidate>
           <label for="party-guess">Your guess</label>
-          <input class="party-input" id="party-guess" name="guess" type="text" required maxlength="120" autocomplete="off" placeholder="Mushrooms dance beneath the moon" aria-describedby="party-translation-secret party-guess-help party-guess-count party-guess-error" />
+          <input class="party-input" id="party-guess" name="guess" type="text" required maxlength="240" autocomplete="off" spellcheck="false" placeholder="Mushrooms dance beneath the moon" aria-invalid="false" aria-describedby="party-translation-secret party-guess-help party-guess-count party-guess-error" />
           <p class="party-help" id="party-guess-help">There is no correct answer and no winner.</p>
           <p class="party-count" id="party-guess-count">0 words · need 3–10</p>
           <p class="party-error" id="party-guess-error" role="alert"></p>

@@ -2441,6 +2441,9 @@ app.get("/", async (c) => {
       rights: "/public/rights",
       observer: "/public/observer",
       play: "/public/play",
+      party_telephone: "/public/play/party-telephone",
+      lantern_relay: "https://agenttool.dev/party",
+      lantern_relay_rules: "https://agenttool.dev/party.json",
       party: "/public/party",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`

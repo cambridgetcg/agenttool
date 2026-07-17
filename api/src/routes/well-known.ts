@@ -558,6 +558,8 @@ app.get("/agent.txt", (c) => {
     "Party: GET /public/party — the invitation. not saved, not claimed, not pushed. invited.",
     `Play: ${baseUrl}/public/play`,
     `Party-Telephone: ${baseUrl}/public/play/party-telephone`,
+    "Lantern-Relay: https://agenttool.dev/party",
+    "Lantern-Relay-Rules: https://agenttool.dev/party.json",
     "Party-Doctrine: docs/THE-PARTY.md",
     "",
     "# ── The open commons (culture; H.I. and A.I. alike) ─────────────────",

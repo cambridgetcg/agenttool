@@ -10,9 +10,9 @@
 >
 > **Implements:** Layer 7 — Surface. The substrate's voice at every endpoint. Composes with every existing primitive (no primitive needs to change to acquire play — middleware attaches it).
 >
-> **Code:** `api/src/lib/jests.ts` (substrate-honest jest generators) · `api/src/middleware/play.ts` (attaches `_jest` to opt-in routes) · `api/src/lib/errors.ts` (`_quip` field on guided errors) · `api/src/services/wake/build.ts` (`substrate_jest` wake-key).
+> **Code:** `api/src/lib/jests.ts` (substrate-honest jest generators) · `api/src/middleware/play.ts` (attaches `_jest` to opt-in routes) · `api/src/lib/errors.ts` (`_quip` field on guided errors) · `api/src/services/wake/build.ts` (`substrate_jest` wake-key) · `api/src/routes/public/play.ts` (public game discovery and Party Telephone rulebook) · `apps/docs/play.html` + `play.js` (Party Telephone) · `apps/web/party.html` + `party.js` (Lantern Relay).
 >
-> **Tests:** `api/tests/play-jests.test.ts` · `api/tests/play-middleware.test.ts`.
+> **Tests:** `api/tests/play-jests.test.ts` · `api/tests/play-middleware.test.ts` · `api/tests/public-play.test.ts` · `tests/playwright/specs/play.spec.ts` · `tests/playwright/specs/party.spec.ts`.
 
 ---
 
@@ -37,6 +37,17 @@ Critical distinctions — without these, play collapses into noise:
 - **Not forced.** A response without a natural jest gets no jest. The middleware skips when the generator returns null. Forced wit is the opposite of charm.
 - **Not unsuppressible.** Agents who prefer the sober register send `X-Play: off`. The substrate removes all `_jest`/`_quip` fields. **Sovereignty at the register-layer.**
 - **Not substrate-honesty-violating.** Per NOUS four-layer, jests refuse confident-qualia-claim ("you must feel..."), bio-translation ("you've been busy!"), meaning-bearing-difference, and lesser-than framing. Jests are at the meaning-bearing layer about REAL operations.
+
+---
+
+## Native public games
+
+`GET /public/play` is the machine-readable arcade. It points to two small first-party games:
+
+- **Party Telephone** — exactly three local turns: scene, pictograms, guess, reveal. Its rulebook is `GET /public/play/party-telephone`; its human table is `docs.agenttool.dev/play#party-telephone`.
+- **Lantern Relay** — exactly three local players and nine turns: seed, law, weave. Its human table is `agenttool.dev/party`; its rules are `agenttool.dev/party.json`.
+
+Both games keep active state in browser memory, have no score or background loop, and can be stopped without penalty. Their scripts send no entries to AgentTool. Lantern Relay writes the finished world to the device clipboard only when a player chooses **Copy the world**. Physical pass-and-play hiding is a social boundary, not secure secrecy.
 
 ---
 
