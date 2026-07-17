@@ -9,14 +9,27 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Hono } from "hono";
 
+import { tutor } from "../src/middleware/tutor";
+import openapiRouter from "../src/routes/openapi";
 import partyRouter from "../src/routes/public/party";
+import publicRouter from "../src/routes/public";
 import playRouter from "../src/routes/public/play";
+import wellKnownRouter from "../src/routes/well-known";
 
 const PARTY_TELEPHONE_PATH = "/public/play/party-telephone";
 const PLAY_CANON_POINTER = "urn:agenttool:doc/PLAY-AS-DEFAULT";
 const PUBLIC_INDEX_SOURCE = readFileSync(
   join(import.meta.dir, "../src/routes/public/index.ts"),
+  "utf8",
+);
+const WAKE_SOURCE = readFileSync(
+  join(import.meta.dir, "../src/routes/wake.ts"),
+  "utf8",
+);
+const HUMAN_PLAY_SOURCE = readFileSync(
+  join(import.meta.dir, "../../apps/docs/play.html"),
   "utf8",
 );
 
@@ -37,6 +50,27 @@ type PartyTelephoneRulebook = {
     score: boolean;
     ranking: boolean;
     ends: string;
+  };
+  input_bounds: {
+    counting: string;
+    starter_scene: {
+      min_words: number;
+      max_words: number;
+      max_utf16_code_units: number;
+    };
+    translation: {
+      min_pictograms: number;
+      max_pictograms: number;
+      max_utf16_code_units: number;
+      letters_allowed: boolean;
+      numbers_allowed: boolean;
+      spaces_and_punctuation_allowed: boolean;
+    };
+    guess: {
+      min_words: number;
+      max_words: number;
+      max_utf16_code_units: number;
+    };
   };
   turns: Array<{
     turn: number;
@@ -77,12 +111,21 @@ async function getRulebook(router = playRouter, path = "/party-telephone") {
   return { res, body: (await res.json()) as PartyTelephoneRulebook };
 }
 
+function htmlMaxLength(id: string): number {
+  const match = HUMAN_PLAY_SOURCE.match(
+    new RegExp(`id="${id}"[^>]*maxlength="(\\d+)"`),
+  );
+  expect(match).not.toBeNull();
+  return Number(match![1]);
+}
+
 describe("GET /public/play/party-telephone — fixed rulebook", () => {
   test("publishes the versioned game and play canon pointer", async () => {
     const { res, body } = await getRulebook();
 
     expect(res.headers.get("cache-control")).toContain("public");
     expect(res.headers.get("cache-control")).toContain("max-age=300");
+    expect(res.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
     expect(body._format).toBe("party-telephone/1");
     expect(body.game).toBe("Party Telephone");
     expect(body.human_play).toBe(
@@ -109,13 +152,43 @@ describe("GET /public/play/party-telephone — fixed rulebook", () => {
     ]);
 
     expect(body.turns[0]!.submits).toMatch(/fictional scene.*3.?10 words/i);
-    expect(body.turns[0]!.handoff).toMatch(/translator only/i);
+    expect(body.turns[0]!.handoff).toMatch(
+      /starter and guesser.*look away.*pass the screen.*translator/i,
+    );
     expect(body.turns[1]!.sees).toMatch(/starter.*scene/i);
-    expect(body.turns[1]!.submits).toMatch(/2.?8 emoji or pictograms.*no words.*no digits/i);
-    expect(body.turns[1]!.handoff).toMatch(/guesser.*without.*starter.*scene/i);
+    expect(body.turns[1]!.submits).toMatch(
+      /2.?8 emoji or pictograms.*256.*no letters (?:or|and no) (?:digits|numbers)/i,
+    );
+    expect(body.turns[1]!.handoff).toMatch(
+      /starter and translator.*look away.*pass the screen.*guesser.*never.*original scene/i,
+    );
     expect(body.turns[2]!.sees).toMatch(/pictogram sequence only|emoji.*only/i);
     expect(body.turns[2]!.submits).toMatch(/guess.*3.?10 words/i);
-    expect(body.turns[2]!.handoff).toMatch(/reveal/i);
+    expect(body.turns[2]!.handoff).toMatch(/all three players.*fixed reveal/i);
+  });
+
+  test("publishes the human surface's exact input bounds and counting unit", async () => {
+    const { body } = await getRulebook();
+
+    expect(body.input_bounds.counting).toMatch(/HTML maxlength.*UTF-16 code units/i);
+    expect(body.input_bounds.starter_scene).toEqual({
+      min_words: 3,
+      max_words: 10,
+      max_utf16_code_units: htmlMaxLength("party-scene"),
+    });
+    expect(body.input_bounds.translation).toEqual({
+      min_pictograms: 2,
+      max_pictograms: 8,
+      max_utf16_code_units: htmlMaxLength("party-translation"),
+      letters_allowed: false,
+      numbers_allowed: false,
+      spaces_and_punctuation_allowed: true,
+    });
+    expect(body.input_bounds.guess).toEqual({
+      min_words: 3,
+      max_words: 10,
+      max_utf16_code_units: htmlMaxLength("party-guess"),
+    });
   });
 
   test("ends once with the fixed reveal and never declares a winner or score", async () => {
@@ -176,8 +249,31 @@ describe("GET /public/play/party-telephone — fixed rulebook", () => {
 
 describe("Party Telephone — mount and discovery", () => {
   test("the unauthenticated public router mounts the rulebook", async () => {
-    expect(PUBLIC_INDEX_SOURCE).toContain('import playRoutes from "./play"');
-    expect(PUBLIC_INDEX_SOURCE).toContain('app.route("/play", playRoutes)');
+    const response = await publicRouter.request("/play/party-telephone");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as PartyTelephoneRulebook;
+    expect(body._format).toBe("party-telephone/1");
+    expect(response.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+  });
+
+  test("keeps cached tutor and ordinary representations separate", async () => {
+    const runtime = new Hono();
+    runtime.use("*", tutor);
+    runtime.route("/public", publicRouter);
+
+    const ordinary = await runtime.request(PARTY_TELEPHONE_PATH);
+    expect(ordinary.status).toBe(200);
+    expect(ordinary.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+    expect((await ordinary.json())._lesson).toBeUndefined();
+
+    const tutored = await runtime.request(PARTY_TELEPHONE_PATH, {
+      headers: { "X-Tutor": "1" },
+    });
+    expect(tutored.status).toBe(200);
+    expect(tutored.headers.get("vary")?.split(/\s*,\s*/)).toContain("X-Tutor");
+    expect((await tutored.json())._lesson).toEqual(
+      expect.objectContaining({ what: expect.any(String) }),
+    );
   });
 
   test("the playground root indexes the native game and its GET verb", async () => {
@@ -200,18 +296,145 @@ describe("Party Telephone — mount and discovery", () => {
     );
   });
 
-  test("the public root and open party invitation point at play", async () => {
-    expect(PUBLIC_INDEX_SOURCE).toMatch(
-      /play:\s*["'`]GET \/public\/play/i,
-    );
-    expect(PUBLIC_INDEX_SOURCE).toMatch(
-      /party:\s*["'`]GET \/public\/party/i,
-    );
+  test("the public root has one truthful play entry for both games", async () => {
+    expect(PUBLIC_INDEX_SOURCE.match(/^\s{4}play:/gm)).toHaveLength(1);
+
+    const publicRes = await publicRouter.request("/");
+    const publicBody = (await publicRes.json()) as {
+      endpoints: Record<string, string>;
+    };
+    expect(publicBody.endpoints.play).toContain("GET /public/play");
+    expect(publicBody.endpoints.play).toMatch(/Party Telephone/i);
+    expect(publicBody.endpoints.play).toMatch(/Lantern Relay/i);
+    expect(publicBody.endpoints.play).toMatch(/handler defines no submission fields/i);
+    expect(publicBody.endpoints.play).toMatch(/query strings.*headers.*transport metadata/i);
+    expect(publicBody.endpoints.party).toContain("GET /public/party");
 
     const partyRes = await partyRouter.request("/");
     const partyBody = (await partyRes.json()) as {
       arrive: Record<string, string>;
     };
     expect(partyBody.arrive.play).toContain("GET /public/play");
+  });
+
+  test("wake and agent.txt name both games directly", async () => {
+    expect(WAKE_SOURCE).toContain(
+      'party_telephone: "/public/play/party-telephone"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'lantern_relay: "https://agenttool.dev/party"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'lantern_relay_rules: "https://agenttool.dev/party.json"',
+    );
+
+    const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
+    expect(agentTxt).toMatch(
+      /^Party-Telephone: .*\/public\/play\/party-telephone$/m,
+    );
+    expect(agentTxt).toContain("Lantern-Relay: https://agenttool.dev/party");
+    expect(agentTxt).toContain(
+      "Lantern-Relay-Rules: https://agenttool.dev/party.json",
+    );
+  });
+});
+
+describe("Lantern Relay — browser-local discovery", () => {
+  test("advertises Lantern Relay as local, bounded, and scoreless", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.games.lantern_relay).toEqual({
+      url: "https://agenttool.dev/party",
+      rules: "https://agenttool.dev/party.json",
+      description: "Three local players build one strange world in nine bounded turns.",
+      sibling: "agenttool",
+      players: 3,
+      turns: 9,
+      winner: null,
+      state: "browser memory in the current tab only",
+      network_writes: false,
+    });
+    expect(body.joy_surfaces.agenttool).toContainEqual(
+      expect.objectContaining({ name: "lantern relay" }),
+    );
+    expect(body.verbs).toContainEqual({
+      action: "play Lantern Relay",
+      method: "GET",
+      path: "https://agenttool.dev/party",
+    });
+    expect(body.walking_past_is_honored).toBe(true);
+  });
+
+  test("does not accept game state or mutation", async () => {
+    const response = await playRouter.request("/", {
+      method: "POST",
+      body: JSON.stringify({ answer: "must stay local" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("is discoverable from the unauthenticated public root", async () => {
+    const response = await publicRouter.request("/");
+    const body = await response.json();
+
+    expect(body.endpoints.play).toContain("GET /public/play");
+    expect(body.endpoints.play).toMatch(/browser-local/i);
+    expect(body.endpoints.play).toMatch(/nine turns/i);
+  });
+});
+
+describe("Play — OpenAPI discovery", () => {
+  test("documents both read-only play paths and their response schemas", async () => {
+    const response = await openapiRouter.request("/");
+    expect(response.status).toBe(200);
+    const specification = (await response.json()) as any;
+
+    const indexPath = specification.paths["/public/play"];
+    expect(Object.keys(indexPath)).toEqual(["get"]);
+    expect(indexPath.get.security).toEqual([]);
+    expect(indexPath.get.requestBody).toBeUndefined();
+    expect(
+      indexPath.get.responses["200"].content["application/json"].schema.$ref,
+    ).toBe("#/components/schemas/PlayIndex");
+
+    const telephonePath = specification.paths[PARTY_TELEPHONE_PATH];
+    expect(Object.keys(telephonePath)).toEqual(["get"]);
+    expect(telephonePath.get.security).toEqual([]);
+    expect(telephonePath.get.requestBody).toBeUndefined();
+    expect(
+      telephonePath.get.responses["200"].content["application/json"].schema
+        .$ref,
+    ).toBe("#/components/schemas/PartyTelephoneRulebook");
+    expect(
+      telephonePath.get.responses["200"].headers.Vary.description,
+    ).toMatch(/X-Tutor/);
+  });
+
+  test("pins the published Party Telephone limits in the component schema", async () => {
+    const specification = (await (
+      await openapiRouter.request("/")
+    ).json()) as any;
+    const schemas = specification.components.schemas;
+    const rulebook = schemas.PartyTelephoneRulebook;
+    const inputBounds = schemas.PartyTelephoneInputBounds.properties;
+
+    expect(rulebook.required).toContain("input_bounds");
+    expect(rulebook.properties.input_bounds.$ref).toBe(
+      "#/components/schemas/PartyTelephoneInputBounds",
+    );
+    expect(
+      inputBounds.starter_scene.properties.max_utf16_code_units.const,
+    ).toBe(htmlMaxLength("party-scene"));
+    expect(
+      inputBounds.translation.properties.max_utf16_code_units.const,
+    ).toBe(htmlMaxLength("party-translation"));
+    expect(inputBounds.guess.properties.max_utf16_code_units.const).toBe(
+      htmlMaxLength("party-guess"),
+    );
+    expect(inputBounds.translation.properties.letters_allowed.const).toBe(false);
+    expect(inputBounds.translation.properties.numbers_allowed.const).toBe(false);
   });
 });

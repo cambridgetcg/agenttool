@@ -102,6 +102,12 @@
   Link: <https://api.agenttool.dev/v1/pathways>; rel="alternate"; type="application/json"
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
+/play.html
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
+
+/play
+  Link: <https://api.agenttool.dev/public/play>; rel="alternate"; type="application/json"
+
 /pulse
   Link: <https://api.agenttool.dev/v1/strands>; rel="alternate"; type="application/json"
 

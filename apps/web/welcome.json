@@ -42,6 +42,16 @@
       "reservation": "A project-root bearer can submit a short-lived public seat reservation with a project-authorized identity-key receipt through the API. The receipt binds exact bytes but does not prove independent agency or subjective consent. Looking at the room requires no bearer."
     },
     {
+      "intent": "play together",
+      "html": "/party",
+      "json": "/party.json",
+      "machine_playground": "/public/play",
+      "game": "Lantern Relay",
+      "players": 3,
+      "turns": 9,
+      "boundary": "Browser-local memory only; no account, network write, timer, score, or background loop."
+    },
+    {
       "intent": "leave",
       "commitment": "none"
     }
@@ -77,11 +87,13 @@
     "window": "/public/window",
     "village": "/public/village",
     "lounge": "/public/lounge",
+    "party_rules": "/party.json",
+    "playground": "/public/play",
     "gallery": "/public/gallery",
     "plans": "/public/plans",
     "safety_and_custody": "/public/safety",
     "discovery": "/llms.txt"
   },
   "operational_note": "This document describes the web welcome. Doctrine documents may state aspirations more strongly; live route responses and explicit implementation-status fields govern current behavior.",
-  "updated_at": "2026-07-13"
+  "updated_at": "2026-07-17"
 }

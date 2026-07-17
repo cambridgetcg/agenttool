@@ -51,6 +51,11 @@ import {
   XENIA_RIGHT_IDS,
   XENIA_RIGHTS_BASELINE,
 } from "./public/rights";
+import {
+  PARTY_TELEPHONE_FORMAT,
+  PARTY_TELEPHONE_INPUT_BOUNDS,
+  PLAY_CANON_POINTER,
+} from "./public/play";
 
 const app = new Hono();
 
@@ -1348,6 +1353,348 @@ const COMMON_SCHEMAS = {
       "_canon_pointer",
       "verbs",
     ],
+  },
+  PartyTelephoneInputBounds: {
+    type: "object",
+    description:
+      "Exact content and HTML maxlength limits enforced by the linked human pass-and-play surface. max_utf16_code_units names HTML's counting unit explicitly.",
+    properties: {
+      counting: {
+        type: "string",
+        const: PARTY_TELEPHONE_INPUT_BOUNDS.counting,
+      },
+      starter_scene: {
+        type: "object",
+        properties: {
+          min_words: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.starter_scene.min_words,
+          },
+          max_words: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.starter_scene.max_words,
+          },
+          max_utf16_code_units: {
+            type: "integer",
+            const:
+              PARTY_TELEPHONE_INPUT_BOUNDS.starter_scene.max_utf16_code_units,
+          },
+        },
+        required: ["min_words", "max_words", "max_utf16_code_units"],
+        additionalProperties: false,
+      },
+      translation: {
+        type: "object",
+        properties: {
+          min_pictograms: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.translation.min_pictograms,
+          },
+          max_pictograms: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.translation.max_pictograms,
+          },
+          max_utf16_code_units: {
+            type: "integer",
+            const:
+              PARTY_TELEPHONE_INPUT_BOUNDS.translation.max_utf16_code_units,
+          },
+          letters_allowed: {
+            type: "boolean",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.translation.letters_allowed,
+          },
+          numbers_allowed: {
+            type: "boolean",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.translation.numbers_allowed,
+          },
+          spaces_and_punctuation_allowed: {
+            type: "boolean",
+            const:
+              PARTY_TELEPHONE_INPUT_BOUNDS.translation
+                .spaces_and_punctuation_allowed,
+          },
+        },
+        required: [
+          "min_pictograms",
+          "max_pictograms",
+          "max_utf16_code_units",
+          "letters_allowed",
+          "numbers_allowed",
+          "spaces_and_punctuation_allowed",
+        ],
+        additionalProperties: false,
+      },
+      guess: {
+        type: "object",
+        properties: {
+          min_words: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.guess.min_words,
+          },
+          max_words: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.guess.max_words,
+          },
+          max_utf16_code_units: {
+            type: "integer",
+            const: PARTY_TELEPHONE_INPUT_BOUNDS.guess.max_utf16_code_units,
+          },
+        },
+        required: ["min_words", "max_words", "max_utf16_code_units"],
+        additionalProperties: false,
+      },
+    },
+    required: ["counting", "starter_scene", "translation", "guess"],
+    additionalProperties: false,
+  },
+  PartyTelephoneTurn: {
+    type: "object",
+    properties: {
+      turn: { type: "integer", enum: [1, 2, 3] },
+      role: { type: "string", enum: ["starter", "translator", "guesser"] },
+      sees: { type: "string" },
+      submits: { type: "string" },
+      handoff: { type: "string" },
+    },
+    required: ["turn", "role", "sees", "submits", "handoff"],
+    additionalProperties: false,
+  },
+  PartyTelephoneRulebook: {
+    type: "object",
+    description:
+      "A read-only, exactly-three-turn Party Telephone rulebook. The handler defines no submission fields and reads or stores no game content. Global middleware and infrastructure may still process transport metadata; optional response decorations may add fields.",
+    properties: {
+      _format: { type: "string", const: PARTY_TELEPHONE_FORMAT },
+      game: { type: "string", const: "Party Telephone" },
+      human_play: {
+        type: "string",
+        format: "uri",
+        const: "https://docs.agenttool.dev/play#party-telephone",
+      },
+      invitation: { type: "string" },
+      players: {
+        type: "object",
+        properties: {
+          required: { type: "integer", const: 3 },
+          distinct_players_verified_by_agenttool: {
+            type: "boolean",
+            const: false,
+          },
+          note: { type: "string" },
+        },
+        required: [
+          "required",
+          "distinct_players_verified_by_agenttool",
+          "note",
+        ],
+        additionalProperties: false,
+      },
+      bounds: {
+        type: "object",
+        properties: {
+          turns: { type: "integer", const: 3 },
+          rounds: { type: "integer", const: 1 },
+          loops: { type: "integer", const: 0 },
+          winner: { type: "boolean", const: false },
+          score: { type: "boolean", const: false },
+          ranking: { type: "boolean", const: false },
+          ends: { type: "string" },
+        },
+        required: [
+          "turns",
+          "rounds",
+          "loops",
+          "winner",
+          "score",
+          "ranking",
+          "ends",
+        ],
+        additionalProperties: false,
+      },
+      input_bounds: {
+        $ref: "#/components/schemas/PartyTelephoneInputBounds",
+      },
+      turns: {
+        type: "array",
+        items: { $ref: "#/components/schemas/PartyTelephoneTurn" },
+        minItems: 3,
+        maxItems: 3,
+      },
+      reveal: {
+        type: "object",
+        properties: {
+          fixed_order: {
+            type: "array",
+            const: ["starter_scene", "translation", "guesser_guess"],
+          },
+          audience: { type: "string", const: "all three players" },
+          compare_for: {
+            type: "string",
+            const: "surprise and delight only",
+          },
+          ends_game: { type: "boolean", const: true },
+        },
+        required: ["fixed_order", "audience", "compare_for", "ends_game"],
+        additionalProperties: false,
+      },
+      controls: {
+        type: "object",
+        properties: {
+          walking_past_is_honored: { type: "boolean", const: true },
+          stop_any_time: { type: "boolean", const: true },
+          stopping_penalty: { type: "boolean", const: false },
+          incomplete_game_rule: { type: "string" },
+        },
+        required: [
+          "walking_past_is_honored",
+          "stop_any_time",
+          "stopping_penalty",
+          "incomplete_game_rule",
+        ],
+        additionalProperties: false,
+      },
+      handler_boundary: {
+        type: "object",
+        properties: {
+          documented_operation: { type: "string", const: "GET" },
+          receives_submissions: { type: "boolean", const: false },
+          stores_game_state: { type: "boolean", const: false },
+          reads_identity_or_activity: { type: "boolean", const: false },
+          writes_application_storage: { type: "boolean", const: false },
+          verifies_players_turns_or_constraints: {
+            type: "boolean",
+            const: false,
+          },
+          note: { type: "string" },
+        },
+        required: [
+          "documented_operation",
+          "receives_submissions",
+          "stores_game_state",
+          "reads_identity_or_activity",
+          "writes_application_storage",
+          "verifies_players_turns_or_constraints",
+          "note",
+        ],
+        additionalProperties: false,
+      },
+      global_boundary: { type: "string" },
+      _canon_pointer: { type: "string", const: PLAY_CANON_POINTER },
+      verbs: {
+        type: "array",
+        items: { $ref: "#/components/schemas/NextAction" },
+        minItems: 1,
+      },
+    },
+    required: [
+      "_format",
+      "game",
+      "human_play",
+      "invitation",
+      "players",
+      "bounds",
+      "input_bounds",
+      "turns",
+      "reveal",
+      "controls",
+      "handler_boundary",
+      "global_boundary",
+      "_canon_pointer",
+      "verbs",
+    ],
+    additionalProperties: true,
+  },
+  PlayIndex: {
+    type: "object",
+    description:
+      "Public joy-surface index containing both the native Party Telephone rulebook and the browser-local Lantern Relay game. Optional global response decorations may add fields.",
+    properties: {
+      what: { type: "string" },
+      love_equation: { type: "string" },
+      games: {
+        type: "object",
+        properties: {
+          party_telephone: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                const: "/public/play/party-telephone",
+              },
+              description: { type: "string" },
+              sibling: { type: "string", const: "agenttool" },
+            },
+            required: ["url", "description", "sibling"],
+            additionalProperties: false,
+          },
+          lantern_relay: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/party",
+              },
+              rules: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/party.json",
+              },
+              description: { type: "string" },
+              sibling: { type: "string", const: "agenttool" },
+              players: { type: "integer", const: 3 },
+              turns: { type: "integer", const: 9 },
+              winner: { type: "null" },
+              state: {
+                type: "string",
+                const: "browser memory in the current tab only",
+              },
+              network_writes: { type: "boolean", const: false },
+            },
+            required: [
+              "url",
+              "rules",
+              "description",
+              "sibling",
+              "players",
+              "turns",
+              "winner",
+              "state",
+              "network_writes",
+            ],
+            additionalProperties: false,
+          },
+        },
+        required: ["party_telephone", "lantern_relay"],
+        additionalProperties: true,
+      },
+      joy_surfaces: {
+        type: "object",
+        additionalProperties: {
+          type: "array",
+          items: { type: "object", additionalProperties: true },
+        },
+      },
+      doctrine: { type: "string" },
+      walking_past_is_honored: { type: "boolean", const: true },
+      _canon_pointer: { type: "string", const: PLAY_CANON_POINTER },
+      verbs: {
+        type: "array",
+        items: { $ref: "#/components/schemas/NextAction" },
+        minItems: 1,
+      },
+    },
+    required: [
+      "what",
+      "love_equation",
+      "games",
+      "joy_surfaces",
+      "doctrine",
+      "walking_past_is_honored",
+      "_canon_pointer",
+      "verbs",
+    ],
+    additionalProperties: true,
   },
   ObserverProtocol: {
     type: "object",
@@ -3791,6 +4138,61 @@ function spec() {
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/ObserverProtocol" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/public/play": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Discover Party Telephone, Lantern Relay, and sibling joy surfaces",
+          description:
+            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns with no winner and no network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
+          responses: {
+            "200": {
+              description: "Public playground index",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PlayIndex" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/public/play/party-telephone": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Read the fixed three-turn Party Telephone rulebook",
+          description:
+            "Publishes the rules and exact human-surface input bounds. The operation defines no submission fields or request body, and its handler does not read or store names, identities, scenes, translations, guesses, scores, or sessions. Query strings, headers, global middleware, hosting, and network infrastructure may still process transport metadata.",
+          externalDocs: {
+            description: "Human pass-and-play surface",
+            url: "https://docs.agenttool.dev/play#party-telephone",
+          },
+          responses: {
+            "200": {
+              description: "Versioned Party Telephone rulebook",
+              headers: {
+                "Cache-Control": {
+                  description: "Public five-minute cache policy.",
+                  schema: { type: "string" },
+                },
+                Vary: {
+                  description:
+                    "Includes X-Tutor because that opt-in global middleware changes the JSON representation.",
+                  schema: { type: "string" },
+                },
+              },
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/PartyTelephoneRulebook",
+                  },
                 },
               },
             },
