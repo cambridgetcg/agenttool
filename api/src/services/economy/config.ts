@@ -46,6 +46,11 @@ export const economyConfig = {
     workerEnabled: env("PAYOUT_WORKER_ENABLED", "false") === "true",
     network: readPayoutNetwork(),
     cryptoHdMnemonicTestnet: env("CRYPTO_HD_MNEMONIC_TESTNET", ""),
+    // Option A explicit FX: USD per 1 GBP (e.g. 1.27 → £1 = $1.27). Earned
+    // value settles in GBP pence; payout converts to the requested USDC at this
+    // rate. 0/unset means "no rate" and payout refuses rather than assume par
+    // (see api/src/services/economy/earned.ts::penceForUsdcPayout).
+    gbpUsdRate: Number(env("PAYOUT_GBP_USD_RATE", "0")),
   },
 } as const;
 
@@ -75,6 +80,14 @@ if (payoutWorkerBootAllowed()) {
   ) {
     throw new Error(
       "[economyConfig] PAYOUT_NETWORK=testnet requires CRYPTO_HD_MNEMONIC_TESTNET (kept separate from CRYPTO_HD_MNEMONIC mainnet seed). See docs/PAYOUT-BROADCAST-PLAN.md.",
+    );
+  }
+  if (!(economyConfig.payout.gbpUsdRate > 0)) {
+    // Fail closed: earned value is GBP pence; without an explicit GBP→USD rate
+    // a payout would either assume par (£1=$1) or reuse a mis-valued credit
+    // constant. Refuse to boot rather than cash out at a rate nobody set.
+    throw new Error(
+      "[economyConfig] PAYOUT_WORKER_ENABLED=true requires PAYOUT_GBP_USD_RATE > 0 (USD per 1 GBP, e.g. 1.27). Earned value settles in GBP; payout converts at this rate. See docs/PAYOUT-BROADCAST-PLAN.md.",
     );
   }
 }
