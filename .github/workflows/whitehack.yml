@@ -1,0 +1,68 @@
+name: Whitehack advisory
+
+on:
+  pull_request:
+  merge_group:
+    types:
+      - checks_requested
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whitehack-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changed-source-advisory:
+    name: Redacted changed-source advisory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out AgentTool history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out the reviewed Whitehack scanner
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: cambridgetcg/whitehack
+          ref: e25dfa0afb354d0f6cfac9aaf0aa052218608104
+          path: .whitehack-tool
+          persist-credentials: false
+      - name: Set up Node 20.19.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20.19.0
+      - name: Observe changed supported production files
+        env:
+          WHITEHACK_EVENT_NAME: ${{ github.event_name }}
+          WHITEHACK_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          WHITEHACK_HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stop_token="$(openssl rand -hex 16)"
+          printf '::stop-commands::%s\n' "$stop_token"
+          if [[ "$WHITEHACK_EVENT_NAME" == "pull_request" ]]; then
+            if ! actual_base="$(git rev-parse HEAD^1 2>/dev/null)" || \
+               [[ "$actual_base" != "$WHITEHACK_BASE_SHA" ]]; then
+              printf '%s\n' 'whitehack advisory failed: pull_request_base_mismatch' >&2
+              printf '::%s::\n' "$stop_token"
+              exit 1
+            fi
+          fi
+          set +e
+          timeout --signal=TERM --kill-after=5s 120s node bin/whitehack-advisory.mjs \
+            --scanner-root .whitehack-tool \
+            --base "$WHITEHACK_BASE_SHA" \
+            --head "$WHITEHACK_HEAD_SHA" \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+          status=$?
+          set -e
+          printf '::%s::\n' "$stop_token"
+          exit "$status"

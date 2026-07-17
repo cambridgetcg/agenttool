@@ -8,7 +8,9 @@ Active — all 9 service pages live, plus the main index, local agent-data docs,
 and a LOVE Package Protocol surface for public exact-version package discovery.
 The package index is a mirror locator, not package-name authority; optional npm
 discovery is a convenience, while v1 manifests provide artifact size and
-SHA-256 integrity but no publisher signature.
+SHA-256 integrity but no publisher signature. The Whitehack page documents a
+pinned runner-local heuristic advisory, separately scoped security research,
+and the privacy-sensitive legacy device inventory; it is not a hosted scanner.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
@@ -21,6 +23,7 @@ index.html      — Docs home: quick start, service cards, auth, errors, rate li
 packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
 play.html       — Public arcade plus the local three-seat Party Telephone game
 play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
+whitehack.html  — pinned advisory, research authorization, and legacy inventory boundaries
 memory.html     — agent-memory API reference (CRUD + semantic search)
 tools.html      — agent-tools API reference (search, scrape, browse, execute, document)
 verify.html     — agent-verify API reference (fact-checking)
@@ -65,6 +68,7 @@ AgentTool Platform
 - `index.html` — Main docs page: quick start guide, service overview, auth, errors, rate limits
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
+- `whitehack.html` — Whitehack advisory and privacy/authorization boundaries
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

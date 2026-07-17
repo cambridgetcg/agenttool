@@ -19,7 +19,10 @@ node (`packages/data/`), the experimental ADDS encrypted-object package
 distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), and three static apps (`apps/`). Telescope 0.1.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
-scan route. The API is live at
+scan route. The Whitehack bridge is a separate pinned, runner-local,
+changed-source heuristic advisory; it emits redacted metadata, remains
+non-blocking on findings, and adds no hosted scanner or target authorization.
+The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
 orientation surface with links into many primitives; it is not a complete
@@ -91,6 +94,9 @@ cd packages/telescope
 bun run ci                                     # typecheck + hermetic tests + build
 node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood
 
+# Whitehack (pinned changed-source advisory; no target execution) ──
+bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
+
 # Frontends ──────────────────────────────────────────────────────────
 # Vanilla HTML/CSS/JS — no build step. Open files directly or:
 cd apps/dashboard && npx serve .
@@ -119,6 +125,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/sdk`, and `@agenttool/adds` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner over bounded changed production files and emits redacted advisory metadata. It does not execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |
@@ -211,6 +218,7 @@ source boundary by itself.
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
+| How does the Whitehack advisory work, and where does its authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 
