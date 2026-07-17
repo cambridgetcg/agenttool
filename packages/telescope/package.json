@@ -1,7 +1,6 @@
 {
   "name": "@agenttool/telescope",
-  "version": "0.0.0-development",
-  "private": true,
+  "version": "0.1.0",
   "description": "Read-only evidence mapper for agent discovery surfaces",
   "license": "Apache-2.0",
   "type": "module",
@@ -11,6 +10,9 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./report.schema.json": {
+      "default": "./schema/agenttool-telescope-report-v0.1.schema.json"
     }
   },
   "bin": {
@@ -24,6 +26,9 @@
     "LICENSE",
     "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20.19.0",
     "bun": ">=1.3.5"
@@ -56,5 +61,5 @@
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/telescope"
   },
-  "homepage": "https://docs.agenttool.dev"
+  "homepage": "https://docs.agenttool.dev/packages"
 }

@@ -7,11 +7,21 @@ of discovery GETs, and reports what was observed separately from what the
 publisher claims. It can reconstruct exact npm and LOVE install/verification
 commands from validated fields. It never executes those commands.
 
-This directory is a **source-only development slice**. Its package version is
-`0.0.0-development` and `private: true` prevents accidental npm publication.
-There is no public `@agenttool/telescope` npm or LOVE release represented by
-this tree yet. Release preparation and external publication are separate,
-explicit operations.
+The `0.1.0` release is distributed as an exact `love-package/v1` artifact and
+may be mirrored through GitHub Releases and npm. The LOVE manifest records the
+expected byte size and SHA-256; each mirror can be independently absent, so
+query the exact version instead of inferring availability from source or a
+mutable dist-tag. Telescope remains a local client—there is no hosted
+arbitrary-target scan route.
+
+Install an exact registry mirror when convenience matters:
+
+```bash
+npm install --save-exact @agenttool/telescope@0.1.0
+```
+
+Or use the release manifest and immutable LOVE tarball from
+<https://docs.agenttool.dev/packages> when explicit byte verification matters.
 
 ## Try it locally
 
@@ -109,7 +119,7 @@ symlink is refused; handled failures remove only the random partial. A hard
 process interruption can leave a random `.part-*` sibling, never a partial
 final filename.
 `verify-package` requires `agenttool-telescope` on `PATH` (use
-`node dist/cli.js verify-package ...` in this source-only tree). Protect the
+`node dist/cli.js verify-package ...` in a source checkout). Protect the
 file from replacement between verification and install, or re-run verification
 immediately before package machinery. The verifier opens one local file,
 checks its complete outer commitment before decompression, then re-hashes that
@@ -185,7 +195,7 @@ secrets because Telescope cannot universally classify secret-looking content.
 
 ## DNS-AID and PKARR
 
-Both are extension seams in this development release, not bundled protocol
+Both are extension seams in the 0.1 release, not bundled protocol
 implementations:
 
 - Core Node/Bun DNS lookup does not establish DNSSEC validation, and DNS-AID is
@@ -213,5 +223,8 @@ npm pack --ignore-scripts --dry-run
 
 The package has no runtime dependencies or install lifecycle scripts. Unit
 tests inject all network behavior; live scanning is a separate dogfood check.
+The report schema is exported as
+`@agenttool/telescope/report.schema.json` for tooling that needs the exact
+bundled JSON Schema.
 
 Apache-2.0. See `LICENSE` and `NOTICE`.

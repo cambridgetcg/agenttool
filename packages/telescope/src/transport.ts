@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { TOOL_NAME, TOOL_VERSION } from "./constants.js";
 import { LimitError, NetworkPolicyError } from "./errors.js";
 import { assertPublicHttpsUrl } from "./target.js";
 import type {
@@ -220,7 +221,7 @@ export async function fetchDocument(input: {
         headers: {
           accept: input.accept,
           "accept-encoding": "identity",
-          "user-agent": "@agenttool/telescope/0.0.0-development",
+          "user-agent": `${TOOL_NAME}/${TOOL_VERSION}`,
         },
         signal: input.signal,
       });

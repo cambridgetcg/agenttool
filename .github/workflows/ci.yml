@@ -95,6 +95,9 @@ jobs:
           smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.1")process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
+          schema_smoke='import("@agenttool/telescope/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Telescope report v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke")
           node "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
           bun "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
           manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.13.0/manifest.json"

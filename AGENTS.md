@@ -16,9 +16,10 @@ node. It has two SDKs (TypeScript and Python), an `agent-data/v1` reference
 node (`packages/data/`), the experimental ADDS encrypted-object package
 (`packages/data-protocol/`), an explicit encrypted pull bridge
 (`packages/data-sync/`), the registry-neutral `love-package/v1`
-distribution protocol, a source-only read-only discovery evidence mapper
-(`packages/telescope/`), and three static apps (`apps/`). Telescope is not yet
-an npm or LOVE release and does not add a hosted scan route. The API is live at
+distribution protocol, a public read-only discovery evidence mapper
+(`packages/telescope/`), and three static apps (`apps/`). Telescope 0.1.0 is a
+public npm/LOVE package, but it remains a local client and does not add a hosted
+scan route. The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
 orientation surface with links into many primitives; it is not a complete
@@ -85,7 +86,7 @@ bun run ci                                     # parity + build + test
 cd packages/sdk-py
 pytest                                         # Python SDK tests
 
-# Telescope (source-only; no hosted scanner or package release) ─────
+# Telescope (public local client; no hosted scanner) ────────────────
 cd packages/telescope
 bun run ci                                     # typecheck + hermetic tests + build
 node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood

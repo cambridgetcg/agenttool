@@ -90,6 +90,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     releaseTag: "sdk-v0.13.0",
     buildCommands: [["bun", "run", "ci"]],
   },
+  {
+    name: "@agenttool/telescope",
+    version: "0.1.0",
+    packagePath: "packages/telescope",
+    releaseTag: "telescope-v0.1.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
 ] as const;
 
 export interface PackageJson {

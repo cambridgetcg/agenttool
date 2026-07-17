@@ -54,9 +54,12 @@ npm pack --ignore-scripts --dry-run
   Rejected/query-bearing remote locators are omitted or explicitly redacted
   rather than echoed as actionable URLs.
 - Keep the report schema, TypeScript report type, formatter, and tests aligned.
-- The package stays `0.0.0-development` and `private: true` until a separately
-  authorized release. Do not touch `LOVE_PACKAGES`, package manifests/tarballs,
-  release tags, npm workflows, or production deploys in a source-only change.
+- Keep the package version, `TOOL_VERSION`, User-Agent, tests, LOVE inventory,
+  and release tag aligned. Published version bytes are immutable: never rebuild
+  or replace an existing manifest/tarball under the same name and version.
+- External publication and deploy remain explicit operator actions. The
+  package implementation does not add a hosted scan route or own production
+  egress merely because its local client is publicly distributed.
 
 ## Tests
 

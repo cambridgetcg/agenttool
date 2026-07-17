@@ -17,6 +17,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
   "@agenttool/sdk@0.13.0",
+  "@agenttool/telescope@0.1.0",
 ] as const;
 
 describe("optional npm package discovery", () => {

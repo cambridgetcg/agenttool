@@ -80,7 +80,7 @@ describe("fetchDocument request boundary", () => {
     expect(headers.get("accept")).toBe("text/agent, text/plain;q=0.9");
     expect(headers.get("accept-encoding")).toBe("identity");
     expect(headers.get("user-agent")).toBe(
-      "@agenttool/telescope/0.0.0-development",
+      "@agenttool/telescope/0.1.0",
     );
     expect(headers.get("authorization")).toBeNull();
     expect(headers.get("cookie")).toBeNull();

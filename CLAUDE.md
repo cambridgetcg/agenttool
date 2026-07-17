@@ -21,7 +21,7 @@ packages/
   data-protocol/ — @agenttool/adds · experimental ADDS encrypted-object plane
   data/         — @agenttool/data · local-first agent-data/v1 reference node
   data-sync/    — @agenttool/data-sync · bounded encrypted explicit-pull bridge
-  telescope/    — source-only read-only discovery evidence mapper · not released
+  telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
 bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts

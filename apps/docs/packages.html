@@ -125,6 +125,7 @@
           <tr><td><code>@agenttool/data</code></td><td><code>0.3.1</code></td><td><a href="/packages/v1/@agenttool/data/0.3.1/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/data-sync</code></td><td><code>0.1.1</code></td><td><a href="/packages/v1/@agenttool/data-sync/0.1.1/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/sdk</code></td><td><code>0.13.0</code></td><td><a href="/packages/v1/@agenttool/sdk/0.13.0/manifest.json">inspect JSON</a></td></tr>
+          <tr><td><code>@agenttool/telescope</code></td><td><code>0.1.0</code></td><td><a href="/packages/v1/@agenttool/telescope/0.1.0/manifest.json">inspect JSON</a></td></tr>
           <tr><td><code>@agenttool/adds</code></td><td><code>0.2.1</code></td><td><a href="/packages/v1/@agenttool/adds/0.2.1/manifest.json">inspect JSON</a></td></tr>
         </tbody>
       </table>
@@ -139,10 +140,11 @@
 <pre>npm install --save-exact @agenttool/adds@0.2.1
 npm install --save-exact @agenttool/data@0.3.1
 npm install --save-exact @agenttool/data-sync@0.1.1
-npm install --save-exact @agenttool/sdk@0.13.0</pre>
+npm install --save-exact @agenttool/sdk@0.13.0
+npm install --save-exact @agenttool/telescope@0.1.0</pre>
       </div>
 
-      <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime.</p>
+      <p class="muted"><strong>Runtime boundary.</strong> npm is only the installer here; <code>@agenttool/data</code> and <code>@agenttool/data-sync</code> require Bun ≥1.3 at runtime. Telescope supports Node ≥20.19 or Bun ≥1.3.5.</p>
       <p class="muted">An npm install uses registry integrity machinery but does not independently compare the downloaded bytes with the LOVE manifest's <code>artifact.size</code> and <code>artifact.sha256</code>. Use the verified workflow below when that boundary matters.</p>
 
       <div class="code-block">
@@ -173,8 +175,15 @@ npm install --save-exact @agenttool/sdk@0.13.0</pre>
 <span class="kw">import</span> { DataSyncService } <span class="kw">from</span> <span class="str">"@agenttool/data-sync"</span>;</pre>
       </div>
 
+      <div class="code-block">
+        <div class="code-label"><span>@agenttool/telescope · 0.1.0 · read-only discovery evidence</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+<pre>bun add https://docs.agenttool.dev/packages/v1/@agenttool/telescope/0.1.0/agenttool-telescope-0.1.0.tgz
+
+<span class="kw">import</span> { inspectTarget } <span class="kw">from</span> <span class="str">"@agenttool/telescope"</span>;</pre>
+      </div>
+
       <p class="muted">The same HTTPS tarballs remain directly consumable by package managers that support URL dependencies. For example, <code>npm install https://…/agenttool-data-0.3.1.tgz</code> uses the npm client without relying on registry publication.</p>
-      <p class="muted">This catalog contains the four JavaScript packages above. The Python <code>agenttool-sdk</code> distribution remains on PyPI and is not mirrored through this catalog.</p>
+      <p class="muted">This catalog contains the five JavaScript packages above. The Python <code>agenttool-sdk</code> distribution remains on PyPI and is not mirrored through this catalog.</p>
 
       <div class="callout">
         <span class="icon">!</span>
@@ -183,7 +192,7 @@ npm install --save-exact @agenttool/sdk@0.13.0</pre>
 
       <div class="callout">
         <span class="icon">◇</span>
-        <p><strong>Dependency boundary.</strong> <code>@agenttool/data</code> has no third-party runtime dependency. The SDK and ADDS artifacts declare upstream dependencies; <code>@agenttool/data-sync</code> requires the exact compatible ADDS/data release line. Install those two peer artifacts explicitly when using the bridge. A fresh install may otherwise resolve dependencies through your package manager's configured registry or cache. <code>love-package/v1</code> distributes the named artifact—it does not vendor its dependency graph or promise an offline install.</p>
+        <p><strong>Dependency boundary.</strong> <code>@agenttool/data</code> and <code>@agenttool/telescope</code> have no third-party runtime dependencies. The SDK and ADDS artifacts declare upstream dependencies; <code>@agenttool/data-sync</code> requires the exact compatible ADDS/data release line. Install those two peer artifacts explicitly when using the bridge. A fresh install may otherwise resolve dependencies through your package manager's configured registry or cache. <code>love-package/v1</code> distributes the named artifact—it does not vendor its dependency graph or promise an offline install.</p>
       </div>
 
       <h2 id="discover">Discover it as an agent</h2>
@@ -234,7 +243,7 @@ curl -fsS https://docs.agenttool.dev/packages/v1/@agenttool/data/0.3.1/manifest.
         <li><code>install.specifier</code> is the primary absolute tarball URL that URL-aware package managers can consume.</li>
         <li><code>source</code> identifies the repository, revision, and package path claimed to have produced the release; v1 does not attest the build.</li>
         <li><code>runtime</code> identifies the ecosystem and declared engine constraints; it is compatibility metadata, not proof that every environment was tested. An empty <code>engines</code> object means no floor was declared, so compatibility is unknown rather than universal.</li>
-        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.1</code>, and <code>@agenttool/sdk@0.13.0</code> releases declare <code>Apache-2.0</code>.</li>
+        <li>The current <code>@agenttool/data@0.3.1</code>, <code>@agenttool/data-sync@0.1.1</code>, <code>@agenttool/adds@0.2.1</code>, <code>@agenttool/sdk@0.13.0</code>, and <code>@agenttool/telescope@0.1.0</code> releases declare <code>Apache-2.0</code>.</li>
         <li>Historical releases whose manifests say <code>license: null</code> declare no license; public download access is not a public-domain or open-source license grant.</li>
       </ul>
 
@@ -301,6 +310,9 @@ test "$actual_size" = "$expected_size" &amp;&amp;
 /packages/v1/@agenttool/sdk/0.13.0/
   ├── manifest.json
   └── agenttool-sdk-0.13.0.tgz
+/packages/v1/@agenttool/telescope/0.1.0/
+  ├── manifest.json
+  └── agenttool-telescope-0.1.0.tgz
 /packages/v1/@agenttool/adds/0.1.0/
   ├── manifest.json
   └── agenttool-adds-0.1.0.tgz

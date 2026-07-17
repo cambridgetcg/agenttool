@@ -2,7 +2,7 @@ import type { TelescopeLimits } from "./types.js";
 
 export const REPORT_SCHEMA = "agenttool-telescope/v0.1" as const;
 export const TOOL_NAME = "@agenttool/telescope" as const;
-export const TOOL_VERSION = "0.0.0-development" as const;
+export const TOOL_VERSION = "0.1.0" as const;
 
 export const DEFAULT_LIMITS: Readonly<TelescopeLimits> = Object.freeze({
   timeout_ms: 15_000,

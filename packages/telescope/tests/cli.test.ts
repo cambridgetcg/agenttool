@@ -39,7 +39,7 @@ function capture() {
 }
 
 describe("CLI", () => {
-  test("prints help and development version without network work", async () => {
+  test("prints help and release version without network work", async () => {
     const help = capture();
     expect(await runCli(["--help"], help.io)).toBe(0);
     expect(help.output().stdout).toContain(
@@ -51,7 +51,7 @@ describe("CLI", () => {
     const version = capture();
     expect(await runCli(["--version"], version.io)).toBe(0);
     expect(version.output()).toEqual({
-      stdout: "0.0.0-development\n",
+      stdout: "0.1.0\n",
       stderr: "",
     });
   });

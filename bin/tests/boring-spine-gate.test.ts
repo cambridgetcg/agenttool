@@ -314,4 +314,27 @@ describe("boring test spine", () => {
       ),
     ).toBe(true);
   });
+
+  test("keeps Telescope publication manual, exact-artifact, and protected", async () => {
+    const workflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-telescope.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toMatch(/\n\s+push:/);
+    expect(workflow).toContain("environment: npm-bootstrap");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
+    expect(workflow).toContain(
+      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
+    );
+    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
+    expect(workflow).toContain("agenttool-telescope-0.1.0.tgz");
+    expect(workflow).toContain('npm publish "$artifact" --access public --provenance');
+    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+  });
 });
