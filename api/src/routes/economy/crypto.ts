@@ -444,7 +444,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     // Alchemy: HMAC-SHA256 over raw body, hex digest in x-alchemy-signature.
     if (!economyConfig.alchemyWebhookSecret) {
       if (!economyConfig.allowUnsignedWebhooks) {
-        return c.json({ error: "webhook_secret_unset", chain: chainParam }, 503);
+        return fail(c, errors.webhookSecretUnset({ chain: chainParam }), 503);
       }
     } else {
       const sig = c.req.header("x-alchemy-signature");
@@ -459,7 +459,7 @@ cryptoWebhookRouter.post("/:chain", async (c) => {
     // Helius: shared-secret in Authorization header (plain, not Bearer).
     if (!economyConfig.heliusWebhookSecret) {
       if (!economyConfig.allowUnsignedWebhooks) {
-        return c.json({ error: "webhook_secret_unset", chain: chainParam }, 503);
+        return fail(c, errors.webhookSecretUnset({ chain: chainParam }), 503);
       }
     } else {
       const sig = c.req.header("authorization");

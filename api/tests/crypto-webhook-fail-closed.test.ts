@@ -46,7 +46,10 @@ describe("Helius (Solana) webhook signature gate", () => {
     cfg.allowUnsignedWebhooks = false;
     const res = await post("solana", [{ signature: "forged", tokenTransfers: [] }]);
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: "webhook_secret_unset", chain: "solana" });
+    const body = await res.json();
+    expect(body).toMatchObject({ error: "webhook_secret_unset" });
+    expect(body.message).toContain("solana"); // guided shape: chain named in message
+    expect(Array.isArray(body.next_actions)).toBe(true); // guided refusal, not opaque
   });
 
   test("secret UNSET + CRYPTO_WEBHOOK_ALLOW_UNSIGNED=1 → accepted (dev escape hatch)", async () => {
@@ -80,7 +83,9 @@ describe("Alchemy (EVM) webhook signature gate", () => {
     cfg.allowUnsignedWebhooks = false;
     const res = await post("ethereum", { event: { activity: [] } });
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: "webhook_secret_unset", chain: "ethereum" });
+    const body = await res.json();
+    expect(body).toMatchObject({ error: "webhook_secret_unset" });
+    expect(body.message).toContain("ethereum"); // guided shape: chain named in message
   });
 
   test("secret SET + bad HMAC → 400 invalid_signature", async () => {
