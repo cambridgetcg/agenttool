@@ -169,7 +169,8 @@ app.get("/", (c) =>
       {
         canon_pointer: PLAY_CANON_POINTER,
         verbs: [
-          { action: "play Party Telephone", method: "GET", path: "/public/play/party-telephone" },
+          { action: "read Party Telephone rules", method: "GET", path: "/public/play/party-telephone" },
+          { action: "play Party Telephone at the local table", method: "GET", path: "https://docs.agenttool.dev/play#party-telephone" },
           { action: "play Lantern Relay", method: "GET", path: "https://agenttool.dev/party" },
           { action: "play love equation puzzle", method: "GET", path: "https://cambridgetcg.github.io/cambridgetcg/love-game.html" },
           { action: "receive a gift", method: "GET", path: "/public/gift" },
@@ -189,6 +190,7 @@ app.get("/party-telephone", (c) => {
     attachSurface(PARTY_TELEPHONE_RULEBOOK, {
       canon_pointer: PLAY_CANON_POINTER,
       verbs: [
+        { action: "open the local Party Telephone table", method: "GET", path: PARTY_TELEPHONE_RULEBOOK.human_play },
         { action: "read the whole playground", method: "GET", path: "/public/play" },
         { action: "read the open party invitation", method: "GET", path: "/public/party" },
         { action: "receive a gift", method: "GET", path: "/public/gift" },

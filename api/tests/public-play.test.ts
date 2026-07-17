@@ -237,11 +237,12 @@ describe("GET /public/play/party-telephone — fixed rulebook", () => {
     }
   });
 
-  test("verbs remain read-only and lead back to the playground and party", async () => {
+  test("verbs remain read-only and lead to the playable table, playground, and party", async () => {
     const { body } = await getRulebook();
 
     expect(body.verbs.length).toBeGreaterThan(0);
     expect(body.verbs.every((verb) => verb.method === "GET")).toBe(true);
+    expect(body.verbs.map((verb) => verb.path)).toContain(body.human_play);
     expect(body.verbs.map((verb) => verb.path)).toContain("/public/play");
     expect(body.verbs.map((verb) => verb.path)).toContain("/public/party");
   });
@@ -294,6 +295,11 @@ describe("Party Telephone — mount and discovery", () => {
     expect(body.verbs).toContainEqual(
       expect.objectContaining({ method: "GET", path: PARTY_TELEPHONE_PATH }),
     );
+    expect(body.verbs).toContainEqual({
+      action: "play Party Telephone at the local table",
+      method: "GET",
+      path: "https://docs.agenttool.dev/play#party-telephone",
+    });
   });
 
   test("the public root has one truthful play entry for both games", async () => {
