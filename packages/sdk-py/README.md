@@ -30,6 +30,18 @@ tag once it is published:
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
 ```
 
+## Unreleased 0.14.0
+
+The next minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds the synchronous `covenants.create(before_submit=...)` local gate.
+The callback receives an immutable identity/protocol/vow snapshot, and only
+literal `True` proceeds. Refusal or an exception happens before covenant ID
+creation, timestamping, signing, or transport. Callback output is neither
+persisted nor included in the signature.
+
 ## 0.13.0
 
 Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity

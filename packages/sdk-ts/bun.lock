@@ -11,6 +11,8 @@
         "@scure/bip39": "^2.2.0",
       },
       "devDependencies": {
+        "@rhetorlint/core": "^0.1.0",
+        "@rhetorlint/rules-en": "^0.1.0",
         "@types/bun": "^1.2.0",
         "typescript": "^5.7.0",
       },
@@ -22,6 +24,10 @@
     "@noble/ed25519": ["@noble/ed25519@2.3.0", "", {}, "sha512-M7dvXL2B92/M7dw9+gzuydL8qn/jiqNHaoR3Q+cb1q1GHV7uwE17WCyFMG+Y+TZb5izcaXk5TdJRrDUxHXL78A=="],
 
     "@noble/hashes": ["@noble/hashes@2.2.0", "", {}, "sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg=="],
+
+    "@rhetorlint/core": ["@rhetorlint/core@0.1.0", "", {}, "sha512-cSwE+qBJU7Lo+hbiHBkupB0Rh2y23E5CAAxkIt/V3z3XYLtYrIra+Zur2Q2zFpXkC0YYt0bAvVw5t/Sbljix4A=="],
+
+    "@rhetorlint/rules-en": ["@rhetorlint/rules-en@0.1.0", "", {}, "sha512-AW9/iEB+2wabagRv5aaPhOo2PhbR7ypoA6qu80GQkOFDTxdUmQc1qq5doFtCZEFwvVykOdkydzAwWwctbmKrTA=="],
 
     "@scure/base": ["@scure/base@2.2.0", "", {}, "sha512-b8XEupJibegiXV+tDUseI8oLQc8ei3d/4Jkb2RpbHh3MfE054ov3uIz2dhFkB3FI8iwYkEh0gGCApkrYggkPNg=="],
 

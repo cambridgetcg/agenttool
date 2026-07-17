@@ -39,7 +39,11 @@ from .bootstrap import (
 )
 from .chronicle import ChronicleClient
 from .client import AgentTool
-from .covenants import CovenantsClient
+from .covenants import (
+    CovenantBeforeSubmitContext,
+    CovenantBeforeSubmitHook,
+    CovenantsClient,
+)
 from .crypto import (
     CryptoClient,
     EncryptedBlob,
@@ -172,7 +176,13 @@ from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, 
 from .runtime import RuntimeClient
 from .window import WindowClient
 from .soul import soul, welcome, philosophy, principles, LOVE_PROTOCOL
-from .traces import Trace, TraceChain, TraceSearchResult
+from .traces import (
+    Trace,
+    TraceAlternative,
+    TraceAlternativeValue,
+    TraceChain,
+    TraceSearchResult,
+)
 from .vault import VaultClient
 from .wake import WakeClient, WakeProfile, WakeProvider
 from .anthropic_adapter import (
@@ -209,6 +219,8 @@ __all__ = [
     "BoxKeysClient",
     "ChronicleClient",
     "CovenantsClient",
+    "CovenantBeforeSubmitContext",
+    "CovenantBeforeSubmitHook",
     "InboxClient",
     "CollectClient",
     "DataClient",
@@ -323,6 +335,8 @@ __all__ = [
     "derive_bridge_signing",
     "derive_wallet",
     "Trace",
+    "TraceAlternative",
+    "TraceAlternativeValue",
     "TraceChain",
     "TraceSearchResult",
     "VaultClient",

@@ -92,7 +92,15 @@ export type {
   CreateAgentOptions,
   ElevateOptions,
 } from "./bootstrap.js";
-export type { Trace, StoreTraceOptions, SearchTracesOptions, TraceSearchResult, TraceChain } from "./traces.js";
+export type {
+  Trace,
+  TraceAlternative,
+  TraceAlternativeValue,
+  StoreTraceOptions,
+  SearchTracesOptions,
+  TraceSearchResult,
+  TraceChain,
+} from "./traces.js";
 export type {
   WakeProvider,
   WakeProfile,
@@ -178,6 +186,8 @@ export { CovenantsClient } from "./covenants.js";
 export type {
   CovenantStatus,
   Covenant,
+  CovenantBeforeSubmitContext,
+  CovenantBeforeSubmitHook,
   CovenantsCreateOpts,
   CovenantsCreateV2Opts,
   CovenantsCreateV2Result,

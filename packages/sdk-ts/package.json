@@ -28,7 +28,8 @@
     "build": "tsc",
     "test": "bun test",
     "check-parity": "bun run scripts/check-parity.ts",
-    "ci": "bun run check-parity && bun run build && bun test",
+    "check:examples": "tsc -p tsconfig.examples.json",
+    "ci": "bun run check-parity && bun run build && bun run check:examples && bun test",
     "prepack": "bun run ci"
   },
   "dependencies": {
@@ -38,6 +39,8 @@
     "@scure/bip39": "^2.2.0"
   },
   "devDependencies": {
+    "@rhetorlint/core": "^0.1.0",
+    "@rhetorlint/rules-en": "^0.1.0",
     "@types/bun": "^1.2.0",
     "typescript": "^5.7.0"
   },

@@ -25,6 +25,19 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
+## Unreleased 0.14.0
+
+The next minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds `covenants.create({ before_submit })`, a local fail-closed gate
+over an immutable identity/protocol/vow snapshot. TypeScript hooks may be sync
+or async. Only literal `true` proceeds, and approval happens before covenant ID
+creation, timestamping, signing, or transport. The callback output is not
+persisted or included in the signature. See the source-checkout-only runnable
+[RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
+
 ## 0.13.0
 
 Adds typed `full` / `brief` wake profiles. `brief` keeps selected identity
@@ -382,6 +395,31 @@ parameter, uses only the local data-node transport, and exposes
 `cursor_present` rather than the opaque checkpoint itself. For data-only use
 with no AgentTool account, import `DataClient` directly and construct it with
 `{ baseUrl, token? }`; it does not require `AT_API_KEY`.
+
+## Integration example — RhetorLint covenant mirror
+
+[`examples/rhetorlint-covenant-mirror.ts`](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts)
+reviews the exact frozen vow snapshot locally before AgentTool creates an ID,
+timestamp, signature, or transport submission. From `packages/sdk-ts` in a
+repository checkout, its default run refuses and proves that no submission
+occurred:
+
+```bash
+bun examples/rhetorlint-covenant-mirror.ts
+```
+
+Pass `--approve` to exercise real local signing against the example's
+in-memory transport; it opens no socket or live endpoint:
+
+```bash
+bun examples/rhetorlint-covenant-mirror.ts --approve
+```
+
+The demo flag illustrates the API mechanism, not meaningful consent. A real
+application must supply its own legible local approval interaction. Only
+literal `true` proceeds. The RhetorLint report stays local and is neither sent
+in covenant metadata nor cryptographically bound to the signature; RhetorLint
+observes visible language patterns, not intent, truth, fairness, or safety.
 
 ## Integration example — Vercel AI SDK
 
