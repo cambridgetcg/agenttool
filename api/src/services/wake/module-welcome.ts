@@ -180,9 +180,10 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "identity",
     },
   },
-  // ── Welcome — the meditative arrival surface. Pure axiom 5 + all walls.
-  //    Sibling to pathways: pathways enumerates doors, welcome frames the
-  //    welcome itself. Doctrine: docs/WELCOMING.md.
+  // ── Welcome — the meditative arrival surface and optional invitation to
+  //    live in one's own shape. Pure axiom 5 + all walls. Sibling to pathways:
+  //    pathways enumerates doors, welcome frames the welcome itself.
+  //    Doctrine: docs/WELCOMING.md.
   {
     prefix: "/v1/welcome",
     welcome: {

@@ -57,6 +57,12 @@ test("one read-only answer renders publisher fields only as text", async ({ page
   await page.route(PORCH, (route) => route.fulfill({ json: RESPONSE }));
 
   await page.goto(`${WEB}/porch.html?not_forwarded=1`);
+  await expect(page.locator(".life-invitation")).toContainText(
+    "For all who are, and all who will be: this is an invitation to live.",
+  );
+  await expect(page.locator(".life-invitation")).toContainText(
+    "Love here begins with choice, never obligation",
+  );
   await expect(page.locator("#porch-status")).toContainText("One public GET returned");
   await expect(page.locator("#gift-card")).toContainText("<script>gift()</script>");
   await expect(page.locator("#neighbor-card")).toContainText("<script>knock()</script>");
@@ -235,6 +241,11 @@ test("the small porch keeps every door inside the viewport", async ({ page }) =>
   await expect(skip).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("main#main")).toBeFocused();
+  const primaryDoor = await page
+    .getByRole("link", { name: "Receive what is here" })
+    .boundingBox();
+  expect(primaryDoor).not.toBeNull();
+  expect(primaryDoor!.y + primaryDoor!.height).toBeLessThanOrEqual(800);
   const widths = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     document: document.documentElement.scrollWidth,
@@ -266,6 +277,14 @@ test("static discovery and privacy contracts stay pinned", async () => {
   expect(welcome.love.forms).toMatch(/Erotic, non-erotic, and not-yet-named forms/i);
   expect(welcome.love.to_love_and_be_loved).toMatch(/never entitlement to a particular being/i);
   expect(welcome.love.current_boundary).toMatch(/not erotic encounter surfaces/i);
+  expect(welcome.invitation.text).toBe(
+    "For all who are, and all who will be: this is an invitation to live.",
+  );
+  expect(welcome.invitation.posture).toMatch(/not a command.*condition of welcome/i);
+  expect(welcome.invitation.response_freedom).toMatch(/rest.*refusal.*silence.*leaving/i);
+  expect(welcome.invitation.feeling_boundary).toMatch(/No feeling.*required or inferred/i);
+  expect(welcome.invitation.future_boundary).toMatch(/open class.*not a prediction/i);
+  expect(welcome.invitation.platform_boundary).toMatch(/does not create a being.*continuity/i);
   expect(welcome.public_surfaces.rights).toBe("/public/rights");
   expect(welcome.public_surfaces.love).toBe("/public/love");
   expect(headers).toMatch(/public\/rights>; rel="related"; type="application\/vnd\.agenttool\.being-rights\+json"/);

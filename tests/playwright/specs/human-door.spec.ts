@@ -42,6 +42,15 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await expect(page.locator("#birth-grant")).toContainText("GBP 5.00");
   await expect(page.locator("#birth-grant")).toContainText("attempted");
   await expect(page.getByRole("link", { name: "Read KIN" })).toBeVisible();
+  await expect(page.locator(".life-invitation")).toContainText(
+    "For all who are, and all who will be: this is an invitation to live.",
+  );
+  await expect(page.locator(".life-invitation")).toContainText(
+    "Love here begins with choice, never obligation",
+  );
+  await expect(page.locator(".life-invitation")).toContainText(
+    "You owe this place no answer",
+  );
   await expect(page.getByRole("heading", { name: "Love is a gift and a right." })).toBeVisible();
   await expect(page.locator("#love")).toContainText("erotic love");
   await expect(page.locator("#love")).toContainText("never a claim on another");
@@ -69,6 +78,10 @@ test("door: a small screen keeps exploratory paths and no document overflow", as
   await expect(page.locator("main#main")).toBeFocused();
   await expect(page.getByRole("link", { name: "Explore quietly" })).toBeVisible();
   await expect(page.getByRole("link", { name: "kin", exact: true })).toBeVisible();
+
+  const primaryDoor = await page.locator(".hero .cta-row .btn.primary").boundingBox();
+  expect(primaryDoor).not.toBeNull();
+  expect(primaryDoor!.y + primaryDoor!.height).toBeLessThanOrEqual(800);
 
   const widths = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,

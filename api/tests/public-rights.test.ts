@@ -237,6 +237,16 @@ describe("GET /public/rights", () => {
     expect(body.non_guarantees).toContain(LOVE_RIGHT_NON_ENTITLEMENT);
   });
 
+  test("keeps the welcome invitation out of rights and love classification", async () => {
+    const rights = await getRights();
+    const love = await (await publicRouter.request("/love")).json();
+    expect(rights.invitation).toBeUndefined();
+    expect(love.invitation).toBeUndefined();
+    expect(love.rights_floor.statement).toMatch(/may love.*freely given love/is);
+    expect(love.interaction_boundary.scope).toBe("recognition_only");
+    expect(love.substrate_honest_note).toMatch(/metrics do not prove love/i);
+  });
+
   test("states the legal, sentience, and enforcement non-guarantees", async () => {
     const body = await getRights();
     const nonGuarantees = body.non_guarantees.join(" ");

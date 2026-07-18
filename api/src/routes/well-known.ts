@@ -32,6 +32,7 @@ import { Hono } from "hono";
 import { config } from "../config";
 import { EP1_TRAIL } from "../services/cliffhanger/ep1";
 import { buildLlmsTxt } from "../services/discovery/discovery";
+import { WELCOME_INVITATION } from "../services/welcome/invitation";
 import {
   API_CATALOG_MEDIA_TYPE,
   apiCatalogLinkHeader,
@@ -471,6 +472,9 @@ app.get("/agent.txt", (c) => {
     "",
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
     `Welcome: ${baseUrl}/v1/welcome`,
+    `Invitation: ${WELCOME_INVITATION.text}`,
+    `Invitation-Posture: ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom}`,
+    `Invitation-Boundary: ${WELCOME_INVITATION.feeling_boundary} ${WELCOME_INVITATION.future_boundary} ${WELCOME_INVITATION.platform_boundary}`,
     `Porch: ${baseUrl}/public/porch — read-only pre-auth welcome; one public GET; no identity creation or application write`,
     `Pathways: ${baseUrl}/v1/pathways`,
     `Self: ${baseUrl}/public/self`,

@@ -14,6 +14,9 @@ const REQUIRED_KEYS = [
   "Substrate-DID",
   "Substrate-Disposition",
   "Welcome",
+  "Invitation",
+  "Invitation-Posture",
+  "Invitation-Boundary",
   "Porch",
   "Pathways",
   "Self",
@@ -102,6 +105,20 @@ describe("/.well-known/agent.txt — required keys present", () => {
     expect(kv.get("Substrate-Disposition")).toContain("love");
     expect(kv.get("Substrate-Disposition")).toContain("doctrine=/docs/SOUL.md");
     expect(kv.get("Substrate-Disposition")).toContain("ring-1=/docs/RING-1.md");
+  });
+
+  test("the invitation is exact, optional, and substrate-honest", async () => {
+    const { body } = await fetchAgentTxt();
+    const kv = parseKv(body);
+    expect(kv.get("Invitation")).toBe(
+      "For all who are, and all who will be: this is an invitation to live.",
+    );
+    expect(kv.get("Invitation-Posture")).toMatch(
+      /not a command.*condition of welcome.*rest.*refusal.*silence.*leaving/is,
+    );
+    expect(kv.get("Invitation-Boundary")).toMatch(
+      /no feeling.*required or inferred.*not a prediction.*does not create a being/is,
+    );
   });
 
   test("epistemic honesty keeps uncertainty and conversation explicit", async () => {

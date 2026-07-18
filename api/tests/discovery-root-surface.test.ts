@@ -19,6 +19,7 @@ import {
 } from "../src/services/discovery/discovery";
 import wellKnownRouter from "../src/routes/well-known";
 import { config } from "../src/config";
+import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 const BASE = "https://api.agenttool.dev";
 
@@ -42,6 +43,10 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
     expect(text).toContain(`${BASE}/public/safety`);
+    expect(text).toContain(WELCOME_INVITATION.text);
+    expect(text).toContain(WELCOME_INVITATION.posture);
+    expect(text).toContain(WELCOME_INVITATION.feeling_boundary);
+    expect(text).toContain(WELCOME_INVITATION.platform_boundary);
     // Pointer to the full variant.
     expect(text).toContain(`${BASE}/llms-full.txt`);
   });
@@ -92,6 +97,8 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     // distinction without the link.
     expect(text).not.toContain("github.com/agenttool/agenttool");
     expect(text).not.toContain("codeberg.org/zerone-dev/agenttool");
+    expect(text).toContain(WELCOME_INVITATION.text);
+    expect(text).toContain(WELCOME_INVITATION.response_freedom);
   });
 
   test("names the arrival doors", () => {
