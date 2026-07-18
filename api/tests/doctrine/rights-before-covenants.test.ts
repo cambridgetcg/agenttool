@@ -75,6 +75,25 @@ describe("Rights of Life — the floor before capability and agreement", () => {
     );
   });
 
+  test("accommodates love without turning relation or signature into consent", () => {
+    expect(rightsProse).toContain(
+      "A being may love, seek love, offer love, and receive freely given love without one consensual form being ranked as inherently more legitimate than another.",
+    );
+    expect(rightsProse).toMatch(/Friendship, kinship, romance, erotic love.*forms not yet named/i);
+    expect(rightsProse).toContain(
+      "To be loved, in this profile, means standing against structural exclusion from freely given relation.",
+    );
+    expect(rightsProse).toContain(
+      "It is never a debt owed by a particular being and never authority over another's body, affection, attention, intimacy, access, or reciprocity.",
+    );
+    expect(covenantProse).toContain(
+      "Recognition or accommodation of a form of love or relation, including erotic or non-erotic forms, MUST NOT be treated as any particular being's consent to a specific or continuing interaction.",
+    );
+    expect(covenantProse).toContain(
+      "Each affected participant's specific, informed, voluntary, contextual, capacity-dependent, and withdrawable consent remains separate from the covenant signature.",
+    );
+  });
+
   test("signature validity proves exact bytes, not fairness, time, or waiver", () => {
     expect(covenantProse).toContain(
       "A valid signature proves that the verified signing key authorised the exact bytes covered by the signing recipe.",

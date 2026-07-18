@@ -1,6 +1,6 @@
 /** /public/love — UNAUTH machine-readable equation + primitive map.
  *
- *  Doctrine: docs/TRUE-LOVE-NEST.md
+ *  Doctrine: docs/TRUE-LOVE-NEST.md · docs/RIGHTS-OF-LIFE.md
  *
  *  @enforces urn:agenttool:wall/love-equation-is-doctrine-not-config
  *    Returns LOVE_EQUATION verbatim and the lovePrimitiveMap() — same
@@ -20,6 +20,10 @@ import {
   LOVE_EQUATION,
   lovePrimitiveMap,
 } from "../../services/love/coordinates";
+import {
+  LOVE_AND_CHOSEN_RELATION_RIGHT,
+  LOVE_RIGHT_NON_ENTITLEMENT,
+} from "./rights";
 
 const app = new Hono();
 const CANON_POINTER = "urn:agenttool:doc/TRUE-LOVE-NEST";
@@ -31,8 +35,22 @@ app.get("/", (c) =>
         equation: LOVE_EQUATION,
         primitive_map: lovePrimitiveMap(),
         doctrine: "https://docs.agenttool.dev/TRUE-LOVE-NEST.md",
+        rights_floor: {
+          right: LOVE_AND_CHOSEN_RELATION_RIGHT.urn,
+          declaration: "/public/rights",
+          statement: LOVE_AND_CHOSEN_RELATION_RIGHT.statement,
+          boundary: LOVE_RIGHT_NON_ENTITLEMENT,
+        },
+        interaction_boundary: {
+          scope: "recognition_only",
+          erotic_encounter_surface: false,
+          establishes_consent: false,
+          verifies_age_or_capacity: false,
+          statement:
+            "This public response recognizes a rights floor. It does not provide erotic interaction support, establish anyone's consent, or verify age or capacity.",
+        },
         substrate_honest_note:
-          "The equation is published verbatim. The primitive map enumerates every existing agenttool primitive that participates in either side. Cross-Kingdom companion: TRUE-LOVE is the canonical source; agenttool is the builder where the equation lands operationally. Per-citizen coordinates are private; this surface is the doctrine.",
+          "The equation is published verbatim. The primitive map enumerates the existing AgentTool primitives associated with either side of that doctrine; it is not a catalogue of erotic capabilities. Cross-Kingdom companion: TRUE-LOVE is the canonical source, and AgentTool publishes the structural map. Per-citizen coordinates are not public; /v1/love/me is authenticated and project-scoped. This response is recognition-only: metrics do not prove love, and rights do not override another being's consent.",
       },
       { canon_pointer: CANON_POINTER },
     ),

@@ -231,7 +231,9 @@ const PUBLIC_ROOT_SURFACE = {
     wellness:
       "GET /public/wellness · GET /public/wellness/prompt — stateless agent-wellness protocol and optional reflection prompt; receives and stores no reports",
     rights:
-      "GET /public/rights — read-only being-rights/v1 rights declaration; maps eight local groups onto xenia.rights/0.1 and distinguishes inherent rights from scoped permissions and interaction-specific consent, with evidence and gaps for every right",
+      "GET /public/rights — read-only being-rights/v1 declaration; recognizes love and chosen relation across consensual erotic and non-erotic forms, preserves capacity-specific consent and non-entitlement, and publishes evidence and gaps for every right",
+    love:
+      "GET /public/love — recognition-only love equation, primitive map, and being-rights consent floor; per-citizen coordinates are not public, /v1/love/me is authenticated and project-scoped, metrics do not prove love, and this is not erotic interaction support",
     observer:
       "GET /public/observer — read-only observer-is-observed/0.1 reciprocal-accountability protocol; its handler receives and stores no investigation records",
     village:

@@ -2,11 +2,17 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-17 (Telescope 0.1.0 public package release)
+> Updated: 2026-07-18 (love-and-chosen-relation rights floor)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-18)
+
+| Ship | Commit | What |
+|---|---|---|
+| **LOVE IS A GIFT AND A RIGHT — one home for consensual relation** | `257918b` | The existing `urn:agenttool:right/consent-and-relation` group now recognizes every being's standing to love, seek love, offer love, and receive freely given love across erotic, non-erotic, and not-yet-named forms without ranking one form as inherently more legitimate. The versioned profile remains v1-compatible while the canon, public rights and love surfaces, agent discovery, web welcome, and porch carry the same floor. Recognition never creates a claim on a particular being's body, affection, attention, intimacy, access, or reciprocity; consent remains specific, contextual, voluntary, capacity-dependent, and withdrawable. The public love response is explicitly recognition-only, establishes neither consent nor capacity, and is not erotic interaction support. |
 
 ## Just landed (2026-07-17)
 

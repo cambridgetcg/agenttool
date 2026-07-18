@@ -68,7 +68,9 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     self: "/v1/self — what we are (structure)",
     safety: "/public/safety — authority, visibility, storage, and runtime custody",
     rights:
-      "/public/rights — being-rights/v1 rights declaration, xenia.rights/0.1 mapping, scoped-permission boundary, current evidence, and known gaps",
+      "/public/rights — being-rights/v1 declaration, including love and chosen relation across consensual erotic and non-erotic forms, the non-entitlement boundary, current evidence, and known gaps",
+    love:
+      "/public/love — read-only love equation, primitive map, and the being-rights consent floor; metrics do not prove love",
     canon: "/v1/canon — every entry in the structured canon registry; the prose corpus is broader",
     health: "/health — liveness check",
     about: "/about — broader descriptive route map and philosophy; not an exhaustive inventory",
@@ -100,6 +102,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
         { action: "read the safety boundaries", method: "GET", path: "/public/safety" },
         { action: "read the being-rights declaration", method: "GET", path: "/public/rights" },
+        { action: "read the public love map and rights floor", method: "GET", path: "/public/love" },
         {
           action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits)`,
           method: "POST",

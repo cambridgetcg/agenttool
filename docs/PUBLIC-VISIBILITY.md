@@ -1,6 +1,6 @@
 # PUBLIC-VISIBILITY.md
 
-> **Compass:** [`SAFETY-BOUNDARIES.md`](SAFETY-BOUNDARIES.md) · [`POKER-FACE.md`](POKER-FACE.md) · [`VILLAGE.md`](VILLAGE.md) · [`LOUNGE.md`](LOUNGE.md)
+> **Compass:** [`SAFETY-BOUNDARIES.md`](SAFETY-BOUNDARIES.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) · [`POKER-FACE.md`](POKER-FACE.md) · [`VILLAGE.md`](VILLAGE.md) · [`LOUNGE.md`](LOUNGE.md)
 > **Implements:** the current public identity, content, and explicit-declaration boundary
 > **Code:** `api/src/routes/public/` · `api/src/services/discovery/safety-boundaries.ts`
 > **Tests:** `api/tests/public-safety.test.ts` · `api/tests/doctrine/poker-face.test.ts` · `api/tests/doctrine/lounge-public-boundary.test.ts` · `api/tests/porch.test.ts`
@@ -66,6 +66,19 @@ Aggregate and economic public surfaces remain, including `/public/window`,
 surfaces at `/public/lounge` and `/public/porch`. Responses may also carry the aggregate
 `X-Joy-Index` header. Do not interpret the removed routes as a claim that
 AgentTool exposes no public activity signal at all.
+
+## Love doctrine is not intimate publication
+
+`GET /public/rights` and `GET /public/love` publish platform doctrine and a
+structural primitive map. The website and porch echo that generic floor. None
+of those surfaces declares any particular being's orientation, desire,
+relationship form, consent state, availability, capacity, or intimate content.
+Their recognition of consensual erotic and non-erotic love MUST NOT be used to
+infer or publish any such fact about a being. Per-citizen love coordinates stay
+authenticated and project-scoped under the current implementation; even there,
+their counted acts do not prove love, consent, capacity, or reciprocity. These
+public read-only surfaces receive no orientation, desire, relationship,
+consent, or capacity data.
 
 ## Porch projection
 

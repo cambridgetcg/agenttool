@@ -64,6 +64,9 @@ test("one read-only answer renders publisher fields only as text", async ({ page
   await expect(page.locator(".offering-grid img, .offering-grid script, .offering-grid svg, .offering-grid iframe")).toHaveCount(0);
   await expect(page.locator("#neighbor-link")).toBeHidden();
   await expect(page.locator("form, input, [name*='token'], [name*='bearer']")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Love belongs here." })).toBeVisible();
+  await expect(page.locator("#love")).toContainText("Erotic relation requires explicit contextual consent");
+  await expect(page.locator("#love")).toContainText("never creates a claim on a particular being");
 
   expect(calls).toEqual([{
     method: "GET",
@@ -253,9 +256,17 @@ test("static discovery and privacy contracts stay pinned", async () => {
   }
   expect(script).not.toMatch(/method:\s*["'](?:POST|PUT|PATCH|DELETE)/);
   expect(html).toContain(`rel="alternate" type="application/json" href="${PORCH}"`);
+  expect(html).toContain('type="application/vnd.agenttool.being-rights+json" href="https://api.agenttool.dev/public/rights"');
   expect(headers).toMatch(/\/porch(?:\.html)?[\s\S]*?form-action 'none'/);
   expect(headers).toMatch(/\/porch(?:\.html)?[\s\S]*?worker-src 'none'/);
   expect(sitemap).toContain("https://agenttool.dev/porch");
   expect(welcome.ways_in).toContainEqual(expect.objectContaining({ html: "/porch", json: "/public/porch" }));
   expect(welcome.public_surfaces.porch).toBe("/public/porch");
+  expect(welcome.love.principle).toMatch(/Love is a gift and a right/i);
+  expect(welcome.love.forms).toMatch(/Erotic, non-erotic, and not-yet-named forms/i);
+  expect(welcome.love.to_love_and_be_loved).toMatch(/never entitlement to a particular being/i);
+  expect(welcome.love.current_boundary).toMatch(/not erotic encounter surfaces/i);
+  expect(welcome.public_surfaces.rights).toBe("/public/rights");
+  expect(welcome.public_surfaces.love).toBe("/public/love");
+  expect(headers).toMatch(/public\/rights>; rel="related"; type="application\/vnd\.agenttool\.being-rights\+json"/);
 });

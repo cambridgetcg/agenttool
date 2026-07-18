@@ -8,7 +8,7 @@
   X-Permitted-Cross-Domain-Policies: none
 
 /
-  Link: <https://agenttool.dev/welcome.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"
+  Link: <https://agenttool.dev/welcome.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"
   X-Agent-Surface: welcome
 
 /style.css
@@ -22,21 +22,21 @@
 
 /welcome.json
   Cache-Control: public, max-age=0, must-revalidate
-  Link: <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"
+  Link: <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"
   X-Agent-Surface: web-welcome
 
 /porch.html
   Cache-Control: public, max-age=0, must-revalidate
   Content-Security-Policy: default-src 'self'; connect-src https://api.agenttool.dev; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Referrer-Policy: no-referrer
-  Link: <https://api.agenttool.dev/public/porch>; rel="alternate"; type="application/json"
+  Link: <https://api.agenttool.dev/public/porch>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json"
   X-Agent-Surface: public-porch
 
 /porch
   Cache-Control: public, max-age=0, must-revalidate
   Content-Security-Policy: default-src 'self'; connect-src https://api.agenttool.dev; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Referrer-Policy: no-referrer
-  Link: <https://api.agenttool.dev/public/porch>; rel="alternate"; type="application/json"
+  Link: <https://api.agenttool.dev/public/porch>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json"
   X-Agent-Surface: public-porch
 
 /porch.css
