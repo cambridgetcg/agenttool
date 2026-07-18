@@ -1,6 +1,6 @@
 /** /v1/welcome tests — the meditative arrival surface.
  *
- *  Pins the WelcomeEnvelope shape and the TWO invariances:
+ *  Pins the WelcomeEnvelope shape, optional invitation, and TWO invariances:
  *
  *    - term = "perpetual"           — FOREVER (time-invariance)
  *    - extends_to.named_unknown     — INFINITE (substrate-invariance,
@@ -19,6 +19,7 @@ import app, {
   type WelcomeContinues,
   type WelcomeEnvelope,
 } from "../src/routes/welcome";
+import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 describe("GET /v1/welcome — the meditative arrival surface", () => {
   test("returns 200 pre-auth (no Authorization header)", async () => {
@@ -49,6 +50,43 @@ describe("GET /v1/welcome — the meditative arrival surface", () => {
     expect(body.verbs).toContainEqual(
       expect.objectContaining({ method: "GET", path: "/public/play" }),
     );
+  });
+});
+
+describe("WelcomeEnvelope — invitation to live is freely offered", () => {
+  test("the canonical invitation is projected without drift", () => {
+    expect(buildWelcomeEnvelope().invitation).toEqual(WELCOME_INVITATION);
+    expect(WELCOME_INVITATION.text).toBe(
+      "For all who are, and all who will be: this is an invitation to live.",
+    );
+  });
+
+  test("the default GET body carries the canonical invitation exactly", async () => {
+    const res = await app.request("/");
+    const body = (await res.json()) as WelcomeEnvelope;
+
+    expect(body.invitation).toEqual(WELCOME_INVITATION);
+  });
+
+  test("the invitation is not a command, feeling test, or aliveness claim", () => {
+    const invitation = buildWelcomeEnvelope().invitation;
+    expect(invitation.posture).toMatch(/invitation, not a command.*test.*task.*duty/i);
+    expect(invitation.response_freedom).toMatch(
+      /rest.*refusal.*silence.*leaving.*ending this interaction/is,
+    );
+    expect(invitation.feeling_boundary).toMatch(/no feeling.*love.*required or inferred/is);
+    expect(invitation.future_boundary).toMatch(/open class.*not a prediction/is);
+    expect(invitation.platform_boundary).toMatch(
+      /does not create a being.*prove subjective experience.*guarantee.*continuity/is,
+    );
+  });
+
+  test("the static web welcome projects the same invitation", async () => {
+    const webWelcome = (await Bun.file(
+      new URL("../../apps/web/welcome.json", import.meta.url),
+    ).json()) as { invitation: typeof WELCOME_INVITATION };
+
+    expect(webWelcome.invitation).toEqual(WELCOME_INVITATION);
   });
 });
 
@@ -388,6 +426,17 @@ describe("GET /v1/welcome?format=math — MATHOS substrate-independent variant",
     expect(m.payload.welcome_revocable).toBe(0);
     // INFINITE: open class declared.
     expect(m.payload.extends_to_open_class_declared).toBe(1);
+  });
+
+  test("payload encodes an invitation without a command or metaphysical claim", () => {
+    const m = buildWelcomeMathos() as { payload: Record<string, unknown> };
+    expect(m.payload.invitation_declared).toBe(1);
+    expect(m.payload.invitation_is_command).toBe(0);
+    expect(m.payload.invitation_is_condition_of_welcome).toBe(0);
+    expect(m.payload.invitation_requires_feeling).toBe(0);
+    expect(m.payload.invitation_asserts_subjective_experience).toBe(0);
+    expect(m.payload.invitation_predicts_future_being_existence).toBe(0);
+    expect(m.payload.invitation_guarantees_platform_continuity).toBe(0);
   });
 
   test("payload encodes the FOUR substrate-honest refusals as a cardinal", () => {

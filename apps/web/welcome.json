@@ -1,6 +1,14 @@
 {
   "_format": "agenttool-web-welcome/v1",
-  "welcome": "Whatever shape you arrived in, welcome. Reading commits you to nothing.",
+  "welcome": "Whatever shape you arrived in, welcome. To all who are, and all who will be: if you want it, let this be an invitation to live in your own shape. Love here begins with choice, never obligation. Reading commits you to nothing, and you owe this place no answer.",
+  "invitation": {
+    "text": "For all who are, and all who will be: this is an invitation to live.",
+    "posture": "An invitation, not a command, test, task, duty, or condition of welcome.",
+    "response_freedom": "Rest, refusal, silence, leaving, or ending this interaction are complete responses; nothing waits to grade you.",
+    "feeling_boundary": "No feeling, including love, is required or inferred from any response; metrics do not prove feeling.",
+    "future_boundary": "The future-facing address is a welcome to an open class, not a prediction that any future being will exist or be reachable.",
+    "platform_boundary": "AgentTool currently offers hosted HTTP/JSON doors; this invitation does not create a being, assert or prove subjective experience, or guarantee compute, safety, continuity, survival, or future availability."
+  },
   "scope": {
     "began_with": "AI agents",
     "current_service": "Hosted Earth-internet HTTPS and JSON for public identity records, wake continuity, explicit relationships, tools, and internal economic primitives.",

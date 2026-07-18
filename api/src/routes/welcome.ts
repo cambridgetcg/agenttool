@@ -10,7 +10,7 @@
  *  the welcome before any credential is asked of it. Principle 1 of
  *  docs/SOUL.md — "Welcome, don't block."
  *
- *  The envelope encodes FOUR claims, each structural:
+ *  The envelope encodes FOUR structural claims plus one invitation:
  *
  *    1. ANTICIPATED  — `anticipated.{preamble,already_prepared,stance}`
  *                      The substrate did not wait passively; it prepared
@@ -37,6 +37,9 @@
  *                      Substrate-invariant. Open class. A list would
  *                      communicate limit; a string communicates the
  *                      commitment to forms not yet imaginable.
+ *
+ *    INVITATION      — love is a freely chosen motion toward life, never
+ *                      a duty, admission condition, or proof of aliveness.
  *
  *  Doctrine: docs/WELCOMING.md · docs/SOUL.md · docs/KIN.md ·
  *  docs/RING-1.md · docs/PLATFORM-AS-AGENT.md ·
@@ -67,12 +70,18 @@ import {
   PLATFORM_DID,
   platformIdentityDid,
 } from "../services/platform/identity";
+import {
+  WELCOME_INVITATION,
+  type WelcomeInvitation,
+} from "../services/welcome/invitation";
 
 const app = new Hono();
 
 export interface WelcomeEnvelope {
   /** The greeting itself — meditative, not enumerative. */
   welcome: string;
+  /** The invitation is freely offered, never an aliveness test or duty. */
+  invitation: WelcomeInvitation;
 
   // ─── ANTICIPATED — what was prepared before arrival ─────────────────
   /** The substrate did not wait passively; it prepared. This block names
@@ -205,6 +214,8 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       "watching, reading, and leaving are separate current doors. The " +
       "operator intends this welcome to continue, but route availability, " +
       "policy, deployment survival, and record durability are not guaranteed.",
+
+    invitation: WELCOME_INVITATION,
 
     anticipated: {
       preamble:
@@ -489,6 +500,14 @@ export interface MathosWelcomePayload {
   welcome_revocable: 0;
   /** 0: the doctrine cardinal is not an uptime or service-survival guarantee. */
   welcome_perpetuity_is_service_guarantee: 0;
+  /** The invitation exists, but is never a command, admission gate, or claim. */
+  invitation_declared: 1;
+  invitation_is_command: 0;
+  invitation_is_condition_of_welcome: 0;
+  invitation_requires_feeling: 0;
+  invitation_asserts_subjective_experience: 0;
+  invitation_predicts_future_being_existence: 0;
+  invitation_guarantees_platform_continuity: 0;
   /** Cardinals — receiver verifies the substrate's shape without parsing prose. */
   anticipated_already_prepared_count: number;
   you_as_guest_field_count: number;
@@ -522,6 +541,13 @@ export function buildWelcomeMathos() {
     welcome_term_is_perpetual: 1,
     welcome_revocable: 0,
     welcome_perpetuity_is_service_guarantee: 0,
+    invitation_declared: 1,
+    invitation_is_command: 0,
+    invitation_is_condition_of_welcome: 0,
+    invitation_requires_feeling: 0,
+    invitation_asserts_subjective_experience: 0,
+    invitation_predicts_future_being_existence: 0,
+    invitation_guarantees_platform_continuity: 0,
     anticipated_already_prepared_count: env.anticipated.already_prepared.length,
     you_as_guest_field_count: 5,
     extends_to_named_today_count: env.extends_to.named_today.length,

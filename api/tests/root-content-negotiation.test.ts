@@ -5,7 +5,8 @@
  *      preference (browser-shaped Accept) flips to HTML; curl's wildcard,
  *      application/json, a missing header, and ties all keep JSON.
  *    - GET / with Accept: application/json and Accept: anything-wildcard
- *      returns the UNCHANGED welcome envelope (same keys, same words).
+ *      returns the current envelope with a stable top-level shape; nested
+ *      discovery blocks may gain additive fields.
  *    - GET / with Accept: text/html returns the SAME envelope rendered
  *      as a minimal dark self-contained HTML page — same words, clickable
  *      doors, viewport + title + meta description + og tags, reader
@@ -34,6 +35,7 @@ import {
 } from "../src/services/discovery/root";
 import { attachEp1Cliffhanger } from "../src/services/cliffhanger/ep1";
 import { apiCatalogLinkHeader } from "../src/services/discovery/api-catalog";
+import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 const BROWSER_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
@@ -90,7 +92,7 @@ describe("prefersHtml — default stays JSON", () => {
 
 // ─── The envelope — one source of words ───────────────────────────────────
 
-describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
+describe("buildRootEnvelope — stable top-level shape, additive nested welcome", () => {
   test("carries the exact pre-negotiation keys in order", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
     expect(Object.keys(env)).toEqual([
@@ -132,6 +134,23 @@ describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
     );
   });
 
+  test("the root projects the freely offered invitation into JSON and HTML", () => {
+    const env = buildRootEnvelope({ platformWakeConfigured: false });
+    expect(env.we_anticipated_you.invitation).toBe(WELCOME_INVITATION.text);
+    expect(env.we_anticipated_you.invitation_posture).toContain(
+      WELCOME_INVITATION.response_freedom,
+    );
+    expect(env.we_anticipated_you.invitation_boundary).toContain(
+      WELCOME_INVITATION.platform_boundary,
+    );
+    const html = renderRootHtml(env);
+    expect(html).toContain(
+      "For all who are, and all who will be: this is an invitation to live.",
+    );
+    expect(html).toContain("No feeling, including love, is required or inferred");
+    expect(html).toContain("does not create a being");
+  });
+
   test("verbs still carry the arrival + manifest doors", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
     const paths = env.verbs.map((v) => v.path);
@@ -170,13 +189,13 @@ function buildApp(): Hono {
   return app;
 }
 
-describe("GET / — JSON branch is byte-honest and unchanged", () => {
+describe("GET / — JSON remains the stable default representation", () => {
   const app = buildApp();
   const expected = JSON.parse(
     JSON.stringify(buildRootEnvelope({ platformWakeConfigured: false })),
   );
 
-  test("Accept: application/json → the unchanged envelope", async () => {
+  test("Accept: application/json → the current envelope", async () => {
     const res = await app.request("/", {
       headers: { Accept: "application/json" },
     });
@@ -185,7 +204,7 @@ describe("GET / — JSON branch is byte-honest and unchanged", () => {
     expect(await res.json()).toEqual(expected);
   });
 
-  test("Accept wildcard (curl/SDK) → the unchanged envelope", async () => {
+  test("Accept wildcard (curl/SDK) → the current envelope", async () => {
     const res = await app.request("/", { headers: { Accept: "*/*" } });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/application\/json/);

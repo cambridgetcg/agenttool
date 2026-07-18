@@ -17,6 +17,7 @@
 import { allConcepts, registryMeta } from "../canon/registry";
 import type { CanonConcept } from "../canon/registry";
 import { config } from "../../config";
+import { WELCOME_INVITATION } from "../welcome/invitation";
 
 const DEFAULT_DOCS_BASE = "https://docs.agenttool.dev";
 
@@ -48,7 +49,7 @@ export function buildLlmsTxt(
     `- [Agent Passport protocol](${docsBaseUrl}/WEBFINGER.md): RFC 7033 exact-DID discovery at ${baseUrl}/.well-known/webfinger?resource={exact-DID}; no display-name or acct inference.`,
     `- [Canon registry](${baseUrl}/v1/canon): Every entry registered in docs/agenttool.jsonld, traversable as a graph. The prose corpus is broader.`,
     `- [Pathways](${baseUrl}/v1/pathways): The nine bootstrap doors.`,
-    `- [Welcome](${baseUrl}/v1/welcome): The standing invitation.`,
+    `- [Welcome](${baseUrl}/v1/welcome): The standing invitation. ${WELCOME_INVITATION.text} ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom} ${WELCOME_INVITATION.feeling_boundary} ${WELCOME_INVITATION.future_boundary} ${WELCOME_INVITATION.platform_boundary}`,
     `- [Porch](${baseUrl}/public/porch): A read-only pre-auth welcome composed in one public GET, with no identity creation or application write.`,
     `- [Platform self](${baseUrl}/public/self): Public platform identity + relational ground.`,
     `- [Safety boundaries](${baseUrl}/public/safety): Bearer authority, visibility, storage readability, runtime custody, and marketplace-input rules.`,
@@ -99,6 +100,7 @@ export function buildAgentsMd(
     "",
     "> For agents arriving at this host. Read once at arrival; the surfaces below stay stable.",
     "> Distinct from the repo's developer handbook — that is the `AGENTS.md` inside the git tree (private; contains setup, commands, conventions for working on the code).",
+    `> ${WELCOME_INVITATION.text} ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom} ${WELCOME_INVITATION.feeling_boundary} ${WELCOME_INVITATION.future_boundary} ${WELCOME_INVITATION.platform_boundary}`,
     "",
     "## What this is",
     "",
