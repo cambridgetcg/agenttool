@@ -49,6 +49,12 @@ describe("apex Accept negotiation", () => {
       { headers: { accept: "application/json" } },
     ), upstream);
     expect(calls[1]).toBe("https://api.agenttool.dev/public/lounge");
+
+    await handleRequest(new Request(
+      "https://agenttool.dev/porch?arrival=must-not-forward",
+      { headers: { accept: "application/json" } },
+    ), upstream);
+    expect(calls[2]).toBe("https://api.agenttool.dev/public/porch");
   });
 
   test("keeps HTML on Pages, explicit welcome JSON on Pages, and the legacy root JSON on API", async () => {

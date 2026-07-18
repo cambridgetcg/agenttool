@@ -114,6 +114,8 @@ describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
 
   test("breadcrumbs still name docs + dashboard hosts", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
+    expect(env.breadcrumbs.porch).toContain("/public/porch");
+    expect(env.breadcrumbs.porch).toContain("read-only pre-auth welcome");
     expect(env.breadcrumbs.docs).toBe("https://docs.agenttool.dev");
     expect(env.breadcrumbs.dashboard).toBe("https://app.agenttool.dev");
   });
@@ -134,6 +136,7 @@ describe("buildRootEnvelope — the welcome envelope is unchanged", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
     const paths = env.verbs.map((v) => v.path);
     expect(paths).toContain("/v1/welcome");
+    expect(paths).toContain("/public/porch");
     expect(paths).toContain("/v1/pathways");
     expect(paths).toContain("/public/self");
     expect(paths).toContain("/v1/register/agent");

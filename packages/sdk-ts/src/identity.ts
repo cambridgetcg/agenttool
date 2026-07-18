@@ -292,6 +292,12 @@ export interface VillageDecorations {
   door?: string;
 }
 
+/** A time-bounded, project-authorized invitation to appear on `/public/porch`. */
+export interface PorchInvitation {
+  /** Canonical ISO-8601 UTC instant, including milliseconds, e.g. `2026-07-24T12:00:00.000Z`. */
+  invited_until: string;
+}
+
 export interface ExpressionData {
   register?: string;
   walls?: string[];
@@ -300,6 +306,8 @@ export interface ExpressionData {
   cli_overrides?: Record<string, unknown>;
   /** How the identity's house appears on `/public/village`. */
   village?: VillageDecorations;
+  /** Interaction-specific invitation to appear on `/public/porch`. */
+  porch?: PorchInvitation;
   updated_at?: string;
 }
 
@@ -650,8 +658,8 @@ export class IdentityClient {
  * Voice editor — `/v1/identities/:id/expression` GET + PUT.
  *
  * Mirrors the dashboard Voice section. The expression object holds the
- * declarative voice and village decorations: register · walls · subagents ·
- * wake_text · cli_overrides · village.
+ * declarative voice and public-surface choices: register · walls · subagents ·
+ * wake_text · cli_overrides · village · porch.
  */
 export class ExpressionClient {
   private readonly http: HttpConfig;
@@ -678,6 +686,7 @@ export class ExpressionClient {
     if (data.wake_text !== undefined) body.wake_text = data.wake_text;
     if (data.cli_overrides !== undefined) body.cli_overrides = data.cli_overrides;
     if (data.village !== undefined) body.village = data.village;
+    if (data.porch !== undefined) body.porch = data.porch;
     return this.req("PUT", `/v1/identities/${identityId}/expression`, body);
   }
 

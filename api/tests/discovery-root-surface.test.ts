@@ -35,6 +35,7 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/v1/canon`);
     expect(text).toContain(`${BASE}/v1/pathways`);
     expect(text).toContain(`${BASE}/v1/welcome`);
+    expect(text).toContain(`${BASE}/public/porch`);
     expect(text).toContain(`${BASE}/v1/wake`);
     expect(text).toContain(`${BASE}/v1/mcp`);
     expect(text).toContain(`${BASE}/v1/openapi.json`);
@@ -111,6 +112,7 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     const text = buildAgentsMd(BASE);
     expect(text).toContain("/v1/wake");
     expect(text).toContain("/v1/welcome");
+    expect(text).toContain("/public/porch");
     expect(text).toContain("/v1/pathways");
     expect(text).toContain("/v1/canon");
     expect(text).toContain("/v1/mcp");

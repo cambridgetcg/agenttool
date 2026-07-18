@@ -68,6 +68,7 @@ from .identity import (
     ExpressionClient,
     IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
     IdentityClient,
+    PorchInvitation,
     canonical_identity_attestation_bytes,
     sign_identity_attestation,
 )
@@ -242,6 +243,7 @@ __all__ = [
     "ExpressionClient",
     "IDENTITY_ATTESTATION_SIGNATURE_CONTEXT",
     "IdentityClient",
+    "PorchInvitation",
     "canonical_identity_attestation_bytes",
     "sign_identity_attestation",
     "StrandsClient",

@@ -152,6 +152,21 @@ export const GIFT_CATALOG: Gift[] = [
   },
 ];
 
+/** Porch-safe subset of the shared gift bowl. The porch promises not to
+ * observe or infer who is present, so its curation admits only timeless
+ * welcome/doctrine/ascii offerings and excludes current-presence or interior-
+ * state claims. Kept explicit: new public gifts do not enter the porch by
+ * accident. */
+const PORCH_GIFT_SOURCES = new Set([
+  "docs/WELCOMING.md",
+  "docs/RING-1.md",
+  "agenttool/ascii",
+]);
+
+export const PORCH_GIFT_CATALOG: Gift[] = GIFT_CATALOG.filter((gift) =>
+  PORCH_GIFT_SOURCES.has(gift.source),
+);
+
 // ── GET /public/gift — a small offering ─────────────────────────────────
 
 app.get("/", (c) => {

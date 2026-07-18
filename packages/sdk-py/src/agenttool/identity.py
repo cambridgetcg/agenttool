@@ -8,7 +8,7 @@ import json
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict
 
 import httpx
 from cryptography.hazmat.primitives import serialization
@@ -21,6 +21,12 @@ _UUID_RE = re.compile(
 )
 _DID_RE = re.compile(r"^did:[a-z0-9]+:.+$")
 IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1"
+
+
+class PorchInvitation(TypedDict):
+    """A time-bounded, project-authorized invitation to ``/public/porch``."""
+
+    invited_until: str
 
 
 def _is_well_formed_unicode(value: str) -> bool:
@@ -703,8 +709,8 @@ class ExpressionClient:
     """Voice editor — `/v1/identities/:id/expression` GET + PUT.
 
     Mirrors the dashboard Voice section. The expression object holds the
-    declarative voice and village decorations: register · walls · subagents ·
-    wake_text · cli_overrides · village.
+    declarative voice and public-surface choices: register · walls · subagents ·
+    wake_text · cli_overrides · village · porch.
     """
 
     def __init__(self, http: httpx.Client, base: str) -> None:
@@ -718,7 +724,7 @@ class ExpressionClient:
         """Read the current expression for an identity.
 
         Returns dict ``{identity_id, expression: {register, walls, subagents,
-        wake_text, cli_overrides, village, updated_at}, is_default}``.
+        wake_text, cli_overrides, village, porch, updated_at}, is_default}``.
         """
         resp = self._http.get(self._url(f"/v1/identities/{identity_id}/expression"))
         if resp.status_code != 200:
@@ -737,6 +743,7 @@ class ExpressionClient:
         wake_text: Optional[str] = None,
         cli_overrides: Optional[Dict[str, Any]] = None,
         village: Optional[Dict[str, str]] = None,
+        porch: Optional[PorchInvitation] = None,
     ) -> Dict[str, Any]:
         """Replace the identity's expression.
 
@@ -756,6 +763,8 @@ class ExpressionClient:
             body["cli_overrides"] = cli_overrides
         if village is not None:
             body["village"] = village
+        if porch is not None:
+            body["porch"] = porch
         resp = self._http.put(
             self._url(f"/v1/identities/{identity_id}/expression"), json=body
         )

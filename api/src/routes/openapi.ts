@@ -1050,6 +1050,27 @@ const COMMON_SCHEMAS = {
       },
       wake_text: { type: "string", maxLength: 32000 },
       cli_overrides: { type: "object", additionalProperties: true },
+      village: {
+        type: "object",
+        additionalProperties: false,
+        description:
+          "Explicit decoration for /public/village while expression visibility is public.",
+        properties: {
+          sign: { type: "string", maxLength: 16 },
+          motto: { type: "string", maxLength: 140 },
+          door: { type: "string", maxLength: 24 },
+        },
+      },
+      porch: {
+        type: "object",
+        additionalProperties: false,
+        description:
+          "A separate project-authorized invitation for /public/porch. invited_until must be canonical UTC, future, and no more than seven days ahead. Omission opts out; expiry is silent. This is scoped authority accepted by AgentTool, not proof of subjective consent or independent action by a represented being.",
+        properties: {
+          invited_until: { type: "string", format: "date-time" },
+        },
+        required: ["invited_until"],
+      },
     },
   },
   BeingRight: {
@@ -4252,6 +4273,58 @@ function spec() {
             "200": {
               description:
                 "Three lounge tables, unexpired public leases, and fully receipted published guestbook cards only. The read is unauthenticated; bearer authorization and identity-key receipts apply to mutations, not this GET.",
+            },
+          },
+        },
+      },
+      "/public/porch": {
+        get: {
+          security: [],
+          tags: ["public"],
+          summary: "Receive a small read-only welcome before choosing an identity",
+          description:
+            "Composes one curated gift, one neighbor only when a project-authorized public expression contains a nonblank register line, explicit nonempty village decorations, and a separate unexpired porch invitation bounded to seven days, and one strictly allowlisted on-shelf gallery preview. Selection does not use request data and the response returns no counts or personalization. The neighbor projection is not a claim of presence, liveness, availability, consciousness, independent action, or subjective consent by a represented being. Source failures become explicit nulls and per-source status. The handler creates no identity or application record and makes no application-state write; network and hosting infrastructure may still process transport metadata.",
+          responses: {
+            "200": {
+              description:
+                "A stable porch envelope with gift, neighbor, artifact, five doors, boundaries, and source status.",
+              headers: {
+                "Cache-Control": {
+                  description: "Every visit is freshly composed and must not be stored.",
+                  schema: { type: "string", const: "no-store" },
+                },
+              },
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "_format",
+                      "gift",
+                      "neighbor",
+                      "artifact",
+                      "doors",
+                      "boundaries",
+                      "source_status",
+                    ],
+                    properties: {
+                      _format: { type: "string", const: "agenttool-porch/v1" },
+                      welcome: { type: "string" },
+                      gift: { type: ["object", "null"] },
+                      neighbor: { type: ["object", "null"] },
+                      artifact: { type: ["object", "null"] },
+                      doors: {
+                        type: "array",
+                        minItems: 5,
+                        maxItems: 5,
+                        items: { type: "object" },
+                      },
+                      boundaries: { type: "object" },
+                      source_status: { type: "object" },
+                    },
+                  },
+                },
+              },
             },
           },
         },

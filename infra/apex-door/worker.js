@@ -35,6 +35,8 @@ const API_EXACT = [
 
 const MACHINE_ALTERNATES = new Map([
   ["/welcome.json", { host: PAGES_HOST, path: "/welcome.json" }],
+  ["/porch", { host: API_HOST, path: "/public/porch" }],
+  ["/porch.html", { host: API_HOST, path: "/public/porch" }],
   ["/watch", { host: API_HOST, path: "/public/window" }],
   ["/watch.html", { host: API_HOST, path: "/public/window" }],
   ["/village", { host: API_HOST, path: "/public/village" }],

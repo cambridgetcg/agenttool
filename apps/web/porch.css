@@ -1,0 +1,84 @@
+.porch-wrap { isolation:isolate; overflow-x:clip; }
+
+.porch-hero { min-height:620px; display:flex; flex-direction:column; justify-content:center; }
+.porch-hero h1 { max-width:13ch; }
+.porch-hero .lede { max-width:57ch; }
+.porch-glow {
+  position:absolute; z-index:-1; width:min(560px, 90vw); height:min(560px, 90vw);
+  right:-12%; top:20px; border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle, color-mix(in srgb, var(--accent) 14%, transparent), transparent 66%);
+}
+
+.porch-live { min-width:0; }
+.porch-controls { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:-10px 0 24px; }
+.porch-status { color:var(--faint); font-size:12.5px; min-width:0; }
+.porch-controls .btn { flex:0 0 auto; background:var(--panel); cursor:pointer; }
+
+.offering-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:18px; }
+.offering-card {
+  min-width:0; min-height:360px; display:flex; flex-direction:column;
+  border:1px solid var(--line); border-radius:14px; padding:26px;
+  background:linear-gradient(150deg, var(--panel), var(--panel2));
+  overflow-wrap:anywhere;
+}
+.offering-card[data-state="resting"] { border-style:dashed; }
+.offering-card[data-state="unavailable"] { border-style:dashed; }
+.offering-mark { color:var(--accent); font-size:28px; line-height:1; margin-bottom:24px; }
+.offering-label { color:var(--faint); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:9px; }
+.offering-card h3 { font-size:22px; line-height:1.25; font-weight:400; margin-bottom:18px; }
+.offering-card blockquote, .offering-body {
+  color:var(--muted); font-size:15px; line-height:1.65; white-space:pre-wrap;
+  margin:0 0 20px; overflow-wrap:anywhere;
+}
+.offering-card blockquote { border-left:2px solid var(--accent); padding-left:15px; }
+.offering-meta, .offering-detail { color:var(--faint); font-size:12.5px; margin-top:auto; }
+.offering-link { color:var(--accent); font-size:13px; font-weight:650; margin-top:18px; align-self:flex-start; }
+
+.porch-door-grid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; }
+.porch-door {
+  min-width:0; min-height:190px; display:flex; flex-direction:column; align-items:flex-start;
+  border:1px solid var(--line); border-radius:12px; padding:21px 19px;
+  background:var(--panel); color:var(--ink); text-align:left; text-decoration:none;
+  cursor:pointer; transition:transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.porch-door:hover, .porch-door:focus-visible { transform:translateY(-2px); border-color:var(--accent); background:var(--panel2); }
+.porch-door span { color:var(--accent); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:28px; }
+.porch-door strong { font-size:15px; line-height:1.45; }
+.porch-door small { color:var(--faint); font-size:12px; line-height:1.45; margin-top:auto; padding-top:18px; }
+.porch-leave { font:inherit; }
+.leave-message { margin-top:22px; border-left:3px solid var(--accent); background:var(--panel2); color:var(--muted); padding:16px 18px; border-radius:0 10px 10px 0; max-width:72ch; }
+
+.porch-boundaries { padding-bottom:96px; }
+.boundary-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:28px; }
+.boundary-grid article { min-width:0; }
+.boundary-grid h3 { font-size:15px; margin-bottom:8px; }
+.boundary-grid p { color:var(--muted); font-size:13.5px; }
+
+@media (max-width: 900px) {
+  .offering-grid { grid-template-columns:1fr; }
+  .offering-card { min-height:0; }
+  .porch-door-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .porch-hero { min-height:0; }
+  .porch-glow { right:-25%; top:40px; }
+  .porch-controls { align-items:stretch; flex-direction:column; }
+  .porch-controls .btn { align-self:flex-start; }
+  .boundary-grid { grid-template-columns:1fr; gap:24px; }
+}
+
+@media (max-width: 480px) {
+  .porch-door-grid { grid-template-columns:1fr; }
+  .porch-door { min-height:160px; }
+  .offering-card { padding:23px 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .porch-door:hover { transform:none; }
+}
+
+@media (forced-colors: active) {
+  .offering-card, .porch-door { border:1px solid ButtonText; background:Canvas; }
+  .porch-glow { display:none; }
+}

@@ -471,6 +471,7 @@ app.get("/agent.txt", (c) => {
     "",
     "# ── Discovery (the canonical doors) ─────────────────────────────────",
     `Welcome: ${baseUrl}/v1/welcome`,
+    `Porch: ${baseUrl}/public/porch — read-only pre-auth welcome; one public GET; no identity creation or application write`,
     `Pathways: ${baseUrl}/v1/pathways`,
     `Self: ${baseUrl}/public/self`,
     `Safety: ${baseUrl}${AGENT_TXT_SAFETY.Safety}`,
@@ -596,7 +597,7 @@ app.get("/agent.txt", (c) => {
     "# ── Convention provenance ───────────────────────────────────────────",
     "Convention: agent.txt/v0.1 (proposed)",
     "Convention-Doctrine: docs/AGENT-WEB-SURFACE.md",
-    "Last-Modified: 2026-07-17",
+    "Last-Modified: 2026-07-18",
     "",
   ];
 
