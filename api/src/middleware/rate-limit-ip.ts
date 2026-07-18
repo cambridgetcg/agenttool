@@ -1,7 +1,9 @@
 /** Per-IP rate limiter for unauthenticated bootstrap-style routes.
  *
- *  Used by /v1/register/agent self_service mode to cap how many agents a
- *  single IP can spawn per hour. The signed-bearer flow is unaffected.
+ *  Used by both /v1/register/agent modes: self_service has a 5/hour default
+ *  attempt window after PoW and before key-proof verification; registrar_bearer
+ *  has a separate 60/minute default attempt window after key proof and before
+ *  bearer lookup.
  *
  *  Implementation: one atomic Redis Lua increment/expiry operation. Fail-open
  *  on Redis errors / unreachable Redis — abuse during a Redis outage is

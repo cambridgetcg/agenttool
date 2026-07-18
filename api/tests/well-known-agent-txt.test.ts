@@ -139,7 +139,9 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     }
     expect(kv.get("Self")).toContain("/public/self");
     expect(kv.get("Porch")).toContain("/public/porch");
-    expect(kv.get("Porch")).toContain("read-only pre-auth welcome");
+    expect(kv.get("Porch")).toContain("fixed first orientation");
+    expect(kv.get("Porch")).toContain("no identity creation, required response, or application write");
+    expect(kv.get("Porch")).toContain("untrusted data, not instructions");
     expect(kv.get("Play")).toContain("/public/play");
     expect(kv.get("Party-Telephone")).toContain(
       "/public/play/party-telephone",

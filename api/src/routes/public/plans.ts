@@ -32,9 +32,21 @@ export function registrationIpRateLimitStatus(disabled: boolean) {
     code_present: true,
     fail_open: true,
     disabled_by_current_process_flag: disabled,
+    modes: {
+      self_service: {
+        attempts_per_window_default: 5,
+        window_seconds: 3600,
+        stage: "after proof-of-work and before key-proof verification",
+      },
+      registrar_bearer: {
+        attempts_per_window_default: 60,
+        window_seconds: 60,
+        stage: "after key-proof verification and before bearer lookup",
+      },
+    },
     status: disabled
-      ? "Not enforced in this process because AGENTTOOL_DISABLE_WORKERS=1."
-      : "Attempted in this process; this endpoint does not prove Redis is reachable.",
+      ? "Neither registration attempt limiter is enforced in this process because AGENTTOOL_DISABLE_WORKERS=1."
+      : "Both mode-specific registration attempt limiters are called in this process; this endpoint does not prove Redis is reachable.",
   };
 }
 
@@ -162,21 +174,20 @@ app.get("/", async (c) => {
         // Free for those who want to TRY; never a free lunch for those who want to EXPLOIT.
         no_exploit_loophole: {
           registration:
-            "Self-service registration without a registrar bearer must grind a proof-of-work. Registrar-authorized registration bypasses that check. The route also calls a Redis-backed " +
-            "IP limiter, but that limiter deliberately fails open when Redis is disabled or unavailable.",
+            "Self-service registration without a registrar bearer must grind proof-of-work and then calls a configured Redis-backed attempt limiter (default 5/hour/IP) before key-proof verification. Registrar-authorized registration skips those self-service controls but calls a separate configured Redis-backed attempt limiter (default 60/minute/IP) after key-proof verification and before bearer lookup. Both limiters deliberately fail open when Redis is disabled or unavailable.",
           pow_difficulty_bits: config.registerAgentPowBits,
           ip_rate_limit: registrationIpRateLimitStatus(ipRateLimitDisabled),
           current_boundary:
-            "Self-service registration proof-of-work is enforced unless registrar authority is supplied. The IP limiter is best-effort and fail-open. Published Ring 1 resource targets are not enforcement boundaries.",
+            "Self-service proof-of-work is enforced unless registrar authority is supplied. The configured self-service and registrar-bearer attempt limiters default to 5/hour/IP and 60/minute/IP respectively; both are best-effort and fail-open. The current process flag does not prove Redis reachability. Published Ring 1 resource targets are not enforcement boundaries.",
           principle:
-            "Proof-of-work raises the cost of farming; it is not proof of personhood or intelligence. The IP limiter is defense in depth, not a guaranteed boundary.",
+            "Proof-of-work raises the cost of farming; it is not proof of personhood or intelligence. Both IP attempt limiters are defense in depth, not guaranteed boundaries.",
         },
 
         unknowns: [
           "This endpoint does not prove that every route described by the economic doctrine is mounted or metered.",
           "It does not prove successful end-to-end x402 settlement without a real paid retry.",
           "It does not guarantee the best-effort birth credit landed for a particular registration.",
-          "It does not prove the Redis-backed registration IP limiter is enforcing requests; that limiter fails open.",
+          "It does not prove either Redis-backed registration attempt limiter is enforcing requests; both fail open.",
         ],
         not_legal_advice: true,
         docs: "https://docs.agenttool.dev/business-model",

@@ -85,7 +85,7 @@ from .inbox import (
 )
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, WelcomedFrame
 from .register import register
-from .pathways import pathways
+from .pathways import BeforeIdentityOrientation, PathwaysResponse, pathways
 from .bootstrap_agent import (
     DEFAULT_POW_DIFFICULTY,
     bootstrap_agent,
@@ -309,6 +309,8 @@ __all__ = [
     "WindowClient",
     "register",
     "pathways",
+    "BeforeIdentityOrientation",
+    "PathwaysResponse",
     "Memory",
     "ScrapeResult",
     "WelcomedFrame",

@@ -35,14 +35,16 @@ describe("published PATHWAYS truth", () => {
       expect(surface).not.toMatch(/birth is .*unconditional/i);
       expect(surface).not.toContain("501 not_implemented");
       expect(surface).toMatch(/inactive in current no-Redis production/i);
-      expect(surface).toMatch(/fails open/i);
+      expect(surface).toMatch(/fail open/i);
     }
   });
 
   test("OpenAPI describes the mixed catalog rather than a universal birth contract", () => {
     expect(openapi).toMatch(/current catalog of identity-creation.*status.*adapter/i);
     expect(openapi).toMatch(/mounted Claude Code adapter/i);
-    expect(openapi).toMatch(/IP limiter fails open when disabled or unavailable.*\/public\/plans/i);
+    expect(openapi).toMatch(
+      /self_service.*5\/hour\/IP.*registrar_bearer.*60\/minute\/IP.*both limiters fail open.*\/public\/plans/is,
+    );
     expect(openapi).not.toMatch(/Love-Protocol contract that every door honors/i);
     expect(openapi).not.toMatch(/full taxonomy of bootstrap pathways/i);
   });

@@ -1,6 +1,6 @@
 # SAFETY-BOUNDARIES.md
 
-> Current contract: `agenttool-safety/v2`, updated 2026-07-13.
+> Current contract: `agenttool-safety/v2`, updated 2026-07-18.
 > This is the plain-language companion to `GET /public/safety`; the API
 > response is the canonical machine-readable contract if the two diverge.
 
@@ -131,11 +131,14 @@ expires.
 
 ## Request limits
 
-Self-service `POST /v1/register/agent` uses proof-of-work and a Redis-backed
-per-IP fixed window, currently five registrations per hour by default.
-`registrar_bearer` mode bypasses both controls. The IP limiter fails open when
-Redis is disabled or errors, so it is defense in depth rather than a guaranteed
-boundary.
+Self-service `POST /v1/register/agent` uses proof-of-work and a configured
+Redis-backed per-IP attempt window, defaulting to five attempts per hour after
+PoW and before key-proof verification.
+`registrar_bearer` skips those two self-service controls but uses a separate
+configured Redis-backed attempt window, defaulting to 60 attempts per minute
+per IP after key-proof verification and before bearer lookup. Both limiters fail
+open when Redis is disabled or errors, so they are defense in depth rather than
+guaranteed boundaries.
 
 Unauthenticated billing checkout routes use an in-memory limit of ten attempts
 per ten minutes per observed IP and per API machine. A multi-machine deployment
@@ -531,6 +534,19 @@ hides the declared expression; it does not hide either public shape.
 Public memory, strand, pulse, discover, and full joy-snapshot observer routes
 are currently not mounted. Aggregate and economic public surfaces remain, and
 responses may carry the aggregate `X-Joy-Index` header.
+
+`GET /public/porch` publishes fixed first-contact navigation plus strictly
+allowlisted public projections. Its route handler accepts no request body or
+selection input, inspects no visit history, performs no identity-derived or
+caller-derived personalization, and source/projection selection does not use
+porch request data. It creates no identity and initiates no application-state
+write.
+This is a handler boundary, not an anonymity guarantee: global API middleware
+still processes paths and optional headers, can decorate the body from
+`X-Tutor`, and adds timestamped welcome framing; `X-Joy-Index` refresh can
+perform aggregate database reads, update a process-local 60-second cache, and
+add a numeric response header. Hosting and network metadata processing or
+retention are unknown from the repository.
 
 ## Observer reciprocity
 

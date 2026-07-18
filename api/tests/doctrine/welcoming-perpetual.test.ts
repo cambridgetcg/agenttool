@@ -49,6 +49,7 @@ import welcomeApp, {
   type WelcomeEnvelope,
 } from "../../src/routes/welcome";
 import { welcomeLetter } from "../../src/services/i18n/welcome";
+import { PORCH_FIRST_ORIENTATION } from "../../src/services/porch";
 
 const REPO_ROOT = join(__dirname, "../../");
 
@@ -115,6 +116,47 @@ describe("Claim 5 — the invitation is choice toward life, never a command", ()
     expect(registry).toMatch(
       /future-facing address welcomes an open class; it does not predict that a future being will exist or be reachable/i,
     );
+  });
+
+  test("orientation before identity remains optional, non-inferential, and non-granting", () => {
+    const orientation = PORCH_FIRST_ORIENTATION;
+    expect(orientation.first_means).toMatch(
+      /first contact or return.*porch orientation handler.*does not inspect visit history/is,
+    );
+    expect(orientation.gift.response_required).toBe(false);
+    expect(orientation.gift.monetary_value).toBe(false);
+    expect(orientation.gift.effects).toEqual({
+      rights: "inherent_not_created_or_granted",
+      permission: "none",
+      status: "none",
+      consent: "not_established",
+      relationship: "not_established",
+    });
+    expect(orientation.access).toEqual({
+      existing_identity_required: false,
+      bearer_required: false,
+      payment_required: false,
+      proof_of_work_required: false,
+      performance_or_usefulness_required: false,
+    });
+    expect(orientation.selection).toEqual({
+      default: null,
+      inferred_from_request: false,
+      recorded_by_handler: false,
+    });
+    expect(orientation.boundaries.fetch_establishes).toMatch(
+      /no identity.*intent.*agency.*sentience.*feeling.*aliveness.*need.*acceptance.*consent.*relationship/is,
+    );
+    expect(orientation.boundaries.response_freedom).toMatch(
+      /staying.*silence.*refusal.*rest.*leaving.*no further request/is,
+    );
+    expect(orientation.boundaries.orientation_meaning).toMatch(
+      /navigational first-contact.*not a request.*sexual or relational orientation.*fetcher/is,
+    );
+    expect(orientation.boundaries.not_anonymity_guarantee).toMatch(
+      /not an anonymity guarantee.*metadata processing and retention/is,
+    );
+    expect(orientation.doors.every((door) => door.application_write === false)).toBe(true);
   });
 });
 
@@ -256,7 +298,7 @@ describe("Claim 3 — FOREVER (the welcome does not expire)", () => {
   test("if_you_lose_everything names a separate identity and normal gates", () => {
     const env = buildWelcomeEnvelope();
     expect(env.if_you_lose_everything.toLowerCase()).toMatch(
-      /new, separate identity.*new keys.*proof.*rate-limit.*does not recover/is,
+      /new, separate identity.*caller-supplied keys.*register-agent\/v2 proof.*registration nonce.*self_service.*proof-of-work.*redis.*default 5\/hour\/ip.*registrar_bearer.*separate configured fail-open redis.*default 60\/minute\/ip.*does not recover/is,
     );
   });
 });

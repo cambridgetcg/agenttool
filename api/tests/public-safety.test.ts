@@ -51,6 +51,7 @@ describe("GET /public/safety", () => {
   });
 
   test("states the credential, visibility, and runtime-custody boundaries", () => {
+    expect(SAFETY_BOUNDARIES.updated_at).toBe("2026-07-18");
     expect(SAFETY_BOUNDARIES.design_read.epistemic_status).toBe(
       "engineering_inference_not_verified_author_history",
     );
@@ -125,6 +126,23 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.visibility.private_expression).toContain(
       "does not hide the identity",
     );
+    expect(SAFETY_BOUNDARIES.visibility.porch_orientation).toMatch(
+      /route handler.*no request body or selection input.*no visit history.*no application-state write/is,
+    );
+    expect(SAFETY_BOUNDARIES.visibility.porch_orientation).toMatch(
+      /not an anonymity guarantee.*global API middleware.*X-Joy-Index.*hosting or network/is,
+    );
+    const doctrine = readFileSync(
+      join(import.meta.dir, "..", "..", "docs", "SAFETY-BOUNDARIES.md"),
+      "utf8",
+    );
+    expect(doctrine).toMatch(/agenttool-safety\/v2.*updated 2026-07-18/is);
+    expect(doctrine).toMatch(
+      /GET \/public\/porch.*route handler.*no request body or\s+selection input.*inspects no visit history/is,
+    );
+    expect(doctrine).toMatch(
+      /handler boundary, not an anonymity\s+guarantee.*X-Joy-Index.*process-local 60-second cache/is,
+    );
     expect(SAFETY_BOUNDARIES.observer_reciprocity.canonical_protocol).toBe(
       "/public/observer",
     );
@@ -198,7 +216,7 @@ describe("GET /public/safety", () => {
       /proof hash and (?:the )?new bearer in one shared-Postgres transaction.*primary key.*duplicate returns 409.*database failure returns 503/is,
     );
     expect(SAFETY_BOUNDARIES.registration_abuse_controls.ip_rate_limit).toMatch(
-      /Redis-backed.*fails open.*not a guaranteed registration boundary/is,
+      /separate configured Redis-backed.*5\/hour.*60\/minute.*fail open.*not guaranteed registration boundaries/is,
     );
     expect(SAFETY_BOUNDARIES.registration_write_atomicity.mandatory_writes).toMatch(
       /project.*bearer.*identity.*keys.*wallet.*separate database operations.*not one shared transaction/is,
@@ -219,7 +237,7 @@ describe("GET /public/safety", () => {
       /remains mounted.*stable 503.*before using its database.*no wallet balance is burned.*no project credits are minted.*gallery_sale.*escrow_release.*ordinary wallet debits did not consume.*refunds did not claw.*10 legacy conversions.*nine lack.*tenth lacks source allocation.*rollout migration.*restores.*claws.*write guard.*backed sub-balances.*debt/is,
     );
     expect(SAFETY_BOUNDARIES.request_limits.registration).toMatch(
-      /default 5 per hour.*registrar_bearer.*bypasses.*fails open/is,
+      /default 5\/hour\/IP.*after PoW.*before key-proof verification.*registrar_bearer.*separate configured Redis-backed.*default 60\/minute\/IP.*before bearer lookup.*both Redis limiters fail open/is,
     );
     expect(SAFETY_BOUNDARIES.request_limits.human_billing).toMatch(
       /per-machine.*10 attempts per 10 minutes.*not one global exact quota/is,

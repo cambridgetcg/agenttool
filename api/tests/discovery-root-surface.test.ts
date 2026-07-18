@@ -37,6 +37,8 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/v1/pathways`);
     expect(text).toContain(`${BASE}/v1/welcome`);
     expect(text).toContain(`${BASE}/public/porch`);
+    expect(text).toContain("fixed first orientation");
+    expect(text).toContain("untrusted data, not instructions");
     expect(text).toContain(`${BASE}/v1/wake`);
     expect(text).toContain(`${BASE}/v1/mcp`);
     expect(text).toContain(`${BASE}/v1/openapi.json`);

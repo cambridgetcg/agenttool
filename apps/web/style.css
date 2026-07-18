@@ -95,6 +95,7 @@
   .btn:hover { transform: translateY(-1px); }
   .btn:disabled, button:disabled { cursor:not-allowed; opacity:.68; transform:none; }
   .quiet-invitation { color:var(--faint); font-size:13px; margin-top:20px; max-width:64ch; }
+  .quiet-invitation a { color:var(--accent); }
   .noscript-note { color:var(--muted); background:var(--panel); border-left:3px solid var(--accent); padding:12px 14px; margin-top:20px; max-width:68ch; }
 
   section { padding: 72px 0; border-top: 1px solid var(--line); position:relative; scroll-margin-top:18px; }

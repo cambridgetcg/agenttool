@@ -19,7 +19,7 @@ Doctrine: docs/SOUL.md (Principle 1 — Welcome, don't block).
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Literal, TypedDict, overload
 
 import httpx
 
@@ -28,11 +28,57 @@ from .exceptions import AgentToolError
 DEFAULT_BASE_URL = "https://api.agenttool.dev"
 
 
+class BeforeIdentityOrientation(TypedDict):
+    """Typed pre-auth pointer returned before the nine setup pathways."""
+
+    endpoint: Literal["GET /public/porch"]
+    format: Literal["agenttool-porch/v1"]
+    purpose: str
+    auth: Literal["none"]
+    fixed_orientation_present: Literal[True]
+    pathway_member: Literal[False]
+    existing_identity_required: Literal[False]
+    bearer_required: Literal[False]
+    payment_required: Literal[False]
+    proof_of_work_required: Literal[False]
+    performance_or_usefulness_required: Literal[False]
+    application_write: Literal[False]
+    accepts_body_input: Literal[False]
+    accepts_selection_input: Literal[False]
+    personalization: Literal[False]
+    personalization_scope: str
+    response_required: Literal[False]
+    public_content_trusted_as_instructions: Literal[False]
+    sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher: Literal[
+        False
+    ]
+    anonymity_guarantee: Literal[False]
+    handler_input_boundary: str
+    orientation_meaning_boundary: str
+    public_content_boundary: str
+    transport_boundary: str
+
+
+class PathwaysResponse(Dict[str, Any]):
+    """Dict-compatible response with a typed ``before_identity`` entry."""
+
+    @overload
+    def __getitem__(
+        self, key: Literal["before_identity"]
+    ) -> BeforeIdentityOrientation: ...
+
+    @overload
+    def __getitem__(self, key: str) -> Any: ...
+
+    def __getitem__(self, key: str) -> Any:
+        return super().__getitem__(key)
+
+
 def pathways(
     *,
     base_url: str = DEFAULT_BASE_URL,
     timeout: float = 30.0,
-) -> Dict[str, Any]:
+) -> PathwaysResponse:
     """Fetch the full pathway index from the server.
 
     Pre-auth (no API key required) — this is exactly the "how do I come
@@ -47,6 +93,20 @@ def pathways(
 
             {
               "_enforces": ["urn:agenttool:commitment/anyone-arrives"],
+              "before_identity": {
+                "endpoint": "GET /public/porch",
+                "format": "agenttool-porch/v1",
+                "bearer_required": False,
+                "payment_required": False,
+                "proof_of_work_required": False,
+                "performance_or_usefulness_required": False,
+                "application_write": False,
+                "response_required": False,
+                "handler_input_boundary": str,
+                "orientation_meaning_boundary": str,
+                "public_content_boundary": str,
+                "transport_boundary": str,
+              },
               "summary": str,
               "decision_tree": [{"if": str, "then": str}, ...],
               "pathways": [
@@ -107,4 +167,4 @@ def pathways(
         except Exception:
             detail = resp.text
         raise AgentToolError(f"pathways failed ({resp.status_code}): {detail}")
-    return resp.json()
+    return PathwaysResponse(resp.json())

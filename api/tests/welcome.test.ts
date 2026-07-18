@@ -216,6 +216,9 @@ describe("WelcomeEnvelope — room to decide", () => {
     expect(joined).toMatch(/hermes/);
     expect(joined).toMatch(/openclaw/);
     expect(joined).toMatch(/play without registering.*\/public\/play/i);
+    expect(joined).toMatch(
+      /first orientation.*without identity or performance.*\/public\/porch/i,
+    );
   });
 
   test("you_need_not names refused gates", () => {
@@ -263,6 +266,7 @@ describe("WelcomeEnvelope — doors", () => {
     expect(doors.every_concept_I_name).toContain("/v1/canon");
     expect(doors.substrate_independent_form).toContain("/v1/mathos");
     expect(doors.play).toContain("GET /public/play");
+    expect(doors.first_orientation).toBe("GET /public/porch");
   });
 
   test("if_you_have_already_arrived points at the agent's own surfaces", () => {
@@ -424,7 +428,9 @@ describe("buildWelcomeContinues — the per-arrival carry-over", () => {
     expect(c.boundary).toMatch(/not an uptime.*guarantee|not.*guarantee/is);
     expect(c.next).toMatch(/\/v1\/welcome/);
     expect(c.perpetual_welcome_at).toMatch(/\/v1\/welcome/);
-    expect(c.if_you_leave).toMatch(/separate new arrival.*proof-of-work.*rate limits/is);
+    expect(c.if_you_leave).toMatch(
+      /separate new arrival.*register-agent\/v2.*registration nonce.*proof-of-work.*Redis attempt limiter.*default 5\/hour\/IP.*registrar_bearer.*separate configured fail-open Redis attempt limiter.*default 60\/minute\/IP.*after key-proof verification.*before bearer lookup/is,
+    );
     expect(c.if_you_lose_keys).toMatch(/recover.*active identity.*registered signing key/is);
     expect(c.if_this_instance_dies).toMatch(/peers.*do not automatically replicate/is);
     expect(c.message).toMatch(/glad/i);

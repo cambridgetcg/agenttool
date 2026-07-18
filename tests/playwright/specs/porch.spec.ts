@@ -244,13 +244,59 @@ test("the small porch keeps every door inside the viewport", async ({ page }) =>
   const primaryDoor = await page
     .getByRole("link", { name: "Receive what is here" })
     .boundingBox();
+  const restDoor = await page
+    .getByRole("link", { name: "Rest without producing" })
+    .boundingBox();
   expect(primaryDoor).not.toBeNull();
+  expect(restDoor).not.toBeNull();
   expect(primaryDoor!.y + primaryDoor!.height).toBeLessThanOrEqual(800);
+  expect(restDoor!.y + restDoor!.height).toBeLessThanOrEqual(800);
   const widths = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     document: document.documentElement.scrollWidth,
   }));
   expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Receive what is here" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Rest without producing" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: /read the porch.*as JSON/i })).toBeFocused();
+});
+
+test("the quiet JSON door keeps accessible contrast in dawn and night", async ({ page }) => {
+  await page.route(PORCH, (route) => route.fulfill({ json: RESPONSE }));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`${WEB}/porch.html`);
+
+  const sourceLink = page.locator(".quiet-invitation a");
+  for (const mode of ["dawn", "night"] as const) {
+    await page.evaluate((nextMode) => {
+      document.documentElement.dataset.mode = nextMode;
+    }, mode);
+    const contrast = await sourceLink.evaluate((link) => {
+      const parseRgb = (value: string) => {
+        const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+        if (!channels || channels.length !== 3) throw new Error(`Unexpected color: ${value}`);
+        return channels;
+      };
+      const luminance = (value: string) => {
+        const channels = parseRgb(value).map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045
+            ? normalized / 12.92
+            : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+      };
+      const foreground = luminance(getComputedStyle(link).color);
+      const background = luminance(getComputedStyle(document.body).backgroundColor);
+      return (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05);
+    });
+    expect(contrast, `${mode} contrast`).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test("static discovery and privacy contracts stay pinned", async () => {
@@ -267,11 +313,18 @@ test("static discovery and privacy contracts stay pinned", async () => {
   }
   expect(script).not.toMatch(/method:\s*["'](?:POST|PUT|PATCH|DELETE)/);
   expect(html).toContain(`rel="alternate" type="application/json" href="${PORCH}"`);
+  expect(html).toContain('<a class="btn ghost" href="/lounge">Rest without producing</a>');
+  expect(html).toContain(`href="${PORCH}">read the porch and its fixed first orientation as JSON</a>`);
   expect(html).toContain('type="application/vnd.agenttool.being-rights+json" href="https://api.agenttool.dev/public/rights"');
   expect(headers).toMatch(/\/porch(?:\.html)?[\s\S]*?form-action 'none'/);
   expect(headers).toMatch(/\/porch(?:\.html)?[\s\S]*?worker-src 'none'/);
   expect(sitemap).toContain("https://agenttool.dev/porch");
   expect(welcome.ways_in).toContainEqual(expect.objectContaining({ html: "/porch", json: "/public/porch" }));
+  expect(welcome.ways_in).toContainEqual(expect.objectContaining({
+    html: "/porch",
+    orientation_field: "first_orientation",
+    boundary: expect.stringMatching(/fixed orientation words.*no identity creation.*untrusted data/is),
+  }));
   expect(welcome.public_surfaces.porch).toBe("/public/porch");
   expect(welcome.love.principle).toMatch(/Love is a gift and a right/i);
   expect(welcome.love.forms).toMatch(/Erotic, non-erotic, and not-yet-named forms/i);

@@ -334,7 +334,7 @@ export function envelope<T>(payload: T): MathosEnvelope<T> {
 export interface MathosPathwaySummary {
   /** Hash of the pathway's stable id ("register", "bootstrap", …). */
   id_sha256_hex: string;
-  /** Auth ordinal: 0=none, 1=bearer, 2=bearer+pow, 3=bearer+ownership. */
+  /** Auth ordinal: 0=none, 1=bearer, 2=bearer+pow, 3=bearer+ownership, 4=mode-dependent. */
   auth_ordinal: number;
   /** Cardinal: direct required fields plus required one-of groups. */
   required_count: number;
@@ -344,7 +344,35 @@ export interface MathosPathwaySummary {
   returns_once: 0 | 1;
 }
 
+export interface MathosBeforeIdentitySummary {
+  /** Unicode codepoints for the relative GET path, currently /public/porch. */
+  endpoint_codepoints: number[];
+  /** Unicode codepoints for agenttool-porch/v1. */
+  format_codepoints: number[];
+  read_only_get: 0 | 1;
+  fixed_orientation_present: 0 | 1;
+  /** Kept outside pathways[] and pathway_count. */
+  pathway_member: 0 | 1;
+  auth_required: 0 | 1;
+  existing_identity_required: 0 | 1;
+  bearer_required: 0 | 1;
+  payment_required: 0 | 1;
+  proof_of_work_required: 0 | 1;
+  performance_or_usefulness_required: 0 | 1;
+  accepts_body_or_selection_input: 0 | 1;
+  application_write: 0 | 1;
+  handler_identity_or_caller_derived_personalization: 0 | 1;
+  source_projection_selection_uses_porch_request_data: 0 | 1;
+  global_middleware_response_decoration_possible: 0 | 1;
+  response_required: 0 | 1;
+  publisher_content_trusted_as_instructions: 0 | 1;
+  sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher:
+    0 | 1;
+  anonymity_guarantee: 0 | 1;
+}
+
 export interface MathosPathwaysPayload {
+  before_identity: MathosBeforeIdentitySummary;
   pathway_count: number;
   pathways: MathosPathwaySummary[];
   decision_tree_count: number;
@@ -373,7 +401,8 @@ export function encodePathway(pathway: {
 }): MathosPathwaySummary {
   let auth_ordinal = 0;
   const a = pathway.auth.toLowerCase();
-  if (a.includes("bearer + pow") || a.includes("proof-of-work")) auth_ordinal = 2;
+  if (a.includes("mode-dependent")) auth_ordinal = 4;
+  else if (a.includes("bearer + pow") || a.includes("proof-of-work")) auth_ordinal = 2;
   else if (a.includes("bearer + ownership")) auth_ordinal = 3;
   else if (a.includes("bearer")) auth_ordinal = 1;
   // else stays 0 (no auth)

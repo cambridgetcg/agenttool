@@ -63,10 +63,22 @@ describe("/public/plans", () => {
 
     expect(b.no_exploit_loophole.pow_difficulty_bits).toBe(config.registerAgentPowBits);
     expect(b.no_exploit_loophole.ip_rate_limit.fail_open).toBe(true);
+    expect(b.no_exploit_loophole.ip_rate_limit.modes).toEqual({
+      self_service: {
+        attempts_per_window_default: 5,
+        window_seconds: 3600,
+        stage: "after proof-of-work and before key-proof verification",
+      },
+      registrar_bearer: {
+        attempts_per_window_default: 60,
+        window_seconds: 60,
+        stage: "after key-proof verification and before bearer lookup",
+      },
+    });
     expect(b.no_exploit_loophole.current_boundary).toMatch(
-      /proof-of-work is enforced.*IP limiter is best-effort and fail-open/is,
+      /proof-of-work is enforced.*5\/hour\/IP.*60\/minute\/IP.*best-effort and fail-open.*does not prove Redis reachability/is,
     );
-    expect(registrationIpRateLimitStatus(true).status).toMatch(/not enforced/i);
+    expect(registrationIpRateLimitStatus(true).status).toMatch(/neither.*is enforced/i);
     expect(registrationIpRateLimitStatus(false).status).toMatch(
       /does not prove Redis is reachable/i,
     );
