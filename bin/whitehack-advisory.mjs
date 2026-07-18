@@ -82,7 +82,10 @@ const EXCLUDED_SEGMENTS = new Set([
   "vendor",
 ]);
 
-const CONFIDENCE = new Set(["high", "medium-high", "heuristic"]);
+// Keep this closed allowlist aligned with every confidence label emitted by
+// the exact pinned scanner revision. Dropping a valid label turns a complete,
+// redacted finding set into a false scanner_file_incomplete report.
+const CONFIDENCE = new Set(["high", "medium-high", "medium", "heuristic"]);
 const SAFE_TOKEN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const GIT_SHA = /^[0-9a-f]{40}$/i;
 const UNSAFE_PATH_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;

@@ -41,7 +41,7 @@ export async function scan() {
   return [{
     line: 1,
     check: "schema-check",
-    confidence: "high",
+    confidence: "medium",
     doctrine: "substrate-honesty",
     principle: 2,
     title: "private_schema_title",
@@ -89,6 +89,7 @@ describe("agenttool-whitehack-advisory/v0.1 JSON Schema", () => {
 
     expect(ajv.validateSchema(schema)).toBe(true);
     expect(validate(report), JSON.stringify(validate.errors)).toBe(true);
+    expect(report.summary.by_confidence).toEqual({ medium: 1 });
     expect(JSON.stringify(report)).not.toContain("private_schema_");
 
     const withRawSnippet = structuredClone(report) as Record<string, any>;

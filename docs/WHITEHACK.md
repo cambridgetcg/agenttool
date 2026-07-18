@@ -83,7 +83,9 @@ for the bounded changed-file set at that run. It does **not** prove:
 
 Whitehack v0.4 is a dependency-free text/regex linter rather than an AST or
 data-flow analyzer. Its confidence labels are evidence about the check's own
-calibration, not a severity score or bounty claim.
+calibration, not a severity score or bounty claim. The pinned revision emits
+`high`, `medium-high`, `medium`, and `heuristic`; the redaction bridge accepts
+exactly those four labels and fails closed on anything else.
 
 ## Local security-research evidence
 

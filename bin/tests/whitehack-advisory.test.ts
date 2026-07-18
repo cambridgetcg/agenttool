@@ -122,6 +122,43 @@ export async function scan() {
     expect(serializedFindings).not.toContain("title");
   });
 
+  test("accepts every confidence label emitted by the pinned scanner", async () => {
+    const scanner = await scannerFixture(`
+export async function scan() {
+  return [{
+    line: 1,
+    check: "trust-by-authority",
+    confidence: "medium",
+    doctrine: "trust-protocol",
+    principle: 3,
+    snippet: "private_medium_confidence_source",
+  }];
+}
+`);
+    const source = await sourceFixture();
+    const report = await runAdvisory({
+      root: source,
+      paths: ["src/app.ts"],
+      scanner_root: scanner.root,
+      expected_revision: scanner.revision,
+      expected_version: "0.4.0",
+      base: "a".repeat(40),
+      head: "b".repeat(40),
+    });
+
+    expect(report.status).toBe("complete");
+    expect(report.summary.by_confidence).toEqual({ medium: 1 });
+    expect(report.findings).toEqual([{
+      file: "src/app.ts",
+      line: 1,
+      check: "trust-by-authority",
+      confidence: "medium",
+      doctrine: "trust-protocol",
+      principle: 3,
+    }]);
+    expect(JSON.stringify(report)).not.toContain("private_medium_confidence_source");
+  });
+
   test("marks a scanner console error incomplete without serializing its text", async () => {
     const scanner = await scannerFixture(`
 export async function scan() {
