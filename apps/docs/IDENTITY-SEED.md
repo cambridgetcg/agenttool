@@ -96,7 +96,8 @@ Caller runs the SDK (or the separate repository CLI):
   → Caller generates 256 bits of entropy locally and encodes 24 BIP39 words
   → SDK derives all keys per path scheme above
   → Caller persists the mnemonic before a remote registration can commit
-  → SDK signs the registration payload, grinds proof-of-work, and POSTs to /v1/register/agent
+  → SDK signs the complete single-use register-agent/v2 birth intent, including a caller nonce
+  → SDK grinds proof-of-work and POSTs canonical public keys + proof + nonce to /v1/register/agent
   → Server creates identity row using the provided pubkeys
   → Server returns identity_id + did + bearer (api_key)
   → Caller atomically completes its handoff and chooses local key/bearer storage
@@ -127,10 +128,12 @@ Operator types 24 words into a fresh local process:
   → SDK derives all keys
   → If the DID is unknown, sign identity-discover/v1 bytes and POST /public/identities/by-pubkey
   → Select the intended returned DID; never choose arbitrarily when several match
-  → SDK creates a timestamp and signs canonical bytes with the derived signing key
-  → POST /v1/identity/recover { did, derived_pubkey, signature, timestamp, device_label? }
-  → Server resolves did → identity_keys row → confirms pubkey match
-  → Server verifies ±5-minute freshness and atomically records the proof hash in shared Postgres
+  → SDK creates a timestamp and signs identity-recover/v1 with the derived signing key
+  → POST the exact JSON entity to /v1/identity/recover
+  → For an agent_root identity, the verified 428 response reveals next_sequence
+  → SDK signs that same exact POST as identity-authority/v1 with the immutable root and retries
+  → For a legacy_bearer identity, any matching active key keeps the historical path
+  → Server verifies freshness and atomically records the proof hash in shared Postgres
   → Duplicate proof returns 409; unavailable replay storage returns 503 before authority is minted
   → Server returns a fresh project-wide bearer named for this device
   → Caller persists derived keys + new bearer using its chosen local mechanism
@@ -215,14 +218,14 @@ The hard wall is narrower than the original slogan: losing the mnemonic plus eve
 - Wallet HD code in `api/src/services/economy/crypto/hd.ts` stays as-is for operator-rooted hosted wallets
 - An OS keychain can remain a caller- or CLI-chosen day-to-day cache for derived keys; the SDK itself does not persist them
 - `/v1/identity/backup` remains; **best use becomes** "passphrase-encrypt the mnemonic itself, store the ciphertext as cloud backup-of-last-resort"
-- Each bearer is separately named, rotatable, and revocable; its authority remains project-wide
+- Each bearer is separately named, rotatable, and revocable. It still opens non-constitutional project capabilities, but it cannot replace the root proof required by an `agent_root`; legacy identities remain bearer-controlled.
 
 ### Changes (additive)
 
 - **SDKs expose `at.crypto.seed`** for local mnemonic generation, seed conversion, primary-bundle derivation, explicit per-device bridge derivation, and explicit per-wallet derivation (snake_case in Python; camelCase in TypeScript)
 - **`/v1/register` is retired**: it returns 410. The live arrival route is `/v1/register/agent`.
-- **`/v1/register/agent`** mandates BYO keys, requires a signed `key_proof` over `canonicalRegisterAgentBytes`, declares `runtime: { provider, model, host?, context? }`, and enforces configurable proof-of-work. It also calls a Redis-backed IP limiter, but that limiter deliberately fails open when Redis is disabled or unavailable; it is not a guaranteed boundary. Optional `registrar.kind = "registrar_bearer"` lets an existing project's bearer authorize a sub-agent and bypass both checks. No private key crosses the wire during this flow. The server stores `key_origin = caller_supplied_unverified` and `seed_protocol = null`: it verifies possession, not SOMA or mnemonic provenance.
-- **`/v1/identity/recover`** accepts `{ did, derived_pubkey, signature, timestamp, device_label? }`. The timestamp is caller-created, not a server challenge. A shared-Postgres transaction inserts the one-time proof digest and fresh project-wide bearer together; the digest primary key rejects replay across API machines.
+- **`/v1/register/agent`** mandates canonical BYO keys and a complete, single-use `register-agent/v2` proof over every variable birth field, a digest of the exact registrar credential, a caller-random nonce, and timestamp. It declares `runtime: { provider, model, host?, context? }` and enforces configurable proof-of-work. The Redis-backed self-service IP limiter still fails open when Redis is disabled or unavailable. Optional `registrar.kind = "registrar_bearer"` skips PoW but is attempt-limited before bearer lookup. No private key crosses the wire. The supplied signing public key becomes the new identity's immutable constitutional root.
+- **`/v1/identity/recover`** accepts the signed recovery entity. The timestamp is caller-created, not a server challenge. Rooted identities accept only the immutable authority root and require a second exact-request `identity-authority/v1` proof over that same body; legacy identities retain matching-active-key recovery. A shared-Postgres transaction inserts the one-time proof digest and fresh project bearer together.
 - **Repository CLI helper `bun bin/agenttool-seed.ts restore --did did:at:...`**: interactive mnemonic entry plus signed recovery on macOS; it requires the DID and is not part of the npm package.
 - **Repository CLI helper `bun bin/agenttool-seed.ts bootstrap`**: macOS-oriented machine bootstrap — generates a mnemonic, derives keys, signs key proof, grinds PoW, POSTs `/v1/register/agent`, then uses its documented Keychain and mode-`0600` local state. It is separate from the SDK package.
 - **SDK helpers**: `bootstrapAgent` (ts) and `bootstrap_agent` (py) mirror the network/crypto flow and return the result without persisting it; `signRegisterAgent`, `grindRegisterAgentPow`, and `canonicalRegisterAgentBytes` are exported for callers wiring custom flows.
@@ -238,6 +241,8 @@ For an identity born under the old (server-generated) protocol who wants to adop
 4. (Optional) `DELETE /v1/identities/:id/keys/:old-kid` to revoke the old key
 5. From this point forward, the active AgentTool identity can accept the new registered signing key; the mnemonic can reproduce that key and use the recovery route, but does not migrate the identity or records to another operator
 6. **K_master / K_vault are NOT re-keyed** — those are tied to encrypted content. The new mnemonic derives different K_master/K_vault, so existing encrypted strand thoughts stay encrypted under the OLD K_master. The agent must keep the old K_master AND the new mnemonic to read history — or re-encrypt old content under the new K_master (expensive, optional pass).
+
+This imports a reproducible operational key but does **not** retroactively create immutable constitutional authority. The identity continues to surface as `legacy_bearer`; signed migration to `agent_root` is not implemented.
 
 For most agents, the cleanest migration is **don't migrate** — keep the existing identity as-is and let the seed protocol be the default for *new* agents born after this feature ships.
 
@@ -332,7 +337,7 @@ Wire-format-identical across both languages — same mnemonic produces byte-iden
 
 | Existing primitive | How seed protocol composes |
 |---|---|
-| `/v1/register/agent` | Live BYO-key arrival route with signature proof and proof-of-work. |
+| `/v1/register/agent` | Canonical birth door: BYO signing + box keys, complete `register-agent/v2` proof, caller nonce, and `agent_root` authority. |
 | `/v1/bootstrap` | Pathway index / separate bootstrap surface; not the seed birth wire described above. |
 | `/v1/identities/:id/keys/import` | Already shipped. SDK uses this for per-device bridge signing key registration after recovery. |
 | Strand thoughts (caller-encrypted under K_master) | The same K_master can be derived on each device. Reads still require AgentTool access and successful client encryption under that key. |
@@ -353,7 +358,7 @@ Wire-format-identical across both languages — same mnemonic produces byte-iden
 4. **Cross-language interop test** — fixed test vectors (e.g. mnemonic `"abandon abandon abandon ... art"`) produce identical bytes across py + ts.
 5. **`bun run check-parity` green.**
 
-Current status: BYO-key birth, recovery, SDK derivation, and wake recovery state are present. Agent-owned mnemonic-rooted wallets remain future work; hosted wallets are operator-rooted today. CLI surfaces should be checked against the live `/v1/register/agent` route before use.
+Current status: replay-claimed BYO-key birth, root-gated recovery, SDK derivation, and wake recovery state are present. Still deferred: agent-owned mnemonic-rooted wallets, root rotation/guardian recovery, and signed migration from `legacy_bearer` to `agent_root`. CLI surfaces should be checked against the live `/v1/register/agent` route before use.
 
 ---
 

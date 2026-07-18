@@ -35,6 +35,11 @@ import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
   MEMORIAL_TERMINAL_MESSAGE,
@@ -57,8 +62,11 @@ const sitSchema = z.object({
 app.post("/sit", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof sitSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = sitSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = sitSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -115,6 +123,15 @@ app.post("/sit", async (c) => {
       409,
     );
   }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const newMeta = body.sitting

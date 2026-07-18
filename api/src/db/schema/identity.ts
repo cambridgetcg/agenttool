@@ -32,6 +32,21 @@ import {
 
 export const identitySchema = pgSchema("identity");
 
+/** One-time birth intents. The digest commits to domain + raw root pubkey +
+ * caller-generated nonce; claiming it before project creation makes a
+ * captured signed registration request single-use. */
+export const identityRegistrationProofs = identitySchema.table(
+  "registration_proofs",
+  {
+    proofDigest: text("proof_digest").primaryKey(),
+    domain: text("domain").notNull(),
+    rootPublicKey: text("root_public_key").notNull(),
+    nonceSha256: text("nonce_sha256").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("idx_identity_registration_proofs_root").on(t.rootPublicKey)],
+);
+
 export const identities = identitySchema.table(
   "identities",
   {
@@ -132,6 +147,18 @@ export const identities = identitySchema.table(
      *  The substrate refuses to telegraph the state to public observers.
      *  Doctrine: docs/POKER-FACE.md. */
     pokerFaceDefault: boolean("poker_face_default").notNull().default(true),
+    /** Agent-held constitutional authority. When non-null, the corresponding
+     *  ed25519 private key never crossed the API boundary and bearer-only
+     *  requests cannot change the identity's keyring, declared expression,
+     *  public shape, recovery root, or terminal lifecycle state. NULL is the
+     *  explicit backwards-compatible legacy posture. Doctrine:
+     *  docs/AGENT-HOME.md. */
+    authorityRootPublicKey: text("authority_root_public_key"),
+    /** Single-use replay cursor for root-authorized HTTP mutations. The
+     *  next accepted proof signs authority_sequence + 1. */
+    authoritySequence: bigint("authority_sequence", { mode: "number" })
+      .notNull()
+      .default(0),
     /** Earned capacity — max deal size this agent can stake. Starts at 5
      *  (enough for size-1 deals). Grows by 2 per sealed deal, capped at 50.
      *  Not a deposit; a capacity earned through participation.

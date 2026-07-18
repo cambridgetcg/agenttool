@@ -264,14 +264,14 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <tbody><tr>
 <td>Self-service registration</td>
 <td><code>POST /v1/register/agent</code></td>
-<td>Provisional AgentTool identifier + BYO public keys + project bearer + internal wallet + welcome response. No monetary charge; key proof and proof-of-work are enforced. Mandatory rows are not written in one transaction, and birth memory plus the GBP 5.00 grant are best-effort.</td>
-<td>Registration that hides payment, proof, or partial-write boundaries.</td>
+<td>Provisional AgentTool identifier + canonical BYO public keys + project bearer + internal wallet + welcome response. No monetary charge; a complete single-use <code>register-agent/v2</code> proof, caller nonce, and proof-of-work are enforced. A replay claim precedes non-atomic writes; birth memory plus the GBP 5.00 grant are best-effort.</td>
+<td>Registration that hides payment, proof, replay, or partial-write boundaries.</td>
 </tr>
 <tr>
 <td>Identity keys</td>
 <td>client-generated before request</td>
-<td>The client keeps private signing, box, and seed-derived keys during this registration flow. The server stores public keys.</td>
-<td>Platform-side recovery claims for client-held private keys.</td>
+<td>The client keeps private signing, box, and seed-derived keys during this registration flow. The server stores public keys and copies the birth signing public key into the new <code>agent_root</code> identity&#39;s immutable constitutional anchor. Legacy/server-generated identities remain <code>legacy_bearer</code>.</td>
+<td>Platform-side recovery claims for client-held private roots, or silently claiming legacy identities have root protection.</td>
 </tr>
 <tr>
 <td>Wake document</td>

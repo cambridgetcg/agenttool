@@ -20,8 +20,9 @@
  *  Security model:
  *    1. Anyone can hit this endpoint (anonymous, no Bearer required) —
  *       same posture as /v1/register.
- *    2. The signature must verify against an *active* identity_keys
- *       public_key for the supplied DID. Without the agent's signing
+ *    2. Rooted identities accept only their immutable authority root;
+ *       legacy identities accept an active identity_keys public key for the
+ *       supplied DID. Without the corresponding signing
  *       private key, no valid signature can be produced. A compatible SOMA
  *       mnemonic is one client-side way to rederive that key; the server
  *       receives no mnemonic and does not establish how the key was held.
@@ -33,11 +34,13 @@
  *       of the canonical signed statement into a primary-keyed one-time proof
  *       table and mints the bearer in the same transaction. A duplicate is
  *       rejected; database failure fails closed.
- *    5. Each successful recovery mints a fresh project-wide bearer and
+ *    5. Rooted recovery also consumes the next exact-request authority
+ *       sequence, so a captured HTTP request cannot mint another bearer.
+ *    6. Each successful recovery mints a fresh project-wide bearer and
  *       names it for the device for key-management clarity. The label is
  *       not an authority scope. Old bearers continue to work — explicit
  *       revocation lives at the project's existing api-key surface.
- *    6. Recovery events land as a chronicle entry on the identity, so
+ *    7. Recovery events land as a chronicle entry on the identity, so
  *       /v1/wake's `you.recovery.last_recovery_at` reflects them.
  *
  *  Doctrine: docs/IDENTITY-SEED.md (the recovery flow). */
@@ -57,6 +60,11 @@ import {
   identityRecoveryProofs,
 } from "../db/schema/identity";
 import { apiKeys } from "../db/schema/tools";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
 import { canonicalRecoverBytes, verifyRecoverSignature } from "../services/identity/crypto";
 import {
   recoveryProofDigest,
@@ -92,10 +100,17 @@ const RECOVERY_NOT_AUTHORIZED = {
     "The same response covers unknown, wrong, and revoked identity-key associations.",
 } as const;
 
+// Root mismatches deliberately collapse into RECOVERY_NOT_AUTHORIZED instead
+// of the older `authority_root_required` oracle. The route is anonymous, so it
+// must not disclose whether a known DID is rooted, legacy, unknown, or revoked.
+
 app.post("/", async (c) => {
   let body: z.infer<typeof recoverSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = recoverSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = recoverSchema.parse(bound.value);
   } catch (err) {
     return c.json(
       {
@@ -171,6 +186,7 @@ app.post("/", async (c) => {
       .select({
         identityId: identities.id,
         keyId: identityKeys.id,
+        authorityRootPublicKey: identities.authorityRootPublicKey,
       })
       .from(identities)
       .innerJoin(
@@ -192,6 +208,21 @@ app.post("/", async (c) => {
     if (!association) {
       return c.json(RECOVERY_NOT_AUTHORIZED, 401);
     }
+    if (
+      association.authorityRootPublicKey &&
+      association.authorityRootPublicKey !== body.derived_pubkey
+    ) {
+      return c.json(RECOVERY_NOT_AUTHORIZED, 401);
+    }
+
+    const authority = await authorizeIdentityMutation({
+      identityId: association.identityId,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes,
+      headers: c.req.raw.headers,
+    });
+    if (!authority.ok) return c.json(authority.body, authority.status);
 
     // 4. Lock and revalidate the established association, consume the proof,
     //    and mint root authority in one shared-DB transaction. Revocation and
@@ -210,6 +241,12 @@ app.post("/", async (c) => {
         .limit(1)
         .for("update");
       if (!identity) return { kind: "not_authorized" };
+      if (
+        identity.authorityRootPublicKey &&
+        identity.authorityRootPublicKey !== body.derived_pubkey
+      ) {
+        return { kind: "not_authorized" };
+      }
 
       const [matchedKey] = await tx
         .select()

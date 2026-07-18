@@ -85,6 +85,11 @@ function buildAll(): Record<string, GuidedErrorBody> {
     validation: errors.validation({ formErrors: [], fieldErrors: { foo: ["required"] } }),
     internal: errors.internal(),
     internalWithMessage: errors.internal("disk-full on the lhr1 worker"),
+    refusal: errors.refusal({
+      error: "route_specific_refusal",
+      message: "This route-specific request cannot proceed.",
+      legacy_field: "preserved",
+    }),
     substrateTaskRefusal: errors.substrateTaskRefusal({
       code: "task_not_open",
       message: "This substrate-task is no longer open for claim.",

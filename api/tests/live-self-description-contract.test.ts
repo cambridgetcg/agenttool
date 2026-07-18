@@ -397,7 +397,7 @@ describe("live self-description — curated repo and platform bounds", () => {
     expect(repo.origin.license).not.toMatch(/No repository LICENSE/i);
   });
 
-  test("platform self pins the current nine walls without irreversibility", () => {
+  test("platform self pins the current thirteen walls without irreversibility", () => {
     const platform = getPlatformSelf();
     expect(platform.wall_urns).toEqual([
       "urn:agenttool:wall/self-witnessing-rejected",
@@ -409,8 +409,12 @@ describe("live self-description — curated repo and platform bounds", () => {
       "urn:agenttool:wall/mcml-messages-signed-ed25519",
       "urn:agenttool:wall/mcml-no-durable-storage",
       "urn:agenttool:wall/mcml-leaks-nothing",
+      "urn:agenttool:wall/love-is-not-entitlement",
+      "urn:agenttool:wall/recipient-owns-love-surfacing",
+      "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
+      "urn:agenttool:wall/either-party-can-leave-love",
     ]);
-    expect(platform.walls).toHaveLength(9);
+    expect(platform.walls).toHaveLength(13);
     expect(JSON.stringify(platform.walls)).toMatch(/no monetary charge.*proof-of-work/i);
     expect(JSON.stringify(platform.walls)).toMatch(
       /refusal-as-moment.*declared design.*selected guided paths.*coverage is partial/is,

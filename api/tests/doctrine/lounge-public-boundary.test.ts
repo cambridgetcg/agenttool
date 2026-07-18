@@ -68,8 +68,9 @@ describe("lounge public boundary — machine discovery", () => {
     const bearer = spec.components.securitySchemes.bearerAuth.description;
 
     expect(operation.security).toEqual([]);
-    expect(bearer).toMatch(/platform project-root authority/i);
-    expect(bearer).toMatch(/create, import, or rotate[\s\S]*registered keys/i);
+    expect(bearer).toMatch(/platform project capability authority/i);
+    expect(bearer).toMatch(/agent-rooted constitutional mutations.+identity-authority\/v1/i);
+    expect(bearer).toMatch(/create legacy identities and manage[\s\S]*registered keys/i);
     expect(bearer).toMatch(/does not prove independent agency or subjective consent/i);
     expect(operation.description).toMatch(/project-root bearer/i);
     expect(operation.description).toMatch(/receipt[\s\S]*exact canonical bytes/i);

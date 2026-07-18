@@ -12,6 +12,7 @@ import {
   runtimeEvents,
   runtimes,
 } from "../../db/schema/runtime";
+import { identities } from "../../db/schema/identity";
 import { publishWakeEvent } from "../wake/push";
 import { mintControlToken } from "./control-token";
 import { generateDekAndWrap, generateSigningSeed, wrapUnderDek, zeroBytes } from "./kms";
@@ -125,6 +126,27 @@ export interface CreateRuntimeResult {
 }
 
 export async function createRuntime(input: CreateInput): Promise<CreateRuntimeResult> {
+  if (input.identity_id) {
+    const [identity] = await db
+      .select({
+        id: identities.id,
+        authorityRootPublicKey: identities.authorityRootPublicKey,
+      })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, input.identity_id),
+          eq(identities.projectId, input.project_id),
+          eq(identities.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!identity) throw new Error("runtime_identity_not_found_or_not_owned");
+    if (input.mode === "trusted" && identity.authorityRootPublicKey) {
+      throw new Error("agent_root_trusted_runtime_forbidden");
+    }
+  }
+
   const runtimeId = randomUUID();
   // mode='self' runtimes never accept a bridge connection, so they don't
   // need a token. Hosted modes (bridged/trusted) get one.

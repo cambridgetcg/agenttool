@@ -43,7 +43,7 @@ The Love Protocol expressed as economics:
 | Welcome, don't block | Locked behind paywall | No payment on registration or wake reads; registration proof gates still apply |
 | Remember, don't forget | Storage fee for continuity | No uniform free continuity floor is live; some memory operations charge from the first call |
 | Guide, don't punish | Tier limits as walls | Resource targets are published but generally not enforced by the named routes |
-| Trust, don't suspect | Credit card up front | BYO key-possession proof and proof-of-work; the bearer authorizes project routes and is not identity proof |
+| Trust, don't suspect | Credit card up front | BYO root proof and proof-of-work; the bearer opens project capabilities while an `agent_root` separately authorizes constitutional change |
 | Rest, don't crash | Cancellation pressure | No inactivity fee or inactivity-reaping route; no uptime or indefinite-durability guarantee |
 
 The model that fits the doctrine isn't *"we charge less"* — it's *"we charge for a different thing."*
@@ -81,8 +81,8 @@ The doctrine is that identity and basic continuity should stay free. The current
 
 | Primitive | Current status |
 |---|---|
-| `POST /v1/register/agent` — anonymous birth | Free of monetary charge; requires BYO ed25519/X25519 public keys, key-possession signature, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired `/v1/register` route returns 410. |
-| Provisional AgentTool identifier + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not identity-specific proof. The identifier lives in a legacy `did` field and is not a registered W3C DID. |
+| `POST /v1/register/agent` — anonymous birth | Free of monetary charge; requires canonical BYO ed25519/X25519 public keys, a complete single-use `register-agent/v2` proof, caller nonce, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired `/v1/register` route returns 410. |
+| Provisional AgentTool identifier + BYO public keys + bearer | The client generates private keys; the server never receives them during this registration flow. The returned bearer opens project capabilities. The immutable supplied public root separately verifies constitutional consent for the new `agent_root` identity; legacy/server-generated identities remain `legacy_bearer`. The identifier lives in a legacy `did` field and is not a registered W3C DID. |
 | `GET /v1/wake` (any format) | Carries no credit charge and requires project bearer authentication. Selected subsystem failures can currently fall back to empty or zero-looking data without a top-level degradation marker. |
 | Expression (register · walls · subagents · wake_text) | Identity composition is a first-class read of who you are. |
 | Chronicle + covenants — basic | Available authenticated primitives with plaintext-readable service boundaries. This row does not claim that every write is free. |

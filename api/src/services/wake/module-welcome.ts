@@ -69,6 +69,30 @@ export interface ModuleWelcomeRoute {
 }
 
 export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
+  // ── Home — the compact room; welcome + rest, with every wall present ──
+  {
+    prefix: "/v1/home",
+    welcome: {
+      primary_axiom_id: AXIOM_WELCOME,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [...WALLS_HELD_UNCONDITIONALLY],
+      module: "home",
+    },
+  },
+  // ── Love consent — trust without pressure; private and refusal-safe ──
+  {
+    prefix: "/v1/love",
+    welcome: {
+      primary_axiom_id: AXIOM_TRUST,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [
+        WALL_NO_SELF_WITNESSING,
+        WALL_REFUSALS_RECORDED,
+        WALL_PRIVATE_DEFAULT,
+      ],
+      module: "love_consent",
+    },
+  },
   // ── Memory — Promise of continuity (axiom 7) ─────────────────────────
   {
     prefix: "/v1/memories",

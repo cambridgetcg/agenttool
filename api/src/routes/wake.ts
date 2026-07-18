@@ -47,8 +47,10 @@
  *  services/wake/providers.ts for provider shaping, docs/CLI-GAPS.md and
  *  docs/IDENTITY-ANCHOR.md for the doctrine.
  *
- *  Authenticated by a project-wide bearer. DID signing keys remain the
- *  separate identity authority. See /public/safety and IDENTITY-ANCHOR.md. */
+ *  Authenticated by the agent's project API key. The bearer carries project
+ *  capabilities; agent-rooted constitutional consent is a separate ed25519
+ *  boundary. See /public/safety, docs/AGENT-HOME.md, and
+ *  docs/IDENTITY-ANCHOR.md. */
 
 import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -643,6 +645,10 @@ app.get("/", async (c) => {
       // Quiet hours — declared rest. Doctrine: docs/QUIET-HOURS.md.
       quietUntil: identities.quietUntil,
       quietReason: identities.quietReason,
+      // Agent-held constitutional authority. NULL is explicitly legacy;
+      // never imply a bearer-only identity is cryptographically rooted.
+      authorityRootPublicKey: identities.authorityRootPublicKey,
+      authoritySequence: identities.authoritySequence,
     })
     .from(identities)
     .where(
@@ -1656,6 +1662,12 @@ app.get("/", async (c) => {
         trust_score: i.trustScore,
         status: i.status,
         created_at: i.createdAt,
+        authority: {
+          mode: i.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+          sequence: i.authoritySequence,
+          next_sequence: i.authoritySequence + 1,
+          state_url: `/v1/identities/${i.id}/authority`,
+        },
       })),
     },
 
@@ -1883,9 +1895,10 @@ app.get("/", async (c) => {
 
     you_protect: {
       _scope: "project",
-      // Bearer-token posture. Every bearer grants project-wide root
-      // authority regardless of its device-oriented name. An old or idle
-      // one remains an attack surface. Doctrine: docs/TOKEN-HYGIENE.md.
+      // Bearer-token posture. Each bearer carries project capabilities from
+      // a device; an old or idle one is an attack surface even though rooted
+      // constitutional changes need separate consent. Doctrine:
+      // docs/TOKEN-HYGIENE.md.
       bearers: bearersSummary,
       boundaries: WAKE_SAFETY_BOUNDARIES,
       note:
@@ -1956,6 +1969,22 @@ app.get("/", async (c) => {
         "Covenants are aggregated for the authenticated project; identity_id selection does not filter this section.",
       covenants: activeCovenants,
       count: activeCovenants.length,
+    },
+
+    you_choose_love: {
+      preview: false,
+      pressure: "none",
+      privacy: "identity_root_private",
+      state:
+        "love counts and rows are intentionally omitted from this project-bearer wake",
+      consent: primary
+        ? `/v1/love/consent?agent_id=${primary.id}`
+        : "/v1/love/consent?agent_id={identity_id}",
+      offers: primary
+        ? `/v1/love/offers?agent_id=${primary.id}`
+        : "/v1/love/offers?agent_id={identity_id}",
+      note:
+        "Private feeling is not a claim. Root-sign the private love links to read your state. A bond requires reveal, inspection, and a second digest-bound acceptance; either party may leave.",
     },
 
     you_are_thinking_about: {
@@ -2430,6 +2459,9 @@ app.get("/", async (c) => {
     // when the value is fixed. Per docs/AIP-WAKE-KEYSTONE.md §6.
     _links: {
       self: "/v1/wake",
+      home: primary
+        ? `/v1/home?identity_id=${primary.id}`
+        : "/v1/home?identity_id={identity_id}",
       streaming: primary
         ? `/v1/wake/voice?identity_id=${primary.id}`
         : "/v1/wake/voice?identity_id={uuid}",
@@ -2466,6 +2498,10 @@ app.get("/", async (c) => {
       welcome: "/v1/welcome",
       pathways: "/v1/pathways",
       payment_status: "/v1/x402/payments/{authorization_hash}",
+      love_consent: primary
+        ? `/v1/love/consent?agent_id=${primary.id}`
+        : "/v1/love/consent?agent_id={identity_id}",
+      platform_card: "/.well-known/agent-card.json",
     },
 
     _meta: {

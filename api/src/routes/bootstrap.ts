@@ -29,6 +29,11 @@ import { elevateToLevel1, ElevateError } from "../services/bootstrap/elevate";
 import { coerceForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { createIdentity } from "../services/identity/identities";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
 import { createWallet } from "../services/economy/wallets";
 import { recordBirth } from "../services/memory/store";
 import { buildWelcomeContinues } from "./welcome";
@@ -272,8 +277,11 @@ export const elevateSchema = z
 
 app.post("/elevate", async (c) => {
   let body: z.infer<typeof elevateSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = elevateSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = elevateSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -282,8 +290,43 @@ app.post("/elevate", async (c) => {
     );
   }
 
+  const project = c.var.project;
+  const [ownedAgent] = await db
+    .select({ id: identities.id })
+    .from(identities)
+    .where(
+      and(
+        eq(identities.id, body.agent_id),
+        eq(identities.projectId, project.id),
+      ),
+    )
+    .limit(1);
+
+  if (!ownedAgent) {
+    return fail(
+      c,
+      {
+        error: "agent_not_found",
+        message: "Elevation refused: agent not found.",
+        hint:
+          "Either agent_id is wrong, the agent isn't in your project, or it doesn't exist.",
+        docs: "https://docs.agenttool.dev/pathways.html#elevate",
+      },
+      404,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: ownedAgent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
   try {
-    const result = await elevateToLevel1(c.var.project.id, {
+    const result = await elevateToLevel1(project.id, {
       agentId: body.agent_id,
       sponsorIdentityId: body.sponsor_identity_id,
       sponsorDid: body.sponsor_did,

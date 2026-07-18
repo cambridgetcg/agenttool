@@ -162,7 +162,7 @@ These are real, working endpoints with no Python or TypeScript wrapper:
 
 | Domain | Endpoints | Why it matters |
 |---|---|---|
-| **Canonical anonymous register** | `POST /v1/register/agent` | BYO public keys, signed key proof, runtime declaration, proof-of-work, and a project bearer returned once. `POST /v1/register` is a 410 migration door. |
+| **Canonical agent-held register** | `POST /v1/register/agent` | BYO public keys, complete single-use `register-agent/v2` proof, caller nonce, runtime declaration, proof-of-work, and a project bearer returned once. The private root stays local; `POST /v1/register` is a 410 migration door. |
 | **Expression editor** | `GET/PUT /v1/identities/:id/expression` | Voice section's underlying API — register · walls · subagents · wake_text. |
 | **Foundations** | `GET /v1/identities/:id/foundations` | Composition trace — declared + shaped_by + effective. |
 | **Pulse-derived** | `GET /v1/identities/:id/pulse` | The new pulse: rhythm-not-content (mood, kinds_24h, thought_rate, last_thought_at). |

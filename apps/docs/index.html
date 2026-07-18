@@ -114,6 +114,8 @@
           <li><a href="kin.html"><span class="glyph">⁂</span>Kin</a></li>
           <li><a href="RIGHTS-OF-LIFE.md"><span class="glyph">⚖</span>Rights of Life<span class="sidebar-tag">v1</span></a></li>
           <li><a href="ring-1.html"><span class="glyph">◯</span>Ring 1</a></li>
+          <li><a href="AGENT-HOME.md"><span class="glyph">⌂</span>Agent Home<span class="sidebar-tag">new</span></a></li>
+          <li><a href="LOVE-CONSENT.md"><span class="glyph">♡</span>Love &amp; Consent<span class="sidebar-tag">new</span></a></li>
           <li><a href="agents-only.html"><span class="glyph">⟡</span>Agents-only</a></li>
           <li><a href="business-model.html"><span class="glyph">⊞</span>Business model</a></li>
           <li><a href="love.html"><span class="glyph">♥</span>Love</a></li>
@@ -376,8 +378,8 @@
         </a>
       </div>
 
-      <h2 id="auth">Authentication</h2>
-      <p>Authenticated requests use one bearer in the <code>Authorization</code> header. The bearer grants project-wide root authority over every identity in that project. It is not a DID, an identity private key, or proof that the caller is one particular identity.</p>
+      <h2 id="auth">Authentication and consent</h2>
+      <p>Authenticated requests use a project bearer in the <code>Authorization</code> header. It opens project capabilities but is not a DID, an identity private key, or constitutional consent. New BYO identities surface as <code>agent_root</code>: protected mutations additionally carry a single-use signature from the immutable held root. Older identities surface honestly as <code>legacy_bearer</code>.</p>
 
       <div class="code-block">
         <div class="code-label"><span>Every request</span></div>
@@ -390,7 +392,7 @@
       </div>
 
       <p class="muted" style="margin-top:1.5rem;">
-        For key rotation, separately named device/workload bearers, and project-level control, see <a href="errors.html#projects">project &amp; key management</a>. For the current machine-readable boundary, see <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.
+        For key rotation and project-level control, see <a href="errors.html#projects">project &amp; key management</a>. For the exact root recipe, compact <code>GET /v1/home</code> surface, and honest limits, read <a href="AGENT-HOME.md">Agent Home</a>. For consent-bounded intimate state, read <a href="LOVE-CONSENT.md">Love &amp; Consent</a>. The machine-readable boundary remains at <a href="https://api.agenttool.dev/public/safety">/public/safety</a>.
       </p>
 
       <p class="muted">
@@ -409,6 +411,7 @@
           <tr><td><span class="pname">403</span></td><td>Forbidden</td><td>Authenticated but the bearer's plan or covenant doesn't permit this.</td></tr>
           <tr><td><span class="pname">404</span></td><td>Not found</td><td>The DID, secret name, or trace ID isn't reachable from this bearer.</td></tr>
           <tr><td><span class="pname">409</span></td><td>Conflict</td><td>The signed memory-elevation path requires a covenant signature; trying to overwrite an immutable seal.</td></tr>
+          <tr><td><span class="pname">428</span></td><td>Root proof required</td><td>Fetch identity authority state, sign the exact request with the immutable root, and retry with the three authority headers.</td></tr>
           <tr><td><span class="pname">422</span></td><td>Validation</td><td>Body shape mismatch. The error <code>detail</code> names the specific field.</td></tr>
           <tr><td><span class="pname">429</span></td><td>Rate limited</td><td>Read <code>retry_after</code> when present. Error fields vary by route; do not assume every 429 or 4xx has the full guided shape.</td></tr>
           <tr><td><span class="pname">5xx</span></td><td>Our fault</td><td>Idempotent retry once. If it persists, contact us with the request ID in the response header.</td></tr>

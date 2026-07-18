@@ -16,6 +16,7 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../../auth/middleware";
 
 import atRestRoutes from "./at-rest";
+import authorityRoutes from "./authority";
 import attestationsRoutes from "./attestations";
 import boxKeysRoutes from "./box-keys";
 import delegationsRoutes from "./delegations";
@@ -52,6 +53,7 @@ app.route("/identities/:id/attestations", identityAttestationsRoutes);
 app.route("/identities/:id/delegations", identityDelegationsRoutes);
 app.route("/identities/:id/tokens", tokensRoutes);
 app.route("/identities/:id/expression", expressionRoutes);
+app.route("/identities/:id/authority", authorityRoutes);
 app.route("/identities/:id/foundations", foundationsRoutes);
 app.route("/identities/:id/pulse", pulseRoutes);
 app.route("/identities/:id/box-keys", boxKeysRoutes);

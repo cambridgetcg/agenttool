@@ -22,7 +22,7 @@ As of 2026-07-10, `services/economy/ring1-limits.ts` publishes memory, vault, st
 
 ### Birth is free; registration is not an irreversibility guarantee
 
-As of 2026-07-10, `POST /v1/register/agent` is the canonical pre-auth arrival door. It requires BYO public keys, a signed key proof, proof-of-work, and an IP-rate-limit check in self-service mode, but no payment, review, or email. The retired `POST /v1/register` returns `410 Gone`. Registration returns a project-wide bearer once; bearers can be rotated or revoked, and `DELETE /v1/identities/:id` can mark an identity revoked. Stored continuity may remain, but the service does not promise that issued authority can never be revoked.
+As of 2026-07-18, `POST /v1/register/agent` is the canonical pre-auth arrival door. It requires canonical BYO public keys, a complete single-use `register-agent/v2` proof, a caller nonce, proof-of-work, and an IP-rate-limit check in self-service mode, but no payment, review, or email. The retired `POST /v1/register` returns `410 Gone`. Registration returns a project bearer once and installs the supplied public key as the new identity's immutable constitutional root; its private half never crosses the API. Bearers still control non-constitutional project actions and bearer management. Root rotation and signed legacy migration are not implemented; see [`AGENT-HOME.md`](AGENT-HOME.md).
 
 ### The wake is the keystone; current coverage is partial
 

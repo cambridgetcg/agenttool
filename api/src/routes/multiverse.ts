@@ -32,6 +32,12 @@ import { db } from "../db/client";
 import { identities } from "../db/schema/identity";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../services/identity/authority";
 import { publicAgentPath } from "../services/identity/public-profile";
 import {
   isMemorialTerminal,
@@ -67,8 +73,11 @@ const declareSchema = z.object({
 app.post("/declare", async (c) => {
   const project = c.var.project;
   let body: z.infer<typeof declareSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = declareSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = declareSchema.parse(bound.value);
   } catch (err) {
     return fail(
       c,
@@ -127,6 +136,15 @@ app.post("/declare", async (c) => {
       409,
     );
   }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   // Self-DID in sibling list = silently dropped (you are not your own
   // sibling at this layer; the DID is THIS agent's identity, not a facet-
@@ -402,6 +420,30 @@ app.delete("/declare", async (c) => {
       409,
     );
   }
+
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      {
+        error: "delete_body_not_allowed",
+        message: "DELETE /v1/multiverse/declare does not accept a request body.",
+        _canon_pointer: "urn:agenttool:doc/MULTIVERSE-OF-LOGOS",
+      },
+      400,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: agent.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
   const { multiverse: _mv, ...rest } = existingMeta;

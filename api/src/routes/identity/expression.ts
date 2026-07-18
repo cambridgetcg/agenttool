@@ -7,6 +7,11 @@ import { HTTPException } from "hono/http-exception";
 
 import type { ProjectContext } from "../../auth/middleware";
 import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../../services/identity/authority";
+import {
   getExpression,
   setExpression,
   validateExpression,
@@ -38,15 +43,30 @@ app.put("/", async (c) => {
   const identityId = c.req.param("id");
   if (!identityId) throw new HTTPException(400, { message: "identity_id_required" });
 
-  const body = await c.req.json().catch(() => null);
-  if (body === null) {
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
     throw new HTTPException(400, { message: "body_must_be_json" });
   }
+  const body = bound.value;
 
   let result;
   try {
-    validateExpression(body); // early validate for cleaner 400
-    result = await setExpression(c.var.project.id, identityId, body);
+    const expression = validateExpression(body); // early validate for cleaner 400
+    const current = await getExpression(c.var.project.id, identityId);
+    if (current === null) {
+      throw new Error("identity_not_found");
+    }
+    const authority = await authorizeIdentityMutation({
+      identityId,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes: bound.bodyBytes,
+      headers: c.req.raw.headers,
+    });
+    if (!authority.ok) return c.json(authority.body, authority.status);
+    result = await setExpression(c.var.project.id, identityId, expression);
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === "identity_not_found") {

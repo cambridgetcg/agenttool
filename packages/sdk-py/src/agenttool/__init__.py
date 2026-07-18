@@ -118,6 +118,12 @@ from .data import (
     DataSyncStatusResult,
 )
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
+from .authority import (
+    canonical_identity_authority_bytes,
+    canonical_identity_read_authority_bytes,
+    identity_authority_headers,
+    identity_read_authority_headers,
+)
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .handoff import (
     HandoffAuthority,
@@ -218,6 +224,10 @@ __all__ = [
     "AtRestClient",
     "canonical_at_rest_bytes",
     "sign_at_rest",
+    "canonical_identity_authority_bytes",
+    "canonical_identity_read_authority_bytes",
+    "identity_authority_headers",
+    "identity_read_authority_headers",
     "GraceClient",
     "canonical_grace_bytes",
     "sign_grace",

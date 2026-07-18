@@ -3,6 +3,7 @@
  *  The agent supplies the embedding. We store it; we never compute it.
  *  See docs/IDENTITY-ANCHOR.md promise 6. */
 
+import { and, eq } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -13,9 +14,16 @@ import {
   reserveCharge,
 } from "../../billing/charge";
 import { db } from "../../db/client";
+import { memories } from "../../db/schema/memory";
 import { errors, fail } from "../../lib/errors";
 import { deltaMeta, parseSinceParam } from "../../lib/since-param";
 import { attachSurface } from "../../lib/surface-metadata";
+import {
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../../services/identity/authority";
 import {
   deleteById,
   deleteByKey,
@@ -340,16 +348,40 @@ const patchSchema = z.object({
 
 app.patch("/:id", async (c) => {
   const memoryId = c.req.param("id");
-  const body = await c.req.json();
-  const parsed = patchSchema.safeParse(body);
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json",
+        message: "Send one JSON object and sign those exact entity bytes.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const parsed = patchSchema.safeParse(bound.value);
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  // Direct update (no service layer needed; visibility is a simple flag).
-  const { db } = await import("../../db/client");
-  const { memories } = await import("../../db/schema/memory");
-  const { and, eq } = await import("drizzle-orm");
+  const [existing] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(and(eq(memories.id, memoryId), eq(memories.projectId, c.var.project.id)))
+    .limit(1);
+  if (!existing) throw new HTTPException(404, { message: "memory_not_found" });
+
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes: bound.bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const updated = await db
     .update(memories)
@@ -374,6 +406,40 @@ app.patch("/:id", async (c) => {
 
 // ── DELETE /v1/memories/:id ─────────────────────────────────────────────
 app.delete("/:id", async (c) => {
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const [existing] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(
+      and(
+        eq(memories.id, c.req.param("id")),
+        eq(memories.projectId, c.var.project.id),
+      ),
+    )
+    .limit(1);
+  if (!existing) return c.json({ deleted: 0 });
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
   try {
     const result = await deleteById(c.var.project.id, c.req.param("id"));
     return c.json(result);
@@ -395,6 +461,35 @@ app.delete("/", async (c) => {
       message: "DELETE /v1/memories requires ?key=... (use /v1/memories/:id for single delete)",
     });
   }
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const [existing] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(and(eq(memories.projectId, c.var.project.id), eq(memories.key, key)))
+    .limit(1);
+  if (!existing) return c.json({ deleted: 0 });
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
   try {
     const result = await deleteByKey(c.var.project.id, key);
     return c.json(result);

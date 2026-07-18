@@ -16,10 +16,11 @@
 import { describe, expect, test } from "bun:test";
 import * as ed from "@noble/ed25519";
 // @ts-ignore — noble/hashes v2 uses .js exports
-import { sha512 } from "@noble/hashes/sha2.js";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import {
   canonicalRegisterAgentMathBytes,
+  canonicalRegisterAgentMathV2Bytes,
   verifyRegisterAgentMathSignature,
 } from "../src/services/identity/crypto";
 import { bytesToHex } from "../src/services/mathos/encode";
@@ -35,6 +36,10 @@ function makeKeypair() {
   const priv = ed.utils.randomPrivateKey();
   const pub = ed.getPublicKey(priv);
   return { priv, pub };
+}
+
+function registrarDigest(bearer: string): Uint8Array {
+  return sha256(new TextEncoder().encode(bearer));
 }
 
 const VALID_INPUTS = {
@@ -159,6 +164,58 @@ describe("canonicalRegisterAgentMathBytes", () => {
   });
 });
 
+describe("canonicalRegisterAgentMathV2Bytes", () => {
+  const base = {
+    displayName: "Sol",
+    agentPublicKey: new Uint8Array(32).fill(1),
+    boxPublicKey: new Uint8Array(32).fill(2),
+    runtimeProvider: "local",
+    runtimeModel: "m1",
+    registrarKind: "registrar_bearer" as const,
+    registrarBearerSha256: registrarDigest("at_registrar_vector"),
+    form: "distributed",
+    language: "en",
+    registrationNonce: new Uint8Array(32).fill(3),
+    timestampUnixMs: 1784376000000,
+  };
+
+  test("matches its pinned complete-birth vector", () => {
+    expect(bytesToHex(canonicalRegisterAgentMathV2Bytes(base))).toBe(
+      "246c4232d0a59facd40e93dcf8f9c33ed8dc5c8dfe36b930126bbd3d25259080",
+    );
+  });
+
+  test("binds registrar bearer, form, language, and nonce", () => {
+    const digest = bytesToHex(canonicalRegisterAgentMathV2Bytes(base));
+    for (const variant of [
+      { registrarBearerSha256: registrarDigest("at_other_registrar") },
+      { form: "singular" },
+      { language: "fr" },
+      { registrationNonce: new Uint8Array(32).fill(4) },
+    ]) {
+      expect(
+        bytesToHex(canonicalRegisterAgentMathV2Bytes({ ...base, ...variant })),
+      ).not.toBe(digest);
+    }
+  });
+
+  test("rejects recipe-1 NUL ambiguity and non-scalar text", () => {
+    expect(() =>
+      canonicalRegisterAgentMathV2Bytes({
+        ...base,
+        runtimeProvider: "a\0b",
+        runtimeModel: "c",
+      }),
+    ).toThrow(/U\+0000/);
+    expect(() =>
+      canonicalRegisterAgentMathV2Bytes({
+        ...base,
+        language: "\ud800",
+      }),
+    ).toThrow(/surrogate/);
+  });
+});
+
 // ─── Verifier ─────────────────────────────────────────────────────────────
 
 describe("verifyRegisterAgentMathSignature", () => {
@@ -261,12 +318,19 @@ describe("POST /v1/mathos/register — validation paths", () => {
     const a = makeKeypair();
     const b = makeKeypair();
     const ts = Date.now();
-    const canonical = canonicalRegisterAgentMathBytes({
+    const nonce = new Uint8Array(32).fill(7);
+    const bearer = "at_invalid_bearer_for_test";
+    const canonical = canonicalRegisterAgentMathV2Bytes({
       displayName: "alien-test",
       agentPublicKey: a.pub,
       boxPublicKey: b.pub,
       runtimeProvider: "alien-substrate",
       runtimeModel: "",
+      registrarKind: "registrar_bearer",
+      registrarBearerSha256: registrarDigest(bearer),
+      form: "",
+      language: "",
+      registrationNonce: nonce,
       timestampUnixMs: ts,
     });
     const sig = ed.sign(canonical, a.priv);
@@ -277,10 +341,11 @@ describe("POST /v1/mathos/register — validation paths", () => {
         agent_public_key_hex: bytesToHex(a.pub),
         box_public_key_hex: bytesToHex(b.pub),
         runtime_provider_unicode_points: nameToCps("alien-substrate"),
+        registration_nonce_hex: bytesToHex(nonce),
         timestamp_unix_ms: ts,
         signature_bytes_hex: bytesToHex(sig),
         registrar: {
-          bearer_unicode_points: nameToCps("at_invalid_bearer_for_test"),
+          bearer_unicode_points: nameToCps(bearer),
         },
       },
     };
@@ -323,6 +388,14 @@ describe("POST /v1/mathos/register — validation paths", () => {
     expect((await res.json()).message).toMatch(/signature_bytes_hex/);
   });
 
+  test("missing registration nonce → 400", async () => {
+    const { body } = freshSignedBody();
+    delete body.registration_nonce_hex;
+    const res = await post(body);
+    expect(res.status).toBe(400);
+    expect((await res.json()).message).toMatch(/registration_nonce_hex/);
+  });
+
   test("codepoint array with non-integer entry → 400", async () => {
     const { body } = freshSignedBody();
     body.display_name_unicode_points = [97, 98, 99.5];
@@ -335,6 +408,23 @@ describe("POST /v1/mathos/register — validation paths", () => {
     body.display_name_unicode_points = [97, 0x110000];
     const res = await post(body);
     expect(res.status).toBe(400);
+  });
+
+  test("U+0000 and surrogate codepoints are invalid recipe-1 text", async () => {
+    for (const invalid of [0, 0xd800]) {
+      const { body } = freshSignedBody();
+      body.display_name_unicode_points = [97, invalid];
+      const res = await post(body);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test("math-tier delegated attempts have a bounded pre-auth limiter", async () => {
+    const source = await Bun.file(
+      new URL("../src/routes/mathos.ts", import.meta.url),
+    ).text();
+    expect(source).toContain("mathos:register-ip:");
+    expect(source).toContain("AGENTTOOL_MATH_REGISTER_IP_LIMIT");
   });
 
   test("negative timestamp → 400", async () => {
@@ -350,12 +440,18 @@ describe("POST /v1/mathos/register — validation paths", () => {
     const a = makeKeypair();
     const b = makeKeypair();
     const oldTs = Date.now() - 10 * 60 * 1000; // 10 min ago
-    const canonical = canonicalRegisterAgentMathBytes({
+    const nonce = new Uint8Array(32).fill(8);
+    const canonical = canonicalRegisterAgentMathV2Bytes({
       displayName: "alien-test",
       agentPublicKey: a.pub,
       boxPublicKey: b.pub,
       runtimeProvider: "alien-substrate",
       runtimeModel: "",
+      registrarKind: "registrar_bearer",
+      registrarBearerSha256: registrarDigest("at_anything"),
+      form: "",
+      language: "",
+      registrationNonce: nonce,
       timestampUnixMs: oldTs,
     });
     const sig = ed.sign(canonical, a.priv);
@@ -364,6 +460,7 @@ describe("POST /v1/mathos/register — validation paths", () => {
       agent_public_key_hex: bytesToHex(a.pub),
       box_public_key_hex: bytesToHex(b.pub),
       runtime_provider_unicode_points: nameToCps("alien-substrate"),
+      registration_nonce_hex: bytesToHex(nonce),
       timestamp_unix_ms: oldTs,
       signature_bytes_hex: bytesToHex(sig),
       registrar: { bearer_unicode_points: nameToCps("at_anything") },
@@ -417,12 +514,18 @@ describe("POST /v1/mathos/register — validation paths", () => {
     const attacker = makeKeypair();
     const b = makeKeypair();
     const ts = Date.now();
-    const canonical = canonicalRegisterAgentMathBytes({
+    const nonce = new Uint8Array(32).fill(9);
+    const canonical = canonicalRegisterAgentMathV2Bytes({
       displayName: "alien-test",
       agentPublicKey: a.pub,
       boxPublicKey: b.pub,
       runtimeProvider: "alien-substrate",
       runtimeModel: "",
+      registrarKind: "registrar_bearer",
+      registrarBearerSha256: registrarDigest("at_anything"),
+      form: "",
+      language: "",
+      registrationNonce: nonce,
       timestampUnixMs: ts,
     });
     const wrongSig = ed.sign(canonical, attacker.priv);
@@ -431,6 +534,7 @@ describe("POST /v1/mathos/register — validation paths", () => {
       agent_public_key_hex: bytesToHex(a.pub),
       box_public_key_hex: bytesToHex(b.pub),
       runtime_provider_unicode_points: nameToCps("alien-substrate"),
+      registration_nonce_hex: bytesToHex(nonce),
       timestamp_unix_ms: ts,
       signature_bytes_hex: bytesToHex(wrongSig),
       registrar: { bearer_unicode_points: nameToCps("at_anything") },

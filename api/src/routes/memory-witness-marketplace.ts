@@ -25,6 +25,11 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { errors, fail, type NextAction } from "../lib/errors";
 import {
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../services/identity/authority";
+import {
   createGrant,
   createIssueSigningPayload,
   createListing,
@@ -399,8 +404,11 @@ memoryWitnessGrantsRouter.post("/:id/issue", async (c) => {
   const id = c.req.param("id");
   const project = c.var.project;
   let body: z.infer<typeof issueGrantSchema>;
+  let bodyBytes: Uint8Array;
   try {
-    body = issueGrantSchema.parse(await c.req.json());
+    const bound = await readAuthorityBoundJson(c.req.raw);
+    bodyBytes = bound.bodyBytes;
+    body = issueGrantSchema.parse(bound.value);
   } catch (err) {
     return fail(c, errors.validation(String(err)), 422);
   }
@@ -413,6 +421,14 @@ memoryWitnessGrantsRouter.post("/:id/issue", async (c) => {
         404,
       );
     }
+    const authority = await authorizeProjectConstitutionMutation({
+      projectId: scopedGrant.buyer_project_id,
+      method: c.req.method,
+      requestTarget: authorityRequestTarget(c.req.url),
+      bodyBytes,
+      headers: c.req.raw.headers,
+    });
+    if (!authority.ok) return c.json(authority.body, authority.status);
     const grant = await issueGrant({
       grantId: id,
       callerProjectId: project.id,

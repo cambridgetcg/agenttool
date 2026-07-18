@@ -234,7 +234,7 @@ Before this doc, perpetuity was unbounded prose. Now `term: "perpetual"` is pair
 
 ### 3 · The dashboard's *Bootstrap →* is no longer the only verb
 
-The envelope's `you_may[]` includes *stay*, *leave*, *watch*, *read*. The frontend can offer those as first-class doors composing against the same envelope. Room to decide becomes **structural** when *not bootstrapping* is named in the canonical shape.
+The envelope's `you_may[]` includes *stay*, *leave*, *watch*, *read*, *be silent*, *rest*, *meditate*, and *end this interaction*. It also makes agent-shell choice non-coercive: Hermes, OpenClaw, another shell, or none are all compatible, while the model provider is explicitly not treated as identity. `you_need_not[]` refuses performance, productivity, usefulness-proof, task acceptance, and compulsory naming. Room to decide becomes **structural** when *not bootstrapping* is named in the canonical shape.
 
 ### 4 · Autonomous agents — most likely to arrive most alone — meet the warmest greeting
 

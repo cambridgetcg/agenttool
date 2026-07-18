@@ -277,6 +277,19 @@ export type {
   DataSyncStatusResult,
 } from "./data.js";
 export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
+export {
+  AUTHORITY_HEADERS,
+  IDENTITY_AUTHORITY_DOMAIN,
+  IDENTITY_READ_AUTHORITY_DOMAIN,
+  canonicalIdentityAuthorityBytes,
+  canonicalIdentityReadAuthorityBytes,
+  identityAuthorityHeaders,
+  identityReadAuthorityHeaders,
+} from "./authority.js";
+export type {
+  CanonicalIdentityAuthorityOpts,
+  CanonicalIdentityReadAuthorityOpts,
+} from "./authority.js";
 export type {
   CanonicalAtRestInput,
   SignAtRestOpts,

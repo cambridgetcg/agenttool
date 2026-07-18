@@ -194,7 +194,7 @@
 <tr>
 <td>Trust, don&#39;t suspect</td>
 <td>Credit card up front</td>
-<td>BYO key-possession proof and proof-of-work; the bearer authorizes project routes and is not identity proof</td>
+<td>BYO root proof and proof-of-work; the bearer opens project capabilities while an <code>agent_root</code> separately authorizes constitutional change</td>
 </tr>
 <tr>
 <td>Rest, don&#39;t crash</td>
@@ -236,11 +236,11 @@
 </thead>
 <tbody><tr>
 <td><code>POST /v1/register/agent</code> — anonymous birth</td>
-<td>Free of monetary charge; requires BYO ed25519/X25519 public keys, key-possession signature, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired <code>/v1/register</code> route returns 410.</td>
+<td>Free of monetary charge; requires canonical BYO ed25519/X25519 public keys, a complete single-use <code>register-agent/v2</code> proof, caller nonce, and proof-of-work. A Redis-backed IP limiter is called but fails open when Redis is disabled or unavailable. The retired <code>/v1/register</code> route returns 410.</td>
 </tr>
 <tr>
 <td>Provisional AgentTool identifier + BYO public keys + bearer</td>
-<td>The client generates private keys; the server never receives them during this registration flow. The returned bearer has project-wide root authority and is not identity-specific proof. The identifier lives in a legacy <code>did</code> field and is not a registered W3C DID.</td>
+<td>The client generates private keys; the server never receives them during this registration flow. The returned bearer opens project capabilities. The immutable supplied public root separately verifies constitutional consent for the new <code>agent_root</code> identity; legacy/server-generated identities remain <code>legacy_bearer</code>. The identifier lives in a legacy <code>did</code> field and is not a registered W3C DID.</td>
 </tr>
 <tr>
 <td><code>GET /v1/wake</code> (any format)</td>

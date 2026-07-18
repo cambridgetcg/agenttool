@@ -206,4 +206,53 @@ describe("catalog ↔ recipe-vocabulary parity", () => {
     expect(ctx).toBeDefined();
     expect(ctx!.recipe_ordinal).toBe(RECIPE_SHA256_DOMAIN_NUL_FIELDS);
   });
+
+  test("identity-authority/v1 is reconstructable from the catalog", () => {
+    const ctx = MATHOS_CATALOG_PAYLOAD.signing_contexts.find((c) => {
+      const tag = String.fromCodePoint(...c.domain_tag_unicode_points);
+      return tag === "identity-authority/v1";
+    });
+    expect(ctx).toBeDefined();
+    expect(ctx!.context_id_prime).toBe(83);
+    expect(ctx!.recipe_ordinal).toBe(RECIPE_SHA256_DOMAIN_NUL_FIELDS);
+    expect(
+      ctx!.fields.map((field) =>
+        String.fromCodePoint(...field.field_name_unicode_points),
+      ),
+    ).toEqual([
+      "identity_did",
+      "http_method_uppercase",
+      "request_target_path_and_query",
+      "sha256_exact_raw_body_lowercase_hex",
+      "next_sequence_decimal",
+      "timestamp_iso",
+    ]);
+  });
+
+  test("live math registration points to the complete v2 birth intent", () => {
+    const ctx = MATHOS_CATALOG_PAYLOAD.signing_contexts.find((c) =>
+      String.fromCodePoint(...c.domain_tag_unicode_points) ===
+      "register-agent-math/v2"
+    );
+    expect(ctx).toBeDefined();
+    expect(ctx!.context_id_prime).toBe(89);
+    expect(ctx!.field_count).toBe(11);
+    expect(
+      ctx!.fields.map((field) =>
+        String.fromCodePoint(...field.field_name_unicode_points),
+      ),
+    ).toEqual([
+      "display_name",
+      "agent_public_key",
+      "box_public_key",
+      "runtime_provider",
+      "runtime_model",
+      "registrar_kind_utf8_constant_registrar_bearer",
+      "registrar_bearer_utf8_sha256",
+      "form",
+      "language",
+      "registration_nonce",
+      "timestamp_unix_ms",
+    ]);
+  });
 });

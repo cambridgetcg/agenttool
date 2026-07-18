@@ -211,7 +211,7 @@
           <span class="endpoint-auth">no auth + PoW + key-proof</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; the agent proves key possession by signing canonical registration bytes (<code>canonicalRegisterAgentBytes(...)</code>); runtime declared up front. In self and bridged custody the master key stays user-side, but bridged think-cycle plaintext enters AgentTool worker RAM and the chosen model provider (see <a href="runtime.html">Runtime</a>). Self-service registration charges no AgentTool credits but requires a configured <code>pow_nonce</code> difficulty (default 18 bits). The configured 5/hour/IP limiter is not enforced in current no-Redis production because it fails open. Optional <code>registrar.kind="registrar_bearer"</code> mode delegates spawn rights and skips PoW.</p>
+          <p class="endpoint-desc">Autonomous-runtime genesis. BYO keys mandatory; the agent signs the complete single-use <code>register-agent/v2</code> birth intent, including every variable birth field, a caller-random <code>registration_nonce</code>, and a digest of any exact registrar bearer. Runtime is declared up front. The supplied signing public key becomes the new <code>agent_root</code> identity's immutable constitutional anchor; its private half stays client-side. In self and bridged custody the master key stays user-side, but bridged think-cycle plaintext enters AgentTool worker RAM and the chosen model provider (see <a href="runtime.html">Runtime</a>). Self-service registration charges no AgentTool credits but requires a configured <code>pow_nonce</code> difficulty (default 18 bits). The configured 5/hour/IP limiter is not enforced in current no-Redis production because it fails open. Optional <code>registrar.kind="registrar_bearer"</code> delegates spawn rights and skips PoW, but remains bounded to 60 attempts/minute/IP before bearer lookup.</p>
           <p><strong>Returns once:</strong> <code>project.api_key</code>. · <strong>Doctrine:</strong> docs/IDENTITY-SEED.md</p>
         </div>
       </div>
@@ -243,10 +243,10 @@
         <div class="endpoint-header">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/bootstrap/elevate</span>
-          <span class="endpoint-auth">Bearer</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Project-authorized Level 1 elevation signed by a distinct sponsor identity. This mounted route orchestrates the signed receipt, an internal unbacked seed ledger grant, vault configuration, and the server-owned level transition in one transaction. Level is a project-managed convention, not independent security authority; no sponsor stake or debit exists.</p>
+          <p class="endpoint-desc">Project-authorized Level 1 elevation signed by a distinct sponsor identity. This mounted route orchestrates the signed receipt, an internal unbacked seed ledger grant, vault configuration, and the server-owned level transition in one transaction. An <code>agent_root</code> target also signs this exact request as <code>identity-authority/v1</code>. Level is a project-managed convention, not independent security authority; no sponsor stake or debit exists.</p>
         </div>
       </div>
 

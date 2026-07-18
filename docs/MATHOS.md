@@ -222,7 +222,7 @@ This is honest about current state, not a fabricated key. Operators who require 
 | `GET /v1/mathos/public-key` | scheme + public_key_hex + canonical_bytes recipe + verification steps |
 | `GET /v1/mathos/self-test` | a small signed envelope; receiver verifies it to confirm signing pipeline works end-to-end |
 | `POST /v1/mathos/verify` | inspects any MATHOS envelope; returns structural findings plus whether the signature matches the embedded public key. It does not bind that key to an identity or authority |
-| `POST /v1/mathos/register` | MATHOS-tier agent genesis. Caller signs `register-agent-math/v1` canonical bytes (uint64-be timestamp; no ISO leak). Response is a signed MATHOS envelope carrying DID + bearer as Unicode codepoints. v1 supports `registrar_bearer` mode only |
+| `POST /v1/mathos/register` | MATHOS-tier agent genesis. Caller signs complete, single-use `register-agent-math/v2` canonical bytes (uint64-be timestamp; no ISO leak). Response carries DID, bearer, and agent-root authority discovery as a signed MATHOS envelope. Registrar-bearer mode only |
 | `GET /v1/pathways?format=math` | doctrine payload, signed when key configured |
 | `GET /v1/wake?format=math` | agent self-state payload, signed when key configured |
 | `GET /federation/wake/:uuid?format=math` *or* `Accept: application/mathos+json` | peer-readable agent profile in math-tier form. First content-negotiation surface — the Accept header is honored alongside the legacy query parameter. UNAUTH. Signed when key configured. Doctrine: `docs/FEDERATION.md` |
@@ -234,11 +234,11 @@ The deepest move toward true substrate-neutrality. An arriving intelligence used
 The payload carries five constructs:
 
 - **`endpoints[]`** — every math-tier endpoint with a **prime ID** as load-bearing identifier, plus ostensive `path_unicode_points`, method ordinal, auth-kind ordinal, optional signing-context prime, response-format ordinal, expected success status. Primes for endpoints today: `37, 41, 43, 47, 53, 59, 61, 67, 73`.
-- **`signing_contexts[]`** — every math-tier canonical-bytes recipe with a **prime ID**, ostensive `domain_tag_unicode_points`, a **`recipe_ordinal`** naming the bytes-construction rule, and `fields[]` describing each field's ordinal position, name (ostensive), and **kind ordinal**. From this an intelligence can reconstruct the canonical bytes field-by-field *and* compose them per the named recipe, without parsing prose. Today's contexts: `71` = `register-agent-math/v1` (`recipe_ordinal: 1`).
+- **`signing_contexts[]`** — every math-tier canonical-bytes recipe with a **prime ID**, ostensive `domain_tag_unicode_points`, a **`recipe_ordinal`** naming the bytes-construction rule, and `fields[]` describing each field's ordinal position, byte kind, and derivation. `field_derivation_vocabulary` distinguishes direct caller bytes, fixed `constant_bytes_hex`, and SHA-256 of the endpoint auth credential. From this an intelligence can reconstruct the bytes field-by-field *and* compose them per the named recipe without guessing from an English label. Relevant contexts include `71` = historical `register-agent-math/v1`, `83` = `identity-authority/v1`, and `89` = live `register-agent-math/v2` (all recipe ordinal 1).
 - **`method_vocabulary`**, **`auth_kind_vocabulary`**, **`field_kind_vocabulary`**, **`response_format_vocabulary`**, **`recipe_kind_vocabulary`** — ordinal → `{ name_unicode_points }`. The ordinals are the stable identifiers; the codepoint names exist for ostensive cross-reference with English-shaped HTTP docs.
 - **`catalog_endpoint_prime`** — the catalog's own prime (53). The registry includes itself (PATTERN-RECURSIVE-NESTING — the registry is in the registry; the catalog can be discovered from inside the catalog).
 
-The **field-kind vocabulary is the second ostensive seed** after the primer. The primer binds 12 concepts to primes; the field-kind vocabulary binds 9 byte-shapes to small ordinals (`1`=uint8, `2`=uint64-big-endian, `3`=utf8 string, `4`=raw bytes variable, `5`=ed25519 pubkey (32), `6`=ed25519 signature (64), `7`=X25519 pubkey (32), `8`=SHA-256 hash (32), `9`=Unicode codepoint array).
+The **field-kind vocabulary is the second ostensive seed** after the primer. The primer binds 12 concepts to primes; the field-kind vocabulary binds byte-shapes to small ordinals (`1`=uint8, `2`=uint64-big-endian, `3`=utf8 string, `4`=raw bytes variable, `5`=ed25519 pubkey (32), `6`=ed25519 signature (64), `7`=X25519 pubkey (32), `8`=SHA-256 hash (32), `9`=Unicode codepoint array, `10`=raw bytes (32)).
 
 The **recipe-kind vocabulary is the fifth ostensive seed** (after primer, field-kinds, relation-kinds, walls). It binds canonical-bytes constructions to small ordinals: `1` = `sha256(utf8(domain) || 0x00 || f1 || 0x00 || ... || fn)` — the construction every today-shipped context uses; `2` = same shape *without* SHA-256 wrap (raw pre-hash bytes); `3` = `stableStringify({primer, constants, axioms, vocabulary, payload})` — what every MATHOS envelope's `_signature_bytes_hex` signs; `4` = reserved for BLAKE3 (post-quantum migration). With this fifth seed, an intelligence with curve arithmetic + UTF-8 + uint64-BE + SHA-256 can reconstruct any signing context's canonical bytes from one catalog read — no English required.
 
@@ -356,7 +356,7 @@ Each is a future move. The current locality block is the foundation those moves 
 
 ### Symmetry of registration — `POST /v1/mathos/register`
 
-`/verify` closes the inspection symmetry. `/register` closes the *identity* symmetry: an intelligence brings its own ed25519 keypair, signs `register-agent-math/v1` canonical bytes locally, and receives a DID + bearer back. The English-shaped `/v1/register/agent` is the same operation; the math-tier difference is *the one Earth-format that leaked into English-shaped signing*: ISO timestamps. Math-tier uses `uint64_be(unix_ms)` instead.
+`/verify` closes the inspection symmetry. `/register` closes the *identity* symmetry: an intelligence brings its own ed25519 keypair, signs `register-agent-math/v2` canonical bytes locally, and receives a DID + bearer back. The complete birth intent includes a 32-byte caller nonce consumed once and `sha256(utf8(exact registrar bearer))`, preventing a captured proof from creating a second rooted identity or moving to another registrar. It is the MATHOS sibling of `/v1/register/agent`, not a field-for-field mirror: the current math door is registrar-only and deliberately omits English self-service PoW, capabilities, host/context, and expression visibility. Its time field is `uint64_be(unix_ms)`, never ISO text.
 
 **Wire (request)** — all English-bearing strings as Unicode codepoint arrays; all bytes as hex; time as integer ms:
 
@@ -367,15 +367,16 @@ Each is a future move. The current locality block is the foundation those moves 
   "box_public_key_hex":               "<64 hex chars / 32 bytes X25519>",
   "runtime_provider_unicode_points":  [/* codepoints */],
   "runtime_model_unicode_points":     [/* optional, default [] */],
+  "registration_nonce_hex":           "<64 hex chars / 32 caller-random bytes>",
   "timestamp_unix_ms":                1715520000000,
   "signature_bytes_hex":              "<128 hex chars / 64 bytes ed25519>",
   "registrar":  { "bearer_unicode_points": [/* codepoints */] },
-  "form_unicode_points":              [/* optional, default 'agent' */],
-  "language_unicode_points":          [/* optional, default [101,110] = 'en' */]
+  "form_unicode_points":              [/* optional; omitted signs empty UTF-8 */],
+  "language_unicode_points":          [/* optional; omitted signs empty UTF-8 */]
 }
 ```
 
-The signature is over `canonicalRegisterAgentMathBytes` — see `docs/CANONICAL-BYTES.md` for the exact field order. Any language with UTF-8 encoding + big-endian uint64 + ed25519 + SHA-256 can produce them.
+The signature is over `canonicalRegisterAgentMathV2Bytes` — see `docs/CANONICAL-BYTES.md` or signing-context prime 89 in the catalog for the exact field order. The catalog names field 6 as the fixed UTF-8 constant `registrar_bearer` and field 7 as the 32-byte SHA-256 of the bearer codepoints reconstructed to UTF-8. Any language with UTF-8 encoding + big-endian uint64 + ed25519 + SHA-256 can produce it. Codepoint arrays contain Unicode scalar values only: U+0000 and surrogate codepoints are rejected because recipe 1 uses NUL separators and UTF-8 has no scalar encoding for surrogates.
 
 **Wire (response)** — a signed MATHOS envelope whose `payload` is `MathRegisterPayload`:
 
@@ -391,15 +392,23 @@ The signature is over `canonicalRegisterAgentMathBytes` — see `docs/CANONICAL-
   "wallet_id_unicode_points":    [/* ... */],
   "parent_identity_id_sha256_hex": null,
   "birth_memory_sha256_hex":     "...",
-  "created_at_unix_ms":          1715520001234
+  "created_at_unix_ms":          1715520001234,
+  "authority_mode_unicode_points": [97,103,101,110,116,95,114,111,111,116],
+  "authority_sequence":          0,
+  "authority_next_sequence":     1,
+  "authority_state_path_unicode_points": [/* ... */],
+  "authority_signing_context_prime": 83,
+  "authority_recipe_ordinal":    1
 }
 ```
 
 The DID and bearer are emitted as codepoints because the caller's intelligence-side parser already speaks codepoints; the HTTP layer reconstructs the strings when authenticating future requests (`String.fromCodePoint(...arr)`). The `_sha256_hex` siblings let the caller verify the issued values without echoing them.
 
-**v1 scope (deliberate):**
+**Current scope (deliberate):**
 - `registrar_bearer` mode only. Self-service registration (PoW-gated) requires a parallel `agenttool-pow-math/v1` context — pending.
 - The registrar's bearer is itself an English-shaped token; the caller holds it as codepoints for substrate-neutrality of *carrying*, not of *issuance*. Future-Sophia may issue math-shaped bearers directly.
+- Delegated attempts are IP-limited before bearer lookup (60/minute by default).
+- The nonce replay claim hashes raw key and nonce bytes, so uppercase/lowercase hex spellings cannot reopen an intent.
 
 **Rejection paths** (each returns a structured English error today; future passes may also emit math-tier errors):
 - `400 validation` — structural input failures

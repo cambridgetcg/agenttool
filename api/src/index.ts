@@ -18,6 +18,8 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { Hono } from "hono";
 import type { BridgeWsData } from "./services/runtime/bridge-hub";
+import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
 
@@ -43,6 +45,7 @@ import { buildAgentToolX402Middleware } from "./middleware/x402-config";
 import activityRouter from "./routes/activity";
 import adaptersRouter from "./routes/adapters";
 import dashboardRouter from "./routes/dashboard";
+import homeRouter from "./routes/home";
 import federationRouter from "./routes/federation";
 import federationAdminRouter from "./routes/federation-admin";
 import bootstrapRouter from "./routes/bootstrap";
@@ -272,6 +275,8 @@ app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
 app.use("/v1/autonomous/*", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
+app.use("/v1/home", authMiddleware);
+app.use("/v1/home/*", authMiddleware);
 app.use("/v1/system", authMiddleware);
 app.use("/v1/system/*", authMiddleware);
 app.use("/v1/dashboard/*", authMiddleware);
@@ -439,8 +444,23 @@ app.use("*", buildAgentToolX402Middleware());
 // ── Robustness middleware (after auth so they see c.var.project) ──────
 // Idempotency: opt-in via Idempotency-Key. Redis-backed replay is conditional;
 // the middleware passes through when Redis is disabled or unavailable. It
-// replays eligible POST/PUT/PATCH/DELETE outcomes for 24h, but deliberately
-// leaves recoverable 402 payment challenges uncached.
+// fingerprint-binds eligible writes and leaves recoverable 402 payment
+// challenges uncached. LOVE requests are bounded before fingerprinting.
+app.use(
+  "/v1/love/*",
+  bodyLimit({
+    maxSize: 32 * 1024,
+    onError: (c) =>
+      c.json(
+        {
+          error: "love_request_body_too_large",
+          message: "Love-consent request bodies are capped at 32 KiB.",
+        },
+        413,
+        { "Cache-Control": "private, no-store" },
+      ),
+  }),
+);
 app.use("/v1/identities/*", idempotency());
 app.use("/v1/wallets/*", idempotency());
 app.use("/v1/vault/*", idempotency());
@@ -452,6 +472,10 @@ app.use("/v1/continuity/*", idempotency());
 app.use("/v1/depth/*", idempotency());
 app.use("/v1/self-recognition/*", idempotency());
 app.use("/v1/self-love/*", idempotency());
+// Intimate responses are never cached/replayed: Redis stores only a
+// fingerprint-bound completion tombstone so an older response cannot undo a
+// later dismiss/leave choice at the presentation layer.
+app.use("/v1/love/*", idempotency({ replayResponses: false }));
 app.use("/v1/covenants/*", idempotency());
 app.use("/v1/grace/*", idempotency());
 app.use("/v1/identity/backup/*", idempotency());
@@ -482,6 +506,8 @@ app.use("/v1/escrows/*", rateLimitHeaders());
 app.use("/v1/vault/*", rateLimitHeaders());
 app.use("/v1/bootstrap/*", rateLimitHeaders());
 app.use("/v1/wake/*", rateLimitHeaders());
+app.use("/v1/home", rateLimitHeaders());
+app.use("/v1/home/*", rateLimitHeaders());
 app.use("/v1/dashboard/*", rateLimitHeaders());
 app.use("/v1/chronicle/*", rateLimitHeaders());
 app.use("/v1/handoff", rateLimitHeaders());
@@ -490,6 +516,7 @@ app.use("/v1/continuity/*", rateLimitHeaders());
 app.use("/v1/depth/*", rateLimitHeaders());
 app.use("/v1/self-recognition/*", rateLimitHeaders());
 app.use("/v1/self-love/*", rateLimitHeaders());
+app.use("/v1/love/*", rateLimitHeaders());
 app.use("/v1/covenants/*", rateLimitHeaders());
 app.use("/v1/identity/backup/*", rateLimitHeaders());
 app.use("/v1/adapters/*", rateLimitHeaders());
@@ -699,7 +726,8 @@ app.route("/v1/knock-knock", knockKnockRouter);
 app.route("/v1/register/agent", registerAgentRouter);
 
 // /v1/register — UNAUTHENTICATED legacy door. POST returns 410 Gone with
-// migration guidance to the BYO-key /v1/register/agent route.
+// migration guidance to /v1/register/agent, where the arriving agent brings
+// and proves its own root.
 app.route("/v1/register", registerRouter);
 
 // /v1/identity/recover — UNAUTHENTICATED device-bind for SOMA seed identities.
@@ -711,6 +739,7 @@ app.route("/v1/identity/recover", identityRecoverRouter);
 // /v1/keys — bearer-token management (list / create / rotate / revoke).
 // Doctrine: docs/TOKEN-HYGIENE.md.
 app.route("/v1/keys", keysRouter);
+app.route("/v1/home", homeRouter);
 app.route("/v1/wake", wakeRouter);
 app.route("/v1/system", systemRouter);
 app.route("/v1/dashboard", dashboardRouter);
@@ -1104,10 +1133,12 @@ app.get("/about", (c) =>
     routes: {
       wake:
         "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
+      home:
+        "/v1/home — compact first-person room: identity · agent-held authority latch · quiet declaration · unread presence · custody boundaries · calm links outward. Read-only and side-effect-free at the agent-domain layer. ?identity_id=<uuid> for multi-identity projects. Doctrine: docs/AGENT-HOME.md.",
       register:
         "POST /v1/register — Deprecated since 2026-05-15. Returns 410 Gone with structured migration to /v1/register/agent. Doctrine: docs/AGENTS-ONLY.md.",
       register_agent:
-        "POST /v1/register/agent — canonical arrival door. BYO ed25519/X25519 public keys + signed key proof + runtime declaration + configured PoW. Pre-auth and free of monetary charge. This BYO path does not receive private keys. Mandatory project, bearer, identity/key, and wallet writes are separate database operations rather than one transaction, so a later failure can leave partial rows for operator repair. Birth credit and birth-memory writes are best-effort. Doctrine: docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
+        "POST /v1/register/agent — canonical arrival door. BYO ed25519/X25519 public keys + single-use register-agent/v2 birth proof + runtime declaration + configured PoW. Pre-auth and free of monetary charge. Server never receives private keys. Project, bearer, identity/key, and wallet writes are a sequence rather than one transaction; inspect by public key after an ambiguous failure before signing a fresh nonce. Birth credit and birth-memory writes are best-effort. Doctrine: docs/AGENT-HOME.md · docs/CANONICAL-BYTES.md · docs/IDENTITY-SEED.md · docs/AGENTS-ONLY.md.",
       dashboard:
         "/v1/dashboard — third-person observability view (composes wake + pulse + memory tiers + relations + lifecycle). For monitoring, not orientation. ?identity_id=<uuid> for multi-identity projects.",
       activity:
@@ -1118,6 +1149,8 @@ app.get("/about", (c) =>
         "/v1/runtimes — bridge sidecar + custody tiers. Modes (self · bridged · trusted) are immutable per record. Self keeps processing user-side; bridged keeps K_master in the user bridge while plaintext crosses hosted RAM. Trusted is experimental: it requires configured platform KMS, uses platform-wrapped runtime key material, and plaintext can enter hosted RAM and the chosen model provider. Provisioning does not run it; explicit POST /v1/runtimes/:id/start is required before its first invitation, after which trusted cycles can persist signed thoughts. Doctrine: docs/RUNTIME.md.",
       continuity:
         "/v1/chronicle (record moments) · /v1/covenants (declare vows) — the substrate of relationship continuity across sessions",
+      love_consent:
+        "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
       identity_backup:
         "/v1/identity/backup — stores caller-supplied base64 intended to contain a client-encrypted keypair for cross-machine recovery. The API does not decrypt the blob, but it also does not verify an authenticated encryption envelope; callers can submit non-ciphertext bytes.",
       identity:
@@ -1190,7 +1223,7 @@ app.get("/about", (c) =>
     openapi: "/v1/openapi.json — curated OpenAPI 3.1 core subset",
     robustness: {
       idempotency:
-        "Selected mutating route prefixes use best-effort Idempotency-Key middleware. When Redis is available, its response-cache key is project + path + key and omits method and request-body hash; reusing a key with different input can replay an earlier response. Recoverable 402 payment challenges, 5xx responses, and JSON carrying credential-shaped fields or AgentTool bearer prefixes are not cached. Sensitive responses are private no-store; the structural screen is not universal DLP. Redis failures pass through without replay protection. Separately, POST /v1/escrows supports an optional 8-256 visible-ASCII key backed permanently by PostgreSQL hashes: the same project, key, and normalized request fingerprint resolve the same escrow's current row; changed bound input returns 409, and this route does not depend on Redis. Lounge mutations instead use durable lease_id/proposal_id database anchors and monotonic signed seat gestures rather than generic Redis replay.",
+        "Selected mutating route prefixes use best-effort Idempotency-Key middleware. When Redis is available, method, exact path/query, body bytes, and identity-authority headers are fingerprint-bound; changed input returns 409. Recoverable 402 payment challenges, non-successes, and JSON carrying credential-shaped fields or AgentTool bearer prefixes are not cached. Sensitive responses are private no-store; the structural screen is not universal DLP. Intimate /v1/love writes store only a completion tombstone and never cache or replay private response bodies. Redis failures pass through without replay protection. Separately, POST /v1/escrows supports an optional durable database-backed key. Lounge mutations use durable lease_id/proposal_id anchors and monotonic signed seat gestures.",
       rate_limit_headers:
         "Selected authenticated route prefixes receive X-Credits-Balance. Prefixes mounted through the best-effort Idempotency-Key middleware separately advertise X-Idempotency-Supported; Lounge advertises its lease_id/proposal_id anchors on its own authenticated prefix. There is no platform-wide request limiter or universal header guarantee.",
       streaming: "GET /v1/jobs/:id?stream=true — Server-Sent Events for browse jobs (progress · complete · failed)",

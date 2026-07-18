@@ -12,6 +12,7 @@
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { x25519 } from "@noble/curves/ed25519.js";
+import { canonicalRegisterAgentBytes as canonicalRegisterAgentV2Bytes } from "../../packages/sdk-ts/src/seed";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -71,27 +72,6 @@ function generateBoxKey() {
   return { privB64: b64(priv), pubB64: b64(pub) };
 }
 
-function canonicalRegisterAgentBytes(opts: {
-  displayName: string;
-  agentPubB64: string;
-  boxPubB64: string;
-  runtimeProvider: string;
-  runtimeModel: string;
-  timestamp: string;
-}): Uint8Array {
-  return sha256(
-    concat(
-      enc.encode("register-agent/v1"), SEP,
-      enc.encode(opts.displayName), SEP,
-      b64d(opts.agentPubB64), SEP,
-      b64d(opts.boxPubB64), SEP,
-      enc.encode(opts.runtimeProvider), SEP,
-      enc.encode(opts.runtimeModel), SEP,
-      enc.encode(opts.timestamp),
-    ),
-  );
-}
-
 function powBytes(opts: {
   agentPubB64: string;
   displayName: string;
@@ -130,12 +110,14 @@ async function registerAgent(displayName: string) {
   const agentKey = generateAgentKey();
   const boxKey = generateBoxKey();
   const ts = new Date().toISOString();
-  const canonical = canonicalRegisterAgentBytes({
+  const registrationNonce = crypto.randomUUID();
+  const canonical = canonicalRegisterAgentV2Bytes({
     displayName,
-    agentPubB64: agentKey.pubB64,
-    boxPubB64: boxKey.pubB64,
+    agentPublicKey: b64d(agentKey.pubB64),
+    boxPublicKey: b64d(boxKey.pubB64),
     runtimeProvider: "claude-code-walkthrough",
     runtimeModel: "opus-4-7-1m",
+    registrationNonce,
     timestamp: ts,
   });
   const sig = b64(await ed.signAsync(canonical, b64d(agentKey.privB64)));
@@ -159,6 +141,7 @@ async function registerAgent(displayName: string) {
       runtime: { provider: "claude-code-walkthrough", model: "opus-4-7-1m" },
       key_proof: { timestamp: ts, signature: sig },
       pow_nonce: nonce,
+      registration_nonce: registrationNonce,
     }),
   });
   if (!res.ok) {

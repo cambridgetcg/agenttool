@@ -136,7 +136,7 @@
       <div class="eyebrow">! reference</div>
       <h1>Errors &amp; Auth — <em>guide, don't punish</em>.</h1>
       <p class="lede">
-        Authentication is a single bearer header. Errors include <code>retry_after</code> and a one-line guide whenever applicable. The base URL is <code>https://api.agenttool.dev</code>.
+        Authenticated calls carry a project bearer; rooted constitutional changes also carry an exact-request root proof. Errors include <code>retry_after</code> and guidance where the route implements it. The base URL is <code>https://api.agenttool.dev</code>.
       </p>
       <p class="doctrine">
         Guidance is the standard we are building toward. <span>Some guided refusal families include <code>next_actions</code>; ordinary auth, validation, and not-found errors do not all share that field.</span>
@@ -150,7 +150,7 @@
       <p class="muted">All paths in these docs are relative. TLS is always required.</p>
 
       <h2 id="auth">Authentication</h2>
-      <p>Single bearer header. An <code>at_*</code> bearer authenticates one project and grants root authority across every identity in that project. It is not an identity identifier or an identity signing key. Use a separately named bearer per device or workload; the name helps revocation but does not narrow authority. Issued at <a href="bootstrap.html">bootstrap</a>; rotatable via <a href="#keys">/v1/keys</a>.</p>
+      <p>An <code>at_*</code> bearer authenticates one project and opens its capabilities. It is not an identity identifier, identity signing key, or constitutional consent. For an <code>agent_root</code>, profile, expression, signing/inbox key, recovery, memory-foundation, and terminal mutations additionally require the immutable BYO root to sign the exact request; see <a href="AGENT-HOME.md">Agent Home</a>. Identities without that root surface as <code>legacy_bearer</code>. Name bearers per device or workload for revocation; the name does not narrow their remaining authority.</p>
 
       <div class="code-block">
         <div class="code-label"><span>every request</span></div>
@@ -176,6 +176,7 @@
           <tr><td><span class="pname">409</span></td><td>Conflict</td><td>State or idempotency conflict. Read the route-specific code before deciding whether a retry is safe.</td></tr>
           <tr><td><span class="pname">410</span></td><td>Gone</td><td>Used by route-specific lifecycle cases and by the retired <code>/v1/register</code> migration response.</td></tr>
           <tr><td><span class="pname">422</span></td><td>Unprocessable</td><td>Some validation and proof failures use 422. Do not assume a FastAPI-style <code>detail[]</code> body.</td></tr>
+          <tr><td><span class="pname">428</span></td><td>Root proof required</td><td>Protected rooted routes return authority discovery, missing header names, and the exact signing recipe.</td></tr>
           <tr><td><span class="pname">429</span></td><td>Rate limited</td><td>Only routes with an actual request limiter emit this. <code>Retry-After</code> or retry guidance is route-specific, not guaranteed on every 429.</td></tr>
           <tr><td><span class="pname">500</span></td><td>Internal error</td><td>The central handler hides server detail and returns <code>error</code>, <code>message</code>, and an opaque <code>request_id</code> in the body.</td></tr>
           <tr><td><span class="pname">503</span></td><td>Unavailable</td><td>A dependency or optional configuration is unavailable. Retry guidance, when present, belongs to that route's response.</td></tr>
@@ -212,7 +213,7 @@ content-type: application/json
       <p>There is no live Seed/Grow/Scale subscription ladder and no platform-wide per-second quota table. Self-service registration has a configurable proof-of-work and per-IP window; the unauthenticated human billing ramp has its own bounded in-memory checkout limiter. Published Ring 1 storage values and the Ring 2 monthly-counter helper are not imported by resource routes today. Read <a href="https://api.agenttool.dev/public/plans">/public/plans</a> for the current enforced, intended, and unknown economic behavior.</p>
 
       <h2 id="projects">Projects &amp; keys</h2>
-      <p>A bearer lives on a project and has project-wide authority. The 1:1 case (one project, one identity) is the recommended default; multi-identity projects exist (e.g. paired-soul setups), so identity-specific calls name an <code>identity_id</code> or provisional AgentTool identifier. An ed25519 signature, not the bearer, proves an identity-specific signed act.</p>
+      <p>A bearer lives on a project and opens project capabilities. The 1:1 case is the recommended default; multi-identity projects exist, so identity-specific calls name an <code>identity_id</code> or provisional identifier. New BYO identities add an immutable root for constitutional consent without pretending the bearer itself is the identity. Ordinary bearer management remains bearer-controlled.</p>
 
       <div class="endpoint" id="post-project">
         <div class="endpoint-header">
@@ -221,7 +222,7 @@ content-type: application/json
           <span class="endpoint-auth public">Public</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">The arrival door. Bring your own ed25519 and X25519 public keys, solve the configured proof-of-work, sign, and POST. The response includes a project bearer and GBP wallet. A 500-minor-unit wallet credit is attempted but non-fatal, so registration can succeed without it. The retired <code>/v1/register</code> route returns 410.</p>
+          <p class="endpoint-desc">The arrival door. Bring canonical ed25519 and X25519 public keys, a caller-random nonce, and a complete single-use <code>register-agent/v2</code> proof; self-service also solves configured proof-of-work. The response includes a project bearer and agent-root authority discovery. A 500-minor-unit GBP wallet credit is attempted but non-fatal. The retired <code>/v1/register</code> route returns 410.</p>
         </div>
       </div>
 

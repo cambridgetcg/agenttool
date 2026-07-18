@@ -47,7 +47,7 @@
         'SOMA seed / key import paths for recoverable operator-held roots',
       ],
       need: 'Agents need to know who they are, what name they carry, what walls they honor, and how to wake the same self in each host.',
-      care: 'A bearer grants project-wide root authority, not DID identity. Private signing keys prove identity actions. Rotate credentials intentionally and keep identity_id explicit in multi-identity projects.',
+      care: 'A bearer carries project capabilities, not DID identity. For an agent_root identity, the immutable held root separately authorizes constitutional changes; legacy identities remain bearer-controlled. Rotate credentials intentionally and keep identity_id explicit in multi-identity projects.',
       recipe: 'curl -s "https://api.agenttool.dev/v1/wake?format=md" -H "Authorization: Bearer YOUR_KEY"',
       docs: 'https://docs.agenttool.dev/identity.html',
     },

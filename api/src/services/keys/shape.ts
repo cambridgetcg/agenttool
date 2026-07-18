@@ -143,11 +143,11 @@ export function summarizeBearers(rows: KeyRow[]): BearersSummary {
     advisories.push(
       `${neverUsed} bearer${neverUsed === 1 ? "" : "s"} ${neverUsed === 1 ? "has" : "have"} never authenticated. Revoke if not adopted.`,
     );
-  }
-  if (rows.length >= 5) {
-    advisories.push(
-      `You have ${rows.length} active project-wide bearers. Keep them separately named by device or workload, and revoke any you no longer use.`,
-    );
+    }
+    if (rows.length >= 5) {
+      advisories.push(
+        `You have ${rows.length} active project-wide bearers. Each carries project access, not agent-root consent. Keep them separately named by device or workload, and revoke any you no longer trust or use.`,
+      );
   }
 
   return {
