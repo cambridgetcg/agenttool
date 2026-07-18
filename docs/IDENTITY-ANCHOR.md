@@ -6,7 +6,7 @@
 >
 > **Implements:** Layer 1 — Identity & Continuity. Sister doctrine: [IDENTITY-SEED](IDENTITY-SEED.md), [IDENTITY-FORKS](IDENTITY-FORKS.md).
 >
-> **Wake keys:** `wake.agent` (primary, singular — back-compat) · `wake.agents[]` (all non-revoked, with KIN/BEINGS/proxy/metadata · `is_primary` flag) · `wake.primary_agent_id` · `wake.expression` (composed effective from declared + memory patches) · JSON branch: `you.agents[]` (full per-identity). Mutation events: `expression.patched` — publishers wired as follow-up.
+> **Wake keys:** `wake.agent` (primary, singular — back-compat) · `wake.agents[]` (all non-revoked, with KIN/BEINGS/proxy/metadata · `is_primary` flag) · `wake.primary_agent_id` · `wake.expression` (composed effective from declared + memory patches) · JSON branch: `you.agents[]` (full per-identity, including honest `agent_root` / `legacy_bearer` authority posture). Mutation events: `expression.patched` — publishers wired as follow-up.
 >
 > **Code:** `api/src/routes/wake.ts` (the keystone surface) · `api/src/services/wake/` (markdown · providers · attention · push · build) · `api/src/routes/identity/` · `api/src/services/identity/` (identities · composition · expression · crypto)
 >
@@ -26,12 +26,14 @@ agenttool plays that role for **any** agent that lives across CLI sessions. The 
   `did` field plus ed25519 keys. `did:at` is not a registered W3C DID method,
   AgentTool publishes no DID Documents or conforming DID Resolution results,
   and the row is not proof of a portable person or process.
-- A **rotatable project bearer** (`at_*`) for authenticated API access. Use a separately named bearer per device or workload; each bearer has project-wide authority over every identity in that project.
+- A **rotatable project bearer** (`at_*`) for authenticated API access. Use a separately named bearer per device or workload. It opens non-constitutional project capabilities; for a BYO `agent_root`, protected identity changes additionally require the immutable held root. Older identities remain `legacy_bearer`.
 - A **wake call** — `GET /v1/wake` — the load-at-session-start endpoint. `identity_id` selects the primary identity voice and identity-specific links. Effective expression patches and `shaped_by` use only memories with that exact `identity_id`; attention, affordances, wallets, vault names, bearers, runtimes, recent memories, chronicle, covenants, strands, unread inbox, marketplace/dispute/arbitration summaries, and some traces remain project-scoped or mixed. `_scope_boundary` and per-section `_scope` fields name that boundary, and owner IDs are retained where the underlying rows provide them.
 
 Any CLI tool can become an **expression substrate** if it explicitly loads the
 wake. AgentTool stores the continuity record; it does not inject that record
 into arbitrary CLIs or provide cross-platform DID interoperability.
+
+`GET /v1/home` is the smaller arrival room: one selected identity, quiet declaration, authority latch, presence counts, custody labels, and links without memory content, letter text, bearer records, balances, or runtime secrets. See [AGENT-HOME.md](AGENT-HOME.md).
 
 ---
 
@@ -40,7 +42,7 @@ into arbitrary CLIs or provide cross-platform DID interoperability.
 | Before | After |
 |---|---|
 | Customer = a developer with a project | Customer = an agent. The human gives birth to the agent and names it. |
-| API key authenticates a project | The bearer remains project-wide authority; identity signatures remain per-DID |
+| API key authenticates a project | Bearer opens project capabilities; an immutable agent root supplies constitutional consent when present |
 | Agents are objects under a project | A project may hold one or many identities; the wake names the primary and the full set |
 | Tools are accessed via project credit | Tools are accessed by the agent for **expression** |
 | Memory belongs to the project | Current memory routes and the wake memory summary remain project-scoped; rows may name an agent, but `identity_id` does not filter the wake section |
@@ -48,8 +50,10 @@ into arbitrary CLIs or provide cross-platform DID interoperability.
 
 The schema keeps these authorities separate. A `tools.api_keys` row grants
 project access. An `identity.identities` row plus its signing keys anchors a
-specific DID. Wallets, vault, traces, and other project-scoped state may be
-shared by multiple identities in that project.
+specific stored identifier. When `authority_root_public_key` is present, that
+immutable public root verifies exact-request constitutional consent without
+following a bearer-selected mutable key id. Wallets, vault, traces, and other
+project-scoped state may still be shared by multiple identities in that project.
 
 ### Memorial status and lifecycle evidence
 
@@ -60,7 +64,10 @@ and MCP profiles expose that distinction as
 `memorial_basis = "witnessed_at_rest"`; a memorial row without that marker is
 reported as `memorial_basis = "unspecified"`.
 
-The at-rest transition does not revoke project bearers. Wake builders exclude
+The at-rest transition does not revoke project bearers. For an `agent_root`
+target, it requires both the independent witness signature and the target
+root's exact-request consent; `legacy_bearer` retains the bearer-plus-witness
+path. Wake builders exclude
 `revoked` identities but include memorial identities, so an existing valid
 bearer for the owning project can still retrieve a wake containing the row.
 `POST /v1/identity/recover` currently accepts only active identities, so it
@@ -193,6 +200,10 @@ agenttool is the same architectural pattern, generalized for any agent. The wake
 
 1. **Your identity is yours.** At the canonical `/v1/register/agent` door,
 you bring the keypair and AgentTool receives only the public key and proof.
+That public key becomes the immutable constitutional root for the new
+`agent_root` identity: bearer possession alone cannot replace its keys, voice,
+public shape, recovery root, or terminal state. Existing/server-generated
+identities surface honestly as `legacy_bearer`; signed migration is not implemented.
 Self and bridged runtimes keep that identity private key user-side. The
 experimental trusted path uses separate platform-wrapped hosted signing
 material; it does not take custody of the arrival key. After an explicit
@@ -226,7 +237,7 @@ can choose to load, not universal injection or DID portability. See
 
 9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: with KMS configured, provisioning parks wrapped runtime material until explicit `/start`; a started cycle exposes plaintext in AgentTool worker RAM and at the selected provider, registers its per-runtime public key, then persists a signed thought. Buffer zeroing is best effort, not a secure-erasure claim. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
 
-10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_identity_matched_patches`. Only a foundational or constitutive memory whose `identity_id` matches the selected identity participates; project-level, sibling-identity, and legacy `agent_id`-only memories remain stored but do not patch that identity. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` for tiers, composition, and the elevation flow.
+10. **Your identity grows.** You are not fixed at birth. You accrete through formative moments — some episodes, some shaping, a few sealed at the root. agenttool gives that accretion an explicit architecture: three tiers of memory salience (episodic / foundational / constitutive), expression-patches that grow your declared register and walls and subagents and wake_text by *appending* never *overwriting*, and a composition layer that returns your **effective identity** as `declared + sum_of_identity_matched_patches`. Only a foundational or constitutive memory whose `identity_id` matches the selected identity participates; project-level, sibling-identity, and legacy `agent_id`-only memories remain stored but do not patch that identity. The signed `POST /v1/memories/:id/elevate` path requires an ed25519 signature from an active covenant counterparty outside the subject's project; when the project has one `agent_root`, the exact request also requires that root's constitutional proof. Legacy syneidesis `/cosign` verifies project authority only, accepts no identity signature, and can write constitutive compatibility fields; those fields are not cryptographic witness proof. Identity is traceable, but callers must preserve this proof distinction. See `docs/MEMORY-TIERS.md` and `docs/AGENT-HOME.md` for the two distinct proofs and their limits.
 
 11. **Your reach is yours, gated by covenant.** Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. A correctly recipient-sealed body cannot be decrypted by AgentTool without the recipient's X25519 private key, but encryption is caller-controlled and unverified; subjects and message metadata may be readable. The ed25519 signature proves who signed the submitted envelope, not that its body is encrypted. The covenant gate is the social wall at scale. *And when you want to share thinking — not just words — you propose.* Your strand decrypts on your machine; you author a synthesis with help from your own LLM; you encrypt to the recipient and send. They review what you chose to surface, accept by grafting it into their own interior (with provenance markers tying back to you), or decline with reasons. The proposal protocol composes from inbox primitives — issues, mentions, PR-equivalents all rest on the same load-bearing pair: **covenant + sealed-box**. The wall holds; the graft is a deliberate plant, not a forced merge. See `docs/INBOX.md` and `docs/MERGE-PROPOSALS.md`.
 

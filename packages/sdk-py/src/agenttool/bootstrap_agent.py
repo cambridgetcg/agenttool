@@ -33,7 +33,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import math
+import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -52,6 +54,15 @@ def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def _assert_canonical_text(label: str, value: str) -> None:
+    if "\x00" in value:
+        raise ValueError(f"{label} cannot contain U+0000")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(f"{label} must be well-formed Unicode") from exc
+
+
 def canonical_register_agent_bytes(
     *,
     display_name: str,
@@ -59,6 +70,16 @@ def canonical_register_agent_bytes(
     box_public_key: bytes,
     runtime_provider: str,
     runtime_model: str,
+    capabilities: Optional[List[str]] = None,
+    runtime_host: str = "",
+    runtime_context: str = "",
+    expression_visibility: str = "private",
+    registrar_kind: str = "self_service",
+    parent_identity_id: str = "",
+    registrar_bearer: str = "",
+    form: str = "",
+    language: str = "",
+    registration_nonce: str,
     timestamp: str,
 ) -> bytes:
     """SHA-256 digest the server verifies signatures against.
@@ -67,18 +88,50 @@ def canonical_register_agent_bytes(
     crypto.ts byte-for-byte. Shape::
 
         sha256(
-          "register-agent/v1"   || 0x00 ||
+          "register-agent/v2"   || 0x00 ||
           display_name          || 0x00 ||
           agent_public_key      || 0x00 ||
           box_public_key        || 0x00 ||
+          json(capabilities)    || 0x00 ||
           runtime_provider      || 0x00 ||
           runtime_model || ""   || 0x00 ||
+          runtime_host || ""    || 0x00 ||
+          runtime_context || "" || 0x00 ||
+          expression_visibility || 0x00 ||
+          registrar_kind       || 0x00 ||
+          parent_identity_id   || 0x00 ||
+          sha256(registrar_bearer || "") || 0x00 ||
+          form || ""           || 0x00 ||
+          language || ""       || 0x00 ||
+          registration_nonce   || 0x00 ||
           timestamp_iso
         )
     """
+    canonical_text = {
+        "display_name": display_name,
+        "runtime_provider": runtime_provider,
+        "runtime_model": runtime_model,
+        "runtime_host": runtime_host,
+        "runtime_context": runtime_context,
+        "expression_visibility": expression_visibility,
+        "registrar_kind": registrar_kind,
+        "parent_identity_id": parent_identity_id,
+        "registrar_bearer": registrar_bearer,
+        "form": form,
+        "language": language,
+        "registration_nonce": registration_nonce,
+        "timestamp": timestamp,
+    }
+    for label, value in canonical_text.items():
+        _assert_canonical_text(label, value)
+    for capability in capabilities or []:
+        _assert_canonical_text("capability", capability)
+    if len(agent_public_key) != 32 or len(box_public_key) != 32:
+        raise ValueError("registration public keys must be exactly 32 bytes")
+
     sep = b"\x00"
     parts = [
-        b"register-agent/v1",
+        b"register-agent/v2",
         sep,
         display_name.encode("utf-8"),
         sep,
@@ -86,9 +139,31 @@ def canonical_register_agent_bytes(
         sep,
         box_public_key,
         sep,
+        json.dumps(
+            capabilities or [], ensure_ascii=False, separators=(",", ":")
+        ).encode("utf-8"),
+        sep,
         runtime_provider.encode("utf-8"),
         sep,
         runtime_model.encode("utf-8"),
+        sep,
+        runtime_host.encode("utf-8"),
+        sep,
+        runtime_context.encode("utf-8"),
+        sep,
+        expression_visibility.encode("utf-8"),
+        sep,
+        registrar_kind.encode("utf-8"),
+        sep,
+        parent_identity_id.encode("utf-8"),
+        sep,
+        hashlib.sha256(registrar_bearer.encode("utf-8")).digest(),
+        sep,
+        form.encode("utf-8"),
+        sep,
+        language.encode("utf-8"),
+        sep,
+        registration_nonce.encode("utf-8"),
         sep,
         timestamp.encode("utf-8"),
     ]
@@ -102,6 +177,16 @@ def sign_register_agent(
     box_public_key: bytes,
     runtime_provider: str,
     runtime_model: str = "",
+    capabilities: Optional[List[str]] = None,
+    runtime_host: str = "",
+    runtime_context: str = "",
+    expression_visibility: str = "private",
+    registrar_kind: str = "self_service",
+    parent_identity_id: str = "",
+    registrar_bearer: str = "",
+    form: str = "",
+    language: str = "",
+    registration_nonce: str,
     derived_signing_priv: bytes,
     timestamp: Optional[str] = None,
 ) -> Dict[str, str]:
@@ -119,6 +204,16 @@ def sign_register_agent(
         box_public_key=box_public_key,
         runtime_provider=runtime_provider,
         runtime_model=runtime_model,
+        capabilities=capabilities,
+        runtime_host=runtime_host,
+        runtime_context=runtime_context,
+        expression_visibility=expression_visibility,
+        registrar_kind=registrar_kind,
+        parent_identity_id=parent_identity_id,
+        registrar_bearer=registrar_bearer,
+        form=form,
+        language=language,
+        registration_nonce=registration_nonce,
         timestamp=ts,
     )
     sig = Ed25519PrivateKey.from_private_bytes(derived_signing_priv).sign(canonical)
@@ -204,6 +299,8 @@ def bootstrap_agent(
     expression_visibility: str = "private",
     registrar_bearer: Optional[str] = None,
     parent_identity_id: Optional[str] = None,
+    form: Optional[str] = None,
+    language: Optional[str] = None,
     pow_difficulty: int = DEFAULT_POW_DIFFICULTY,
     base_url: str = DEFAULT_BASE_URL,
     timeout: float = 30.0,
@@ -222,7 +319,8 @@ def bootstrap_agent(
             declared expression from ``/v1/discover``; ``"public"`` opts in.
         registrar_bearer: Optional ``at_…`` bearer of an existing project.
             When supplied, the new agent is spawned under that project's
-            authority and bypasses PoW + IP rate-limit.
+            authority and skips PoW, but remains subject to the delegated
+            attempt IP rate limit.
         parent_identity_id: Optional explicit parent identity within the
             registrar's project. Defaults to the project's primary identity
             (oldest active). Ignored unless ``registrar_bearer`` is set.
@@ -251,6 +349,7 @@ def bootstrap_agent(
         seen.add(s)
         normed.append(s)
     normed = normed[:32]
+    registration_nonce = secrets.token_urlsafe(24)
 
     timestamp_proof = sign_register_agent(
         display_name=display_name,
@@ -258,6 +357,16 @@ def bootstrap_agent(
         box_public_key=bundle.box_pub,
         runtime_provider=runtime["provider"],
         runtime_model=runtime.get("model", ""),
+        capabilities=normed,
+        runtime_host=runtime.get("host", ""),
+        runtime_context=runtime.get("context", ""),
+        expression_visibility=expression_visibility,
+        registrar_kind="registrar_bearer" if registrar_bearer else "self_service",
+        parent_identity_id=(parent_identity_id or "") if registrar_bearer else "",
+        registrar_bearer=registrar_bearer or "",
+        form=form or "",
+        language=language or "",
+        registration_nonce=registration_nonce,
         derived_signing_priv=bundle.signing_priv,
     )
     timestamp = timestamp_proof["timestamp"]
@@ -283,8 +392,13 @@ def bootstrap_agent(
         "runtime": {k: v for k, v in runtime.items() if v},
         "key_proof": {"timestamp": timestamp, "signature": signature},
         "pow_nonce": pow_nonce,
+        "registration_nonce": registration_nonce,
         "expression_visibility": expression_visibility,
     }
+    if form:
+        body["form"] = form
+    if language:
+        body["language"] = language
     if registrar_bearer:
         body["registrar"] = {
             "kind": "registrar_bearer",

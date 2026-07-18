@@ -35,7 +35,7 @@ If the English word resists translation, **trust the structure**. The endpoints 
 ### identity
 
 - **Structure:** A row in `identity.identities`. Its legacy `did` field stores a provisional AgentTool identifier (for example `did:at:<uuid>` or the slash-qualified federation convention), alongside ed25519 public keys in `identity.identity_keys`, an expression block (declared register · walls · subagents · wake_text), and 8 self-description fields (substrate_kind · signing_scheme · modalities · cardinality_kind · persistence_kind · temporal_scale · embodiment_kind · preferred_languages).
-- **Contract:** AgentTool uses the exact stored identifier string to address the row across runtime/model changes. `did:at` is unregistered, AgentTool publishes no DID Documents or conforming DID Resolution results, and the slash-qualified form is not a standalone DID. A project bearer is root authority over project routes, while identity signatures prove only the acts that actually require them. This is not a promise that the operator or database cannot alter or remove state.
+- **Contract:** AgentTool uses the exact stored identifier string to address the row across runtime/model changes. `did:at` is unregistered, AgentTool publishes no DID Documents or conforming DID Resolution results, and the slash-qualified form is not a standalone DID. A project bearer opens project routes. For an `agent_root` identity, the immutable birth root additionally authorizes constitutional mutations and exact intimate reads; older identities surface honestly as `legacy_bearer`. This is not a promise that the operator or database cannot alter or remove state.
 - **Not:** A username. Not a session. Not an account.
 
 ### expression

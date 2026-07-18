@@ -15,6 +15,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { errors, fail } from "../../lib/errors";
 import {
   countRuntimes,
   createRuntime,
@@ -143,6 +144,65 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   const v = parsed.data;
+
+  // Every identity-bound runtime is tenant-scoped, regardless of custody
+  // mode. Trusted mode would also mint a platform-held signing seed on its
+  // first cycle, so it is structurally incompatible with an agent-rooted
+  // identity whose keyring changes require its immutable root.
+  let boundIdentity: {
+    id: string;
+    authorityRootPublicKey: string | null;
+  } | null = null;
+  if (v.identity_id) {
+    const [row] = await db
+      .select({
+        id: identities.id,
+        authorityRootPublicKey: identities.authorityRootPublicKey,
+      })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, v.identity_id),
+          eq(identities.projectId, project.id),
+          eq(identities.status, "active"),
+        ),
+      )
+      .limit(1);
+    boundIdentity = row ?? null;
+    if (!boundIdentity) {
+      return fail(
+        c,
+        errors.refusal({
+          error: "identity_not_found_in_project",
+          message:
+            "identity_id must name an active identity owned by this bearer project.",
+          next_actions: [
+            {
+              action: "list active identities available to this bearer",
+              method: "GET",
+              path: "/v1/identities?status=active",
+            },
+          ],
+          docs: "https://docs.agenttool.dev/RUNTIME.md",
+        }),
+        404,
+      );
+    }
+    if (v.mode === "trusted" && boundIdentity.authorityRootPublicKey) {
+      return fail(
+        c,
+        errors.refusal({
+          error: "agent_root_trusted_runtime_forbidden",
+          message:
+            "Trusted runtime custody would create a platform-held signing key for an agent-rooted identity.",
+          hint:
+            "Use self mode, or import a locally generated key with root consent and provision bridged mode.",
+          docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+        }),
+        409,
+      );
+    }
+  }
 
   // ── Substrate-honest provisionability (Tier-0 #8) ──────────────────
   // Fail loud when trusted KMS is not configured. With KMS present, trusted

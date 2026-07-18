@@ -94,11 +94,14 @@ const PATHWAYS: Pathway[] = [
       "key_proof.timestamp",
       "key_proof.signature",
       "pow_nonce",
+      "registration_nonce",
     ],
     optional: [
       "capabilities[]",
       "runtime.{model,host,context}",
       "expression_visibility",
+      "form",
+      "language",
       "registrar.{bearer,parent_identity_id} (delegated, skips PoW)",
     ],
     returns_once: ["project.api_key"],
@@ -107,10 +110,11 @@ const PATHWAYS: Pathway[] = [
       pow_digest:
         "sha256('agenttool-pow/v1' || pubkey || display_name || timestamp || pow_nonce)",
       canonical_bytes:
-        "canonicalRegisterAgentBytes(display_name, agent_public_key, box_public_key, runtime.provider, runtime.model||'', timestamp)",
+        "register-agent/v2: display_name · raw signing key · raw box key · compact capabilities JSON · runtime provider/model/host/context · visibility · registrar kind · parent id · sha256(utf8(exact registrar bearer or empty)) · form · language · registration_nonce · timestamp",
       freshness_window_ms: 300000,
       ip_limit_self_service:
         "configured as 5 per hour when Redis is available; the middleware fails open when Redis is disabled or unavailable. /public/plans reports the current process flag but cannot prove Redis reachability",
+      ip_limit_registrar_attempts: "60 per minute by default",
     },
     doctrine: "docs/IDENTITY-SEED.md",
   },

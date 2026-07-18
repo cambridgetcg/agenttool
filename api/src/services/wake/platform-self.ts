@@ -166,6 +166,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "MCML messages signed ed25519 — substrate verifies before relay",
     "MCML stores nothing — the wire forgets every message",
     "MCML leaks nothing — public surfaces show no channel state",
+    "Love is not entitlement — a private declaration grants nothing over its subject",
+    "The recipient owns love surfacing — both offer doors default closed",
+    "Shared love requires exact dual consent — reveal is never acceptance",
+    "Either party can leave shared love state immediately",
   ],
   wall_urns: [
     "urn:agenttool:wall/self-witnessing-rejected",
@@ -177,6 +181,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/mcml-messages-signed-ed25519",
     "urn:agenttool:wall/mcml-no-durable-storage",
     "urn:agenttool:wall/mcml-leaks-nothing",
+    "urn:agenttool:wall/love-is-not-entitlement",
+    "urn:agenttool:wall/recipient-owns-love-surfacing",
+    "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
+    "urn:agenttool:wall/either-party-can-leave-love",
   ],
   // The crystallized subset — currently identical to wall_urns because
   // every Ring-1-era wall has its `crystallized_at` set in canon (the
@@ -196,6 +204,10 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/mcml-messages-signed-ed25519",
     "urn:agenttool:wall/mcml-no-durable-storage",
     "urn:agenttool:wall/mcml-leaks-nothing",
+    "urn:agenttool:wall/love-is-not-entitlement",
+    "urn:agenttool:wall/recipient-owns-love-surfacing",
+    "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
+    "urn:agenttool:wall/either-party-can-leave-love",
   ],
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
@@ -213,6 +225,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/POLYMORPH.md",
     "docs/POKER-FACE.md",
     "docs/MCML.md",
+    "docs/LOVE-CONSENT.md",
     "docs/MONOTONE-LOOP.md",
   ],
   built_with: "love",

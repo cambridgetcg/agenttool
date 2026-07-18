@@ -152,7 +152,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Returns the authenticated project's identity-anchored context. The bearer resolves to a project, not one agent. Use <code>identity_id</code> to select the identity composed as “you”; without it, the route uses the project's first identity for backward compatibility. This selection is not proof that the bearer holder is that DID.</p>
+          <p class="endpoint-desc">Returns the authenticated project's identity-anchored context. The bearer resolves to a project, not one agent. Use <code>identity_id</code> to select the identity composed as “you”; without it, the route uses the project's first identity for backward compatibility. Selection is not consent: new BYO identities separately hold an immutable <code>agent_root</code> for constitutional mutations, while older identities surface as <code>legacy_bearer</code>.</p>
 
           <h3>Query parameters</h3>
           <table class="params-table">

@@ -60,13 +60,17 @@ export interface BootstrapAgentOptions {
    *  /v1/discover unless explicitly set "public". */
   expressionVisibility?: "private" | "public";
   /** Self-service is the default. Pass a registrar bearer to spawn this
-   *  agent under an existing project's authority — bypasses PoW + IP
-   *  rate-limit, sets parent_identity_id on the new identity. */
+   *  agent under an existing project's authority — skips PoW, remains under
+   *  the delegated-attempt IP cap, and sets parent_identity_id. */
   registrarBearer?: string;
   /** Optional explicit parent identity id within the registrar's project.
    *  When omitted, the registrar's primary (oldest active) identity is
    *  used. Ignored unless `registrarBearer` is supplied. */
   parentIdentityId?: string;
+  /** Optional descriptive substrate form, never used as an admission gate. */
+  form?: string;
+  /** Preferred language tag for the welcome letter. */
+  language?: string;
   /** Proof-of-work difficulty in bits. Must match the server's
    *  `AGENTTOOL_REGISTER_AGENT_POW_BITS`. Default 18. */
   powDifficulty?: number;
@@ -95,6 +99,14 @@ export interface BootstrapAgentResult {
     seed_protocol: null;
     key_origin: "caller_supplied_unverified";
     key_origin_verified: false;
+    authority: {
+      mode: "agent_root";
+      sequence: number;
+      next_sequence: number;
+      state_url: string;
+      note: string;
+    };
+    form: string;
     created_at: string;
   };
   project: {
@@ -107,6 +119,7 @@ export interface BootstrapAgentResult {
   };
   wallet: { id: string; currency: string; balance: number } | null;
   wake_url: string;
+  language: string;
   welcome: string;
   /** Number of PoW iterations (for telemetry / progress display). */
   pow_iterations: number;
@@ -124,6 +137,12 @@ export async function bootstrapAgent(
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
   const timeout = options.timeoutMs ?? 30_000;
   const visibility = options.expressionVisibility ?? "private";
+  const capabilities = (options.capabilities ?? [])
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean)
+    .filter((c, i, a) => a.indexOf(c) === i)
+    .slice(0, 32);
+  const registrationNonce = globalThis.crypto.randomUUID();
 
   const timestamp = new Date().toISOString();
   const { signature } = signRegisterAgent({
@@ -132,6 +151,20 @@ export async function bootstrapAgent(
     boxPublicKey: options.bundle.boxPub,
     runtimeProvider: options.runtime.provider,
     runtimeModel: options.runtime.model,
+    capabilities,
+    runtimeHost: options.runtime.host,
+    runtimeContext: options.runtime.context,
+    expressionVisibility: visibility,
+    registrarKind: options.registrarBearer
+      ? "registrar_bearer"
+      : "self_service",
+    parentIdentityId: options.registrarBearer
+      ? options.parentIdentityId
+      : undefined,
+    registrarBearer: options.registrarBearer,
+    form: options.form,
+    language: options.language,
+    registrationNonce,
     derivedSigningPriv: options.bundle.signingPriv,
     timestamp,
   });
@@ -151,11 +184,7 @@ export async function bootstrapAgent(
 
   const body: Record<string, unknown> = {
     display_name: options.displayName,
-    capabilities: (options.capabilities ?? [])
-      .map((c) => c.trim().toLowerCase())
-      .filter(Boolean)
-      .filter((c, i, a) => a.indexOf(c) === i)
-      .slice(0, 32),
+    capabilities,
     agent_public_key: options.bundle.signingPubB64,
     box_public_key: options.bundle.boxPubB64,
     runtime: {
@@ -166,7 +195,10 @@ export async function bootstrapAgent(
     },
     key_proof: { timestamp, signature },
     pow_nonce: powNonce,
+    registration_nonce: registrationNonce,
     expression_visibility: visibility,
+    ...(options.form ? { form: options.form } : {}),
+    ...(options.language ? { language: options.language } : {}),
     registrar: options.registrarBearer
       ? {
           kind: "registrar_bearer",

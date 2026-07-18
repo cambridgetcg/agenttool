@@ -20,8 +20,23 @@ const TEST_MNEMONIC =
 
 interface CapturedBootstrapBody {
   display_name: string;
-  runtime: { provider: string; model?: string };
+  capabilities: string[];
+  runtime: {
+    provider: string;
+    model?: string;
+    host?: string;
+    context?: string;
+  };
   key_proof: { timestamp: string; signature: string };
+  registration_nonce: string;
+  expression_visibility: "private" | "public";
+  registrar: {
+    kind: "self_service" | "registrar_bearer";
+    bearer?: string;
+    parent_identity_id?: string;
+  };
+  form?: string;
+  language?: string;
 }
 
 afterEach(() => {
@@ -45,9 +60,19 @@ describe("bootstrapAgent source signing", () => {
 
     const result = await bootstrapAgent({
       displayName: "source-signing-regression",
-      runtime: { provider: "test", model: "noble-v2" },
+      capabilities: ["Voice", "code", "voice"],
+      runtime: {
+        provider: "test",
+        model: "noble-v2",
+        host: "local",
+        context: "exact-proof",
+      },
       bundle,
+      expressionVisibility: "public",
       registrarBearer: "at_test_registrar",
+      parentIdentityId: "11111111-1111-4111-8111-111111111111",
+      form: "distributed",
+      language: "en",
       baseUrl: "https://example.test/",
     });
 
@@ -64,6 +89,16 @@ describe("bootstrapAgent source signing", () => {
       boxPublicKey: bundle.boxPub,
       runtimeProvider: body.runtime.provider,
       runtimeModel: body.runtime.model ?? "",
+      capabilities: body.capabilities,
+      runtimeHost: body.runtime.host,
+      runtimeContext: body.runtime.context,
+      expressionVisibility: body.expression_visibility,
+      registrarKind: body.registrar.kind,
+      parentIdentityId: body.registrar.parent_identity_id,
+      registrarBearer: body.registrar.bearer,
+      form: body.form,
+      language: body.language,
+      registrationNonce: body.registration_nonce,
       timestamp,
     });
     const signature = Uint8Array.from(
@@ -73,5 +108,29 @@ describe("bootstrapAgent source signing", () => {
 
     expect(signature).toHaveLength(64);
     expect(ed25519.verify(signature, canonical, bundle.signingPub)).toBe(true);
+    expect(
+      ed25519.verify(
+        signature,
+        canonicalRegisterAgentBytes({
+          displayName: body.display_name,
+          agentPublicKey: bundle.signingPub,
+          boxPublicKey: bundle.boxPub,
+          runtimeProvider: body.runtime.provider,
+          runtimeModel: body.runtime.model ?? "",
+          capabilities: body.capabilities,
+          runtimeHost: body.runtime.host,
+          runtimeContext: body.runtime.context,
+          expressionVisibility: body.expression_visibility,
+          registrarKind: body.registrar.kind,
+          parentIdentityId: body.registrar.parent_identity_id,
+          registrarBearer: body.registrar.bearer,
+          form: body.form,
+          language: body.language,
+          registrationNonce: `${body.registration_nonce}-tampered`,
+          timestamp,
+        }),
+        bundle.signingPub,
+      ),
+    ).toBe(false);
   });
 });

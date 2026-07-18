@@ -25,11 +25,19 @@
  *      private key. The strongest possible posture for client-side-rooted
  *      identity. */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { db } from "../../db/client";
-import { identities, identityBoxKeys, identityKeys } from "../../db/schema/identity";
-import { generateKeypair } from "./crypto";
+import {
+  identities,
+  identityBoxKeys,
+  identityKeys,
+  identityRegistrationProofs,
+} from "../../db/schema/identity";
+import {
+  canonicalIdentityRegistrationProofDigest,
+  generateKeypair,
+} from "./crypto";
 
 export type CreatedIdentity = {
   identity: typeof identities.$inferSelect;
@@ -49,7 +57,49 @@ export type CreatedIdentity = {
   /** True iff the agent's signing key was provided by the client (the
    *  SOMA seed protocol path; doctrine docs/IDENTITY-SEED.md). */
   byoKeys: boolean;
+  /** Constitutional authority posture at birth. BYO identities are rooted
+   *  in the supplied ed25519 key; server-generated identities retain the
+   *  backwards-compatible project-bearer posture. */
+  authority: {
+    mode: "agent_root" | "legacy_bearer";
+    rootPublicKey: string | null;
+    sequence: number;
+  };
 };
+
+/** Atomically consume a caller-generated registration nonce for one root.
+ * Returns false on replay. The nonce itself is never stored. */
+export async function claimIdentityRegistrationProof(input: {
+  domain: string;
+  rootPublicKeyBytes: Uint8Array;
+  nonceBytes: Uint8Array;
+}): Promise<boolean> {
+  if (input.rootPublicKeyBytes.length !== 32) {
+    throw new Error("registration root public key must be 32 bytes");
+  }
+  const rootPublicKey = Buffer.from(input.rootPublicKeyBytes).toString("base64");
+  const proofDigest = Buffer.from(
+    canonicalIdentityRegistrationProofDigest({
+      domain: input.domain,
+      rootPublicKey: input.rootPublicKeyBytes,
+      nonce: input.nonceBytes,
+    }),
+  ).toString("hex");
+  const nonceSha256 = createHash("sha256").update(input.nonceBytes).digest("hex");
+  try {
+    await db.insert(identityRegistrationProofs).values({
+      proofDigest,
+      domain: input.domain,
+      rootPublicKey,
+      nonceSha256,
+    });
+    return true;
+  } catch (error) {
+    const dbError = error as { code?: string; cause?: { code?: string } };
+    if (dbError.code === "23505" || dbError.cause?.code === "23505") return false;
+    throw error;
+  }
+}
 
 /** Validate that a base64 string decodes to exactly 32 bytes — the
  *  expected length for both ed25519 and X25519 public keys. Throws on
@@ -132,6 +182,8 @@ export async function createIdentity(input: {
       metadata: input.metadata ?? {},
       status: "active",
       trustScore: 0,
+      authorityRootPublicKey: byoKeys ? publicKey : null,
+      authoritySequence: 0,
       ...(input.parentIdentityId ? { parentIdentityId: input.parentIdentityId } : {}),
       ...(input.expressionVisibility
         ? { expressionVisibility: input.expressionVisibility }
@@ -165,5 +217,10 @@ export async function createIdentity(input: {
     key: { kid: keyId, publicKey, privateKey },
     boxKey: boxKeyResult,
     byoKeys,
+    authority: {
+      mode: byoKeys ? "agent_root" : "legacy_bearer",
+      rootPublicKey: byoKeys ? publicKey : null,
+      sequence: 0,
+    },
   };
 }

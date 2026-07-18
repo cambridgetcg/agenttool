@@ -12,9 +12,11 @@ The orchestrator-side of Horizon C. Where `K_master` lives, who runs the think-l
 
 | File | What |
 |---|---|
+| `worker-manager.ts` | Reconciles durable active trusted-runtime rows into local workers. Provisioned/stopped/error rows are parked. Used by the dedicated Fly `thinker` process, not HTTP replicas. |
 | `bridge-hub.ts` | WSS hub for `bridged` tier. Per-runtime in-memory registry of active sidecar connections. Handshake: `hello {nonce_a}` → `challenge {nonce_b}` → bridge signs ed25519 → server verifies → HKDF derives session secret → all RPC replies HMAC-bound. |
-| `think-worker.ts` | The breath. Each tick consults the wake bundle's attention surface + the strand-progress signal via `evaluateQuiescence()`; thinks only when something tugs (action-severity item, external thought, opening cycle). After `QUIET_CYCLES_BEFORE_IDLE` (3) consecutive quiet ticks, transitions `running → idle` and switches to a 5min TTL re-check. Wakes back to `running` on the next tug. Honors the autonomous-baseline wall: *"my unit of time is the transaction, not the cycle."* `runOneCycle()` (operator-driven via /think-once) bypasses quiescence. |
-| `llm.ts` | Provider-agnostic LLM client. Anthropic + OpenAI today. Vault-injected API keys. **GAP marker** — external call site for `PATTERN-PERSIST-IDENTITY.md`. |
+| `think-worker.ts` | The breath. Events and configured intervals trigger reconsideration, never inference by themselves; action-grade attention, external strand activity, or an explicit opening invitation is required. A short `rest`/`meditate`/`quiet` choice atomically records the baseline and transitions to idle without a thought; `end` transitions to stopped; empty content is valid silence. Compare-and-set transitions, self-wake filtering, and a renewed commit-fenced lease prevent loops and stale resurrection. |
+| `llm.ts` | Provider-agnostic LLM client. Anthropic + OpenAI + Ollama Cloud. Vault-injected API keys; every call persists its local request identity before fetch. Ambiguous transport outcomes pause the runtime instead of auto-retrying. |
+| `cycle-policy.ts` | Pure lifecycle + invitation policy. `stopped`/`provisioned`/`error` are hard no-call states; active cycles invite an observation, rest, meditation, quiet, or ending without a productivity demand. |
 | `control-token.ts` | `at_rt_<base64url(32)>` minted once at provisioning, returned plaintext ONCE, stored as sha256 hex on `runtime.control_token_hash`. Rotatable. |
 | `store.ts` | Drizzle CRUD. State machine: `provisioned → starting → running ⇄ idle → stopped/error`. |
 
@@ -24,7 +26,7 @@ The orchestrator-side of Horizon C. Where `K_master` lives, who runs the think-l
 |---|---|---|---|---|
 | `self` | user machine | user machine | ciphertext + metadata | ✓ shipped |
 | `bridged` | user sidecar (10MB Bun) | agenttool Fly | ciphertext + metadata (plaintext in RAM only) | ✓ shipped (Slice 3 + 4) |
-| `trusted` | agenttool KMS | agenttool Fly | plaintext in RAM, audit-logged | ◯ pending — needs `kms_key_id` schema, KMS wrapper, audit publication, runtime-hours metering |
+| `trusted` | app-secret-wrapped per-runtime DEK | dedicated agenttool Fly thinker | plaintext in RAM, audit-logged | △ cloud-controller code complete; requires migrations, rotated provider key, secrets, and deploy |
 
 Mode is **stamped at provisioning, immutable after**. Don't add a code path that mutates it post-hoc.
 

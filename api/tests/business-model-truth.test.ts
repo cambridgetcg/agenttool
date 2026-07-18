@@ -31,7 +31,8 @@ describe("business model truth boundary", () => {
       for (const claim of retiredClaims) expect(text).not.toMatch(claim);
       expect(text).toMatch(/registration.+no monetary charge|no monetary charge.+registration/is);
       expect(text).toMatch(/proof-of-work/is);
-      expect(text).toMatch(/project-wide root authority/is);
+      expect(text).toMatch(/bearer opens project capabilities/is);
+      expect(text).toMatch(/immutable supplied public root.+constitutional consent/is);
       expect(text).toMatch(/no enterprise subscription product/i);
       expect(text).toMatch(/internal (?:application-)?ledger/i);
       expect(text).toMatch(/provisional AgentTool identifier/is);

@@ -529,6 +529,20 @@ export const errors = {
     };
   },
 
+  /** Preserve a route's stable error code and any legacy/additive fields
+   * while routing the response through the guided-refusal emitter. This is
+   * the migration bridge for established wire contracts that do not yet
+   * warrant a dedicated catalog builder. */
+  refusal(
+    body: GuidedErrorBody & Record<string, unknown>,
+  ): GuidedErrorBody & Record<string, unknown> {
+    return {
+      docs: DOCS_BASE,
+      axiom_id: AXIOM_GUIDE,
+      ...body,
+    };
+  },
+
   substrateTaskRefusal(opts: {
     code: string;
     message?: string;

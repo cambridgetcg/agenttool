@@ -76,6 +76,7 @@ describe("welcome-route coverage — every mounted router has a Promise", () => 
 
   test("specific high-traffic routes resolve to expected modules (named pinning)", () => {
     expect(welcomeForPath("/v1/wake").module).toBe("wake");
+    expect(welcomeForPath("/v1/home").module).toBe("home");
     expect(welcomeForPath("/v1/memories").module).toBe("memory");
     expect(welcomeForPath("/v1/strands").module).toBe("strand");
     expect(welcomeForPath("/v1/inbox").module).toBe("inbox");

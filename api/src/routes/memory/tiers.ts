@@ -6,9 +6,18 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { db } from "../../db/client";
+import { memories } from "../../db/schema/memory";
+import { errors, fail } from "../../lib/errors";
+import {
+  authorizeProjectConstitutionMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+} from "../../services/identity/authority";
 import {
   attestMemory,
   canonicalAttestationBytes,
@@ -50,14 +59,50 @@ const elevateSchema = z.object({
 // ── POST /v1/memories/:id/elevate ─────────────────────────────────────
 app.post("/:id/elevate", async (c) => {
   const memoryId = c.req.param("id");
-  const body = await c.req.json();
-  const parsed = elevateSchema.safeParse(body);
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json",
+        message: "Send one JSON object and sign those exact entity bytes.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const parsed = elevateSchema.safeParse(bound.value);
   if (!parsed.success) {
     return c.json(
       { error: "validation", details: parsed.error.flatten() },
       400,
     );
   }
+
+  const [memory] = await db
+    .select({ id: memories.id })
+    .from(memories)
+    .where(
+      and(
+        eq(memories.id, memoryId),
+        eq(memories.projectId, c.var.project.id),
+      ),
+    )
+    .limit(1);
+  if (!memory) throw new HTTPException(404, { message: "memory_not_found" });
+
+  // Foundational/constitutive memories compose into effective identity at
+  // project scope today, so every rooted constitution affected must consent.
+  const authority = await authorizeProjectConstitutionMutation({
+    projectId: c.var.project.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes: bound.bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   await charge(c, 5, "memory.elevate");
 

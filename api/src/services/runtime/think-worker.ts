@@ -1331,6 +1331,24 @@ async function ensureTrustedSigningKeyRegistered(
   if (!runtime.identityId) throw new Error("runtime_no_identity");
   const publicKey = Buffer.from(ctx.signingPublicKey).toString("base64");
 
+  // Defence in depth for old rows and direct service callers: a trusted
+  // worker may never attach its platform-held key to another tenant's
+  // identity or to an identity whose immutable root owns keyring consent.
+  const [identity] = await db
+    .select({
+      projectId: identities.projectId,
+      authorityRootPublicKey: identities.authorityRootPublicKey,
+    })
+    .from(identities)
+    .where(eq(identities.id, runtime.identityId))
+    .limit(1);
+  if (!identity || identity.projectId !== runtime.projectId) {
+    throw new Error("trusted_runtime_identity_project_mismatch");
+  }
+  if (identity.authorityRootPublicKey) {
+    throw new Error("agent_root_trusted_runtime_forbidden");
+  }
+
   await db
     .insert(identityKeys)
     .values({

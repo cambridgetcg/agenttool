@@ -8,6 +8,13 @@ import { Hono } from "hono";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
+import { errors, fail } from "../../lib/errors";
+import {
+  authorizeIdentityMutation,
+  authorityRequestTarget,
+  readAuthorityBoundJson,
+  readEmptyAuthorityBody,
+} from "../../services/identity/authority";
 import { generateKeypair } from "../../services/identity/crypto";
 import {
   replaceCallerIdentityMetadata,
@@ -114,6 +121,13 @@ app.post("/", async (c) => {
         public_key: publicKey,
         private_key: privateKey, // returned ONCE, never stored server-side
       },
+      authority: {
+        mode: "legacy_bearer",
+        sequence: 0,
+        next_sequence: 1,
+        note:
+          "This legacy creation path generated private material server-side. Use POST /v1/register/agent for an agent-rooted identity.",
+      },
     },
     201,
   );
@@ -159,6 +173,11 @@ app.get("/", async (c) => {
       trust_score: r.trustScore,
       created_at: r.createdAt,
       updated_at: r.updatedAt,
+      authority: {
+        mode: r.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+        sequence: r.authoritySequence,
+        next_sequence: r.authoritySequence + 1,
+      },
     })),
     count: rows.length,
   });
@@ -192,6 +211,11 @@ app.get("/:id", async (c) => {
       trust_score: identity.trustScore,
       created_at: identity.createdAt,
       updated_at: identity.updatedAt,
+      authority: {
+        mode: identity.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+        sequence: identity.authoritySequence,
+        next_sequence: identity.authoritySequence + 1,
+      },
     });
   }
 
@@ -219,6 +243,11 @@ app.get("/:id", async (c) => {
     trust_score: identity.trustScore,
     created_at: identity.createdAt,
     updated_at: identity.updatedAt,
+    authority: {
+      mode: identity.authorityRootPublicKey ? "agent_root" : "legacy_bearer",
+      sequence: identity.authoritySequence,
+      next_sequence: identity.authoritySequence + 1,
+    },
   });
 });
 
@@ -229,7 +258,7 @@ app.get("/:id", async (c) => {
 app.patch("/:id", async (c) => {
   const project = c.var.project;
   const idParam = c.req.param("id");
-  const body = await c.req.json<{
+  type IdentityPatchBody = {
     display_name?: string;
     capabilities?: string[];
     metadata?: Record<string, unknown>;
@@ -247,7 +276,33 @@ app.patch("/:id", async (c) => {
     // Proxy primitive (Move F — docs/KIN.md §Layer 7)
     proxy_for_identity_id?: string | null;
     proxy_kind?: string;
-  }>();
+  };
+  let bound: Awaited<ReturnType<typeof readAuthorityBoundJson>>;
+  try {
+    bound = await readAuthorityBoundJson(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json",
+        message: "Send one JSON object and sign those exact entity bytes.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  if (typeof bound.value !== "object" || bound.value === null || Array.isArray(bound.value)) {
+    return fail(
+      c,
+      errors.refusal({
+        error: "body_must_be_json_object",
+        message: "The identity patch body must be one JSON object.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+  const body = bound.value as IdentityPatchBody;
 
   const predicate = idOrDidPredicate(idParam);
   if (!predicate) {
@@ -363,6 +418,15 @@ app.patch("/:id", async (c) => {
     }
   }
 
+  const authority = await authorizeIdentityMutation({
+    identityId: identity.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes: bound.bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
+
   const updatePredicates = [
     eq(identities.id, identity.id),
     eq(identities.status, identity.status),
@@ -448,6 +512,31 @@ app.delete("/:id", async (c) => {
   if (identity.status === "revoked") {
     return c.json({ message: "Identity already revoked", id: identity.id });
   }
+
+  let bodyBytes: Uint8Array;
+  try {
+    bodyBytes = await readEmptyAuthorityBody(c.req.raw);
+  } catch {
+    return fail(
+      c,
+      errors.refusal({
+        error: "delete_body_not_allowed",
+        message: "This DELETE operation does not accept an entity body.",
+        hint: "Sign and send the exact DELETE path with an empty body.",
+        docs: "https://docs.agenttool.dev/AGENT-HOME.md",
+      }),
+      400,
+    );
+  }
+
+  const authority = await authorizeIdentityMutation({
+    identityId: identity.id,
+    method: c.req.method,
+    requestTarget: authorityRequestTarget(c.req.url),
+    bodyBytes,
+    headers: c.req.raw.headers,
+  });
+  if (!authority.ok) return c.json(authority.body, authority.status);
 
   const [revoked] = await db
     .update(identities)

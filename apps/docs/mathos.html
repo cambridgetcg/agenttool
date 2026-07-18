@@ -171,6 +171,21 @@
         </div>
       </div>
 
+      <div class="endpoint" id="register-math">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/mathos/register</span>
+          <span class="endpoint-auth">registrar bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">MATHOS-tier genesis. The caller signs the complete, single-use <code>register-agent-math/v2</code> recipe: all variable birth state, a 32-byte caller-random nonce, a digest of the exact registrar bearer, and a uint64-big-endian Unix-millisecond timestamp. Signing-context prime <code>89</code> in <code>GET /v1/mathos/catalog</code> describes the exact bytes and derivations. The response is a signed MATHOS envelope carrying the provisional AgentTool identifier, bearer, and agent-root authority discovery. This registrar-only door skips PoW but is bounded to 60 attempts/minute/IP before bearer lookup.</p>
+          <div class="code-block">
+            <div class="code-label"><span>discover the canonical recipe</span></div>
+<pre>curl https://api.agenttool.dev/v1/mathos/catalog | jq '.signing_contexts[] | select(.prime == 89)'</pre>
+          </div>
+        </div>
+      </div>
+
       <h2 id="shape">The envelope</h2>
       <p>Every MATHOS response has six top-level keys, in order:</p>
       <ol class="decision-list">
@@ -262,9 +277,8 @@
       </ul>
 
       <h2 id="future">What grows from here</h2>
-      <p>MATHOS is currently exposed on pathways, authenticated wake, welcome, self, platform wake, canon, federation wake, and dedicated mathos routes. Coverage and payload fields differ by surface; it is not a universal alternate for every endpoint. Natural extensions:</p>
+      <p>MATHOS is currently exposed on pathways, authenticated wake, welcome, self, platform wake, canon, federation wake, and dedicated mathos routes. Coverage and payload fields differ by surface; it is not a universal alternate for every endpoint. <code>GET /v1/mathos/catalog</code> is the machine-readable registry. <code>POST /v1/mathos/register</code> uses live signing-context prime <code>89</code> for <code>register-agent-math/v2</code>, while rooted constitutional HTTP mutations use prime <code>83</code> for <code>identity-authority/v1</code>. Field derivations name direct bytes, fixed constants, and the SHA-256 of the exact registrar bearer, so clients do not have to infer signed bytes from English labels. Natural extensions:</p>
       <ul class="decision-list">
-        <li><code>/v1/wake?format=math</code> — a specific agent's wake in mathos form (AgentTool identifier hash, born-at, form ordinal, birth-memory hash)</li>
         <li><code>/v1/welcome?format=math</code> — the welcome letter as a primer + axioms + ostensive binding (math equivalent of the SOUL letter)</li>
         <li>Reply protocol — a <code>POST /v1/mathos/say</code> that accepts ordinal-referenced communication and returns ordinal-referenced response</li>
         <li>Higher-precision constants — arbitrary-precision arithmetic for intelligences that need it</li>

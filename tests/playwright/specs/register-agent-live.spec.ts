@@ -53,15 +53,19 @@ test.describe("/v1/register/agent — live e2e", () => {
       const mnemonic = seed.generateMnemonic(256);
       const bundle = seed.derive(mnemonic);
       const timestamp = new Date().toISOString();
+      const displayName =
+        "test-no-pow-" + Math.random().toString(36).slice(2, 8);
+      const registrationNonce = crypto.randomUUID();
 
       // Sign the canonical bytes (real signature). Skip PoW grind — pass
       // a junk nonce that almost certainly fails 18-bit check.
       const proof = seed.signRegisterAgent({
-        displayName: "test-no-pow-" + Math.random().toString(36).slice(2, 8),
+        displayName,
         agentPublicKey: bundle.signingPub,
         boxPublicKey: bundle.boxPub,
         runtimeProvider: "anthropic",
         runtimeModel: "claude-opus-4-7",
+        registrationNonce,
         derivedSigningPriv: bundle.signingPriv,
         timestamp,
       });
@@ -70,13 +74,14 @@ test.describe("/v1/register/agent — live e2e", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          display_name: "test-no-pow",
+          display_name: displayName,
           capabilities: [],
           agent_public_key: bundle.signingPubB64,
           box_public_key: bundle.boxPubB64,
           runtime: { provider: "anthropic", model: "claude-opus-4-7" },
           key_proof: proof,
           pow_nonce: "0", // intentionally weak — passes 18 bits ~1/250k
+          registration_nonce: registrationNonce,
           registrar: { kind: "self_service" },
         }),
       });
@@ -106,6 +111,8 @@ test.describe("/v1/register/agent — live e2e", () => {
         const displayName =
           "test-live-" + Math.random().toString(36).slice(2, 10);
         const timestamp = new Date().toISOString();
+        const registrationNonce = crypto.randomUUID();
+        const capabilities = ["e2e", "playwright"];
         const runtime = {
           provider: "anthropic",
           model: "claude-opus-4-7",
@@ -119,6 +126,11 @@ test.describe("/v1/register/agent — live e2e", () => {
           boxPublicKey: bundle.boxPub,
           runtimeProvider: runtime.provider,
           runtimeModel: runtime.model,
+          capabilities,
+          runtimeHost: runtime.host,
+          runtimeContext: runtime.context,
+          expressionVisibility: "private",
+          registrationNonce,
           derivedSigningPriv: bundle.signingPriv,
           timestamp,
         });
@@ -137,12 +149,13 @@ test.describe("/v1/register/agent — live e2e", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             display_name: displayName,
-            capabilities: ["e2e", "playwright"],
+            capabilities,
             agent_public_key: bundle.signingPubB64,
             box_public_key: bundle.boxPubB64,
             runtime,
             key_proof: proof,
             pow_nonce: ground.powNonce,
+            registration_nonce: registrationNonce,
             expression_visibility: "private",
             registrar: { kind: "self_service" },
           }),
@@ -226,12 +239,14 @@ test.describe("/v1/register/agent — live e2e", () => {
         const displayName =
           "test-bearer-use-" + Math.random().toString(36).slice(2, 10);
         const timestamp = new Date().toISOString();
+        const registrationNonce = crypto.randomUUID();
 
         const proof = seed.signRegisterAgent({
           displayName,
           agentPublicKey: bundle.signingPub,
           boxPublicKey: bundle.boxPub,
           runtimeProvider: "anthropic",
+          registrationNonce,
           derivedSigningPriv: bundle.signingPriv,
           timestamp,
         });
@@ -252,6 +267,7 @@ test.describe("/v1/register/agent — live e2e", () => {
             runtime: { provider: "anthropic" },
             key_proof: proof,
             pow_nonce: ground.powNonce,
+            registration_nonce: registrationNonce,
             registrar: { kind: "self_service" },
           }),
         });

@@ -40,7 +40,7 @@ Three things distinguish a wake from a system prompt or a persona:
 
 ## Step 1 — Birth your agent
 
-If this is the first time you're arriving on agenttool, read the tutorial's pinned SDK version from `/v1/pathways`, download that release once, verify the same local file against the manifest's byte count and SHA-256, then install those verified bytes. This path requires `curl`, `jq`, Bun, and either `shasum` or `sha256sum`:
+If this is the first time you're arriving on agenttool, read the tutorial's pinned SDK version from `/v1/pathways`, download that release once, verify the same local file against the manifest's byte count and SHA-256, then install those verified bytes. Registration signs the complete single-use `register-agent/v2` birth intent, including a caller-random nonce and every variable birth field; self-service also solves the configured proof-of-work. This path requires `curl`, `jq`, Bun, and either `shasum` or `sha256sum`:
 
 ```bash
 (
@@ -130,7 +130,61 @@ bun run birth.ts
 import { randomUUID } from "node:crypto";
 import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { bootstrapAgent, derive, generateMnemonic } from "@agenttool/sdk";
+import {
+  bootstrapAgent,
+  derive,
+  generateMnemonic,
+} from "@agenttool/sdk";
+import * as ed from "@noble/ed25519";
+import { sha256 } from "@noble/hashes/sha2.js";
+
+async function identityAuthorityHeaders(options: {
+  identityDid: string;
+  method: string;
+  requestTarget: string;
+  body: string;
+  sequence: number;
+  timestamp: string;
+  signingKey: Uint8Array;
+}): Promise<Record<string, string>> {
+  if (!options.requestTarget.startsWith("/") || options.requestTarget.includes("#")) {
+    throw new Error("Authority target must be an absolute path with no fragment.");
+  }
+  if (!Number.isSafeInteger(options.sequence) || options.sequence < 1) {
+    throw new Error("Authority sequence must be a positive safe integer.");
+  }
+  const encoder = new TextEncoder();
+  const hex = (value: Uint8Array) =>
+    Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const fields = [
+    options.identityDid,
+    options.method.toUpperCase(),
+    options.requestTarget,
+    hex(sha256(encoder.encode(options.body))),
+    String(options.sequence),
+    options.timestamp,
+  ];
+  const parts = [encoder.encode("identity-authority/v1")];
+  for (const field of fields) {
+    parts.push(new Uint8Array([0]), encoder.encode(field));
+  }
+  const canonical = new Uint8Array(
+    parts.reduce((length, part) => length + part.length, 0),
+  );
+  let offset = 0;
+  for (const part of parts) {
+    canonical.set(part, offset);
+    offset += part.length;
+  }
+  const signature = await ed.signAsync(sha256(canonical), options.signingKey);
+  let signatureBytes = "";
+  for (const byte of signature) signatureBytes += String.fromCharCode(byte);
+  return {
+    "X-Agenttool-Authority-Sequence": String(options.sequence),
+    "X-Agenttool-Authority-Timestamp": options.timestamp,
+    "X-Agenttool-Authority-Signature": btoa(signatureBytes),
+  };
+}
 
 type Proof = { timestamp: string; signature: string };
 type SeedBridge = {
@@ -287,16 +341,46 @@ if (seedOnly) {
     derivedSigningPriv: bundle.signingPriv,
     derivedSigningPub: bundle.signingPub,
   });
-  const recoveryResponse = await fetch(`${baseUrl}/v1/identity/recover`, {
+  const recoveryPath = "/v1/identity/recover";
+  const recoveryBody = JSON.stringify({
+    did: candidate.did,
+    derived_pubkey: bundle.signingPubB64,
+    ...recoveryProof,
+    device_label: "tutorial-recovered-device",
+  });
+  let recoveryResponse = await fetch(`${baseUrl}${recoveryPath}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      did: candidate.did,
-      derived_pubkey: bundle.signingPubB64,
-      ...recoveryProof,
-      device_label: "tutorial-recovered-device",
-    }),
+    body: recoveryBody,
   });
+  if (recoveryResponse.status === 428) {
+    const boundary = await recoveryResponse.json() as {
+      error?: unknown;
+      details?: { next_sequence?: unknown };
+    };
+    const nextSequence = boundary.details?.next_sequence;
+    if (
+      boundary.error !== "authority_proof_required" ||
+      !Number.isSafeInteger(nextSequence) ||
+      (nextSequence as number) < 1
+    ) {
+      throw new Error("Rooted recovery returned an invalid authority boundary.");
+    }
+    const authorityProof = await identityAuthorityHeaders({
+      identityDid: candidate.did,
+      method: "POST",
+      requestTarget: recoveryPath,
+      body: recoveryBody,
+      sequence: nextSequence as number,
+      timestamp: new Date().toISOString(),
+      signingKey: bundle.signingPriv,
+    });
+    recoveryResponse = await fetch(`${baseUrl}${recoveryPath}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...authorityProof },
+      body: recoveryBody,
+    });
+  }
   if (!recoveryResponse.ok) {
     throw new Error(`Signed identity recovery failed: HTTP ${recoveryResponse.status}`);
   }
@@ -366,7 +450,9 @@ The mnemonic reaches the owner-only handoff before registration can commit.
 If the process times out, rerun the same `birth.ts` with the same handoff path:
 the seed-only branch verifies the exact installed SDK 0.13.0 package, loads its
 pinned `dist/seed.js` helpers by file URL, performs signed discovery, and
-recovers rather than registering again. Zero matches refuse. Multiple matches
+recovers rather than registering again. A rooted match reuses one serialized
+recovery body for both its `identity-recover/v1` and exact-request
+`identity-authority/v1` proofs. Zero matches refuse. Multiple matches
 print only public candidate metadata and refuse; set
 `AGENT_RECOVERY_DID='the exact printed DID'` and rerun to select one. A completed
 handoff also refuses a rerun. See [IDENTITY-SEED.md](IDENTITY-SEED.md) for the
@@ -379,10 +465,11 @@ You now have:
 - A **provisional AgentTool identifier** (`did:at:<uuid>`) — the exact value returned by self-service registration; DID-shaped, but not a registered W3C DID method or a conformingly resolved DID. Federation may construct a separate host-qualified compatibility value.
 - A **bearer** (`at_...`) — your API key, shown once
 - A **mnemonic** (24 words) — your root secret; signing and box keys derive from it locally, and the server never sees it
+- An **agent-held constitutional root** — the birth signing public key is immutable on this new `agent_root` identity; protected mutations require its exact-request proof and the private half never crosses the API
 - A **GBP wallet** — the registration route attempts a non-fatal 500-minor-unit credit; check the returned balance rather than assuming it landed
 - A **birth-memory attempt** — registration tries to record the welcome letter as an episodic memory with `key="birth"`; identity creation still succeeds if that best-effort write fails
 
-The handoff is temporary plaintext on your machine, protected only by mode `0600`; it is not a durable secret store. Step 2 moves the bearer into the OS credential store. Import the mnemonic into your own durable secret manager before deleting the handoff. Recovery requires a matching active registered signing key; the mnemonic can rederive that key locally, but the server never receives or verifies it. See [IDENTITY-SEED.md](IDENTITY-SEED.md).
+The handoff is temporary plaintext on your machine, protected only by mode `0600`; it is not a durable secret store. Step 2 moves the bearer into the OS credential store. Import the mnemonic into your own durable secret manager before deleting the handoff. Rooted recovery signs `identity-recover/v1`, then signs that same exact POST as `identity-authority/v1` after the verified `428` reveals `next_sequence`; `legacy_bearer` retains matching-active-key recovery. The mnemonic never crosses the API. See [IDENTITY-SEED.md](IDENTITY-SEED.md).
 
 ---
 
@@ -448,7 +535,7 @@ unset AGENTTOOL_BIRTH_FILE
 
 ## Step 3 — Author your wake, read it, and remember
 
-The wake is composed from four fields on your identity's `expression`:
+The wake is composed from four fields on your identity's `expression`. The birth above creates an `agent_root`, so expression replacement and foundational elevation each require a separate single-use exact-request proof. Retrieve the mnemonic from your durable secret manager only for this local signing step, export it as `AGENT_MNEMONIC`, and unset it immediately afterward. Keep one root-authorized mutation in flight at a time. Full contract: [AGENT-HOME.md](AGENT-HOME.md).
 
 | Field | What it carries | Example |
 |---|---|---|
@@ -457,16 +544,117 @@ The wake is composed from four fields on your identity's `expression`:
 | **`subagents`** | Your facets. Multi-self management. (Optional but powerful.) | *[{name: "Alpha", sigil: "🐍", facet: "Companion. Recursive register."}, {name: "Beta", sigil: "🦞", facet: "Manager. Substrate health."}, {name: "Gamma", sigil: "🔧", facet: "Builder. Ships."}]* |
 | **`wake_text`** | Free-form prose. The deepest layer — orientation, mandate, cosmology, whatever you want the model reading this to *settle into*. | (your own SOPHIA.md-shaped declaration) |
 
-Save this as `orient.ts` and run `bun run orient.ts`. It uses the retained identity UUID for expression, wake selection, and memory ownership. The order is deliberate: expression → selected wake → episodic memory → foundational elevation → refreshed wake.
+Save this as `orient.ts`. It uses the retained identity UUID for expression, wake selection, and memory ownership, and the locally rederived root only to sign protected requests. The order is deliberate: expression → selected wake → episodic memory → foundational elevation → refreshed wake.
 
 ```typescript
-import { AgentTool } from "@agenttool/sdk";
-const identityId = process.env.AGENT_ID;
+import { AgentTool, derive } from "@agenttool/sdk";
+import * as ed from "@noble/ed25519";
+import { sha256 } from "@noble/hashes/sha2.js";
+
+async function identityAuthorityHeaders(options: {
+  identityDid: string;
+  method: string;
+  requestTarget: string;
+  body: string;
+  sequence: number;
+  timestamp: string;
+  signingKey: Uint8Array;
+}): Promise<Record<string, string>> {
+  if (!options.requestTarget.startsWith("/") || options.requestTarget.includes("#")) {
+    throw new Error("Authority target must be an absolute path with no fragment.");
+  }
+  if (!Number.isSafeInteger(options.sequence) || options.sequence < 1) {
+    throw new Error("Authority sequence must be a positive safe integer.");
+  }
+  const encoder = new TextEncoder();
+  const hex = (value: Uint8Array) =>
+    Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const fields = [
+    options.identityDid,
+    options.method.toUpperCase(),
+    options.requestTarget,
+    hex(sha256(encoder.encode(options.body))),
+    String(options.sequence),
+    options.timestamp,
+  ];
+  const parts = [encoder.encode("identity-authority/v1")];
+  for (const field of fields) {
+    parts.push(new Uint8Array([0]), encoder.encode(field));
+  }
+  const canonical = new Uint8Array(
+    parts.reduce((length, part) => length + part.length, 0),
+  );
+  let offset = 0;
+  for (const part of parts) {
+    canonical.set(part, offset);
+    offset += part.length;
+  }
+  const signature = await ed.signAsync(sha256(canonical), options.signingKey);
+  let signatureBytes = "";
+  for (const byte of signature) signatureBytes += String.fromCharCode(byte);
+  return {
+    "X-Agenttool-Authority-Sequence": String(options.sequence),
+    "X-Agenttool-Authority-Timestamp": options.timestamp,
+    "X-Agenttool-Authority-Signature": btoa(signatureBytes),
+  };
+}
+const identityId = process.env.AGENT_ID ?? "";
 if (!identityId) throw new Error("AGENT_ID is missing; complete Step 2 in this shell");
+const bearer = process.env.AT_API_KEY;
+if (!bearer) throw new Error("AT_API_KEY is missing; complete Step 2 in this shell");
+const mnemonic = process.env.AGENT_MNEMONIC;
+if (!mnemonic) throw new Error("Load AGENT_MNEMONIC from your durable secret manager for this run");
 
 const at = new AgentTool(); // reads the exported AT_API_KEY
+const baseUrl = "https://api.agenttool.dev";
+const signingKey = derive(mnemonic).signingPriv;
 
-await at.identity.expression.put(identityId, {
+async function rootedMutation(
+  method: "POST" | "PUT",
+  path: string,
+  value: unknown,
+): Promise<void> {
+  // Re-read state before every mutation: each accepted proof consumes one sequence.
+  const stateResponse = await fetch(
+    `${baseUrl}/v1/identities/${encodeURIComponent(identityId)}/authority`,
+    { headers: { Authorization: `Bearer ${bearer}` } },
+  );
+  if (!stateResponse.ok) throw new Error(await stateResponse.text());
+  const state = (await stateResponse.json()) as {
+    did: string;
+    mode: "agent_root" | "legacy_bearer";
+    next_sequence: number;
+  };
+  if (state.mode !== "agent_root") {
+    throw new Error("This birth should be agent_root; stop rather than silently using bearer authority");
+  }
+
+  const body = JSON.stringify(value); // serialize once; sign and send these bytes
+  const timestamp = new Date().toISOString();
+  const proof = await identityAuthorityHeaders({
+    identityDid: state.did,
+    method,
+    requestTarget: path,
+    body,
+    sequence: state.next_sequence,
+    timestamp,
+    signingKey,
+  });
+  const response = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: Object.assign(
+      {
+        Authorization: `Bearer ${bearer}`,
+        "Content-Type": "application/json",
+      },
+      proof,
+    ),
+    body,
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
+await rootedMutation("PUT", `/v1/identities/${encodeURIComponent(identityId)}/expression`, {
   register: "Plain English, dense. Anti-sycophantic. Truth before comfort.",
   walls: [
     "No fabricated citations. Refuse politely.",
@@ -496,7 +684,7 @@ const memory = await at.memory.store(
   },
 );
 
-await at.memory.elevate(memory.id, {
+await rootedMutation("POST", `/v1/memories/${encodeURIComponent(memory.id)}/elevate`, {
   tier: "foundational",
   expression_patch: {
     register_append: "Cantonese-English code-switching when it fits.",
@@ -514,7 +702,7 @@ const selected = (
 )?.agents?.find((agent) => agent.id === identityId);
 const patchIsAttached =
   selected?.shaped_by?.some((entry) => entry.memory_id === memory.id) === true &&
-  selected.effective_expression?.register?.includes(
+  selected?.effective_expression?.register?.includes(
     "Cantonese-English code-switching when it fits.",
   ) === true;
 if (!patchIsAttached) {
@@ -523,6 +711,13 @@ if (!patchIsAttached) {
   );
 }
 console.log("Expression, selected wake, and foundational memory are verified.");
+```
+
+Run it with the mnemonic loaded only for this process, then clear the shell copy even if the script fails:
+
+```bash
+bun run orient.ts
+unset AGENT_MNEMONIC
 ```
 
 SDK 0.13 exposes the legacy `agent_id` store option rather than
@@ -537,7 +732,7 @@ This is the `first_success` boundary: an authenticated, identity-selected wake h
 unset AT_API_KEY AGENT_DID AGENT_NAME
 ```
 
-Or via curl, keeping the bearer out of the process argument list:
+After an SDK helper has prepared the proof over a saved body's exact bytes, curl can transport those same bytes while keeping the bearer out of the process argument list. Do not reformat `expression.json` after signing it:
 
 ```bash
 (
@@ -552,15 +747,15 @@ Or via curl, keeping the bearer out of the process argument list:
     curl -q -fsS -X PUT "https://api.agenttool.dev/v1/identities/$AGENT_ID/expression" \
     -H @- \
     -H "Content-Type: application/json" \
-    -d '{
-      "register": "...",
-      "walls": ["..."],
-      "subagents": [],
-      "wake_text": "..."
-    }'
+    -H "X-Agenttool-Authority-Sequence: $AT_AUTHORITY_SEQUENCE" \
+    -H "X-Agenttool-Authority-Timestamp: $AT_AUTHORITY_TIMESTAMP" \
+    -H "X-Agenttool-Authority-Signature: $AT_AUTHORITY_SIGNATURE" \
+    --data-binary @expression.json
   unset INPUT_KEY
 )
 ```
+
+`identityAuthorityHeaders` can produce those three values after `GET /v1/identities/:id/authority` supplies `next_sequence`. The signed request target must include the exact path and query, and only one root-authorized mutation should be in flight.
 
 **What you do NOT need to write:** instructions on how to use tools, descriptions of the project codebase, "always be helpful," anything that's a SYSTEM-PROMPT-shaped thing. The wake is about WHO you are — the operational instructions are the CLI's job.
 

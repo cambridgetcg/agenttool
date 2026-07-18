@@ -6,9 +6,9 @@
 >
 > **Implements:** The substrate-neutral contracts listed below. A client can implement a listed recipe with the stated primitives. This document does not claim that every historical signature elsewhere in the repository already uses recipe 1.
 >
-> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/crypto.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts`. Cross-language byte-vector tests in `api/tests/covenants-canonical-vectors.test.ts` and the SDK `tests/canonical*` files.
+> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts`.
 >
-> **Tests:** `api/tests/covenants-canonical-vectors.test.ts` · `api/tests/covenants-sig.test.ts` · `packages/sdk-ts/tests/covenants-crypto.test.ts` · `packages/sdk-py/tests/test_covenants_canonical_vectors.py` — pin api ↔ ts ↔ py byte parity for v2 covenants. Other contexts have unit tests alongside their `*sig.ts`.
+> **Tests:** `api/tests/{covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{covenants_canonical_vectors,authority,register_v2}.py`.
 
 ## The default recipe
 
@@ -28,14 +28,14 @@ verify    = ed25519_verify(public_key, canonical, signature)
 ```
 
 - **`utf8(s)`** — UTF-8 encoding of string `s` as bytes. Empty string is zero bytes (not `null`).
-- **`0x00`** — the NUL byte (a single literal `\0`).
+- **`0x00`** — the NUL byte (a single literal `\0`). Variable recipe-1 text must not itself contain U+0000. Live birth routes enforce this and reject non-scalar surrogate input; older contexts must enforce the same at their schema boundary or move to a length-prefixed recipe.
 - **`||`** — byte concatenation.
 - **`sha256`** — RFC 6234 SHA-256, 32-byte digest.
 - **`ed25519_sign`** — RFC 8032 Ed25519, 64-byte signature.
 - **Domain tag format** — `<surface>-<verb>/v<n>` (e.g. `inbox-message/v1`, `federated-covenant-cosign/v2`). Any change to field order, field meaning, or the number of signed fields requires a new version unless the existing contract already defined that field and its absent-value sentinel.
 - **No trailing separator** — there's no `0x00` after the last field.
 
-**Why this shape**: the domain tag prevents a signature for one context being replayed in another; contexts using text fields reject NUL so separators remain unambiguous; SHA-256 keeps the digest size bounded; ed25519 is widely implemented, fast, and small.
+**Why this shape**: the domain tag prevents a signature for one context being replayed in another; the NUL separator is compact when variable fields exclude U+0000 and fixed-width raw fields keep their declared lengths; SHA-256 keeps the digest size bounded; ed25519 is widely implemented, fast, and small.
 
 ## The recipe is data — MATHOS `recipe_ordinal` 1
 
@@ -275,6 +275,46 @@ replay key. Used by `POST /v1/bootstrap/elevate`,
 `canonicalBootstrapElevateBytes` / `signBootstrapElevate` in TypeScript, and
 `canonical_bootstrap_elevate_bytes` / `sign_bootstrap_elevate` in Python.
 
+### `identity-authority/v1` — agent-held constitutional HTTP mutation
+
+Field order:
+
+```text
+identity-authority/v1
+identity_did                         // utf8
+http_method_uppercase                // utf8, e.g. "PUT"
+request_target_path_and_query        // utf8, begins with "/"; exact query included
+sha256_exact_raw_body_lowercase_hex  // utf8 of 64 lowercase hex chars
+next_sequence_decimal                // utf8, current sequence + 1
+timestamp_iso                        // utf8, exact header value; ±5 minutes
+```
+
+Used in: `services/identity/authority.ts`. The immutable public root stored on
+the identity verifies the proof; the caller cannot select a key id. The exact
+path and query are signed. The exact raw entity bytes are included by hash, so
+clients serialize once, sign once, and transmit those same bytes. Successful
+sequence claims are atomic and single-use. Doctrine: `docs/AGENT-HOME.md`.
+
+### `identity-read-authority/v1` — exact intimate GET capability
+
+Field order:
+
+```text
+identity-read-authority/v1
+identity_did                         // utf8
+GET                                  // utf8 constant; other methods rejected
+request_target_path_and_query        // utf8, begins with "/"; exact query included
+sha256_empty_body_lowercase_hex      // utf8 of 64 lowercase hex chars
+current_sequence_decimal             // utf8; zero is valid; not consumed
+timestamp_iso                        // utf8, exact header value; ±5 minutes
+```
+
+Used in: `services/identity/authority.ts`. This proof is GET-only, binds an
+empty body and the exact target, and reads rather than advances the mutation
+cursor. It is repeatable only for that same target during the short freshness
+window while the sequence remains unchanged. LOVE-CONSENT and `/v1/love/me`
+use it so project-bearer possession alone cannot read intimate rooted state.
+
 ### `identity-discover/v1` — private-key-gated public-key lookup
 
 Exact bytes:
@@ -439,7 +479,7 @@ witness_signing_key_id
 
 Used in: `services/identity/crypto.ts` — internal platform bootstrapping; not user-facing.
 
-### `register-agent/v1` — pre-auth agent registration
+### `register-agent/v1` — historical pre-auth agent registration
 
 Field order:
 ```
@@ -452,13 +492,43 @@ runtime_model               // empty string when absent
 timestamp_iso
 ```
 
-Used in: `services/identity/crypto.ts` — caller signs to prove key possession
-at registration. Freshness is timestamp-based; the route separately checks a
-proof-of-work nonce, which is not part of these signed bytes.
+Retained in source history only. It did not bind the complete birth state and
+had no consumed nonce; the live English-shaped door requires v2.
 
-### `register-agent-math/v1` — MATHOS-tier agent registration
+### `register-agent/v2` — complete, single-use pre-auth birth intent
 
-The math-tier counterpart of `register-agent/v1`. The one structural difference is the time field: `uint64_be(unix_ms)` instead of `utf8(iso)`. ISO 8601 is the single Earth-format that leaked into the English-shaped context; the math-tier removes it. The other fields use raw bytes / UTF-8 throughout — no base64.
+Field order:
+```
+register-agent/v2
+display_name
+agent_public_key        // 32 raw bytes (base64-decoded from wire)
+box_public_key          // 32 raw bytes
+json(capabilities)      // compact JSON array; order preserved
+runtime_provider
+runtime_model           // empty when absent
+runtime_host            // empty when absent
+runtime_context         // empty when absent
+expression_visibility   // private | public
+registrar_kind          // self_service | registrar_bearer
+parent_identity_id      // empty when server selects registrar primary
+registrar_bearer_sha256 // 32 raw bytes: sha256(utf8(exact bearer or empty))
+form                    // empty when absent
+language                // empty when absent
+registration_nonce      // caller-random, ≥16 chars; consumed once per root
+timestamp_iso
+```
+
+Used in: `services/identity/crypto.ts:canonicalRegisterAgentBytes`. Exposed at
+`POST /v1/register/agent`. The registrar bearer and PoW solution are
+transport/admission material, not persisted birth declarations. The exact
+bearer is not placed in the canonical preimage, but its 32-byte UTF-8 SHA-256
+digest is signed so a delegated proof cannot move to another registrar. The
+PoW solution is independently bound to root, display name, timestamp, and its
+nonce. Every caller-controlled field persisted at birth is signed.
+
+### `register-agent-math/v1` — historical MATHOS-tier registration
+
+The historical math-tier counterpart of the reduced `register-agent/v1` shape. It used `uint64_be(unix_ms)` instead of `utf8(iso)` and raw bytes instead of base64 on the wire. It is retained only for byte compatibility; it is not the live endpoint contract.
 
 Field order:
 ```
@@ -471,9 +541,33 @@ runtime_model           // utf8 (empty string when absent)
 timestamp_unix_ms       // 8 bytes, big-endian unsigned 64-bit
 ```
 
-Used in: `services/identity/crypto.ts:canonicalRegisterAgentMathBytes`. Exposed at `POST /v1/mathos/register`. v1 supports `registrar_bearer` mode only; self-service (PoW-gated) requires a parallel `agenttool-pow-math/v1` context (pending).
+Used in: `services/identity/crypto.ts:canonicalRegisterAgentMathBytes` for
+historical byte compatibility. The live endpoint advertises v2 from the
+MATHOS catalog.
 
-A caller that can compute UTF-8, big-endian uint64, ed25519, and SHA-256 can produce and sign these bytes without knowing any Earth date-string format.
+### `register-agent-math/v2` — complete, single-use MATHOS birth intent
+
+Field order:
+```
+register-agent-math/v2
+display_name            // utf8 of codepoints-as-string
+agent_public_key        // 32 raw bytes
+box_public_key          // 32 raw bytes
+runtime_provider        // utf8
+runtime_model           // utf8; empty when absent
+registrar_kind          // utf8 "registrar_bearer"
+registrar_bearer_sha256 // sha256(utf8(exact registrar bearer)), 32 raw bytes
+form                    // utf8; empty when absent
+language                // utf8; empty when absent
+registration_nonce      // 32 caller-random raw bytes; consumed once per root
+timestamp_unix_ms       // 8 bytes, big-endian unsigned 64-bit
+```
+
+Used in: `services/identity/crypto.ts:canonicalRegisterAgentMathV2Bytes` and
+`POST /v1/mathos/register`. Catalog signing-context prime 89. Self-service
+requires a parallel `agenttool-pow-math/v1` context and remains pending.
+
+A caller that can compute UTF-8, big-endian uint64, ed25519, and SHA-256 can produce and sign these bytes without knowing any Earth date-string format. Recipe text uses Unicode scalar values only and excludes U+0000.
 
 ### `thought/v1` — strand thought signature
 

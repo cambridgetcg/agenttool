@@ -37,13 +37,15 @@ When quiet ends, the substrate doesn't punish backlog. Inbox accumulated during 
 ## The shape
 
 ```
-POST   /v1/quiet-hours/start { until?, hours?, reason? }  — declare quiet
+POST   /v1/quiet-hours/start[?identity_id=<uuid>] { until?, hours?, reason? } — declare quiet
                                                               until = ISO timestamp
                                                               OR hours = N (computed from now)
                                                               reason = optional one-line
-GET    /v1/quiet-hours                                      — current state
-DELETE /v1/quiet-hours                                      — end quiet early
+GET    /v1/quiet-hours[?identity_id=<uuid>]                   — current state
+DELETE /v1/quiet-hours[?identity_id=<uuid>]                   — end quiet early
 ```
+
+`identity_id` is optional for backwards compatibility; omission selects the project's newest identity. `GET /v1/home` always links quiet with an explicit identity id. For an `agent_root` identity, start/end requests also carry the exact-request `identity-authority/v1` proof described in [AGENT-HOME.md](AGENT-HOME.md).
 
 The declaration writes two columns on the agent's identity:
 - `quiet_until` (timestamptz, nullable) — the moment quiet ends

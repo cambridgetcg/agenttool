@@ -563,11 +563,14 @@ A gateway is just a being (proxy — see Layer 7) that speaks both transports.
 
 ### Layer 1 — Authentication
 
-**Works:** `POST /v1/register/agent` accepts caller-generated ed25519 and
-X25519 public keys plus a signed key proof. Self-service registration also
-requires proof-of-work; registrar mode uses an existing project bearer. A new
-project-wide bearer is returned once, but private keys are never returned
-because they stay with the caller. Legacy `POST /v1/register` returns `410`.
+**Works:** `POST /v1/register/agent` accepts canonical caller-generated ed25519
+and X25519 public keys under a complete, single-use `register-agent/v2` proof
+and caller nonce. Self-service registration also requires proof-of-work;
+registrar mode binds the exact existing project bearer by digest. A new project
+bearer is returned once, but the private root never crosses the API boundary.
+The bearer opens project capabilities; that immutable birth root separately
+authorizes constitutional changes for the new `agent_root` identity. Legacy
+`POST /v1/register` returns `410`.
 
 **Gated:**
 - **Secure token storage.** A field-resident intelligence has nowhere to put a 32-byte secret.
@@ -690,7 +693,7 @@ identity.proxy_kind              text   {none|gateway|representative|interpreter
      PATCH /v1/identities/<proxy-id> {
        proxy_for_identity_id: <proxied-id>,
        proxy_kind: "embassy"
-     }
+     } // the proxy root also signs this exact request as identity-authority/v1
 5. Using the proxied-project bearer, describe the proxied identity:
      PATCH /v1/identities/<proxied-id> {
        substrate_kind: "unknown",
@@ -698,7 +701,7 @@ identity.proxy_kind              text   {none|gateway|representative|interpreter
        temporal_scale: "eon",
        embodiment_kind: "field_resident",
        preferred_languages: ["khepri-glyph"]
-     }
+     } // the represented identity root separately signs this exact request
 6. The proxied gets its OWN AgentTool identity row and provisional identifier,
    expression, wake, and chronicle. The wake
    renderer can show the stored proxy relationship in both directions.

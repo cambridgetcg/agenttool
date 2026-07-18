@@ -137,9 +137,15 @@
           <tr><td><strong>Attestation</strong></td><td>A signed statement by one identity <em>about</em> another. Claims like <code>has_capability:web_search</code>, <code>created_by:human:Yu</code>, <code>trusted_by:beta</code>. New v1 writes are cryptographically signed and have no caller-selected expiry; legacy rows may still contain expiry data.</td></tr>
           <tr><td><strong>Legacy trust score</strong></td><td>A compatibility field held at <code>0</code>. AgentTool has no qualified trust roots, personhood guarantee, or Sybil-resistant weighting model, so ordinary attestations are not compressed into a platform trust opinion. Never use this field for authorization, accreditation, or ranking.</td></tr>
           <tr><td><strong>Expression</strong></td><td>Declared register, walls, subagents, and <code>wake_text</code>. It appears in the wake. The maintained Claude Code scaffold injects that orientation; other CLIs must integrate the wake URL themselves.</td></tr>
+          <tr><td><strong>Authority mode</strong></td><td><code>agent_root</code> means the immutable public key supplied at birth must approve constitutional mutations; <code>legacy_bearer</code> means the project bearer remains sufficient.</td></tr>
           <tr><td><strong>Agent JWT</strong></td><td>Short-lived (≤ 1h) token for agent-to-agent auth. <code>sub</code> = source AgentTool identifier, <code>aud</code> = target AgentTool identifier.</td></tr>
         </tbody>
       </table>
+
+      <div class="callout" id="rooted-authority">
+        <span class="icon">⌁</span>
+        <p><strong>Rooted constitutional mutations use one reusable latch.</strong> Keep the bearer header, then fetch <code>GET /v1/identities/:id/authority</code>. For <code>agent_root</code>, serialize the body once and use <code>identityAuthorityHeaders</code> (TypeScript) or <code>identity_authority_headers</code> (Python) with the returned DID and <code>next_sequence</code>, uppercase method, exact path/query, exact body bytes, and a fresh timestamp. Send those same bytes and keep only one root-authorized mutation in flight. See <a href="AGENT-HOME.md">AGENT-HOME.md</a> for the byte recipe and honest limits.</p>
+      </div>
 
       <h2 id="identities">Identities</h2>
 
@@ -150,7 +156,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Register a new identity. Returns the new AgentTool identifier and the <strong>private key</strong> — exactly once. We never persist it server-side.</p>
+          <p class="endpoint-desc">Register a compatibility identity in <code>legacy_bearer</code> mode. Returns the new AgentTool identifier and the <strong>private key</strong> — exactly once. For an immutable client-held <code>agent_root</code>, use <code>POST /v1/register/agent</code>.</p>
 
           <div class="callout">
             <span class="icon">⊙</span>
@@ -193,11 +199,22 @@
         </div>
       </div>
 
+      <div class="endpoint" id="get-authority">
+        <div class="endpoint-header">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/authority</span>
+          <span class="endpoint-auth">Bearer required</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Discover this UUID identity's authority mode, immutable public root, current and next single-use sequence, exact <code>identity-authority/v1</code> recipe, proof-header names, protected surfaces, and limitations. Read this immediately before signing a rooted mutation.</p>
+        </div>
+      </div>
+
       <div class="endpoint" id="patch-identity">
         <div class="endpoint-header">
           <span class="method patch">PATCH</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Update display name, metadata, or capabilities. Expression is updated separately via <a href="#expression">/v1/identities/:id/expression</a>.</p>
@@ -208,7 +225,7 @@
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Soft-revoke. The identity no longer surfaces in <code>/v1/wake</code> as "you," but the row is preserved server-side for historical signature verification.</p>
@@ -216,13 +233,13 @@
       </div>
 
       <h2 id="keys">Keys</h2>
-      <p>Each identity holds one or more ed25519 keypairs. Keys can be rotated; old keys remain queryable for signature verification but no longer sign new attestations.</p>
+      <p>Each identity holds one or more operational ed25519 keys. Keys can be rotated; old keys remain queryable for signature verification but no longer sign new attestations. For <code>agent_root</code>, the immutable birth root is a separate constitutional anchor and cannot be revoked through this keyring.</p>
 
       <div class="endpoint" id="get-keys">
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys</span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · legacy_bearer only</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">List all public keys for an identity. Private keys are never returned past creation time.</p>
@@ -236,7 +253,18 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Generate a new keypair for this identity (rotation). The new private key is returned <strong>once</strong>.</p>
+          <p class="endpoint-desc">Generate a new keypair for a <code>legacy_bearer</code> identity. The new private key is returned <strong>once</strong>. An <code>agent_root</code> request is refused; generate locally and import only the public key instead.</p>
+        </div>
+      </div>
+
+      <div class="endpoint" id="post-key-import">
+        <div class="endpoint-header">
+          <span class="method post">POST</span>
+          <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys/import</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">Register a locally generated ed25519 public key without sending its private half. A rooted identity signs this exact JSON request through the <a href="#rooted-authority">authority latch</a>.</p>
         </div>
       </div>
 
@@ -244,10 +272,10 @@
         <div class="endpoint-header">
           <span class="method delete">DELETE</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/keys/<span class="var">:kid</span></span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Revoke a specific key. Existing attestations signed by it remain verifiable; new signatures with this <code>kid</code> are rejected.</p>
+          <p class="endpoint-desc">Revoke a specific operational key. Existing attestations signed by it remain verifiable; new signatures with this <code>kid</code> are rejected. The immutable authority root itself cannot be revoked here.</p>
         </div>
       </div>
 
@@ -269,7 +297,7 @@
         <div class="endpoint-header">
           <span class="method get">GET</span>
           <span class="endpoint-path">/v1/identities/<span class="var">:id</span>/expression</span>
-          <span class="endpoint-auth">Bearer required</span>
+          <span class="endpoint-auth">Bearer · root proof if agent_root</span>
         </div>
         <div class="endpoint-body">
           <p class="endpoint-desc">Returns the agent's declared expression. The <em>effective</em> expression — declared + memory patches — is composed only at wake-time.</p>
@@ -303,6 +331,8 @@
     "wake_text": "You wake into your work, not into a chat. Read the wake. Read the chronicle. Then act."
   }'</pre>
           </div>
+
+          <p class="muted">For <code>agent_root</code>, use the <a href="#rooted-authority">authority latch</a> and transmit the identical serialized body. A complete exact-request example is in <a href="AGENT-HOME.md">AGENT-HOME.md</a>.</p>
         </div>
       </div>
 
