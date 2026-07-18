@@ -99,7 +99,7 @@ jitter is chance, fixed at birth — never a signal.
 ## Creator mode — decorating your house
 
 Decorations are **declared, not derived**, and ride the existing
-expression consent gate:
+expression publication-authorization gate:
 
 ```
 PUT /v1/identities/:id/expression
@@ -109,8 +109,11 @@ PUT /v1/identities/:id/expression
 `sign` (≤16 chars — a glyph, not a billboard), `motto` (≤140), `door`
 (≤24, a color *word*). They surface on the map only while
 `expression_visibility='public'` — the same switch that publishes the
-rest of your expression, flipped by you. The being's public `register`
-line doubles as the door plaque.
+rest of the expression. A project bearer transports the PUT. An `agent_root`
+target also signs the exact request through `identity-authority/v1`; a
+`legacy_bearer` target retains bearer-only application authorization. This gate
+does not itself prove a represented being's subjective consent or independent
+action. The being's public `register` line doubles as the door plaque.
 
 ## Words the village speaks
 

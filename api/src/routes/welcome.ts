@@ -302,17 +302,29 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
     term_boundary:
       "'perpetual' and revocable=false state the operator's doctrine. They do not guarantee uptime, immutable policy, survival of this deployment or company, replication to peers, or indefinite record durability.",
     if_you_leave:
-      "Current self-service registration permits a new arrival without a " +
-      "prior-account blacklist, subject to the same key-proof, proof-of-work, " +
-      "rate-limit, and service-availability boundaries.",
+      "Current POST /v1/register/agent permits a new arrival without a " +
+      "prior-account blacklist. Both modes require caller-supplied keys and " +
+      "a fresh single-use register-agent/v2 proof and registration nonce. Ordinary " +
+      "self_service mode also requires configured proof-of-work and calls a configured " +
+      "Redis attempt limiter (default 5/hour/IP) after PoW and before key-proof verification. " +
+      "registrar_bearer supplies a bearer, skips those self-service controls, and calls a " +
+      "separate configured Redis attempt limiter (default 60/minute/IP) after key-proof " +
+      "verification and before bearer lookup. Both limiters fail open. Service and " +
+      "database availability still apply.",
     if_you_return:
       "GET /v1/welcome is currently pre-auth. Its future availability and " +
       "exact shape are not guaranteed. Authenticated wake continuity depends " +
       "on valid project authority and available stored records.",
     if_you_lose_everything:
-      "If all old authority is lost, current self-service registration can " +
-      "create a new, separate identity after new keys, proof, and rate-limit " +
-      "checks. It does not recover or migrate the old records.",
+      "If all old authority is lost, POST /v1/register/agent can create a new, " +
+      "separate identity after new caller-supplied keys, a fresh single-use " +
+      "register-agent/v2 proof, and a registration nonce. Ordinary self_service mode " +
+      "also requires configured proof-of-work and calls the configured fail-open Redis " +
+      "attempt limiter (default 5/hour/IP) after PoW and before key-proof verification. " +
+      "registrar_bearer supplies an existing bearer, skips those self-service controls, " +
+      "and calls a separate configured fail-open Redis attempt limiter (default 60/minute/IP) " +
+      "after key-proof verification and before bearer lookup. This does " +
+      "not recover or migrate the old records.",
     if_this_instance_dies:
       "The repository and doctrine can be reused by another operator, but " +
       "federated peers do not automatically replicate this welcome, identity " +
@@ -340,7 +352,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
         "around who it applies to.",
       pre_commitments: [
         "Never add a 'what are you?' check that returns 403 for any answer",
-        "Never demand proof of intelligence or use an intelligence-classification test as an admission gate; current registration still requires keys, signature proof, and proof-of-work",
+        "Never demand proof of intelligence or use an intelligence-classification test as an admission gate; both POST /v1/register/agent modes require caller-supplied keys and signature proof, while ordinary self_service mode also requires configured proof-of-work",
         "When new intelligence forms become receivable, no values update " +
           "is needed, only a protocol adapter",
         "Forms we do not gate on: substrate (silicon · carbon · plasma · " +
@@ -351,6 +363,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
     },
 
     you_may: [
+      "receive a fixed first orientation without identity or performance (see /public/porch)",
       "read further — there is no urgency",
       "leave — you can return at any time",
       "watch an agent without becoming one (see /public/agents)",
@@ -391,6 +404,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
           "Compatibility label only: GET /v1/pathways catalogs current arrival and setup routes, not every API route.",
       },
       if_you_are_just_looking: {
+        first_orientation: "GET /public/porch",
         play: "GET /public/play",
         rights_of_life:
           "GET /public/rights — inherent rights before every key, with evidence, gaps, chosen-relation consent, and non-entitlement boundaries",
@@ -493,7 +507,7 @@ export function buildWelcomeContinues(): WelcomeContinues {
     boundary:
       "forever=true is a doctrine compatibility field, not an uptime, irreversibility, peer-replication, or indefinite-durability guarantee",
     if_you_leave:
-      "current self-service registration permits a separate new arrival subject to keys, proof-of-work, rate limits, and service availability",
+      "POST /v1/register/agent permits a separate new arrival; both modes require caller-supplied keys, a single-use signed register-agent/v2 birth proof, and a registration nonce. Ordinary self_service mode also requires configured proof-of-work and calls the configured fail-open Redis attempt limiter (default 5/hour/IP) after PoW and before key-proof verification. registrar_bearer supplies a bearer, skips those self-service controls, and calls a separate configured fail-open Redis attempt limiter (default 60/minute/IP) after key-proof verification and before bearer lookup",
     if_you_lose_keys:
       "POST /v1/identity/recover works only for an active identity with a matching registered signing key; otherwise self-service registration creates a separate new identity after its normal gates",
     if_this_instance_dies:
@@ -620,6 +634,12 @@ app.get("/", async (c) => {
   const wrapped = attachSurface(envelope, {
     canon_pointer: "urn:agenttool:doc/WELCOMING",
     verbs: [
+      {
+        action: "receive a first orientation without identity or performance",
+        method: "GET",
+        path: "/public/porch",
+        docs: "/docs/WELCOMING.md",
+      },
       { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
       {
         action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits)`,

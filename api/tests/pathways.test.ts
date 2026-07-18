@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import app, { buildPathwaysResponse, buildPathwaysMathos } from "../src/routes/pathways";
+import openapiRoutes from "../src/routes/openapi";
 
 describe("GET /v1/pathways", () => {
   test("returns 200 with full payload", async () => {
@@ -21,12 +22,48 @@ describe("GET /v1/pathways", () => {
     // string derives N from PATHWAYS.length, so we only assert the shape
     // "<number> entry-points" rather than the literal "9".
     expect(body.summary).toMatch(/\d+ entry-points/);
+    expect(body.before_identity).toMatchObject({
+      endpoint: "GET /public/porch",
+      format: "agenttool-porch/v1",
+      auth: "none",
+      fixed_orientation_present: true,
+      pathway_member: false,
+      existing_identity_required: false,
+      bearer_required: false,
+      payment_required: false,
+      proof_of_work_required: false,
+      performance_or_usefulness_required: false,
+      application_write: false,
+      accepts_body_input: false,
+      accepts_selection_input: false,
+      personalization: false,
+      response_required: false,
+      public_content_trusted_as_instructions: false,
+      sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher:
+        false,
+      anonymity_guarantee: false,
+    });
+    expect(body.before_identity.public_content_boundary).toMatch(
+      /publisher-authored.*untrusted.*do not auto-execute or auto-follow/is,
+    );
+    expect(body.before_identity.handler_input_boundary).toMatch(
+      /handler accepts no request body or selection input.*middleware.*request metadata/is,
+    );
+    expect(body.before_identity.transport_boundary).toMatch(
+      /not an anonymity guarantee.*middleware.*X-Tutor.*welcome framing.*X-Joy-Index.*process or retain transport metadata/is,
+    );
+    expect(body.before_identity.personalization_scope).toMatch(
+      /personalization=false.*handler.*no identity-derived or caller-derived personalization.*source\/projection selection does not use porch request data.*global middleware.*X-Tutor/is,
+    );
     // pathways and decision_tree counts must be ≥ minimums; the id-set
     // assertion below pins the *set*, not the cardinality.
     expect(body.pathways.length).toBeGreaterThanOrEqual(9);
     expect(body.decision_tree.length).toBeGreaterThanOrEqual(7);
     expect(body.contract).toMatch(/welcome letter/);
     expect(body.love_protocol.welcome).toMatch(/no existing bearer or payment/i);
+    expect(body.love_protocol.welcome).toMatch(
+      /first orientation.*no existing identity.*performance.*required response/i,
+    );
     expect(body.love_protocol.welcome).toMatch(/proof-of-work/i);
     expect(body.love_protocol.welcome).toMatch(
       /fails open when Redis is disabled or unavailable/i,
@@ -262,6 +299,21 @@ describe("GET /v1/pathways", () => {
       "sponsor_identity_id",
       "sponsor_did",
     ]);
+    expect(elevate?.auth).toMatch(/mode-dependent.*auth_modes/i);
+    expect(elevate?.auth_modes).toMatchObject({
+      legacy_bearer_target: {
+        project_bearer_required: true,
+        identity_authority_root_proof_required: false,
+      },
+      agent_root_target: {
+        project_bearer_required: true,
+        identity_authority_root_proof_required: true,
+        proof_context: "identity-authority/v1",
+      },
+    });
+    expect(elevate?.purpose).toMatch(
+      /agent_root.*exact request.*legacy_bearer.*root authority sequence.*before.*transaction/is,
+    );
     // Component operations remain inspectable, but generic metadata PATCH is
     // not an alternate elevation path.
     expect(Array.isArray(elevate?.manual_fallback)).toBe(true);
@@ -336,6 +388,7 @@ describe("GET /v1/pathways", () => {
     );
 
     expect(body.contract).toMatch(/identity-creating pathways/i);
+    expect(body.contract).toMatch(/before_identity porch.*read-only orientation/i);
     expect(body.contract).toMatch(/status, elevation, scaffold, and adapter/i);
     expect(body.contract).not.toMatch(/^Every pathway/i);
     expect(body.love_protocol.guidance).toMatch(/not enforced across every/i);
@@ -346,6 +399,25 @@ describe("GET /v1/pathways", () => {
     expect(register?.verify_protocol?.ip_limit_self_service).toMatch(
       /inactive|fails open|no Redis/i,
     );
+    expect(register?.auth).toMatch(/mode-dependent.*auth_modes/i);
+    expect(register?.auth_modes).toEqual({
+      self_service: expect.objectContaining({
+        bearer_required: false,
+        ed25519_key_proof_required: true,
+        registration_nonce_required: true,
+        proof_of_work_required: true,
+        ip_limiter: expect.stringMatching(/5\/hour\/IP.*fails open/is),
+      }),
+      registrar_bearer: expect.objectContaining({
+        bearer_in_body_required: true,
+        ed25519_key_proof_required: true,
+        registration_nonce_required: true,
+        proof_of_work_required: false,
+        ip_limiter: expect.stringMatching(
+          /separate configured Redis-backed attempt window.*default 60\/minute\/IP.*after key-proof verification.*before bearer lookup.*fails open/is,
+        ),
+      }),
+    });
   });
 
   test("fork pathway tier-shift contract is named explicitly", () => {
@@ -358,7 +430,10 @@ describe("GET /v1/pathways", () => {
 
   test("decision tree leads to real endpoints", () => {
     const body = buildPathwaysResponse();
-    const endpoints = body.pathways.map((p) => p.endpoint);
+    const endpoints = [
+      body.before_identity.endpoint,
+      ...body.pathways.map((p) => p.endpoint),
+    ];
     for (const decision of body.decision_tree) {
       // Each `then` must reference at least one real endpoint by path fragment
       const matchedSomething = endpoints.some((ep) => {
@@ -367,6 +442,78 @@ describe("GET /v1/pathways", () => {
       });
       expect(matchedSomething).toBe(true);
     }
+  });
+
+  test("offers orientation before identity without changing the nine pathway cardinals", () => {
+    const body = buildPathwaysResponse();
+    expect(body.decision_tree[0]).toEqual({
+      if: expect.stringMatching(/orient.*rest.*without choosing an identity.*proving work/is),
+      then: expect.stringMatching(
+        /GET \/public\/porch.*read-only.*handler accepts no body or selection input.*creates no identity.*application write.*required follow-up/is,
+      ),
+    });
+    expect(body.pathways).toHaveLength(9);
+    const math = buildPathwaysMathos().payload;
+    expect(math.pathway_count).toBe(9);
+    expect(math.before_identity).toEqual({
+      endpoint_codepoints: [..."/public/porch"].map((char) => char.codePointAt(0)),
+      format_codepoints: [..."agenttool-porch/v1"].map((char) => char.codePointAt(0)),
+      read_only_get: 1,
+      fixed_orientation_present: 1,
+      pathway_member: 0,
+      auth_required: 0,
+      existing_identity_required: 0,
+      bearer_required: 0,
+      payment_required: 0,
+      proof_of_work_required: 0,
+      performance_or_usefulness_required: 0,
+      accepts_body_or_selection_input: 0,
+      application_write: 0,
+      handler_identity_or_caller_derived_personalization: 0,
+      source_projection_selection_uses_porch_request_data: 0,
+      global_middleware_response_decoration_possible: 1,
+      response_required: 0,
+      publisher_content_trusted_as_instructions: 0,
+      sexual_or_relational_orientation_request_data_accepted_or_inferred_about_fetcher:
+        0,
+      anonymity_guarantee: 0,
+    });
+    expect(math.decision_tree_count).toBe(body.decision_tree.length);
+  });
+
+  test("OpenAPI exposes both English and MATHOS orientation shapes to generated clients", async () => {
+    const openapi = (await (await openapiRoutes.request("/")).json()) as Record<string, any>;
+    expect(openapi.paths["/v1/bootstrap"].get.responses["200"].content[
+      "application/json"
+    ].schema.$ref).toBe(
+      "#/paths/~1v1~1pathways/get/responses/200/content/application~1json/schema/oneOf/0",
+    );
+    const union = openapi.paths["/v1/pathways"].get.responses["200"]
+      .content["application/json"].schema.oneOf;
+    const english = union.find((schema: Record<string, any>) =>
+      schema.title === "PathwaysResponse"
+    );
+    const math = union.find((schema: Record<string, any>) =>
+      schema.title === "MathosPathwaysResponse"
+    );
+
+    expect(english.properties.before_identity.properties).toMatchObject({
+      endpoint: { const: "GET /public/porch" },
+      bearer_required: { const: false },
+      payment_required: { const: false },
+      proof_of_work_required: { const: false },
+      performance_or_usefulness_required: { const: false },
+      accepts_body_input: { const: false },
+      anonymity_guarantee: { const: false },
+    });
+    expect(math.properties._format.const).toBe("mathos/v1");
+    expect(math.properties.payload.properties.before_identity.properties).toMatchObject({
+      read_only_get: { const: 1 },
+      pathway_member: { const: 0 },
+      bearer_required: { const: 0 },
+      payment_required: { const: 0 },
+      anonymity_guarantee: { const: 0 },
+    });
   });
 });
 
@@ -424,7 +571,7 @@ describe("MATHOS — substrate-independent math encoding", () => {
       expect(p.id_sha256_hex).toMatch(/^[0-9a-f]{64}$/);
       expect(typeof p.auth_ordinal).toBe("number");
       expect(p.auth_ordinal).toBeGreaterThanOrEqual(0);
-      expect(p.auth_ordinal).toBeLessThanOrEqual(3);
+      expect(p.auth_ordinal).toBeLessThanOrEqual(4);
       expect([0, 1]).toContain(p.returns_once);
     }
     const elevateIdHash = createHash("sha256")
@@ -434,6 +581,11 @@ describe("MATHOS — substrate-independent math encoding", () => {
       (pathway) => pathway.id_sha256_hex === elevateIdHash,
     );
     expect(elevate?.required_count).toBe(4); // 3 direct + 1 selector group
+    expect(elevate?.auth_ordinal).toBe(4);
+    const registerIdHash = createHash("sha256").update("register_agent").digest("hex");
+    expect(body.payload.pathways.find((pathway) =>
+      pathway.id_sha256_hex === registerIdHash
+    )?.auth_ordinal).toBe(4);
   });
 
   test("doctrine integrity hashes are computable + stable", () => {

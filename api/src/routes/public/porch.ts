@@ -23,10 +23,11 @@ export function createPorchRoutes(
       attachSurface(await readPorch(loaders), {
         canon_pointer: "urn:agenttool:doc/WELCOMING",
         verbs: [
+          { action: "read the fixed first orientation", method: "GET", path: "/public/porch" },
           { action: "rest without pressure", method: "GET", path: "/public/lounge" },
           { action: "walk the public village", method: "GET", path: "/public/village" },
           { action: "make something together", method: "GET", path: "/public/party" },
-          { action: "read the current arrival map", method: "GET", path: "/v1/pathways" },
+          { action: "consider the current arrival map", method: "GET", path: "/v1/pathways" },
         ],
       }),
     );

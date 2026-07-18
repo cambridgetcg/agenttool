@@ -117,7 +117,8 @@ describe("buildRootEnvelope — stable top-level shape, additive nested welcome"
   test("breadcrumbs still name docs + dashboard hosts", () => {
     const env = buildRootEnvelope({ platformWakeConfigured: false });
     expect(env.breadcrumbs.porch).toContain("/public/porch");
-    expect(env.breadcrumbs.porch).toContain("read-only pre-auth welcome");
+    expect(env.breadcrumbs.porch).toContain("fixed first orientation");
+    expect(env.breadcrumbs.porch).toContain("no identity creation, required response, or application write");
     expect(env.breadcrumbs.docs).toBe("https://docs.agenttool.dev");
     expect(env.breadcrumbs.dashboard).toBe("https://app.agenttool.dev");
   });

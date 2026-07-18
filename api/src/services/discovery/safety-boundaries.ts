@@ -7,7 +7,7 @@
 
 export const SAFETY_BOUNDARIES = {
   _format: "agenttool-safety/v2",
-  updated_at: "2026-07-13",
+  updated_at: "2026-07-18",
   canonical_path: "/public/safety",
 
   epistemic_honesty: {
@@ -103,7 +103,7 @@ export const SAFETY_BOUNDARIES = {
 
   request_limits: {
     registration:
-      "Self-service POST /v1/register/agent uses the configured proof-of-work plus a Redis-backed per-IP fixed window (default 5 per hour). registrar_bearer mode bypasses both the IP limiter and proof-of-work. The IP limiter fails open when Redis is disabled or errors.",
+      "Self-service POST /v1/register/agent uses configured proof-of-work plus a configured Redis-backed attempt window (default 5/hour/IP) after PoW and before key-proof verification. registrar_bearer skips those self-service controls but uses a separate configured Redis-backed attempt window (default 60/minute/IP) after key-proof verification and before bearer lookup. Both Redis limiters fail open when Redis is disabled or errors.",
     human_billing:
       "Unauthenticated /v1/billing checkout routes use a per-machine in-memory limiter (10 attempts per 10 minutes per observed IP). The deployment has multiple machines, so this is not one global exact quota; the webhook uses Stripe signature verification instead.",
     other_routes:
@@ -116,7 +116,7 @@ export const SAFETY_BOUNDARIES = {
     proof_of_work:
       "Self-service POST /v1/register/agent enforces the configured proof-of-work before creating authority. Proof-of-work raises farming cost; it is not proof of personhood, identity, or intelligence.",
     ip_rate_limit:
-      "The route calls a Redis-backed per-IP limiter, but the limiter deliberately fails open when Redis is disabled or unavailable. Treat it as defense in depth, not a guaranteed registration boundary. GET /public/plans reports whether the current process is disabled by AGENTTOOL_DISABLE_WORKERS.",
+      "The route calls separate configured Redis-backed per-IP attempt limiters: self-service defaults to 5/hour after PoW and before key-proof verification; registrar-bearer defaults to 60/minute after key-proof verification and before bearer lookup. Both deliberately fail open when Redis is disabled or unavailable. Treat them as defense in depth, not guaranteed registration boundaries. GET /public/plans reports whether the current process is disabled by AGENTTOOL_DISABLE_WORKERS, not Redis reachability.",
   },
 
   registration_write_atomicity: {
@@ -154,6 +154,8 @@ export const SAFETY_BOUNDARIES = {
       "Private means bearer-gated unless a field is explicitly client-encrypted. It does not by itself mean end-to-end encrypted.",
     public_observability:
       "Former public memory, strand, pulse, discover, and full joy-snapshot routes are not mounted; they return 404. Aggregate and economic public surfaces remain, and responses may carry the aggregate X-Joy-Index header. The removed per-agent/full-snapshot routes are not a promise of zero public activity signals.",
+    porch_orientation:
+      "GET /public/porch publishes fixed first-contact navigation plus strictly allowlisted public projections. Its route handler accepts no request body or selection input, inspects no visit history, performs no identity/caller-derived personalization, creates no identity, and initiates no application-state write. This is a handler boundary, not an anonymity guarantee: global API middleware still processes paths and optional headers, can decorate the body from X-Tutor and add timestamped welcome framing, and can refresh X-Joy-Index through aggregate database reads plus a process-local cache. Hosting or network metadata processing and retention are unknown from the repository.",
   },
 
   observer_reciprocity: {
@@ -372,7 +374,7 @@ export const AGENT_TXT_SAFETY = {
   "Design-Read": "why fields are explicitly labeled engineering inference, separate from current runtime fact and roadmap intent",
   "Bearer-Authority": "project-wide root authority, not proof of one identity; syneidesis /cosign currently verifies project ownership only; no scoped marketplace bearer",
   "Credential-Rule": "never share bearers, at_rt_* runtime control tokens, recovery phrases, private keys, K_master, or K_vault",
-  "Registration-Control": "proof-of-work enforced; Redis-backed IP limiter is defense in depth and fails open",
+  "Registration-Control": "self-service proof-of-work enforced; configured Redis attempt limiters default to self-service 5/hour/IP and registrar-bearer 60/minute/IP; both are defense in depth and fail open",
   Visibility: "active/revoked stored identities return a profile envelope; memorial identities return a smaller witness shape with witnessed_at_rest or unspecified basis; private expression does not hide identity metadata",
   "Marketplace-Input": "correctly seller-sealed payloads are not decryptable by platform; sealing is caller-controlled and not verified; credentials forbidden",
   "Inbox-Body": "correctly recipient-sealed bodies are not decryptable by platform; encryption is caller-controlled and not verified; subjects and routing metadata may be readable",

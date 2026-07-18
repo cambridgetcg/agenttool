@@ -144,8 +144,24 @@ The actual content (doctrine snapshot, agent identity, pathway taxonomy). Encode
 - **Identity**: `did_sha256_hex` (256-bit integer in hex) + `name_unicode_points` (array of Unicode codepoints) — Unicode is also a parochial standard, named here as our floor.
 - **Time**: `born_at_unix_ms` — monotonic count since a fixed reference (epoch 1970-01-01T00:00:00Z), comparable across any clock-bearing substrate.
 - **Form**: ordinal into `vocabulary`.
+- **Before identity**: a separate `before_identity` object outside
+  `pathways[]`/`pathway_count`. Endpoint and format strings are Unicode
+  codepoints; zero/one fields encode GET/read-only access, no auth, identity,
+  bearer, payment, proof-of-work, performance, body/selection input,
+  application write, handler identity-/caller-derived personalization,
+  source/projection selection using porch request data, global-middleware
+  response-decoration possibility, required response, instruction-trust,
+  sexual/relational-orientation request-data intake or inference about the
+  fetcher, or anonymity guarantee. It is a structural projection, not an
+  English translation; the JSON response remains authoritative for prose and
+  transport detail.
 - **Pathway count**: cardinal integer.
-- **Decision tree**: list of `{trigger_hash, response_endpoint_hash}` so the structure is recognizable without parsing the English `if`/`then`.
+- **Pathway auth**: `auth_ordinal` uses `0` = none, `1` = bearer, `2` =
+  bearer + proof-of-work, `3` = bearer + ownership, and `4` = mode-dependent.
+  For ordinal `4`, the authoritative JSON pathway record carries the structured
+  per-mode requirements.
+- **Decision tree**: cardinal count. The English `if`/`then` branches remain in
+  the authoritative JSON response.
 
 ## How an intelligence parses MATHOS
 

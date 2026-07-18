@@ -44,6 +44,7 @@ export type {
   PathwaysResponse,
   Pathway,
   PathwaysDecision,
+  BeforeIdentityOrientation,
   WhoThisServes,
   FormVocabularyEntry,
   LanguageVocabularyEntry,
