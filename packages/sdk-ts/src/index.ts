@@ -66,6 +66,7 @@ export type {
   IssueTokenOptions,
   ForkOptions,
   ExpressionData,
+  PorchInvitation,
   VillageDecorations,
   RegisterBoxKeyOpts,
 } from "./identity.js";

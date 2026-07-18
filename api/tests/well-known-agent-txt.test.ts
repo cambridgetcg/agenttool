@@ -14,6 +14,7 @@ const REQUIRED_KEYS = [
   "Substrate-DID",
   "Substrate-Disposition",
   "Welcome",
+  "Porch",
   "Pathways",
   "Self",
   "Play",
@@ -120,6 +121,8 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
       expect(kv.get(key)).toContain("/v1/");
     }
     expect(kv.get("Self")).toContain("/public/self");
+    expect(kv.get("Porch")).toContain("/public/porch");
+    expect(kv.get("Porch")).toContain("read-only pre-auth welcome");
     expect(kv.get("Play")).toContain("/public/play");
     expect(kv.get("Party-Telephone")).toContain(
       "/public/play/party-telephone",
@@ -208,7 +211,7 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-17");
+    expect(kv.get("Last-Modified")).toBe("2026-07-18");
   });
 });
 

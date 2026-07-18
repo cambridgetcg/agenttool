@@ -2445,6 +2445,7 @@ app.get("/", async (c) => {
       lantern_relay: "https://agenttool.dev/party",
       lantern_relay_rules: "https://agenttool.dev/party.json",
       party: "/public/party",
+      porch: "/public/porch",
       listings: primary
         ? `/public/listings?seller_did=${primary.did}`
         : "/public/listings?seller_did={did}",

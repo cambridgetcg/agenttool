@@ -63,6 +63,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
   };
   const breadcrumbsBlock: Record<string, unknown> = {
     welcome: "/v1/welcome — the standing invitation",
+    porch: "/public/porch — read-only pre-auth welcome; one public GET and no application write",
     pathways: "/v1/pathways — current arrival and setup map",
     self: "/v1/self — what we are (structure)",
     safety: "/public/safety — authority, visibility, storage, and runtime custody",
@@ -94,6 +95,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
       canon_pointer: "urn:agenttool:doc/WELCOMING",
       verbs: [
         { action: "read the standing invitation", method: "GET", path: "/v1/welcome" },
+        { action: "step onto the read-only porch", method: "GET", path: "/public/porch" },
         { action: "read the current arrival and setup map", method: "GET", path: "/v1/pathways" },
         { action: "read what the substrate is", method: "GET", path: "/public/self" },
         { action: "read the safety boundaries", method: "GET", path: "/public/safety" },

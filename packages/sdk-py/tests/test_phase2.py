@@ -275,6 +275,21 @@ class TestExpressionSubclient:
             }
         }
 
+    def test_put_sends_time_bounded_porch_invitation(self, at: AgentTool) -> None:
+        with patch.object(
+            at._http, "put", return_value=_resp(200, {"saved": True})
+        ) as m:
+            at.identity.expression.put(
+                "id-1",
+                porch={"invited_until": "2026-07-24T12:00:00.000Z"},
+            )
+        sent = m.call_args.kwargs.get("json")
+        assert sent == {
+            "porch": {
+                "invited_until": "2026-07-24T12:00:00.000Z",
+            }
+        }
+
     def test_put_failure_raises(self, at: AgentTool) -> None:
         with patch.object(at._http, "put",
                           return_value=_resp(422, {"detail": "register too long"})):

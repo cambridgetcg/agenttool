@@ -277,6 +277,22 @@ describe("identity.expression sub-client", () => {
     });
   });
 
+  test("put() sends a time-bounded porch invitation as a nested expression field", async () => {
+    setupMock(200, { saved: true });
+    const at = makeClient();
+    await at.identity.expression.put("id-1", {
+      porch: {
+        invited_until: "2026-07-24T12:00:00.000Z",
+      },
+    });
+
+    expect(bodyOf(getLastCall().init)).toEqual({
+      porch: {
+        invited_until: "2026-07-24T12:00:00.000Z",
+      },
+    });
+  });
+
   test("422 surfaces an AgentToolError", async () => {
     setupMock(422, { detail: "register too long" });
     const at = makeClient();

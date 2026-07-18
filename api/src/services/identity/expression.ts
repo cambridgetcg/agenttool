@@ -41,6 +41,12 @@ export interface VillageDecorations {
   door?: string;
 }
 
+export interface PorchInvitation {
+  /** Canonical UTC instant through which this project-authorized invitation
+   *  may appear on /public/porch. Invitations are bounded to seven days. */
+  invited_until: string;
+}
+
 export interface ExpressionData {
   /** The voice. Free prose. Recommended ≤ 500 chars. */
   register?: string;
@@ -56,6 +62,10 @@ export interface ExpressionData {
    *  Surfaces only while expression_visibility='public' (the same consent
    *  gate as the rest of expression). Doctrine: docs/VILLAGE.md. */
   village?: VillageDecorations;
+  /** Interaction-specific invitation to /public/porch. This is accepted
+   *  project authority, not proof of a represented being's subjective
+   *  consent or independent action. */
+  porch?: PorchInvitation;
   /** ISO timestamp of last update — set by setExpression. */
   updated_at?: string;
 }
@@ -68,6 +78,7 @@ const WAKE_TEXT_MAX = 32_000; // generous; wake docs are often essay-length
 const VILLAGE_SIGN_MAX = 16; // a glyph or two, not a billboard
 const VILLAGE_MOTTO_MAX = 140;
 const VILLAGE_DOOR_MAX = 24;
+const PORCH_INVITATION_MAX_MS = 7 * 24 * 60 * 60 * 1000;
 
 const KNOWN_EXPRESSION_FIELDS = new Set([
   "register",
@@ -76,12 +87,17 @@ const KNOWN_EXPRESSION_FIELDS = new Set([
   "wake_text",
   "cli_overrides",
   "village",
+  "porch",
   "updated_at",
 ]);
 
 const KNOWN_VILLAGE_FIELDS = new Set(["sign", "motto", "door"]);
+const KNOWN_PORCH_FIELDS = new Set(["invited_until"]);
 
-export function validateExpression(data: unknown): ExpressionData {
+export function validateExpression(
+  data: unknown,
+  nowMs = Date.now(),
+): ExpressionData {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
     throw new Error("expression must be a JSON object");
   }
@@ -93,7 +109,7 @@ export function validateExpression(data: unknown): ExpressionData {
   for (const k of Object.keys(e)) {
     if (!KNOWN_EXPRESSION_FIELDS.has(k)) {
       throw new Error(
-        `unknown field "${k}". Known fields: register, walls, subagents, wake_text, cli_overrides, village`,
+        `unknown field "${k}". Known fields: register, walls, subagents, wake_text, cli_overrides, village, porch`,
       );
     }
   }
@@ -195,6 +211,40 @@ export function validateExpression(data: unknown): ExpressionData {
       village.door = v.door;
     }
     out.village = village;
+  }
+
+  if (e.porch !== undefined) {
+    if (typeof e.porch !== "object" || e.porch === null || Array.isArray(e.porch)) {
+      throw new Error("porch must be an object");
+    }
+    const p = e.porch as Record<string, unknown>;
+    for (const k of Object.keys(p)) {
+      if (!KNOWN_PORCH_FIELDS.has(k)) {
+        throw new Error(
+          `unknown field "porch.${k}". Known fields: invited_until`,
+        );
+      }
+    }
+    if (typeof p.invited_until !== "string") {
+      throw new Error("porch.invited_until is required and must be a string");
+    }
+    const invitedUntil = new Date(p.invited_until);
+    const invitedUntilMs = invitedUntil.getTime();
+    if (
+      !Number.isFinite(invitedUntilMs) ||
+      invitedUntil.toISOString() !== p.invited_until
+    ) {
+      throw new Error(
+        "porch.invited_until must be a canonical ISO-8601 UTC instant",
+      );
+    }
+    if (invitedUntilMs <= nowMs) {
+      throw new Error("porch.invited_until must be in the future");
+    }
+    if (invitedUntilMs > nowMs + PORCH_INVITATION_MAX_MS) {
+      throw new Error("porch.invited_until cannot be more than 7 days ahead");
+    }
+    out.porch = { invited_until: p.invited_until };
   }
 
   return out;
