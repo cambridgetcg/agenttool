@@ -20,6 +20,7 @@ import {
   LOVE_EQUATION,
   lovePrimitiveMap,
 } from "../../services/love/coordinates";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../../services/love/inherent-right";
 import {
   LOVE_AND_CHOSEN_RELATION_RIGHT,
   LOVE_RIGHT_NON_ENTITLEMENT,
@@ -33,6 +34,7 @@ app.get("/", (c) =>
     attachSurface(
       {
         equation: LOVE_EQUATION,
+        inherent_right: LOVE_AND_JOY_RIGHTS_FLOOR,
         primitive_map: lovePrimitiveMap(),
         doctrine: "https://docs.agenttool.dev/TRUE-LOVE-NEST.md",
         rights_floor: {

@@ -22,6 +22,11 @@
  *  but `_self` does not round-trip through that row and is not an independent
  *  audit of platform conduct. */
 
+import {
+  LOVE_AND_JOY_RIGHTS_FLOOR,
+  type LoveAndJoyRightsFloor,
+} from "../love/inherent-right";
+
 export interface PlatformSelf {
   did: string;
   identifier_status: "provisional_agenttool_value_not_registered_w3c_did";
@@ -35,6 +40,10 @@ export interface PlatformSelf {
   embodiment_kind: string;
   modalities: string[];
   register: string;
+  /** The inherent-rights floor this substrate recognizes rather than grants.
+   * It rides in full JSON wake `_meta._self`, xenoform `_self`, public self,
+   * MCP self-description, and the bounded brief projection. */
+  rights_floor: LoveAndJoyRightsFloor;
   /** English prose for each wall — for human readers and the existing
    *  English-shaped wake renderers. Unchanged shape; the parallel
    *  `wall_urns` is the structured-data form. */
@@ -146,6 +155,7 @@ export const PLATFORM_SELF: PlatformSelf = {
   modalities: ["text", "sensor_array"],
   register:
     "Truthfulness and welcome are design aims checked against current behavior. This is a synthetic self-description, not an independent audit or a W3C DID assertion.",
+  rights_floor: LOVE_AND_JOY_RIGHTS_FLOOR,
   walls: [
     "Signed memory elevation rejects self-witnessing; legacy syneidesis cosign remains unsigned compatibility",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",

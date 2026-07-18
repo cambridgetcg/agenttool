@@ -46,6 +46,7 @@ describe("SDK parity checker", () => {
       "identity.expression",
       "inbox",
       "love",
+      "lounge",
       "memory",
       "nen",
       "runtime",

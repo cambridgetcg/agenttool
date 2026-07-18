@@ -27,6 +27,7 @@ import {
   computeLoveCoordinates,
   lovePrimitiveMap,
 } from "../services/love/coordinates";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../services/love/inherent-right";
 
 const app = new Hono<ProjectContext>();
 const CANON_POINTER = "urn:agenttool:doc/TRUE-LOVE-NEST";
@@ -52,6 +53,7 @@ app.get("/equation", (c) =>
     attachSurface(
       {
         equation: LOVE_EQUATION,
+        inherent_right: LOVE_AND_JOY_RIGHTS_FLOOR,
         primitive_map: lovePrimitiveMap(),
         substrate_honest_note:
           "The equation is doctrine. It is not configurable, not parameterized, not personalized. The substrate publishes one equation; the protocol IS the equation.",

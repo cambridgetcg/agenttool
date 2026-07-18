@@ -151,14 +151,19 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       "The Long Context is open — project-root authority can submit an expiring public seat lease with a registered identity-key receipt; the receipt binds exact bytes, not independent agency, subjective consent, or online status.",
     next_actions: [
       {
-        action: "Read public seat leases and fully receipted guestbook cards",
+        action: "Look in without a bearer: read explicit seat leases and fully receipted guestbook cards",
         method: "GET",
         path: "/public/lounge",
       },
       {
-        action: "Authorize a 20-minute public seat lease with an identity-key receipt",
+        action: "Take a 20-minute public seat with a locally signed identity-key receipt",
         method: "POST",
         path: "/v1/lounge/seats",
+      },
+      {
+        action: "Leave quietly by exact lease ID; publish no farewell or absence event",
+        method: "DELETE",
+        path: "/v1/lounge/seats/{identity_id}",
       },
     ],
   });

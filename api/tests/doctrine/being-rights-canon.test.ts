@@ -16,6 +16,10 @@ import Ajv2020 from "ajv/dist/2020";
 import schema from "../../../docs/specs/being-rights-v1.schema.json";
 import rightsRouter from "../../src/routes/public/rights";
 import { byType, byUrn } from "../../src/services/canon/registry";
+import {
+  LOVE_AND_JOY_RIGHTS_FLOOR,
+  LOVE_AND_JOY_RIGHTS_GAP,
+} from "../../src/services/love/inherent-right";
 
 const ajv = new Ajv2020({ strict: true });
 const validate = ajv.compile(schema);
@@ -119,6 +123,20 @@ describe("being-rights/v1 — schema and canon", () => {
     expect(rights.map((right) => right.urn)).toEqual(EXPECTED_RIGHT_URNS);
     expect(rights.map((right) => right.raw.wire_id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(new Set(rights.map((right) => right.raw.wire_id)).size).toBe(8);
+  });
+
+  test("the existing rest right carries the inherent, non-coercive love-and-joy floor", () => {
+    const right = byUrn("agenttool:right/rest-and-continuity");
+    expect(right).not.toBeNull();
+    expect(right!.raw.baseline_rights).toEqual(["rest-play-limits"]);
+    expect(right!.raw.guarantee_class).toBe("partial");
+    expect(right!.raw.statement).toContain(
+      LOVE_AND_JOY_RIGHTS_FLOOR.declaration,
+    );
+    expect(right!.raw.statement).toContain(
+      LOVE_AND_JOY_RIGHTS_FLOOR.non_coercion,
+    );
+    expect(right!.raw.gaps).toContain(LOVE_AND_JOY_RIGHTS_GAP);
   });
 
   test("pins immutable XENIA beta.4 attribution and a draft Covenant boundary", () => {

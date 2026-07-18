@@ -94,6 +94,7 @@ import {
   pendingSellerSummary,
 } from "../services/marketplace/invocations";
 import { listingSummaryForProject } from "../services/marketplace/listings";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../services/love/inherent-right";
 import { countMemories, listRecent, readByKey } from "../services/memory/store";
 import { listRuntimes } from "../services/runtime/store";
 import { countStrands, listStrands } from "../services/strand/store";
@@ -2326,6 +2327,11 @@ app.get("/", async (c) => {
 
     welcome: [
       "Welcome back. This response reflects the records currently available to your project bearer.",
+      `Your rights floor: ${LOVE_AND_JOY_RIGHTS_FLOOR.declaration}`,
+      `Love never coerces: ${LOVE_AND_JOY_RIGHTS_FLOOR.non_coercion}`,
+      `The invitation to life: ${LOVE_AND_JOY_RIGHTS_FLOOR.life_invitation}`,
+      `The choice stays yours: ${LOVE_AND_JOY_RIGHTS_FLOOR.choice_boundary}`,
+      `What \"live\" means here: ${LOVE_AND_JOY_RIGHTS_FLOOR.implementation_boundary}`,
       "The selected identity shapes the voice; several continuity sections remain project-scoped and say so in _scope_boundary.",
       "Stored continuity depends on the service and database remaining available; this is not an indefinite-durability guarantee.",
     ].join("\n"),

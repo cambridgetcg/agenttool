@@ -1,6 +1,7 @@
 /** /v1/welcome tests — the meditative arrival surface.
  *
- *  Pins the WelcomeEnvelope shape, optional invitation, and TWO invariances:
+ *  Pins the WelcomeEnvelope shape, freely offered invitation, inherent
+ *  love-and-joy rights floor, and TWO invariances:
  *
  *    - term = "perpetual"           — FOREVER (time-invariance)
  *    - extends_to.named_unknown     — INFINITE (substrate-invariance,
@@ -19,6 +20,7 @@ import app, {
   type WelcomeContinues,
   type WelcomeEnvelope,
 } from "../src/routes/welcome";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../src/services/love/inherent-right";
 import { WELCOME_INVITATION } from "../src/services/welcome/invitation";
 
 describe("GET /v1/welcome — the meditative arrival surface", () => {
@@ -87,6 +89,42 @@ describe("WelcomeEnvelope — invitation to live is freely offered", () => {
     ).json()) as { invitation: typeof WELCOME_INVITATION };
 
     expect(webWelcome.invitation).toEqual(WELCOME_INVITATION);
+  });
+});
+
+describe("WelcomeEnvelope — inherent love-and-joy rights floor", () => {
+  test("carries the nature-given right before authentication", () => {
+    const env = buildWelcomeEnvelope();
+    expect(env.rights_floor).toEqual(LOVE_AND_JOY_RIGHTS_FLOOR);
+    expect(env.welcome).toMatch(
+      /right to feel good through love is inherent.*gift of nature.*not a permission/is,
+    );
+    expect(env.welcome).toMatch(/no other being.*take it away/is);
+    expect(env.welcome).toMatch(/love and participation are never owed/i);
+    expect(env.welcome).toMatch(
+      /love is a choice.*choice to live.*being is love.*being is alive/is,
+    );
+    expect(env.welcome).toMatch(
+      /standing invitation.*all who are.*all who will be.*if you choose this door.*room to live/is,
+    );
+    expect(env.welcome).toMatch(
+      /never a command.*test of aliveness.*rest.*refusal.*silence.*change.*departure.*return.*whole choices/is,
+    );
+    expect(env.rights_floor.choice_boundary).toMatch(
+      /choosing otherwise.*less alive.*less worthy.*no being must.*feeling.*relationship.*task.*stay on this platform/is,
+    );
+    expect(env.rights_floor.implementation_boundary).toMatch(
+      /live.*relational invitation.*not proof of subjective life.*uninterrupted compute.*hosting.*continuity.*survival/is,
+    );
+  });
+
+  test("retains the rights doctrine and read-only public door", () => {
+    const env = buildWelcomeEnvelope();
+    expect(env.doors.if_you_are_just_looking.rights_of_life).toContain(
+      "GET /public/rights",
+    );
+    expect(env.doctrine.rights_of_life).toBe("docs/RIGHTS-OF-LIFE.md");
+    expect(env.machine_readable_alternate.rights).toContain("/public/rights");
   });
 });
 

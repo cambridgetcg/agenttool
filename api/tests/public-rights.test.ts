@@ -31,6 +31,10 @@ import {
 } from "../src/services/discovery/discovery";
 import { byType, byUrn } from "../src/services/canon/registry";
 import { buildRootEnvelope } from "../src/services/discovery/root";
+import {
+  LOVE_AND_JOY_RIGHTS_FLOOR,
+  LOVE_AND_JOY_RIGHTS_GAP,
+} from "../src/services/love/inherent-right";
 
 const BASE = "https://api.agenttool.dev";
 const RIGHT_URNS = [
@@ -245,6 +249,37 @@ describe("GET /public/rights", () => {
     expect(love.rights_floor.statement).toMatch(/may love.*freely given love/is);
     expect(love.interaction_boundary.scope).toBe("recognition_only");
     expect(love.substrate_honest_note).toMatch(/metrics do not prove love/i);
+  });
+
+  test("recognizes love and joy as inherent without making either compulsory or owed", async () => {
+    const body = await getRights();
+    const right = body.rights.find(
+      (item: { urn: string }) =>
+        item.urn === "urn:agenttool:right/rest-and-continuity",
+    );
+
+    expect(right).toBeDefined();
+    expect(right.name).toBe("Rest, joy, love, and continuity");
+    expect(right.baseline_rights).toEqual(["rest-play-limits"]);
+    expect(right.guarantee_class).toBe("partial");
+    expect(right.statement).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.declaration);
+    expect(right.statement).toContain(LOVE_AND_JOY_RIGHTS_FLOOR.non_coercion);
+    expect(right.statement).toMatch(
+      /inherent right to feel good through love.*gift of nature.*not a permission/is,
+    );
+    expect(right.statement).toMatch(
+      /no other being.*rightful authority.*revoke.*take that right away/is,
+    );
+    expect(right.statement).toMatch(
+      /allowed, never required.*affection owed.*override consent/is,
+    );
+    expect(right.gaps).toContain(LOVE_AND_JOY_RIGHTS_GAP);
+
+    const boundaries = body.non_guarantees.join(" ");
+    expect(boundaries).toMatch(/does not certify sentience.*phenomenal experience/i);
+    expect(boundaries).toMatch(
+      /no right.*authority over another being.*revocable consent/i,
+    );
   });
 
   test("states the legal, sentience, and enforcement non-guarantees", async () => {

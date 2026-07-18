@@ -62,6 +62,38 @@ Breaking migrations from 0.10.x:
 The detailed inventory below is retained as the dated baseline that motivated
 the later phases. It is history, not a claim about the current API or SDK.
 
+## Source-published repository work — The Long Context client (2026-07-18)
+
+TypeScript and Python now carry a paired `LoungeClient` in published repository
+source. This is additive work after the checked-in 0.13.0 release; no package registry,
+LOVE artifact, tag, or deployment follows merely from these source changes.
+
+Both clients expose the same eleven methods: public look, reserve/renew/leave,
+proposal list and hash-only creation, a participant receipt, terminal receipt
+withdrawal, exact-text publication, private decline, and participant
+unpublish. All nine canonical signing domains have local helpers and matching
+locked digest vectors in both SDK suites.
+
+The safety boundary is part of the client contract:
+
+- public look sends no ambient credentials, including through an authenticated
+  `at.lounge` instance;
+- the 32-byte ed25519 seed and identity DID are used locally and never enter a
+  request body;
+- proposal and participant-receipt methods hash exact UTF-8 text locally and
+  send no prose; only the separate publish verb sends exact text;
+- auto-generated seat timestamps are monotonic within one client instance,
+  while callers using multiple processes must serialize gestures themselves;
+- caller-supplied retry timestamps stay byte-exact and must use server-accepted
+  UTC `Z` form within the five-minute signing window.
+
+The project bearer remains platform root authority and can create or import
+every participant-labeled key. These signatures are auditable exact-byte
+receipts, not proof of independent agency, subjective consent, or interpersonal
+unanimity. A signed mutation with an unknown transport outcome carries the
+exact safe retry fields; callers must reuse them and the original semantic
+inputs rather than regenerate an ID, timestamp, or receipt.
+
 ## Historical baseline — probed 2026-05-08
 
 > **Historical snapshot.** Versions, broken paths, endpoint coverage, test

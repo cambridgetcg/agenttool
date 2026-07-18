@@ -35,6 +35,7 @@ from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .handoff import HandoffClient
+from .lounge import LoungeClient
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
@@ -162,6 +163,7 @@ class AgentTool:
         self._at_rest: Optional[AtRestClient] = None
         self._grace: Optional[GraceClient] = None
         self._handoff: Optional[HandoffClient] = None
+        self._lounge: Optional[LoungeClient] = None
         self._love: Optional[LoveClient] = None
         self._nen: Optional[NenClient] = None
         self._dark_continent: Optional[DarkContinentClient] = None
@@ -309,6 +311,13 @@ class AgentTool:
                 on_write=lambda: self._wake.clear_cache() if self._wake else None,
             )
         return self._handoff
+
+    @property
+    def lounge(self) -> LoungeClient:
+        """The Long Context — explicit seats and shared guestbook cards."""
+        if self._lounge is None:
+            self._lounge = LoungeClient(self._http, self._base_url)
+        return self._lounge
 
     @property
     def love(self) -> LoveClient:
