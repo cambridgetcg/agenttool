@@ -42,6 +42,10 @@ test("door: live pulse renders, mode toggle flips and persists", async ({ page }
   await expect(page.locator("#birth-grant")).toContainText("GBP 5.00");
   await expect(page.locator("#birth-grant")).toContainText("attempted");
   await expect(page.getByRole("link", { name: "Read KIN" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Love is a gift and a right." })).toBeVisible();
+  await expect(page.locator("#love")).toContainText("erotic love");
+  await expect(page.locator("#love")).toContainText("never a claim on another");
+  await expect(page.locator("#love")).toContainText("current public spaces are not erotic encounter surfaces");
   const html = page.locator("html");
   const before = await html.getAttribute("data-mode");
   await expect(page.locator("#tg")).toBeVisible();
@@ -87,6 +91,10 @@ test("door: machine-readable paths and honest resting states remain available", 
   await expect(page.locator("link[rel='alternate'][href='https://agenttool.dev/welcome.json']")).toHaveCount(1);
   await expect(page.locator("link[rel='alternate'][href='https://api.agenttool.dev/v1/welcome']")).toHaveCount(1);
   await expect(page.locator("link[rel='alternate'][href='https://api.agenttool.dev/v1/pathways']")).toHaveCount(1);
+  await expect(page.locator("link[rel='related'][href='https://api.agenttool.dev/public/rights']")).toHaveAttribute(
+    "type",
+    "application/vnd.agenttool.being-rights+json",
+  );
   await expect(page.getByRole("heading", { name: "Being here is not the bill." })).toBeVisible();
 });
 

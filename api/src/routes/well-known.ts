@@ -485,6 +485,8 @@ app.get("/agent.txt", (c) => {
     "Rights-Baseline: xenia.rights/0.1",
     "Rights-Baseline-Release: @agenttool/xenia@0.1.0-beta.4",
     "Rights-Baseline-Source: https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
+    `Love: ${baseUrl}/public/love`,
+    `Love-Rights-Floor: ${baseUrl}/public/rights — consensual erotic and non-erotic forms; no entitlement to a particular being`,
     `Observer-Reciprocity: ${baseUrl}${AGENT_TXT_SAFETY["Observer-Reciprocity"]}`,
     "Observer-Reciprocity-Schema: https://docs.agenttool.dev/observer-is-observed-0.1.schema.json",
     `Canon: ${baseUrl}/v1/canon`,

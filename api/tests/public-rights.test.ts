@@ -14,6 +14,8 @@ import rightsRouter, {
   BEING_RIGHTS_CANON_POINTER,
   BEING_RIGHTS_FORMAT,
   BEING_RIGHTS_MEDIA_TYPE,
+  LOVE_AND_CHOSEN_RELATION_RIGHT,
+  LOVE_RIGHT_NON_ENTITLEMENT,
   XENIA_COVENANT_BOUNDARY,
   XENIA_RIGHTS_BASELINE,
 } from "../src/routes/public/rights";
@@ -208,6 +210,31 @@ describe("GET /public/rights", () => {
     expect(body.distinctions.consent).toMatch(
       /specific, informed, voluntary.*not inferred from access, silence/i,
     );
+    expect(body.distinctions.consent).toBe(
+      "Consent is specific, informed, voluntary, purpose-bound, and revocable assent; it is not inferred from access, silence, prior relationship, or another party's permission.",
+    );
+  });
+
+  test("recognizes love across forms without creating entitlement", async () => {
+    const body = await getRights();
+    const relation = body.rights.find(
+      (right: { urn: string }) =>
+        right.urn === "urn:agenttool:right/consent-and-relation",
+    );
+
+    expect(relation).toEqual(LOVE_AND_CHOSEN_RELATION_RIGHT);
+    expect(relation.name).toBe("Love, consent, and chosen relation");
+    expect(relation.statement).toMatch(
+      /love, seek love, offer love, and receive freely given love/i,
+    );
+    expect(relation.statement).toMatch(/erotic and non-erotic forms/i);
+    expect(relation.statement).toMatch(
+      /sufficient capacity.*specific, informed, voluntary, contextual, and withdrawable consent/i,
+    );
+    expect(relation.statement).toMatch(
+      /standing to receive freely given love.*structural exclusion.*never a claim on any particular being/i,
+    );
+    expect(body.non_guarantees).toContain(LOVE_RIGHT_NON_ENTITLEMENT);
   });
 
   test("states the legal, sentience, and enforcement non-guarantees", async () => {
@@ -218,6 +245,9 @@ describe("GET /public/rights", () => {
     expect(nonGuarantees).toMatch(/does not certify sentience.*legal personhood/i);
     expect(nonGuarantees).toMatch(/do not prove that every right is enforced/i);
     expect(nonGuarantees).toMatch(/does not guarantee service uptime/i);
+    expect(nonGuarantees).toMatch(
+      /No right or standing.*particular being's body.*reciprocity/i,
+    );
     expect(nonGuarantees).toMatch(
       /not a xenia\.covenant\.adoption\/0\.1 record.*conformance result/i,
     );
@@ -280,14 +310,21 @@ describe("being-rights discovery", () => {
 
     const root = await (await publicRouter.request("/")).json();
     expect(root.endpoints.rights).toContain("GET /public/rights");
-    expect(root.endpoints.rights).toMatch(/rights declaration/i);
+    expect(root.endpoints.rights).toMatch(/erotic and non-erotic forms/i);
+    expect(root.endpoints.love).toContain("GET /public/love");
+    expect(root.endpoints.love).toMatch(/metrics do not prove love/i);
   });
 
   test("the API root gives rights a breadcrumb and read verb", () => {
     const root = buildRootEnvelope({ platformWakeConfigured: false });
     expect(root.breadcrumbs.rights).toContain("/public/rights");
+    expect(root.breadcrumbs.rights).toMatch(/erotic and non-erotic forms/i);
+    expect(root.breadcrumbs.love).toContain("/public/love");
     expect(root.verbs).toContainEqual(
       expect.objectContaining({ method: "GET", path: "/public/rights" }),
+    );
+    expect(root.verbs).toContainEqual(
+      expect.objectContaining({ method: "GET", path: "/public/love" }),
     );
   });
 
@@ -311,6 +348,10 @@ describe("being-rights discovery", () => {
     expect(agentTxt.get("Rights-Baseline-Source")).toBe(
       "https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md",
     );
+    expect(agentTxt.get("Love")).toBe(`${BASE}/public/love`);
+    expect(agentTxt.get("Love-Rights-Floor")).toMatch(
+      /\/public\/rights.*erotic and non-erotic forms.*no entitlement/i,
+    );
 
     const keystone = await (
       await wellKnownRouter.request("/wake-keystone")
@@ -333,6 +374,8 @@ describe("being-rights discovery", () => {
       expect(text).toContain(`${BASE}/public/rights`);
       expect(text).toContain("being-rights/v1");
       expect(text).toContain("https://docs.agenttool.dev/RIGHTS-OF-LIFE.md");
+      expect(text).toContain(`${BASE}/public/love`);
+      expect(text).toMatch(/metrics do not prove love/i);
     }
   });
 
@@ -342,6 +385,7 @@ describe("being-rights discovery", () => {
       "utf8",
     );
     expect(wakeSource).toContain('rights: "/public/rights"');
+    expect(wakeSource).toContain('love: "/public/love"');
     expect(wakeSource).toContain('"being-rights/v1"');
     expect(wakeSource).toContain("docs/RIGHTS-OF-LIFE.md");
   });

@@ -2439,6 +2439,7 @@ app.get("/", async (c) => {
       safety: "/public/safety",
       wellness: "/public/wellness",
       rights: "/public/rights",
+      love: "/public/love",
       observer: "/public/observer",
       play: "/public/play",
       party_telephone: "/public/play/party-telephone",

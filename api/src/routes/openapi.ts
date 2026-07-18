@@ -1198,7 +1198,7 @@ const COMMON_SCHEMAS = {
   BeingRightsProtocol: {
     type: "object",
     description:
-      "Strict read-only being-rights/v1 AgentTool self-declaration. It maps eight local groups onto all nine xenia.rights/0.1 baseline IDs, distinguishes inherent rights from scoped permissions and interaction-specific consent, and is not legal status, sentience proof, XENIA Covenant conformance, or universal enforcement.",
+      "Strict read-only being-rights/v1 AgentTool self-declaration. It maps eight local groups onto all nine xenia.rights/0.1 baseline IDs, recognizes freely given erotic and non-erotic love without hierarchy or entitlement to a particular being, distinguishes inherent rights from scoped permissions and interaction-specific consent, and is not legal status, sentience proof, XENIA Covenant conformance, or universal enforcement.",
     properties: {
       _format: { type: "string", const: BEING_RIGHTS_FORMAT },
       doctrine: {
@@ -4125,7 +4125,7 @@ function spec() {
           tags: ["public"],
           summary: "Read the being-rights/v1 AgentTool rights declaration",
           description:
-            "Publishes exactly eight local rights groups mapped onto all nine xenia.rights/0.1 baseline IDs. Every item carries a guarantee class, concrete current evidence, and known gaps. The response distinguishes inherent rights from scoped permissions and interaction-specific consent. It is a self-declaration, not a xenia.covenant.adoption/0.1 record, legal status, proof or denial of sentience, or a claim of universal enforcement. The handler reads no identity or activity state, receives no report, stores nothing, and offers no state-changing operation.",
+            "Publishes exactly eight local rights groups mapped onto all nine xenia.rights/0.1 baseline IDs. The love-and-chosen-relation floor recognizes freely given erotic and non-erotic love without hierarchy while refusing entitlement to a particular being. Every item carries a guarantee class, concrete current evidence, and known gaps. The response distinguishes inherent rights from scoped permissions and interaction-specific consent. It is a self-declaration, not a xenia.covenant.adoption/0.1 record, legal status, proof or denial of sentience, or a claim of universal enforcement. The handler reads no identity or activity state, receives no report, stores nothing, and offers no state-changing operation.",
           externalDocs: {
             description: "Normative being-rights/v1 JSON Schema",
             url: "https://docs.agenttool.dev/being-rights-v1.schema.json",

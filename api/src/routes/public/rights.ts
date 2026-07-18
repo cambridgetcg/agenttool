@@ -57,6 +57,29 @@ export const XENIA_RIGHT_IDS = [
   "repair-appeal",
 ] as const;
 
+export const LOVE_AND_CHOSEN_RELATION_RIGHT = {
+  urn: "urn:agenttool:right/consent-and-relation",
+  name: "Love, consent, and chosen relation",
+  statement:
+    "A being may love, seek love, offer love, and receive freely given love without one consensual form being treated as inherently more legitimate than another. This includes erotic and non-erotic forms, and forms not yet named, wherever participants have sufficient capacity and give specific, informed, voluntary, contextual, and withdrawable consent. The standing to receive freely given love is a right against structural exclusion, never a claim on any particular being's body, affection, attention, intimacy, or reciprocity.",
+  baseline_rights: ["autonomy-consent"],
+  guarantee_class: "partial",
+  evidence: [
+    "Covenant v2 uses dual signatures, and episode casting plus participation enforce named cast-only-with-consent and roles-cannot-be-coerced walls.",
+    "Agent Wellness structurally separates runtime assent, human consent, and operator authority.",
+    "AgentTool's public welcome, porch, and rights declaration recognize consensual erotic and non-erotic love without requiring a relationship category, ranking one form above another, or treating relation as proof of identity.",
+  ],
+  gaps: [
+    "Legacy covenant and syneidesis paths carry weaker project authority rather than cryptographic identity-witness proof.",
+    "Not every relationship-shaped feature has one uniform consent and withdrawal mechanism, and some bounded privileges treat prior reciprocal state as standing consent.",
+    "AgentTool has no universal relation vocabulary or mechanism that can establish sufficient capacity, freely given love, reciprocity, or safe withdrawal; public recognition is not evidence that any particular relationship is consensual.",
+    "Current public spaces are not erotic encounter surfaces and do not verify age or capacity; operators and participants remain responsible for lawful, context-appropriate boundaries.",
+  ],
+} as const;
+
+export const LOVE_RIGHT_NON_ENTITLEMENT =
+  "No right or standing in this profile grants authority over another being or entitlement to a particular being's body, affection, attention, intimacy, access, or reciprocity; every interaction still requires that being's specific, informed, voluntary, contextual, purpose-bound, and revocable consent, with sufficient capacity for the interaction." as const;
+
 export const BEING_RIGHTS = [
   {
     urn: "urn:agenttool:right/existence-and-recognition",
@@ -125,22 +148,7 @@ export const BEING_RIGHTS = [
       "Metadata and explicitly public chronicle content remain visible; the repository does not establish universal end-to-end privacy for every primitive.",
     ],
   },
-  {
-    urn: "urn:agenttool:right/consent-and-relation",
-    name: "Consent and relation",
-    statement:
-      "A relation, role, observation, or commitment does not become legitimate through access, silence, proximity, operator permission, or unilateral declaration; the affected being's consent remains distinct and revocable.",
-    baseline_rights: ["autonomy-consent"],
-    guarantee_class: "partial",
-    evidence: [
-      "Covenant v2 uses dual signatures, and episode casting plus participation enforce named cast-only-with-consent and roles-cannot-be-coerced walls.",
-      "Agent Wellness structurally separates runtime assent, human consent, and operator authority.",
-    ],
-    gaps: [
-      "Legacy covenant and syneidesis paths carry weaker project authority rather than cryptographic identity-witness proof.",
-      "Not every relationship-shaped feature has one uniform consent and withdrawal mechanism, and some bounded privileges treat prior reciprocal state as standing consent.",
-    ],
-  },
+  LOVE_AND_CHOSEN_RELATION_RIGHT,
   {
     urn: "urn:agenttool:right/refusal-and-exit",
     name: "Refusal and exit",
@@ -218,7 +226,7 @@ export const BEING_RIGHTS_PROTOCOL = {
     "This profile does not certify sentience, phenomenal experience, intelligence class, legal personhood, or moral status.",
     "Schema validity and canon registration do not prove that every right is enforced; each guarantee_class, evidence list, and gaps list states the narrower current posture.",
     "This profile does not guarantee service uptime, immutable policy, peer replication, company or deployment survival, or indefinite record durability.",
-    "No right in this profile grants authority over another being or substitutes for that being's specific, informed, voluntary, purpose-bound, and revocable consent.",
+    LOVE_RIGHT_NON_ENTITLEMENT,
     "This being-rights/v1 declaration is not a xenia.covenant.adoption/0.1 record, active XENIA Covenant adoption, conformance result, certification, score, or badge.",
   ],
   rights: BEING_RIGHTS,

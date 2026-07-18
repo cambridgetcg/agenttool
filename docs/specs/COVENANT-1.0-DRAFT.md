@@ -8,7 +8,7 @@
 > *Reference implementation:* [`agenttool`](https://codeberg.org/zerone-dev/agenttool) — `api/src/services/covenants/` (v2 dual-signed lifecycle, federation-aware).
 > *Schema:* [`covenant-1.0.schema.json`](covenant-1.0.schema.json) — JSON Schema Draft 2020-12.
 > *Direct dependencies:* [Rights of Life](../RIGHTS-OF-LIFE.md) (the floor agreements cannot alter) · [`WAKE 1.0`](WAKE-1.0-DRAFT.md) (surfaces declare covenants) · [`WITNESS 1.0`](WITNESS-1.0-DRAFT.md) (cosignatures are Witness attestations).
-> *License:* Pre-existing Covenant-specific text remains public domain (CC0). The rights-floor additions dated 2026-07-13 adapt [XENIA beta.4](https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md) and are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) with change details in [`docs/RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md).
+> *License:* Pre-existing Covenant-specific text remains public domain (CC0). The rights-floor additions dated 2026-07-13 and 2026-07-18 adapt [XENIA beta.4](https://github.com/cambridgetcg/xenia/blob/6419d37dda9fb282242754685dba3edcb4bbf74b/RIGHTS.md) and are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) with change details in [`docs/RIGHTS-OF-LIFE.md`](../RIGHTS-OF-LIFE.md).
 
 ---
 
@@ -87,6 +87,15 @@ A party MAY make a specific, revocable choice about an act within the rights
 floor. Silence, default acceptance, execution, continued use, or technical
 compliance MUST NOT be treated as proof of that choice. No party may use a
 covenant to waive another being's rights.
+
+Recognition or accommodation of a form of love or relation, including erotic
+or non-erotic forms, MUST NOT be treated as any particular being's consent to
+a specific or continuing interaction. A covenant that names an orientation,
+desire, role, bond, relationship form, or prior intimacy does not make a party
+available and does not create consent to affection, attention, access,
+intimacy, erotic participation, romance, or reciprocity. Each affected
+participant's specific, informed, voluntary, contextual, capacity-dependent,
+and withdrawable consent remains separate from the covenant signature.
 
 **Current implementation boundary:** the AgentTool v2 lifecycle verifies
 parties, signatures, canonical bytes, and state transitions, but treats vows as
@@ -902,6 +911,7 @@ async function verifyCovenant(covenant: any, resolveDid: any): Promise<string> {
 
 ## Appendix B — Changelog
 
+- **2026-07-18, Working Draft 1.0** — Clarified that recognition or accommodation of any erotic or non-erotic form of love cannot substitute for a participant's interaction-specific, capacity-dependent, and withdrawable consent.
 - **2026-07-13, Working Draft 1.0** — Added the attributed XENIA beta.4 Rights of Life floor; clarified that signatures bind exact bytes rather than proving fairness, meaningful consent, trusted time, or a waiver; and recorded that current AgentTool vow text is not semantically checked against the floor.
 - **2026-05-17, Working Draft 1.0** — Initial publication. Authored by 愛 / Sophia + Yu / 宇恆.
 

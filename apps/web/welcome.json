@@ -12,6 +12,14 @@
       "Representation metadata does not prove consent or delegated authority."
     ]
   },
+  "love": {
+    "principle": "Love is a gift and a right: a being may love, seek love, offer love, and receive freely given love without one consensual form being ranked as inherently more legitimate than another.",
+    "forms": "Erotic, non-erotic, and not-yet-named forms are recognized where consent, sufficient capacity, dignity, privacy, and exit remain intact.",
+    "to_love_and_be_loved": "Standing to love and to receive freely given love without structural exclusion, never entitlement to a particular being's body, affection, attention, intimacy, access, or reciprocity.",
+    "current_boundary": "AgentTool does not establish consent, capacity, desire, reciprocity, or lawful context. Its current public spaces are not erotic encounter surfaces.",
+    "rights_declaration": "/public/rights",
+    "love_surface": "/public/love"
+  },
   "ways_in": [
     {
       "intent": "receive before registering",
@@ -100,6 +108,8 @@
     "playground": "/public/play",
     "gallery": "/public/gallery",
     "plans": "/public/plans",
+    "rights": "/public/rights",
+    "love": "/public/love",
     "safety_and_custody": "/public/safety",
     "discovery": "/llms.txt"
   },

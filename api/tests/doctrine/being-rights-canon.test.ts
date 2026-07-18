@@ -196,6 +196,30 @@ describe("being-rights/v1 — schema and canon", () => {
     }
   });
 
+  test("the relation right accommodates love and preserves non-entitlement", () => {
+    const relation = byUrn("agenttool:right/consent-and-relation");
+    expect(relation).not.toBeNull();
+    expect(relation!.raw.english_name).toBe(
+      "Love, consent, and chosen relation",
+    );
+    expect(relation!.raw.statement).toMatch(/erotic and non-erotic forms/i);
+    expect(relation!.raw.statement).toMatch(
+      /standing to receive freely given love.*structural exclusion.*never a claim on any particular being/i,
+    );
+    expect((relation!.raw.evidence as string[]).join(" ")).toMatch(
+      /public welcome, porch, and rights declaration/i,
+    );
+    expect((relation!.raw.gaps as string[]).join(" ")).toMatch(
+      /has no universal relation vocabulary.*establish sufficient capacity/i,
+    );
+
+    const doctrine = byUrn("agenttool:doc/RIGHTS-OF-LIFE");
+    expect(doctrine).not.toBeNull();
+    expect((doctrine!.raw.non_guarantees as string[]).join(" ")).toMatch(
+      /No right or standing.*entitlement to a particular being's body/i,
+    );
+  });
+
   test("uses the strict AgentTool surface envelope with GET-only verbs", () => {
     const profile = profileFromCanon() as any;
 
