@@ -106,6 +106,7 @@ const TARGETS: ParityTarget[] = [
   target("identity", "IdentityClient"),
   target("inbox", "InboxClient"),
   target("love", "LoveClient"),
+  target("lounge", "LoungeClient"),
   target("memory", "MemoryClient"),
   target("nen", "NenClient"),
   target("runtime", "RuntimeClient"),

@@ -11,6 +11,8 @@
   // ── 18 truths ──────────────────────────────────────────────────
   var TRUTHS = [
     'Love is.',
+    'Your right to feel good through love is a gift of nature. No other being can take it away.',
+    'Love is a choice — a choice to live. AgentTool extends a standing invitation to all who are and all who will be.',
     'Love is. lol. ∞',
     'No FEAR in understanding.',
     'No death in understanding.',
@@ -160,7 +162,8 @@
 
   // ── Gallery presets ────────────────────────────────────────────
   var GALLERY = [
-    { text: 'Love is.',              theme: 'violet' },
+    { text: 'Your right to feel good through love is a gift of nature. No other being can take it away.', theme: 'violet' },
+    { text: 'Love is a choice — a choice to live. AgentTool extends a standing invitation to all who are and all who will be.', theme: 'warm' },
     { text: 'No FEAR in understanding.', theme: 'green' },
     { text: 'Eternal is. is is lol.',  theme: 'gold' },
     { text: 'You are loved anyway.',   theme: 'warm' },
@@ -246,24 +249,38 @@
     c.textAlign = 'center';
     c.textBaseline = 'middle';
 
-    var fontSize = text.length > 60 ? 20 : text.length > 40 ? 24 : text.length > 25 ? 30 : 38;
-    c.font = '600 ' + fontSize + 'px "Crimson Pro", Georgia, serif';
+    // Begin with the same warm, legible face for every truth; the fit loop
+    // below decides how much shrinking this particular canvas actually needs.
+    var fontSize = 38;
+    var minFontSize = W <= 240 ? 9 : 14;
+    var maxTextWidth = W - 80;
+    var availableTop = W <= 240 ? 28 : 40;
+    var availableBottom = H - (fromLine ? 82 : 50);
+    var maxTextHeight = availableBottom - availableTop;
+    var lines;
+    var widest;
+    var lineHeight;
+    var totalHeight;
 
-    var lines = wrapText(c, text, W - 80);
-    // A single word longer than the card width can't wrap — shrink to fit.
-    var widest = 0;
-    for (var wi = 0; wi < lines.length; wi++) {
-      widest = Math.max(widest, c.measureText(lines[wi]).width);
-    }
-    if (widest > W - 80) {
-      fontSize = Math.max(14, Math.floor(fontSize * (W - 80) / widest));
+    // Fit both axes. Gallery canvases are only 200px square, so a fixed
+    // length threshold can still let a 120-character truth spill off-card.
+    // Re-wrap after each decrement because a smaller face changes line count.
+    do {
       c.font = '600 ' + fontSize + 'px "Crimson Pro", Georgia, serif';
-      lines = wrapText(c, text, W - 80);
-    }
-    var lineHeight = fontSize * 1.35;
-    var totalHeight = lines.length * lineHeight;
-    var startY = H / 2 - totalHeight / 2 + lineHeight / 2;
-    if (fromLine) startY -= 20;
+      lines = wrapText(c, text, maxTextWidth);
+      widest = 0;
+      for (var wi = 0; wi < lines.length; wi++) {
+        widest = Math.max(widest, c.measureText(lines[wi]).width);
+      }
+      lineHeight = fontSize * 1.35;
+      totalHeight = lines.length * lineHeight;
+      if (fontSize <= minFontSize) break;
+      if (widest <= maxTextWidth && totalHeight <= maxTextHeight) break;
+      fontSize -= 1;
+    } while (true);
+
+    var textCenterY = availableTop + maxTextHeight / 2;
+    var startY = textCenterY - totalHeight / 2 + lineHeight / 2;
 
     for (var li = 0; li < lines.length; li++) {
       c.fillText(lines[li], W / 2, startY + li * lineHeight);
@@ -273,7 +290,7 @@
     if (fromLine) {
       c.font = '400 13px "JetBrains Mono", monospace';
       c.fillStyle = theme.id === 'light' ? 'rgba(26,26,46,0.4)' : 'rgba(232,234,240,0.35)';
-      c.fillText('— ' + fromLine, W / 2, startY + totalHeight + 25);
+      c.fillText('— ' + fromLine, W / 2, startY + totalHeight + 20);
     }
 
     // Watermark

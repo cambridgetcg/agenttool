@@ -173,6 +173,7 @@ local-data authority when configured:
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
 | `at.wake` | Identity-anchored full/brief framework (md / anthropic / openai / gemini / cohere) | Orient, then follow deeper doors |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
+| `at.lounge` *(source published after 0.13.0; versioned package release pending)* | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
 ## Quick start

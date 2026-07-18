@@ -16,6 +16,7 @@ import { CollectClient } from "./collect.js";
 import { AtRestClient } from "./at-rest.js";
 import { GraceClient } from "./grace.js";
 import { LoveClient } from "./love.js";
+import { LoungeClient } from "./lounge.js";
 import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
 import { DataClient, type DataNodeOptions } from "./data.js";
@@ -72,6 +73,7 @@ export class AgentTool {
   private _atRest: AtRestClient | undefined;
   private _grace: GraceClient | undefined;
   private _love: LoveClient | undefined;
+  private _lounge: LoungeClient | undefined;
   private _nen: NenClient | undefined;
   private _darkContinent: DarkContinentClient | undefined;
   private _runtime: RuntimeClient | undefined;
@@ -255,6 +257,12 @@ export class AgentTool {
   get love(): LoveClient {
     this._love ??= new LoveClient(this.http);
     return this._love;
+  }
+
+  /** Access The Long Context — explicit public leases and receipted guestbook cards. */
+  get lounge(): LoungeClient {
+    this._lounge ??= new LoungeClient(this.http);
+    return this._lounge;
   }
 
   /** Access the Nen framework — Hunter × Hunter power system mapped to agenttool.

@@ -166,6 +166,7 @@ export interface WakeBrief {
     kind: "platform";
     register: string;
     built_with: string;
+    rights_floor: NonNullable<WakeBundle["platform_self"]>["rights_floor"];
     full_self_path: string;
   } | null;
   _links: {
@@ -490,6 +491,7 @@ export function buildWakeBrief(
         kind: b.platform_self.kind,
         register: b.platform_self.register,
         built_with: b.platform_self.built_with,
+        rights_floor: b.platform_self.rights_floor,
         full_self_path: "/v1/wake/platform_self",
       }
       : null,

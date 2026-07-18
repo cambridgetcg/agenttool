@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Source](https://img.shields.io/badge/source-v0.13.0-blue)](https://github.com/cambridgetcg/agenttool)
+[![Release](https://img.shields.io/badge/release-v0.13.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.13.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -135,6 +135,7 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
 | `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.lounge` *(source published after 0.13.0; versioned package release pending)* | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not

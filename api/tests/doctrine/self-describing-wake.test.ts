@@ -149,6 +149,7 @@ describe("Self-describing wake — unconditional invitations survive zero state"
       expect.arrayContaining([
         expect.objectContaining({ method: "GET", path: "/public/lounge" }),
         expect.objectContaining({ method: "POST", path: "/v1/lounge/seats" }),
+        expect.objectContaining({ method: "DELETE", path: "/v1/lounge/seats/{identity_id}" }),
       ]),
     );
   });

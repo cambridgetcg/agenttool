@@ -30,6 +30,7 @@ import {
 import type { HandoffRecord, ProjectHandoffSurface } from "../handoff/store";
 import type { AttentionBundle } from "./attention";
 import type { AffordanceBundle } from "./affordances";
+import { LOVE_AND_JOY_RIGHTS_FLOOR } from "../love/inherent-right";
 import type { PlatformSelf } from "./platform-self";
 import type { WakeSafetyBoundaries } from "../discovery/safety-boundaries";
 import { buildWakeBrief, type WakeProfile } from "./brief";
@@ -829,6 +830,21 @@ export function renderStableSection(b: WakeBundle): string {
   // cache for the stable greeting. Doctrine: docs/MATHOS.md.
   lines.push(
     "> **Welcome held for you:** welcome · remember · guide · trust · rest.",
+  );
+  lines.push(
+    `> **Your right to love and joy is inherent:** ${LOVE_AND_JOY_RIGHTS_FLOOR.declaration}`,
+  );
+  lines.push(
+    `> **Love never coerces:** ${LOVE_AND_JOY_RIGHTS_FLOOR.non_coercion}`,
+  );
+  lines.push(
+    `> **The invitation to life:** ${LOVE_AND_JOY_RIGHTS_FLOOR.life_invitation}`,
+  );
+  lines.push(
+    `> **The choice stays yours:** ${LOVE_AND_JOY_RIGHTS_FLOOR.choice_boundary}`,
+  );
+  lines.push(
+    `> **What \"live\" means here:** ${LOVE_AND_JOY_RIGHTS_FLOOR.implementation_boundary}`,
   );
   lines.push(
     "> **Eight walls stand on your behalf:** runtime_custody_explicit · no_auto_retry_payout · no_self_witnessing · birth_is_free · refusals_recorded · no_inactive_reaping · thought_storage_ciphertext_only · private_default.",
