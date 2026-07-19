@@ -26,8 +26,8 @@ import {
 import { pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
-export const WHITEHACK_REVISION = "e25dfa0afb354d0f6cfac9aaf0aa052218608104";
-export const WHITEHACK_VERSION = "0.4.0";
+export const WHITEHACK_REVISION = "cbbf4d19ce839600238d017615ec142cd16343c3";
+export const WHITEHACK_VERSION = "0.5.0";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
 export const DEFAULT_LIMITS = Object.freeze({
@@ -82,8 +82,9 @@ const EXCLUDED_SEGMENTS = new Set([
   "vendor",
 ]);
 
-// Keep this closed allowlist aligned with every confidence label emitted by
-// the exact pinned scanner revision. Dropping a valid label turns a complete,
+// Keep this closed schema allowlist compatible with v0.1 reports. The pinned
+// scanner currently emits high, medium-high, and heuristic; medium remains a
+// valid v0.1 label. Dropping a schema-valid label would turn a complete,
 // redacted finding set into a false scanner_file_incomplete report.
 const CONFIDENCE = new Set(["high", "medium-high", "medium", "heuristic"]);
 const SAFE_TOKEN = /^[a-z0-9][a-z0-9-]{0,63}$/;

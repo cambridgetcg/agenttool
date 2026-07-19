@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Whitehack — pinned honesty linting, scoped local research, and legacy device inventory · agenttool</title>
-  <meta name="description" content="Three separate Whitehack practices and their limits. AgentTool does not host a scanner, authorize target testing, or certify software." />
+  <title>Whitehack — crypto-aware honesty linting without crypto custody · agenttool</title>
+  <meta name="description" content="A pinned, redacted crypto-aware source advisory with no wallet, key-use, RPC, live-chain, hosted scanner, or target-authorization capability." />
   <link rel="canonical" href="https://docs.agenttool.dev/whitehack" />
-  <meta property="og:title" content="Whitehack — local evidence with explicit boundaries" />
-  <meta property="og:description" content="Pinned heuristic linting, explicitly scoped local research, and a separate privacy-sensitive device inventory." />
+  <meta property="og:title" content="Whitehack — crypto awareness without custody" />
+  <meta property="og:description" content="Pinned crypto-aware linting, explicitly scoped local research, and a separate privacy-sensitive device inventory." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23e8eaf0' stroke-width='4'/><circle cx='50' cy='50' r='8' fill='%23d4502e'/></svg>" />
@@ -81,9 +81,10 @@
     <div class="glyph">⬜</div>
     <h1><em>Whitehack</em> — three separate practices</h1>
     <p class="sub">
-      AgentTool can produce a redacted runner-local advisory from one exact,
-      pinned honesty linter. It does not host a scanner, authorize target
-      testing, certify software, or turn a finding into permission.
+      AgentTool can produce a redacted, crypto-aware runner-local advisory from
+      one exact, pinned honesty linter. It does not use detected key material,
+      connect wallets or chains, host a scanner API, authorize target testing,
+      certify software, or turn a finding into permission.
       The separate Tax Whitehack editorial game is not a security tool.
     </p>
   </header>
@@ -96,15 +97,19 @@
           <span class="wh-tag">SHIPPED · ADVISORY</span>
           <h3>1. Honesty linter</h3>
           <p>
-            AgentTool pins Whitehack 0.4.0 to the reviewed Git commit
-            <a href="https://github.com/cambridgetcg/whitehack/tree/e25dfa0afb354d0f6cfac9aaf0aa052218608104"><code>e25dfa0…8104</code></a>.
-            Its 38 text/regex checks look for common state, failure,
-            transparency, API, Solidity, network, WiFi, and Bluetooth lies.
+            AgentTool pins Whitehack 0.5.0 to the reviewed Git commit
+            <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3"><code>exact reviewed revision</code></a>.
+            Its 42 text/regex checks look for common state, failure,
+            transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
+            lies.
           </p>
           <p>
             The AgentTool bridge observes bounded changed production files and
             emits only file, line, check, confidence, doctrine, and principle.
-            Source snippets and scanner messages never enter its report.
+            Whitehack v0.5 cross-redacts recognized sensitive hits and
+            same-line overlaps, but ordinary findings can still include source;
+            AgentTool independently drops every raw snippet, title, and message
+            from its report.
           </p>
         </article>
 
@@ -130,7 +135,7 @@
           <h3>3. Device Inventory</h3>
           <p>
             <code>bin/whitehack.py</code> and <code>bin/whitehack2.py</code> are
-            older local macOS inventory scripts. They are not the 0.4 linter,
+            older local macOS inventory scripts. They are not the source linter,
             not a smart-contract audit, and not a hosted service.
           </p>
           <p>
@@ -142,6 +147,34 @@
           </p>
         </article>
       </div>
+    </section>
+
+    <section class="wh-section">
+      <h2>Crypto awareness, <em>no custody</em></h2>
+      <p>
+        The 0.5.0 rule pack can point reviewers toward possible embedded key or
+        recovery literals, general-purpose randomness used directly for
+        security material, explicitly static AEAD nonces, signature expressions
+        coerced to accept failure, re-encoded signed-webhook bodies, and signed
+        webhook files with no visible local timestamp comparison or
+        event-id/nonce deduplication guard.
+      </p>
+      <p>
+        These are source-text signals. The scanner reads selected checkout
+        bytes from runner storage into process memory, but this path does not
+        decode or validate possible material as a key or recovery phrase,
+        extract or import it into a key store or wallet, or serialize raw
+        matched material into the advisory. It does not connect a wallet, signer, browser
+        provider, RPC endpoint, or chain; query state; construct or sign bytes;
+        submit or simulate a transaction; receive a webhook; install a package;
+        or execute a proof of concept.
+      </p>
+      <p class="wh-proof">
+        It does not prove BIP-39 validity, nonce uniqueness, missing signature
+        verification, domain separation, chain/address binding, displayed
+        intent, key lifecycle, dependency safety, cross-module replay coverage,
+        or cryptographic correctness. A match is a review prompt, not a verdict.
+      </p>
     </section>
 
     <section class="wh-section">
@@ -208,6 +241,7 @@ findings            advisory only in this first slice</pre>
       <h2>What is deliberately absent</h2>
       <ul>
         <li>No hosted Whitehack scanner or arbitrary-target upload API.</li>
+        <li>No key import, seed derivation, wallet connection, RPC call, signing, simulation, transaction broadcast, or live-chain query.</li>
         <li>No security, honesty, vulnerability-free, privacy, anonymity, or sandbox guarantee.</li>
         <li>No authorization inferred from public code, bounty presence, project bearer, marketplace activity, or payment.</li>
         <li>No severity/confidence claim treated as exploitability without local reproduction and human review.</li>
@@ -221,7 +255,7 @@ findings            advisory only in this first slice</pre>
     </aside>
 
     <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
-      <a href="https://github.com/cambridgetcg/whitehack/tree/e25dfa0afb354d0f6cfac9aaf0aa052218608104" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
+        <a href="https://github.com/cambridgetcg/whitehack/tree/cbbf4d19ce839600238d017615ec142cd16343c3" class="btn btn-ghost btn-sm">Pinned Whitehack source →</a>
       <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
       <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
       <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>
