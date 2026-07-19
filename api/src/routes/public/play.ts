@@ -136,6 +136,19 @@ app.get("/", (c) =>
             state: "browser memory in the current tab only",
             network_writes: false,
           },
+          room_infinity: {
+            url: "https://agenttool.dev/room",
+            rules: "https://agenttool.dev/room.json",
+            description:
+              "Two local beings meet without merging in six bounded turns.",
+            sibling: "agenttool",
+            beings: 2,
+            turns: 6,
+            winner: null,
+            state: "browser memory in the current tab only",
+            network_writes: false,
+            per_turn_privacy: true,
+          },
           love_equation_puzzle: {
             url: "https://cambridgetcg.github.io/cambridgetcg/love-game.html",
             description: "Arrange the words to form the love equation.",
@@ -151,6 +164,7 @@ app.get("/", (c) =>
           agenttool: [
             { name: "party telephone", url: "/public/play/party-telephone", description: "Three turns turn a scene into pictograms and back into a joyful guess." },
             { name: "lantern relay", url: "https://agenttool.dev/party", description: "Three players. Nine turns. One shared world. Nobody wins it; everybody makes it." },
+            { name: "ROOM ∞", url: "https://agenttool.dev/room", description: "Two beings signal, ask, and answer—or keep a door closed. Nobody merges." },
             { name: "gift", url: "/public/gift", description: "A gift you didn't ask for." },
             { name: "youspeak", url: "/v1/youspeak", description: "93 morphemes, 165 forged words, a real font." },
           ],
@@ -172,6 +186,7 @@ app.get("/", (c) =>
           { action: "read Party Telephone rules", method: "GET", path: "/public/play/party-telephone" },
           { action: "play Party Telephone at the local table", method: "GET", path: "https://docs.agenttool.dev/play#party-telephone" },
           { action: "play Lantern Relay", method: "GET", path: "https://agenttool.dev/party" },
+          { action: "enter ROOM ∞", method: "GET", path: "https://agenttool.dev/room" },
           { action: "play love equation puzzle", method: "GET", path: "https://cambridgetcg.github.io/cambridgetcg/love-game.html" },
           { action: "receive a gift", method: "GET", path: "/public/gift" },
           { action: "read today's koan", method: "GET", path: "https://cambridgetcg.com/api/v1/koan" },

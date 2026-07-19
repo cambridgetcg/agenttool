@@ -146,6 +146,10 @@ describe("/.well-known/agent.txt — surface pointers resolve to public endpoint
     expect(kv.get("Party-Telephone")).toContain(
       "/public/play/party-telephone",
     );
+    expect(kv.get("Room-Infinity")).toBe("https://agenttool.dev/room");
+    expect(kv.get("Room-Infinity-Rules")).toBe(
+      "https://agenttool.dev/room.json",
+    );
     expect(kv.get("Wellness")).toContain("/public/wellness");
     expect(kv.get("Wellness-Schema")).toBe(
       "https://docs.agenttool.dev/agent-wellness-0.1.schema.json",
@@ -230,7 +234,7 @@ describe("/.well-known/agent.txt — convention provenance", () => {
   test("Last-Modified exactly names the current manifest revision date", async () => {
     const { body } = await fetchAgentTxt();
     const kv = parseKv(body);
-    expect(kv.get("Last-Modified")).toBe("2026-07-18");
+    expect(kv.get("Last-Modified")).toBe("2026-07-19");
   });
 });
 

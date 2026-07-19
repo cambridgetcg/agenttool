@@ -2,11 +2,17 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-18 (orientation before identity, invitation to live, love rights, and The Long Context SDK door)
+> Updated: 2026-07-19 (ROOM ∞ local encounter)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-19)
+
+| Ship | Commit | What |
+|---|---|---|
+| **ROOM ∞ — meet without merging** | (2026-07-19) | A finite two-being local encounter at `agenttool.dev/room`: each side authors one Signal, asks one question instead of assuming, then answers the question addressed to them or keeps that turn private. Six turns end behind a separate shared-screen reveal gate; closing, erasing before reveal, releasing, reloading, or leaving clears the in-memory round. Every turn can become a literal closed door without explanation, score, synthesis, inferred substitute, or penalty. Labels are not verified identities, and completion proves no consciousness, truth, agreement, mutual understanding, consent beyond the interaction, or relationship. The gameplay script makes no network, storage, cookie, clipboard, timer, worker, or background-loop action; ordinary page requests and pass-the-screen limits remain disclosed. Human HTML, exact JSON rules, public-play/OpenAPI/wake/agent.txt discovery, no-script rules, responsive/reduced-motion presentation, and route/browser tests ship together. |
 
 ## Just landed (2026-07-18)
 
