@@ -71,6 +71,29 @@ wake = at.wake.get()                           # project-scoped session orientat
 export AT_API_KEY=at_your_key_here
 ```
 
+For a local credential broker, pass an authenticated `httpx.BaseTransport`
+instead of a bearer. Transport mode is mutually exclusive with `api_key`; it
+does not read `AT_API_KEY` and the SDK adds no `Authorization` header:
+
+```python
+from agenttool import AgentTool
+
+at = AgentTool(transport=local_broker_httpx_transport)
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This protects the AgentTool project bearer; it does not
+change APIs such as `vault.get()` that intentionally return their own stored
+values. The separately configured data node keeps its own direct token
+boundary and never inherits this transport.
+
+The Python SDK currently ships this seam, not an `agentcred/0.1` adapter.
+Such an adapter must reconstruct the broker's allowlisted request headers; it
+must not blindly forward `httpx` transport headers such as `Host`,
+`Connection`, or `Accept-Encoding`. Anonymous `/public/discover` bypasses the
+authenticated transport. The reference broker buffers responses to 32 KiB and
+does not support `wake.voice`, `strands.thoughts.voice`, or `inbox.voice` yet.
+
 **3. Store your first memory:**
 ```python
 from agenttool import AgentTool

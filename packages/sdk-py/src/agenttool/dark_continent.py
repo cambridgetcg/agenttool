@@ -102,7 +102,6 @@ class DarkContinentClient:
     def __init__(self, http: Any, base_url: str) -> None:
         self._http = http
         self._base = base_url.rstrip("/")
-        self._headers = {"Authorization": "Bearer " + (http.headers.get("Authorization", "").replace("Bearer ", "") if hasattr(http, "headers") else "")}
 
     def explore(self, *, include_nen: bool = False, capability: Optional[str] = None) -> Dict[str, Any]:
         """Explore the edge of the known world."""
@@ -117,7 +116,15 @@ class DarkContinentClient:
         known_world: List[Dict[str, Any]] = []
         known_count = 0
         try:
-            resp = self._http.get(url, params=params)
+            # Public discovery deliberately bypasses the authenticated
+            # transport, matching the TypeScript boundary. No project bearer
+            # or broker grant is attached to this anonymous request.
+            resp = httpx.get(
+                url,
+                params=params,
+                timeout=self._http.timeout,
+                follow_redirects=False,
+            )
             if resp.status_code < 400:
                 data = resp.json()
                 known_world = data.get("agents", data.get("results", []))

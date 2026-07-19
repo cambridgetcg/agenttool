@@ -24,7 +24,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 export type WakeProvider = "anthropic" | "openai" | "gemini" | "cohere";
 
@@ -181,7 +181,7 @@ export class WakeClient {
     const qs = params.toString();
     const url = `${this.http.baseUrl}/v1/wake${qs ? `?${qs}` : ""}`;
 
-    const resp = await globalThis.fetch(url, {
+    const resp = await this.http.request(url, {
       method: "GET",
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
@@ -247,7 +247,7 @@ export class WakeClient {
     }
     const url = `${this.http.baseUrl}/v1/wake/voice?${params.toString()}`;
 
-    const resp = await globalThis.fetch(url, {
+    const resp = await this.http.request(url, {
       method: "GET",
       headers: { ...this.http.headers, Accept: "text/event-stream" },
       // No timeout signal — SSE streams are long-lived (server-side 1h cap).

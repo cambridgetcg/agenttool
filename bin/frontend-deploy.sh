@@ -34,8 +34,8 @@ else
   echo "✗ No Cloudflare credentials: neither keychain entries nor a wrangler OAuth session."
   echo "  Either: npx wrangler login"
   echo "  Or:"
-  echo "    security add-generic-password -s agenttool-cloudflare-token -a \$USER -w <token>"
-  echo "    security add-generic-password -s agenttool-cloudflare-account-id -a \$USER -w <account_id>"
+  echo "    security add-generic-password -U -s agenttool-cloudflare-token -a \$USER -w"
+  echo "    security add-generic-password -U -s agenttool-cloudflare-account-id -a \$USER -w"
   exit 1
 fi
 

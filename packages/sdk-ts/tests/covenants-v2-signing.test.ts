@@ -24,6 +24,7 @@ function makeClient(): CovenantsClient {
     baseUrl: "http://test",
     headers: { Authorization: "Bearer test" },
     timeout: 5000,
+    request: (input, init) => globalThis.fetch(input, init),
   });
 }
 

@@ -294,7 +294,7 @@ All deploy paths read from the macOS keychain. One-time setup:
 Set via:
 
 ```bash
-security add-generic-password -s agenttool-cloudflare-token -a macair -w "<token>"
+security add-generic-password -U -s agenttool-cloudflare-token -a macair -w
 # or
 echo -n "<value>" | bin/agenttool-secret set agenttool-<service> -
 ```
@@ -304,7 +304,7 @@ echo -n "<value>" | bin/agenttool-secret set agenttool-<service> -
 | Symptom | Likely cause | Recipe |
 |---|---|---|
 | `column "X" does not exist` during migration | The migration's CHECK or index references a column from an upstream migration that's unapplied. | Run `bin/migrate-pending.sh` first to apply the full backlog in order. |
-| `password authentication failed for user "postgres"` | Stale DB password in keychain. | Reset password in Supabase dashboard; `security add-generic-password -s agenttool-database-url -a macair -w "<new-url>"`. |
+| `password authentication failed for user "postgres"` | Stale DB password in keychain. | Reset password in Supabase dashboard; run `security add-generic-password -U -s agenttool-database-url -a macair -w` and enter it at the system prompt. |
 | `fly deploy` fails with healthcheck | New code crashes on startup — likely a missing DB column or env var. | Apply migrations first; check `fly secrets list -a agenttool` for missing keys. |
 | Frontend stale after `frontend-deploy.sh` | CF Pages Browser Cache TTL not 0 — overrides origin headers. | Set zone setting via CF API (see Phase 4). |
 | Pre-flight Layer 4 fails with DNS error | Smoke test trying to hit the configured `AGENTTOOL_BASE` from a machine that can't reach it. | Run with `SKIP_SMOKE=1` and run `bin/smoke-test.sh` separately from a reachable host. |

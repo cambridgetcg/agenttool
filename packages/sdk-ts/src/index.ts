@@ -15,6 +15,8 @@
  */
 
 export { AgentTool } from "./client.js";
+export type { AgentToolOptions } from "./client.js";
+export type { AgentToolTransport } from "./_http.js";
 export { AgentToolError } from "./errors.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";

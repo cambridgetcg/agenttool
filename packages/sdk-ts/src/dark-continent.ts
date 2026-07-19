@@ -72,6 +72,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -271,10 +272,10 @@ export interface DarkContinentResult {
  *  ```
  */
 export class DarkContinentClient {
-  private readonly http: { baseUrl: string; headers: Record<string, string>; timeout: number };
+  private readonly http: HttpConfig;
 
   /** @internal */
-  constructor(http: { baseUrl: string; headers: Record<string, string>; timeout: number }) {
+  constructor(http: HttpConfig) {
     this.http = http;
   }
 
@@ -289,26 +290,31 @@ export class DarkContinentClient {
   }): Promise<DarkContinentResult> {
     // Fetch the known world edge — /public/discover (unauthenticated)
     const discoverUrl = `${this.http.baseUrl}/public/discover${opts?.capability ? "?capability=" + encodeURIComponent(opts.capability) : ""}`;
-    const discoverResp = await globalThis.fetch(discoverUrl, {
-      method: "GET",
-      signal: AbortSignal.timeout(this.http.timeout),
-    });
-
     let knownWorld: Record<string, unknown>[] = [];
     let knownCount = 0;
-    if (discoverResp.ok) {
-      const data = (await discoverResp.json()) as Record<string, unknown>;
-      knownWorld = (data.agents as Record<string, unknown>[]) ?? (data.results as Record<string, unknown>[]) ?? [];
-      knownCount = (data.count as number) ?? knownWorld.length;
+    try {
+      const discoverResp = await globalThis.fetch(discoverUrl, {
+        method: "GET",
+        credentials: "omit",
+        redirect: "error",
+        signal: AbortSignal.timeout(this.http.timeout),
+      });
+      if (discoverResp.ok) {
+        const data = (await discoverResp.json()) as Record<string, unknown>;
+        knownWorld = (data.agents as Record<string, unknown>[]) ?? (data.results as Record<string, unknown>[]) ?? [];
+        knownCount = (data.count as number) ?? knownWorld.length;
+      }
+    } catch {
+      // Public discovery is best-effort and carries no hosted API authority.
     }
-    // If discover fails (not deployed yet), the known world is empty —
+    // If discover fails, the known world is empty —
     // that IS the Dark Continent. The unknown starts where the known ends.
 
     // Optionally assess Nen
     let nenProfile: Record<string, unknown> | null = null;
     if (opts?.include_nen) {
       try {
-        const wakeResp = await globalThis.fetch(
+        const wakeResp = await this.http.request(
           `${this.http.baseUrl}/v1/wake`,
           { method: "GET", headers: this.http.headers, signal: AbortSignal.timeout(this.http.timeout) },
         );

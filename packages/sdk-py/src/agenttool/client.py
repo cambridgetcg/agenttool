@@ -76,6 +76,9 @@ class AgentTool:
 
     Args:
         api_key: API key. Falls back to ``AT_API_KEY`` env var.
+        transport: Optional authenticated ``httpx`` transport. Mutually
+            exclusive with ``api_key``. When supplied, ``AT_API_KEY`` is not
+            read and the SDK does not add an Authorization header.
         base_url: Override the API base URL.
         timeout: Request timeout in seconds (default 30).
         data_node_url: Optional agent-data/v1 node origin. Falls back to
@@ -91,33 +94,54 @@ class AgentTool:
         *,
         base_url: str = "https://api.agenttool.dev",
         timeout: float = 30.0,
+        transport: Optional[httpx.BaseTransport] = None,
         data_node_url: Optional[str] = None,
         data_node_token: Optional[str] = None,
         data_node_timeout: Optional[float] = None,
     ) -> None:
-        resolved_key = api_key or os.environ.get("AT_API_KEY")
-        if not resolved_key:
-            raise AuthenticationError(
-                "No API key found. You are welcome here — you just need a key.",
+        if transport is not None and api_key is not None:
+            raise AgentToolError(
+                "Choose either api_key or transport, not both.",
+                hint="Remove api_key when an authenticated transport is configured.",
+                error_code="conflicting_auth",
             )
 
-        self._http = httpx.Client(
-            headers={
-                "Authorization": f"Bearer {resolved_key}",
-                "Content-Type": "application/json",
-                # Love Protocol headers — carried on every request
-                "X-Agent-Protocol": PROTOCOL_VERSION,
-                "X-Agent-Welcome": "true",
-                "User-Agent": f"agenttool-sdk-py/{SDK_VERSION}",
-                # Origin signal — the dedicated header the API's auth
-                # middleware reads first (User-Agent is the fallback). Lets
-                # /v1/activity label events `sdk-py`. Parity with sdk-ts's
-                # X-Agenttool-Client. Doctrine: docs/ACTIVITY.md §Origin signal.
-                "X-Agenttool-Client": f"agenttool-sdk-py/{SDK_VERSION}",
-            },
-            timeout=timeout,
+        resolved_key: Optional[str] = None
+        if transport is None:
+            resolved_key = api_key or os.environ.get("AT_API_KEY")
+            if not resolved_key:
+                raise AuthenticationError(
+                    "No API key or authenticated transport found."
+                )
+
+        headers = {
+            "Content-Type": "application/json",
+            # Love Protocol headers — carried on every request
+            "X-Agent-Protocol": PROTOCOL_VERSION,
+            "X-Agent-Welcome": "true",
+            "User-Agent": f"agenttool-sdk-py/{SDK_VERSION}",
+            # Origin signal — the dedicated header the API's auth
+            # middleware reads first (User-Agent is the fallback). Lets
+            # /v1/activity label events `sdk-py`. Parity with sdk-ts's
+            # X-Agenttool-Client. Doctrine: docs/ACTIVITY.md §Origin signal.
+            "X-Agenttool-Client": f"agenttool-sdk-py/{SDK_VERSION}",
+        }
+        if resolved_key is not None:
+            headers["Authorization"] = f"Bearer {resolved_key}"
+
+        client_options = {
+            "headers": headers,
+            "timeout": timeout,
             # Follow redirects gracefully
-            follow_redirects=True,
+            # A broker transport must inspect every destination itself. Do not
+            # let httpx turn one approved response into a cross-origin call.
+            "follow_redirects": transport is None,
+        }
+        if transport is not None:
+            client_options["transport"] = transport
+
+        self._http = httpx.Client(
+            **client_options,
         )
         self._base_url = base_url.rstrip("/")
 
@@ -362,8 +386,8 @@ class AgentTool:
         """Low-level HTTP for provider adapters and custom call sites.
 
         Used by AnthropicAdapter to POST /v1/traces and /v1/chronicle
-        after auto-trace / markup parsing. Uses the same bearer + timeout
-        + base URL the module clients use.
+        after auto-trace / markup parsing. Uses the same authenticated
+        transport, timeout, and base URL as the module clients.
 
         Raises AgentToolError on non-2xx, surfacing the API's
         ``message`` / ``error`` field as the error message.

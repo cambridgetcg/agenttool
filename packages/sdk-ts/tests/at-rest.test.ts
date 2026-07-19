@@ -351,6 +351,7 @@ describe("AtRestClient — method shapes", () => {
       baseUrl: "http://localhost:9999",
       headers: {},
       timeout: 5000,
+      request: (input, init) => globalThis.fetch(input, init),
     });
     expect(typeof client.mark).toBe("function");
   });

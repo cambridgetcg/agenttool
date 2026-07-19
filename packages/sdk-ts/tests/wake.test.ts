@@ -48,7 +48,12 @@ function makeStubFetch(opts: {
 
 function makeClient(opts: { ttlMs?: number } = {}): WakeClient {
   return new WakeClient(
-    { baseUrl: "https://api.example.test", headers: { Authorization: "Bearer at_test" }, timeout: 5000 },
+    {
+      baseUrl: "https://api.example.test",
+      headers: { Authorization: "Bearer at_test" },
+      timeout: 5000,
+      request: (input, init) => globalThis.fetch(input, init),
+    },
     opts,
   );
 }

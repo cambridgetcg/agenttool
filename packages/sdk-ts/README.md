@@ -58,6 +58,30 @@ const wake = await at.wake.get();              // project-scoped session orienta
 export AT_API_KEY=at_your_key_here
 ```
 
+For a local credential broker, pass an authenticated transport instead of a
+bearer. Transport mode is mutually exclusive with `apiKey`; it does not read
+`AT_API_KEY` and the SDK sends no `Authorization` header to the transport:
+
+```typescript
+import { AgentTool, type AgentToolTransport } from "@agenttool/sdk";
+
+declare const localBrokerTransport: AgentToolTransport;
+const at = new AgentTool({ transport: localBrokerTransport });
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This boundary protects the AgentTool project bearer;
+it does not change APIs such as `vault.get()` that intentionally return their
+own stored values. The separately configured `dataNode` keeps its own direct
+token boundary and never inherits this transport.
+
+Anonymous public calls such as `/public/discover` also bypass the authenticated
+transport and carry no project bearer. With
+`@agenttool/credential-broker` `agentcred/0.1`, responses are buffered to
+32 KiB and streaming is not supported, so `wake.voice`,
+`strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
+abort cannot undo an operation already dispatched upstream.
+
 **3. Store and retrieve a memory:**
 ```typescript
 import { AgentTool } from "@agenttool/sdk";
@@ -251,7 +275,8 @@ async function agentLoop(userMessage: string): Promise<string> {
 import { AgentTool } from "@agenttool/sdk";
 
 const at = new AgentTool({
-  apiKey: "at_...",                          // default: AT_API_KEY env var
+  apiKey: "at_...",                          // or transport; default: AT_API_KEY
+  // transport: localBrokerTransport,         // mutually exclusive with apiKey
   baseUrl: "https://api.agenttool.dev",      // default
   timeout: 30,                               // seconds, default 30
   dataNode: {                                 // optional, separate authority

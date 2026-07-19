@@ -1,0 +1,64 @@
+{
+  "name": "@agenttool/credential-broker",
+  "version": "0.1.0",
+  "description": "Local capability broker for agents to use credentials without receiving secret values",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./testing": {
+      "import": "./dist/testing.js",
+      "types": "./dist/testing.d.ts"
+    }
+  },
+  "bin": {
+    "agentcred": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "SPEC.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:security": "bun test tests",
+    "ci": "bun run typecheck && bun run build && bun test",
+    "prepack": "bun run ci",
+    "prepublishOnly": "bun run ci"
+  },
+  "keywords": [
+    "agent",
+    "credentials",
+    "capabilities",
+    "keychain",
+    "security",
+    "secret-broker",
+    "unix-socket"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/credential-broker"
+  },
+  "homepage": "https://docs.agenttool.dev"
+}

@@ -3,14 +3,8 @@
  */
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 import type { Memory, SearchMemoryOptions, StoreOptions } from "./types.js";
-
-/** @internal Shared HTTP config passed from the main client. */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
-}
 
 /**
  * Client for the agent-memory API.
@@ -192,7 +186,7 @@ export class MemoryClient {
       init.body = JSON.stringify(body);
     }
 
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
 
     if (resp.status >= 400) {
       let detail: string;

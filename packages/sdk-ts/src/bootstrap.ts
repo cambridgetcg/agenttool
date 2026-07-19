@@ -7,13 +7,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
-}
+import type { HttpConfig } from "./_http.js";
 
 export interface CreateAgentOptions {
   capabilities?: string[];
@@ -133,7 +127,7 @@ export class BootstrapClient {
     body?: unknown
   ): Promise<T> {
     const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await fetch(url, {
+    const resp = await this.http.request(url, {
       method,
       headers: {
         ...this.http.headers,

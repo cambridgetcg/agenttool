@@ -64,7 +64,7 @@ test("the documented birth-to-wake flow executes against the v0.9 surface", asyn
     "https://example.test/v1/register/agent",
     "https://example.test/v1/wake",
   ]);
-  expect((calls[1].init?.headers as Record<string, string>).Authorization).toBe(
+  expect(new Headers(calls[1].init?.headers).get("authorization")).toBe(
     "Bearer at_onboarding_test",
   );
 });

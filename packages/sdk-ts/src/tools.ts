@@ -8,7 +8,7 @@ import type {
   ExecuteResult,
   ScrapeResult,
 } from "./types.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 export interface ParseDocumentOpts {
   url?: string;
@@ -106,7 +106,7 @@ export class ToolsClient {
 
   private async post(path: string, body: unknown): Promise<unknown> {
     const url = `${this.http.baseUrl}${path}`;
-    const resp = await globalThis.fetch(url, {
+    const resp = await this.http.request(url, {
       method: "POST",
       headers: this.http.headers,
       body: JSON.stringify(body),

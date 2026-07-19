@@ -85,17 +85,19 @@ async function keychainSet(service: string, value: string): Promise<void> {
       "keychainSet: only macOS supported in v1 — Linux/Windows storage TBD",
     );
   }
-  const r = Bun.spawnSync([
-    "security",
-    "add-generic-password",
-    "-U", // overwrite if exists
-    "-s",
-    service,
-    "-a",
-    ACCT,
-    "-w",
-    value,
-  ]);
+  const r = Bun.spawnSync(
+    [
+      "security",
+      "add-generic-password",
+      "-U", // overwrite if exists
+      "-s",
+      service,
+      "-a",
+      ACCT,
+      "-w", // last with no value: prompt bytes come from stdin, never argv
+    ],
+    { stdin: new TextEncoder().encode(value) },
+  );
   if (r.exitCode !== 0) {
     const err = (r.stderr ?? new Uint8Array()).toString().trim();
     throw new Error(`keychain write failed for ${service}: ${err || "exit " + r.exitCode}`);

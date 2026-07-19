@@ -16,7 +16,8 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import { ChronicleClient, type ChronicleEntry, type HttpConfig } from "./chronicle.js";
+import type { HttpConfig } from "./_http.js";
+import { ChronicleClient, type ChronicleEntry } from "./chronicle.js";
 
 export type WindowKind = "focus" | "mood" | "noticing";
 
@@ -172,7 +173,7 @@ export class WindowClient {
     if (opts?.identity_id) {
       try {
         const url = `${this.http.baseUrl}/v1/identities/${opts.identity_id}/pulse`;
-        const resp = await globalThis.fetch(url, {
+        const resp = await this.http.request(url, {
           method: "GET",
           headers: this.http.headers,
           signal: AbortSignal.timeout(this.http.timeout),

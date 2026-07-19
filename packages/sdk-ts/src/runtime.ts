@@ -23,6 +23,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -149,10 +150,10 @@ export interface AuditEntry {
  *  ```
  */
 export class RuntimeClient {
-  private readonly http: { baseUrl: string; headers: Record<string, string>; timeout: number };
+  private readonly http: HttpConfig;
 
   /** @internal */
-  constructor(http: { baseUrl: string; headers: Record<string, string>; timeout: number }) {
+  constructor(http: HttpConfig) {
     this.http = http;
   }
 
@@ -269,7 +270,7 @@ export class RuntimeClient {
       signal: AbortSignal.timeout(this.http.timeout),
     };
     if (body !== undefined) init.body = JSON.stringify(body);
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
     if (!resp.ok) {
       let detail: string;
       try {
