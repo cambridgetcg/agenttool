@@ -718,6 +718,6 @@ not make AgentTool a required registry or add a publisher-signature claim.
 Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.1`, `@agenttool/adds@0.2.1`,
-`@agenttool/sdk@0.13.0`, and `@agenttool/telescope@0.1.0` releases instead
+`@agenttool/sdk@0.14.0`, and `@agenttool/telescope@0.1.0` releases instead
 declare `Apache-2.0` without retroactively changing those immutable older
 releases.

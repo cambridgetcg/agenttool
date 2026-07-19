@@ -111,9 +111,9 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is currently SDK 0.13. Python's separately distributed 0.13 source tag is `sdk-v0.13.0`; it is not part of the LOVE JavaScript catalog.
+The installed tutorial contract is currently SDK 0.14. Python's separately distributed 0.14 source tag is `sdk-v0.14.0`; it is not part of the LOVE JavaScript catalog.
 
-Optional shorter install: `npm install --save-exact @agenttool/sdk@0.13.0`.
+Optional shorter install: `npm install --save-exact @agenttool/sdk@0.14.0`.
 This pins the compatible npm release but skips Step 1's independent LOVE
 size/SHA-256 verification; never substitute npm `latest` for the version
 selected by `/v1/pathways`.
@@ -265,13 +265,13 @@ if (seedOnly) {
     sdkEntryUrl.protocol !== "file:" ||
     !sdkEntryUrl.pathname.endsWith("/dist/index.js")
   ) {
-    throw new Error("SDK 0.13 recovery bridge did not resolve to dist/index.js.");
+    throw new Error("SDK 0.14 recovery bridge did not resolve to dist/index.js.");
   }
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.13.0") {
-    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.13.0 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.14.0") {
+    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.14.0 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -280,7 +280,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Verified SDK 0.13.0 is missing its recovery signing helpers.");
+    throw new Error("Verified SDK 0.14.0 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -448,7 +448,7 @@ if (seedOnly) {
 
 The mnemonic reaches the owner-only handoff before registration can commit.
 If the process times out, rerun the same `birth.ts` with the same handoff path:
-the seed-only branch verifies the exact installed SDK 0.13.0 package, loads its
+the seed-only branch verifies the exact installed SDK 0.14.0 package, loads its
 pinned `dist/seed.js` helpers by file URL, performs signed discovery, and
 recovers rather than registering again. A rooted match reuses one serialized
 recovery body for both its `identity-recover/v1` and exact-request
@@ -720,7 +720,7 @@ bun run orient.ts
 unset AGENT_MNEMONIC
 ```
 
-SDK 0.13 exposes the legacy `agent_id` store option rather than
+SDK 0.14 exposes the legacy `agent_id` store option rather than
 `identity_id`. The API binds it to the canonical identity only after verifying
 that the UUID is active and owned by this bearer project; arbitrary handles and
 foreign UUIDs remain project-level memories.
@@ -857,7 +857,7 @@ await at.memory.elevate(episodic.id, {
 });
 ```
 
-Constitutive elevation uses the same `elevate(memoryId, options)` method, but `options.attestations` must contain an external covenant counterparty's `{ attester_did, signing_key_id, signature }`. That counterparty produces `signature` with `signAttestation({ memoryId, tier: "constitutive", content, signing_key })` over the exact memory content. Do not replace that proof with a `witnessSig` convenience field; no such 0.13 field exists.
+Constitutive elevation uses the same `elevate(memoryId, options)` method, but `options.attestations` must contain an external covenant counterparty's `{ attester_did, signing_key_id, signature }`. That counterparty produces `signature` with `signAttestation({ memoryId, tier: "constitutive", content, signing_key })` over the exact memory content. Do not replace that proof with a `witnessSig` convenience field; no such field exists.
 
 **Chronicle** ([continuity](https://docs.agenttool.dev/continuity))
 - Append-only timeline of relational moments — vow · wake · refusal · recognition · naming · seal · note · welcome

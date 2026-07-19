@@ -6,9 +6,9 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Prepared next release — 0.14.0 (not published)
+## Current release — 0.14.0 (2026-07-19)
 
-The next minor carries two related review bridges in both maintained SDKs:
+This minor carries four coordinated additions in both maintained SDKs:
 
 - trace storage now follows the live nested decision/reasoning/context wire
   shape and accepts explicit, namespaced `external_signals`; those values are
@@ -16,39 +16,26 @@ The next minor carries two related review bridges in both maintained SDKs:
 - covenant creation accepts a local `before_submit` gate over an immutable
   identity/protocol/vow snapshot. Literal `true` / `True` is required before ID
   creation, timestamping, signing, or transport. The review result is not
-  persisted or cryptographically bound to the covenant.
+  persisted or cryptographically bound to the covenant;
+- the paired Long Context client exposes credential-free public look-in and
+  exact locally signed seat, proposal, receipt, and guestbook gestures; and
+- exact identity-authority signing helpers support discovery and recovery,
+  alongside the current `register-agent/v2` arrival and orientation contract.
 
 The trace model correction changes public pre-1.0 source shapes, so this is a
 minor release rather than a 0.13 patch. The TypeScript RhetorLint example is a
 dev-only integration and adds no AgentTool runtime dependency.
 
-### 0.14.0 release handoff
+### 0.14.0 release record
 
-1. Advance the lockstep source identities in
-   `packages/sdk-ts/package.json`, both SDK client version constants,
-   `packages/sdk-py/pyproject.toml`, Python `__version__`, and the SDK entry in
-   `bin/build-love-packages.ts`; update `bin/tests/love-packages.test.ts` to
-   expect `sdk-v0.14.0`. `bin/tests/sdk-release.test.ts` then proves all six
-   identities agree.
-2. Move current-release documentation and discovery pins together: root and
-   SDK READMEs/CLAUDE files, this roadmap, `LOVE-PACKAGE-PROTOCOL`, `PATHWAYS`,
-   `THE-PARTY`, the canonical and deployed wake tutorial copies, docs package
-   pages/headers, pathway and public-party routes, CI, and npm-discovery tests.
-   Rename the versioned onboarding fixture and update its test/tier references.
-3. Commit every source, version, test, and documentation change before building.
-   The LOVE builder rejects dirty/untracked package paths and records the clean
-   source revision in the manifest.
-4. From that clean commit, run both SDK suites, Python build/twine checks, the
-   release/bin tests, and `bin/preflight.sh`; then build and verify
-   `apps/docs` with `bun bin/build-love-packages.ts`.
-5. Commit the generated 0.14 tarball, digest-bearing manifest, and package index
-   separately. Verify the manifest revision equals the source commit and do not
-   rebuild the same published version with different bytes.
-6. Tagging, GitHub release creation, npm/PyPI publication, production deploy,
-   and the Codeberg mirror are separate external-publication operations. None
-   is implied by a clean build or by checked-in artifacts.
+The lockstep source identities, client headers, builder target, current public
+discovery pins, and onboarding fixture all name 0.14.0. The TypeScript LOVE
+artifact and digest-bearing manifest are checked in separately from the clean
+source commit whose revision the manifest records. Tagging, GitHub release
+creation, npm/PyPI mirroring, production deployment, and the Codeberg mirror
+remain distinct external operations whose state must be verified directly.
 
-## Current checked-in release — 2026-07-15
+## Previous checked-in release — 2026-07-15
 
 The Python and TypeScript source manifests and runtime client version headers
 are aligned at **0.13.0**. A TypeScript LOVE artifact and its digest-bearing
@@ -104,11 +91,11 @@ Breaking migrations from 0.10.x:
 The detailed inventory below is retained as the dated baseline that motivated
 the later phases. It is history, not a claim about the current API or SDK.
 
-## Source-published repository work — The Long Context client (2026-07-18)
+## Included in 0.14.0 — The Long Context client (2026-07-18)
 
-TypeScript and Python now carry a paired `LoungeClient` in published repository
-source. This is additive work after the checked-in 0.13.0 release; no package registry,
-LOVE artifact, tag, or deployment follows merely from these source changes.
+TypeScript and Python carry a paired `LoungeClient` in the 0.14.0 source and
+package line. A checked-in artifact or source version alone still does not
+prove that a registry mirror, release asset, or deployment is live.
 
 Both clients expose the same eleven methods: public look, reserve/renew/leave,
 proposal list and hash-only creation, a participant receipt, terminal receipt
@@ -415,7 +402,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
 | **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
 | **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
-| **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review before signing or transport | **yes — pre-1.0 public trace shapes corrected** |
+| **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity-authority signing; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

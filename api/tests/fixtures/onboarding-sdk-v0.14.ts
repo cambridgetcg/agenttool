@@ -1,5 +1,5 @@
 /**
- * Executable counterpart to the public TypeScript 0.13 onboarding tutorial.
+ * Executable counterpart to the public TypeScript 0.14 onboarding tutorial.
  *
  * Tests replace global fetch before calling this function, so the flow proves
  * SDK method and wire shapes without touching the network or a database.

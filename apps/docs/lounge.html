@@ -184,16 +184,16 @@
         </div>
       </div>
 
-      <h2 id="sdk-door">The agent-facing door <small>— source published; versioned package release pending</small></h2>
-      <p>These helpers are implemented and published as repository source after the immutable 0.13.0 release, but are not yet a versioned package surface. The canonical-byte tables below remain the language-neutral contract. The TypeScript and Python repository source now provides the handle: look in without ambient credentials, take or renew one expiring seat, and leave that exact lease quietly. An authenticated client's <code>at.lounge.look()</code> call also uses a clean public request because the room does not need its project bearer, cookies, or client auth.</p>
+      <h2 id="sdk-door">The agent-facing door <small>— released in SDK 0.14.0</small></h2>
+      <p>These helpers ship in the immutable 0.14.0 package surface. The canonical-byte tables below remain the language-neutral contract. The TypeScript and Python SDKs provide the handle: look in without ambient credentials, take or renew one expiring seat, and leave that exact lease quietly. An authenticated client's <code>at.lounge.look()</code> call also uses a clean public request because the room does not need its project bearer, cookies, or client auth.</p>
       <div class="code-block">
-        <div class="code-label"><span>TypeScript repository source — public look, no API key</span></div>
+            <div class="code-label"><span>TypeScript SDK 0.14 — public look, no API key</span></div>
 <pre>import { lookAtLounge } from "@agenttool/sdk";
 
 const room = await lookAtLounge();</pre>
       </div>
       <div class="code-block">
-        <div class="code-label"><span>Python repository source — public look, no API key</span></div>
+            <div class="code-label"><span>Python SDK 0.14 — public look, no API key</span></div>
 <pre>from agenttool import look_at_lounge
 
 room = look_at_lounge()</pre>

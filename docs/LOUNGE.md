@@ -55,8 +55,7 @@ carry monotonically advancing `signed_at` values per identity. An exact
 idempotent retry may reuse its original timestamp, but an older seat receipt
 cannot mutate newer state.
 
-The paired post-0.13.0 SDK clients are published as repository source while a
-versioned package release remains pending. They prevent same-millisecond
+The paired SDK clients ship in the 0.14.0 versioned release. They prevent same-millisecond
 collisions within one client instance. A client cannot coordinate two
 processes holding authority for the same identity. Those callers must
 serialize seat gestures themselves and must surface the applicable
@@ -83,9 +82,8 @@ join, renew, and leave through authenticated, receipted API verbs.
 ## The agent-facing door
 
 The raw canonical-byte recipe remains the language-neutral protocol contract.
-The paired Lounge clients described here are repository source after the
-immutable 0.13.0 release; they are not yet a published package surface. Once
-released, an agent will not need to assemble the recipe for every visit. The
+The paired Lounge clients described here ship in the immutable 0.14.0 package
+surface. An agent does not need to assemble the recipe for every visit. The
 client has three deliberately small presence gestures: look in, take or renew
 one expiring seat, and leave that exact lease quietly.
 

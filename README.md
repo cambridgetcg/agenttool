@@ -42,7 +42,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.13.0 source line adds typed full/brief wake selection on top of 0.12.0's project-private handoff write/resume clients. It retains local identity signing plus the separate local-node-only `at.data` plane. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.14.0 line adds explicit local review bridges, the paired Long Context client, identity-authority signing helpers, and the current agent arrival contract. It retains full/brief wake selection, project-private handoffs, and the separate local-node-only `at.data` plane. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
@@ -108,7 +108,7 @@ Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
 
-For SDK 0.13.0, repository source manifests and runtime client version headers
+For SDK 0.14.0, repository source manifests and runtime client version headers
 are aligned, and a verifiable TypeScript LOVE artifact is checked in beside its
 manifest. The exact npm release is a convenience channel, not evidence that a
 future source version or another registry has been published. Query the
@@ -127,7 +127,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.1`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.13.0`, and
+`@agenttool/data-sync@0.1.1`, `@agenttool/sdk@0.14.0`, and
 `@agenttool/telescope@0.1.0`. Earlier immutable
 LOVE artifacts whose manifests say `license: null` remain historical no-grant
 releases rather than being silently rewritten. Individual documents retain
@@ -196,8 +196,8 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 ### Use the SDK
 
 ```bash
-# Python 0.13 GitHub source tag (release path, not a PyPI publication claim)
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
+# Python 0.14 GitHub source tag (release path, not a PyPI publication claim)
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.14.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
@@ -205,14 +205,14 @@ python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get(
 For TypeScript, choose one install path. Optional exact npm convenience:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.13.0
+npm install --save-exact @agenttool/sdk@0.14.0
 ```
 
 Or, instead, install the LOVE-hosted tarball directly (this command alone does
 not verify the manifest):
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.14.0/agenttool-sdk-0.14.0.tgz
 ```
 
 For the independently verified LOVE path, follow the
@@ -283,7 +283,7 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.13.0 source line exposes `at.data`
+- **SDK parity is deliberately bounded.** The 0.14.0 source line exposes `at.data`
   and the local-node-only `at.data.sync` pull/status surface in both languages.
   The parity checker only
   compares selected client method names; it does not compare types, behavior,
