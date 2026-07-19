@@ -22,6 +22,7 @@ src/agenttool/
   _context.py            — AmbientContext for auto-trace ambient state
   bootstrap.py           — BootstrapClient (agent creation, elevation)
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
+  correspondence.py      — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.py           — CovenantsClient (vows + bonds; federation-aware)
   economy.py             — EconomyClient (wallets, escrow, transactions)
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)

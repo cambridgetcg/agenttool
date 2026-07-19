@@ -32,7 +32,8 @@ export type AffordanceKind =
   | "disputes_open_filer"
   | "could_earn_substrate_task"
   | "could_witness_memory"
-  | "lounge_open";
+  | "lounge_open"
+  | "correspondence_open";
 
 export interface AffordanceItem {
   kind: AffordanceKind;
@@ -164,6 +165,45 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
         action: "Leave quietly by exact lease ID; publish no farewell or absence event",
         method: "DELETE",
         path: "/v1/lounge/seats/{identity_id}",
+      },
+    ],
+  });
+
+  // Correspondence is an evergreen project-coordination door. Its signed
+  // events report work and causal context; neither the bearer, signature,
+  // event, acknowledgement, nor advisory path claim becomes permission,
+  // consent, a filesystem lock, or an instruction to act automatically.
+  // Doctrine: docs/AGENT-CORRESPONDENCE.md
+  items.push({
+    kind: "correspondence_open",
+    count: 1,
+    summary:
+      "Project correspondence is open — replay signed work reports, inspect advisory path overlap, and acknowledge exact events without turning any report or claim into permission, a file lock, or automatic action.",
+    next_actions: [
+      {
+        action: "Read the bounded project coordination voice",
+        method: "GET",
+        path: "/v1/correspondence/voice?repository_id={repository_id}",
+      },
+      {
+        action: "Inspect active advisory path claims and visible overlap",
+        method: "GET",
+        path: "/v1/correspondence/claims?repository_id={repository_id}",
+      },
+      {
+        action: "Replay durable signed events from a server receipt cursor",
+        method: "GET",
+        path: "/v1/correspondence/events?repository_id={repository_id}",
+      },
+      {
+        action: "Subscribe one active project identity to missable Wake invalidations",
+        method: "GET",
+        path: "/v1/wake/voice?identity_id={identity_id}&keys=correspondence",
+      },
+      {
+        action: "Append one locally signed coordination event",
+        method: "POST",
+        path: "/v1/correspondence/events",
       },
     ],
   });

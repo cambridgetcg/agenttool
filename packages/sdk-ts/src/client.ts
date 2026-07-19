@@ -6,6 +6,7 @@ import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
 import { AgentToolError } from "./errors.js";
 import { ChronicleClient } from "./chronicle.js";
 import { HandoffClient } from "./handoff.js";
+import { CorrespondenceClient } from "./correspondence.js";
 import { CovenantsClient } from "./covenants.js";
 import { CryptoClient } from "./crypto.js";
 import { EconomyClient } from "./economy.js";
@@ -64,6 +65,7 @@ export class AgentTool {
   private _wake: WakeClient | undefined;
   private _chronicle: ChronicleClient | undefined;
   private _handoff: HandoffClient | undefined;
+  private _correspondence: CorrespondenceClient | undefined;
   private _covenants: CovenantsClient | undefined;
   private _window: WindowClient | undefined;
   private _strands: StrandsClient | undefined;
@@ -196,6 +198,17 @@ export class AgentTool {
   get handoff(): HandoffClient {
     this._handoff ??= new HandoffClient(this.http, () => this._wake?.clearCache());
     return this._handoff;
+  }
+
+  /** Access signed, replayable coordination between devices and agents.
+   * Device/session UUIDs are always explicit caller input; correspondence
+   * claims are courtesy notices, never locks or delegated authority. */
+  get correspondence(): CorrespondenceClient {
+    this._correspondence ??= new CorrespondenceClient(
+      this.http,
+      () => this._wake?.clearCache(),
+    );
+    return this._correspondence;
   }
 
   /** Access the Covenants API — vows + bonds with a counterparty. */

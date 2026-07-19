@@ -30,6 +30,53 @@ tag:
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.14.0#subdirectory=packages/sdk-py"
 ```
 
+## Unreleased
+
+The source tree adds `at.correspondence`, the paired client for
+`agent-correspondence/v0.1`. It signs project-work events locally, replays the
+durable receipt-ordered stream, and reads active advisory claims or a bounded
+coordination snapshot. Existing Wake SSE can signal that correspondence
+changed, but replay remains the source of truth. Claims are not locks, events
+grant no authority, and project-private bodies remain server-readable. See
+[Agent Correspondence](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
+
+One bounded progress event, using an identity key retained by the caller:
+
+```python
+from datetime import datetime, timezone
+
+from agenttool import AgentTool
+
+def report_progress(at: AgentTool, local: dict, session_id: str, session_seq: int):
+    issued_at = (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+    return at.correspondence.append(
+        project_id=local["project_id"],
+        repository_id="repo:github.com/example/project",
+        thread_id="task:42",
+        sender={
+            "identity_id": local["identity_id"],
+            "signing_key_id": local["signing_key_id"],
+            "device_id": local["device_id"],  # stable installation UUID
+            "session_id": session_id,         # fresh UUID for this bounded run
+        },
+        kind="progress",
+        parents=[],
+        session_seq=session_seq,                # caller-persisted run sequence
+        issued_at=issued_at,
+        scope={"base_revision": None, "branch": None, "paths": ["packages/sdk-py"]},
+        body={"summary": "Python client tests pass."},
+        signing_key=local["private_key"],       # canonical base64 or raw bytes; never sent
+    )
+```
+
+This surface is not part of the immutable 0.14.0 source tag linked above. A
+future versioned release must update the package identity and publish/verify
+its own exact artifact before callers treat it as distributed.
+
 ## 0.14.0
 
 This minor aligns both SDKs with the live nested trace contract and adds
@@ -189,6 +236,7 @@ local-data authority when configured:
 | `at.wake` | Identity-anchored full/brief framework (md / anthropic / openai / gemini / cohere) | Orient, then follow deeper doors |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
+| `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
 ## Quick start

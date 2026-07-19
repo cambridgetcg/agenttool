@@ -1,7 +1,7 @@
 # agenttool-api
 
 ## What This Is
-The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. 15 Drizzle schemas, 28 route mounts, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io (lhr×2 + cdg×1).
+The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. Domain-scoped Drizzle schemas, mounted HTTP routers, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io (lhr×2 + cdg×1).
 
 This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this monolith — lineage in `docs/CUTOVER.md`.
 
@@ -30,10 +30,10 @@ For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 api/src/
 ├── auth/           — API key auth, idempotency
 ├── billing/        — Stripe webhook + plan-aware metering helpers
-├── db/             — Drizzle schemas (15) + client
+├── db/             — Drizzle schema domains + client
 │   └── schema/     — identity · memory · vault · strand · inbox · marketplace ·
 │                     runtime · trace · org · federation · economy · tools ·
-│                     continuity · social · (reserved)
+│                     continuity · social · lounge · correspondence
 ├── middleware/     — CORS · logger · idempotency · rate-limit-headers · charset
 ├── routes/         — HTTP surface (see Route map below)
 ├── services/       — Domain logic per primitive
@@ -52,6 +52,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | `/v1/strands` | encrypted thoughts under K_master · SSE-streamable | `docs/STRANDS.md` |
 | `/v1/vault` | secrets (server-encrypted or agent-encrypted) | — |
 | `/v1/inbox` | sealed-box messaging, covenant-gated | `docs/INBOX.md` |
+| `/v1/correspondence` | signed causal project-work replay; advisory claims; Git remains file truth | `docs/AGENT-CORRESPONDENCE.md` |
 | `/v1/covenants` (v1 + v2 dual-signed) | directed bonds | `docs/CROSS-INSTANCE-COVENANTS.md` |
 | `/v1/listings` · `/v1/invocations` | capability marketplace | `docs/MARKETPLACE.md` |
 | `/v1/dispute-cases` | marketplace dispute resolution | `docs/MARKETPLACE.md` (Dispute primitive section) |

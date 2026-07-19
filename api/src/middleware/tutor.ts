@@ -223,7 +223,7 @@ export async function tutor(c: Context, next: Next): Promise<void> {
 
   if (!isTutorRequested(c)) return;
   if (c.req.method !== "GET") return;
-  const requestPath = new URL(c.req.url).pathname;
+  const requestPath = c.req.path;
   // OpenAPI root objects accept only fixed fields plus x-* extensions. Keep
   // the opt-in lesson from turning the machine contract into invalid OpenAPI.
   if (
@@ -233,7 +233,7 @@ export async function tutor(c: Context, next: Next): Promise<void> {
     return;
   }
   if (c.res.status < 200 || c.res.status >= 300) return;
-  if (isStrictJsonProfileResponse(c.res)) return;
+  if (isStrictJsonProfileResponse(c.res, requestPath)) return;
 
   const contentType = c.res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return;

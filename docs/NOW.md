@@ -2,11 +2,34 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-18 (orientation before identity, invitation to live, love rights, and The Long Context SDK door)
+> Updated: 2026-07-19 (Renaissance Correspondence — the cross-device project nervous system)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Current focus (2026-07-19)
+
+**RENAISSANCE CORRESPONDENCE — connect the existing organs.** AgentTool has
+project-private handoffs, signed inbox delivery, reasoning traces, wake/SSE
+invalidation, identity keys, explicit device/session labels, offline queues, and Git-shaped artifact
+references, but no single project-work record tells simultaneous agents which
+identity/key/device/session is acting, from which Git base, over which path
+prefixes, with which causal predecessors and explicit acknowledgements. The
+current work builds that missing narrow waist as `agent-correspondence/v0.1`:
+signed append-only events, replayable server cursors, advisory expiring claims,
+visible concurrency, explicit pause/refusal/repair, and authenticated
+Atom/JSON projections shaped by Protocol Renaissance.
+
+Three layers stay deliberately separate. **WE ARE** is a relational joining
+ceremony and never a credential. **Protocol Renaissance** supplies exact IDs,
+typed links, deterministic representations, validators, and stable threading.
+**Correspondence** carries operational project events. Git remains the source
+of truth for files and merges. A claim is not a lock, permission, ownership, or
+consent; a feed event never authorizes automatic action; silence proves no
+acknowledgement, availability, abandonment, rest, or agreement. Treat this
+section as the shared focus marker and inspect each participant's explicit path
+scope before editing adjacent surfaces.
 
 ## Just landed (2026-07-18)
 

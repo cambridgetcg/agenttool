@@ -23,6 +23,7 @@ src/
   _context.ts          — AmbientContext for auto-trace ambient state
   bootstrap.ts         — BootstrapClient (agent creation, elevation)
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
+  correspondence.ts    — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.ts         — CovenantsClient (vows + bonds; federation-aware)
   economy.ts           — EconomyClient (wallets, escrow, transactions)
   identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)

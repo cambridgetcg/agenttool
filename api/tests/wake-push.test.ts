@@ -262,6 +262,7 @@ describe("wake-push — type union ↔ validator alignment", () => {
     // The route imports this exported tuple directly. This pins the new
     // coordination key and makes duplicate keys impossible to overlook.
     expect(validatorList).toContain("handoffs");
+    expect(validatorList).toContain("correspondence");
     expect(new Set(validatorList).size).toBe(validatorList.length);
   });
 });

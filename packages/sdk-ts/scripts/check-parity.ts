@@ -91,6 +91,7 @@ const TARGETS: ParityTarget[] = [
   target("bootstrap", "BootstrapClient"),
   target("chronicle", "ChronicleClient"),
   target("collect", "CollectClient"),
+  target("correspondence", "CorrespondenceClient"),
   target("covenants", "CovenantsClient"),
   target("crypto", "CryptoClient"),
   target("data", "DataClient"),

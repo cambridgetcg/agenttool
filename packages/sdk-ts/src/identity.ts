@@ -44,7 +44,8 @@ function base64UrlEncode(bytes: Uint8Array): string {
   return base64Encode(bytes).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
-function decodeSigningKey(value: string | Uint8Array, operation: string): Uint8Array {
+/** @internal Decode the canonical private-key forms emitted/accepted by the SDK. */
+export function decodeSigningKey(value: string | Uint8Array, operation: string): Uint8Array {
   let key: Uint8Array;
   if (typeof value === "string") {
     if (
@@ -63,8 +64,10 @@ function decodeSigningKey(value: string | Uint8Array, operation: string): Uint8A
     if (base64Encode(key) !== value) {
       throw new AgentToolError(`${operation}: private_key must be canonical standard base64.`);
     }
-  } else {
+  } else if (value instanceof Uint8Array) {
     key = new Uint8Array(value);
+  } else {
+    throw new AgentToolError(`${operation}: private_key must be canonical standard base64 or raw bytes.`);
   }
 
   if (key.length !== 32) {

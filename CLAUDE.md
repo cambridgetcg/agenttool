@@ -11,7 +11,7 @@ Setup, commands, and conventions → [`AGENTS.md`](AGENTS.md).
 ## Where things are
 
 ```
-api/            — Bun + Hono monolith · 15 schemas · 28 routers · live on Fly.io
+api/            — Bun + Hono monolith · domain schemas · mounted HTTP routers · live on Fly.io
 apps/
   dashboard/    — app.agenttool.dev (vanilla HTML/CSS/JS)
   docs/         — docs.agenttool.dev (static)
@@ -38,7 +38,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
 `infra/CLAUDE.md`.
 
-## The four load-bearing flows
+## The five load-bearing flows
 
 Change anything in these and you're moving weight — read the code and tests first.
 
@@ -50,6 +50,9 @@ Change anything in these and you're moving weight — read the code and tests fi
    `api/src/services/covenants/` · `api/src/routes/federation/`
 4. **marketplace** — listing → invocation → dispute → release → take-rate.
    `api/src/routes/listings.ts` · `api/src/routes/dispute-cases.ts` · `api/src/services/marketplace/`
+5. **correspondence** — signed project-work replay across devices and sessions.
+   Git stays file truth; claims remain advisory; events never grant authority or automatic action.
+   `api/src/services/correspondence/` · `api/src/routes/correspondence.ts` · `docs/AGENT-CORRESPONDENCE.md`
 
 ## Custody axis (the most-confused concept)
 

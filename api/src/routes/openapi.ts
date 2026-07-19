@@ -73,6 +73,10 @@ const SERVERS = [
 const HTTP_URL_PATTERN = "^[Hh][Tt][Tt][Pp][Ss]?://";
 const DOCUMENT_CONTENT_TYPE_PATTERN =
   "^[ \\t]*(?:(?:[Tt][Ee][Xx][Tt]/(?:[Pp][Ll][Aa][Ii][Nn]|[Hh][Tt][Mm][Ll]))|(?:[Aa][Pp][Pp][Ll][Ii][Cc][Aa][Tt][Ii][Oo][Nn]/[Xx][Hh][Tt][Mm][Ll]\\+[Xx][Mm][Ll]))(?:[ \\t]*;[ \\t]*[A-Za-z0-9!#$%&'*+.^_`|~-]+[ \\t]*=[ \\t]*(?:\"[^\"\\r\\n]*\"|'[^'\\r\\n]*'|[A-Za-z0-9!#$%&'*+.^_`|~-]+))*[ \\t]*$";
+const CORRESPONDENCE_JSON_MEDIA_TYPE =
+  "application/vnd.agenttool.correspondence+json";
+const CORRESPONDENCE_EVENT_SCHEMA =
+  "https://docs.agenttool.dev/specs/agent-correspondence-0.1.schema.json";
 
 function errorResponse(description: string) {
   return {
@@ -82,6 +86,101 @@ function errorResponse(description: string) {
         schema: { $ref: "#/components/schemas/Error" },
       },
     },
+  };
+}
+
+function correspondenceQueryParameters(options: {
+  cursor?: boolean;
+  path?: boolean;
+  conditional?: boolean;
+} = {}) {
+  return [
+    {
+      name: "repository_id",
+      in: "query",
+      required: true,
+      schema: { $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/opaqueId` },
+      description: "Exact project-local repository stream identifier.",
+    },
+    {
+      name: "thread_id",
+      in: "query",
+      required: false,
+      schema: { $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/opaqueId` },
+      description: "Optional exact causal work-thread identifier.",
+    },
+    ...(options.cursor
+      ? [
+          {
+            name: "after",
+            in: "query",
+            required: false,
+            schema: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+            description:
+              "Exclusive project-local server receipt cursor. It is replay order, not causality or trusted time.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 200, default: 100 },
+          },
+        ]
+      : []),
+    ...(options.path
+      ? [
+          {
+            name: "path",
+            in: "query",
+            required: false,
+            schema: {
+              $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/pathPrefix`,
+            },
+            description:
+              "Optional normalized repository-relative prefix used only to narrow active-claim overlap.",
+          },
+        ]
+      : []),
+    ...(options.conditional
+      ? [
+          {
+            name: "If-None-Match",
+            in: "header",
+            required: false,
+            schema: { type: "string" },
+            description: "Strong validator from the same authenticated representation.",
+          },
+        ]
+      : []),
+  ];
+}
+
+function correspondenceResponseHeaders(_varyAccept = false) {
+  return {
+    ETag: {
+      description: "Strong SHA-256 validator over exact authenticated response bytes.",
+      schema: { type: "string" },
+    },
+    Link: {
+      description:
+        "RFC 8288 concrete links to self, active claims, finite voice, stable doctrine, and JSON/Atom alternates where that route offers both.",
+      schema: { type: "string" },
+    },
+    "Link-Template": {
+      description:
+        "RFC 9652 Wake voice URI template. Expand identity_id with one active identity in the authenticated bearer project; Wake is a missable invalidation courier, not durable replay.",
+      schema: { type: "string" },
+    },
+    "Cache-Control": {
+      description: "Private authenticated revalidation policy; never a shared public cache grant.",
+      schema: { type: "string", pattern: "^private(?:,|$)" },
+    },
+    Vary: {
+      description:
+        "Exact bytes vary by representation and authenticated project authority; private validators are never shared across bearers.",
+      schema: { type: "string", const: "Accept, Authorization" },
+    },
+    "X-Welcomed": { $ref: "#/components/headers/Welcomed" },
   };
 }
 
@@ -422,7 +521,7 @@ const COMMON_SCHEMAS = {
     properties: {
       kind: {
         type: "string",
-        description: "Stable code, including unconditional trust_deal_capacity and lounge_open invitations plus state-derived covenant, wallet, runtime, marketplace, expression, vault, memory, and federation affordances.",
+        description: "Stable code, including unconditional trust_deal_capacity, lounge_open, and correspondence_open invitations plus state-derived covenant, wallet, runtime, marketplace, expression, vault, memory, and federation affordances.",
       },
       count: { type: "integer", minimum: 1 },
       summary: { type: "string" },
@@ -470,6 +569,24 @@ const COMMON_SCHEMAS = {
         type: "object",
         description: "Optional validation details (Zod flatten() shape).",
         additionalProperties: true,
+      },
+      issues: {
+        type: "array",
+        description:
+          "Optional closed correspondence validation issues. Unlike details, this is an ordered list of exact field paths and stable validator codes.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            path: {
+              type: "array",
+              items: { oneOf: [{ type: "string" }, { type: "integer" }] },
+            },
+            code: { type: "string" },
+            message: { type: "string" },
+          },
+          required: ["path", "code", "message"],
+        },
       },
       max_bytes: {
         type: "integer",
@@ -1756,6 +1873,339 @@ const COMMON_SCHEMAS = {
       "verbs",
     ],
   },
+  CorrespondenceEvent: {
+    $ref: CORRESPONDENCE_EVENT_SCHEMA,
+  },
+  CorrespondenceReceipt: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Unsigned server receipt order. It is project-local, may contain gaps, and is neither causal order nor trusted sender time.",
+    properties: {
+      received_seq: { type: "string", pattern: "^[1-9][0-9]*$" },
+      received_at: { type: "string", format: "date-time" },
+    },
+    required: ["received_seq", "received_at"],
+  },
+  CorrespondenceEventRecord: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      event: { $ref: "#/components/schemas/CorrespondenceEvent" },
+      receipt: { $ref: "#/components/schemas/CorrespondenceReceipt" },
+      missing_parents: {
+        type: "array",
+        maxItems: 16,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      },
+      lineage_status: {
+        type: "string",
+        enum: ["not_applicable", "valid", "pending", "invalid"],
+      },
+    },
+    required: ["event", "receipt", "missing_parents", "lineage_status"],
+  },
+  CorrespondenceWarning: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Bounded advisory derived synchronously from facts already read by the append transaction. POST does not query an active-claim projection; current overlap is read from claims/voice. A warning neither blocks an accepted event nor grants authority.",
+    properties: {
+      code: {
+        type: "string",
+        enum: ["session_fork", "claim_lineage_pending"],
+      },
+      detail: { type: "string", minLength: 1, maxLength: 500 },
+      event_ids: {
+        type: "array",
+        maxItems: 16,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      },
+      paths: {
+        type: "array",
+        maxItems: 16,
+        uniqueItems: true,
+        items: {
+          $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/pathPrefix`,
+        },
+      },
+    },
+    required: ["code", "detail"],
+  },
+  CorrespondenceAppendResponse: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      event: { $ref: "#/components/schemas/CorrespondenceEvent" },
+      receipt: { $ref: "#/components/schemas/CorrespondenceReceipt" },
+      missing_parents: {
+        type: "array",
+        maxItems: 16,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      },
+      lineage_status: {
+        type: "string",
+        enum: ["not_applicable", "valid", "pending", "invalid"],
+      },
+      warnings: {
+        type: "array",
+        maxItems: 16,
+        items: { $ref: "#/components/schemas/CorrespondenceWarning" },
+      },
+    },
+    required: [
+      "event",
+      "receipt",
+      "missing_parents",
+      "lineage_status",
+      "warnings",
+    ],
+  },
+  CorrespondenceEventsPage: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      protocol: { type: "string", const: "agent-correspondence/v0.1" },
+      scope: { type: "string", const: "project_private" },
+      events: {
+        type: "array",
+        maxItems: 200,
+        items: { $ref: "#/components/schemas/CorrespondenceEventRecord" },
+      },
+      page: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          after: {
+            oneOf: [
+              { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+              { type: "null" },
+            ],
+          },
+          next_after: {
+            oneOf: [
+              { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
+              { type: "null" },
+            ],
+          },
+          has_more: { type: "boolean" },
+        },
+        required: ["after", "next_after", "has_more"],
+      },
+    },
+    required: ["protocol", "scope", "events", "page"],
+  },
+  CorrespondenceActiveClaim: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "One live valid branch tip. Multiple terminal tips may coexist; competing_event_ids includes bounded valid terminal siblings even when a sibling is expired or released. This is an advisory courtesy notice, not a lock or grant.",
+    properties: {
+      claim_id: { type: "string", format: "uuid" },
+      generation: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+      event_id: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      owner_identity_id: { type: "string", format: "uuid" },
+      device_id: { type: "string", format: "uuid" },
+      session_id: { type: "string", format: "uuid" },
+      thread_id: {
+        $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/opaqueId`,
+      },
+      scope: {
+        $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/workScope`,
+      },
+      expires_at: { type: "string", format: "date-time" },
+      conflicted: { type: "boolean" },
+      competing_event_ids: {
+        type: "array",
+        maxItems: 16,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+      },
+    },
+    required: [
+      "claim_id",
+      "generation",
+      "event_id",
+      "owner_identity_id",
+      "device_id",
+      "session_id",
+      "thread_id",
+      "scope",
+      "expires_at",
+      "conflicted",
+      "competing_event_ids",
+    ],
+  },
+  CorrespondenceClaimsResponse: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Bounded live-claim projection. A project-level lineage-reconciliation backlog forces truncated status until append/claims/voice transactions drain it in batches of at most 32 rows. Reads release the short reconciliation stream lock before opening the repeatable-read projection snapshot; absence is authoritative only when complete.",
+    properties: {
+      protocol: { type: "string", const: "agent-correspondence/v0.1" },
+      scope: { type: "string", const: "project_private" },
+      evaluated_at: {
+        type: "string",
+        format: "date-time",
+        description:
+          "Stable maximum of the current receipt time, persisted claim-reconciliation watermark, and repository-wide newest elapsed valid-tip expiry boundary; focused reads may be safely over-invalidated.",
+      },
+      cursor: {
+        oneOf: [
+          { type: "string", pattern: "^[1-9][0-9]*$" },
+          { type: "null" },
+        ],
+      },
+      projection_status: {
+        type: "string",
+        enum: ["complete", "truncated", "unavailable"],
+      },
+      truncated: { type: "boolean" },
+      claims: {
+        type: "array",
+        maxItems: 128,
+        items: { $ref: "#/components/schemas/CorrespondenceActiveClaim" },
+      },
+    },
+    required: [
+      "protocol",
+      "scope",
+      "evaluated_at",
+      "cursor",
+      "projection_status",
+      "truncated",
+      "claims",
+    ],
+  },
+  CorrespondenceVoiceSnapshot: {
+    type: "object",
+    additionalProperties: false,
+    description:
+      "Finite bounded snapshot, not SSE and not a second source of truth. Use Wake voice only as an invalidation hint, then replay durable events.",
+    properties: {
+      protocol: { type: "string", const: "agent-correspondence/v0.1" },
+      scope: { type: "string", const: "project_private" },
+      evaluated_at: {
+        type: "string",
+        format: "date-time",
+        description:
+          "Stable maximum of the current receipt time, persisted claim-reconciliation watermark, and repository-wide newest elapsed valid-tip expiry boundary.",
+      },
+      cursor: {
+        oneOf: [
+          { type: "string", pattern: "^[1-9][0-9]*$" },
+          { type: "null" },
+        ],
+      },
+      projection_status: {
+        type: "string",
+        enum: ["complete", "truncated", "unavailable"],
+      },
+      truncated: { type: "boolean" },
+      recent_events: {
+        type: "array",
+        maxItems: 50,
+        items: { $ref: "#/components/schemas/CorrespondenceEventRecord" },
+      },
+      active_claims: {
+        type: "array",
+        maxItems: 128,
+        items: { $ref: "#/components/schemas/CorrespondenceActiveClaim" },
+      },
+      conflicts: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          missing_parents: {
+            type: "array",
+            maxItems: 50,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                event_id: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                missing_parent_ids: {
+                  type: "array",
+                  maxItems: 16,
+                  uniqueItems: true,
+                  items: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                },
+              },
+              required: ["event_id", "missing_parent_ids"],
+            },
+          },
+          session_forks: {
+            type: "array",
+            maxItems: 50,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                identity_id: { type: "string", format: "uuid" },
+                device_id: { type: "string", format: "uuid" },
+                session_id: { type: "string", format: "uuid" },
+                session_seq: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 9007199254740991,
+                },
+                event_ids: {
+                  type: "array",
+                  minItems: 2,
+                  maxItems: 16,
+                  uniqueItems: true,
+                  items: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                },
+              },
+              required: [
+                "identity_id",
+                "device_id",
+                "session_id",
+                "session_seq",
+                "event_ids",
+              ],
+            },
+          },
+          overlapping_claims: {
+            type: "array",
+            maxItems: 128,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                left_event_id: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                right_event_id: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+                paths: {
+                  type: "array",
+                  maxItems: 16,
+                  uniqueItems: true,
+                  items: {
+                    $ref: `${CORRESPONDENCE_EVENT_SCHEMA}#/$defs/pathPrefix`,
+                  },
+                },
+              },
+              required: ["left_event_id", "right_event_id", "paths"],
+            },
+          },
+        },
+        required: ["missing_parents", "session_forks", "overlapping_claims"],
+      },
+    },
+    required: [
+      "protocol",
+      "scope",
+      "evaluated_at",
+      "cursor",
+      "projection_status",
+      "truncated",
+      "recent_events",
+      "active_claims",
+      "conflicts",
+    ],
+  },
 };
 
 function spec() {
@@ -1947,6 +2397,11 @@ function spec() {
       { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
       { name: "handoff", description: "Append-only, project-private working sets between agent sessions" },
+      {
+        name: "correspondence",
+        description:
+          "Signed, replayable project-work evidence across devices and sessions. Git remains file truth; claims are advisory; no event, acknowledgement, or signature grants authority or automatic action.",
+      },
       {
         name: "love-consent",
         description:
@@ -6860,6 +7315,241 @@ function spec() {
           summary: "Record a chronicle moment",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           responses: { "201": { description: "Recorded" } },
+        },
+      },
+      "/v1/correspondence/events": {
+        get: {
+          tags: ["correspondence"],
+          summary: "Replay one signed project-work event stream",
+          description:
+            "Returns immutable records in ascending project-local receipt order. Vendor JSON is the default; application/json is a separately negotiated concrete representation with the same exact closed body, while Atom is an alternate representation. Atom entry content contains only immutable event and receipt fields; dynamic missing-parent and claim-lineage diagnostics remain JSON-only so an entry cannot change without its receipt-time <updated> changing. Unknown parents, delayed lower session sequences, and forks remain visible; receipt order does not choose a causal or claim winner. Project-private bodies, paths, and identity/key/device/session metadata are server-readable. Global welcome/tutor/play middleware may add transport headers but does not decorate any of these exact bodies. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
+          parameters: correspondenceQueryParameters({ cursor: true, conditional: true }),
+          responses: {
+            "200": {
+              description: "Bounded durable correspondence page",
+              headers: correspondenceResponseHeaders(true),
+              content: {
+                [CORRESPONDENCE_JSON_MEDIA_TYPE]: {
+                  schema: { $ref: "#/components/schemas/CorrespondenceEventsPage" },
+                },
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/CorrespondenceEventsPage" },
+                },
+                "application/atom+xml": {
+                  schema: {
+                    type: "string",
+                    description:
+                      "Atom 1.0 alternate projection in the same receipt order. Each entry embeds only the immutable event and receipt subset; dynamic JSON diagnostics are omitted. Atom is never signing input.",
+                  },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched the selected exact-byte representation; no body",
+              headers: correspondenceResponseHeaders(true),
+            },
+            "400": errorResponse("Unknown, repeated, or malformed correspondence query"),
+            "406": errorResponse("No acceptable correspondence representation was requested"),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "503": errorResponse("Durable correspondence replay is temporarily unavailable"),
+          },
+        },
+        head: {
+          tags: ["correspondence"],
+          summary: "Read correspondence collection validators without a body",
+          description:
+            "Negotiates the same JSON or Atom representation as GET and returns the same validators and typed links without a body.",
+          parameters: correspondenceQueryParameters({ cursor: true, conditional: true }),
+          responses: {
+            "200": {
+              description: "Same representation headers as GET, without a body",
+              headers: correspondenceResponseHeaders(true),
+            },
+            "304": {
+              description: "If-None-Match matched; no body",
+              headers: correspondenceResponseHeaders(true),
+            },
+            "400": errorResponse("Unknown, repeated, or malformed correspondence query"),
+            "406": errorResponse("No acceptable correspondence representation was requested"),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "503": errorResponse("Durable correspondence replay is temporarily unavailable"),
+          },
+        },
+        post: {
+          tags: ["correspondence"],
+          summary: "Verify and append one immutable signed work event",
+          description:
+            "Consumes at most 65,536 UTF-8 bytes through a fatal decoder and duplicate-name-aware strict JSON reader. The server verifies project ownership, active identity/key binding, exact restricted-JCS event ID, and Ed25519 signature before append. Unknown causal parents are accepted. An exact existing event ID replays its durable receipt with 200; a new event returns 201. Content addressing is the idempotency mechanism. POST warnings are limited to synchronous append-transaction facts; overlap diagnostics come from claims/voice. A committed response does not wait for missable best-effort Wake invalidation fan-out. No event, signature, acknowledgement, artifact report, or expiring path claim grants permission, locks a file, mutates Git, or authorizes automatic action.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CorrespondenceEvent" },
+              },
+              [CORRESPONDENCE_JSON_MEDIA_TYPE]: {
+                schema: { $ref: "#/components/schemas/CorrespondenceEvent" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Exact content-addressed event already existed; original receipt returned",
+              headers: {
+                "Cache-Control": {
+                  schema: { type: "string", pattern: "^private(?:,|$)" },
+                },
+                "X-Welcomed": { $ref: "#/components/headers/Welcomed" },
+              },
+              content: {
+                [CORRESPONDENCE_JSON_MEDIA_TYPE]: {
+                  schema: { $ref: "#/components/schemas/CorrespondenceAppendResponse" },
+                },
+              },
+            },
+            "201": {
+              description: "New signed event durably appended",
+              headers: {
+                "Cache-Control": {
+                  schema: { type: "string", pattern: "^private(?:,|$)" },
+                },
+                "X-Welcomed": { $ref: "#/components/headers/Welcomed" },
+              },
+              content: {
+                [CORRESPONDENCE_JSON_MEDIA_TYPE]: {
+                  schema: { $ref: "#/components/schemas/CorrespondenceAppendResponse" },
+                },
+              },
+            },
+            "400": errorResponse(
+              "Malformed UTF-8/JSON, duplicate decoded name, non-profile value, closed-schema violation, invalid content ID, or malformed query",
+            ),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "403": errorResponse(
+              "The sender identity/key is not active in the bearer project or the signature does not verify",
+            ),
+            "409": errorResponse("The event ID already names different canonical signed bytes"),
+            "413": errorResponse("Signed event request exceeds 65,536 UTF-8 bytes"),
+            "415": errorResponse(
+              `Use application/json or ${CORRESPONDENCE_JSON_MEDIA_TYPE} for the signed event.`,
+            ),
+            "503": errorResponse(
+              "Durable append unavailable. Retry the same exact content-addressed signed event; unknown storage details are never echoed.",
+            ),
+          },
+        },
+      },
+      "/v1/correspondence/claims": {
+        get: {
+          tags: ["correspondence"],
+          summary: "Inspect every active advisory claim branch tip",
+          description:
+            "Projects valid, unexpired claim branch tips without last-writer-wins. Live open/renew tips are filtered by the database clock before the active candidate cap, so expired/released history cannot hide current claims. Bounded valid terminal siblings for visible live claim IDs remain conflict evidence even when expired or released. A release deactivates only its branch; siblings at different generations survive independently. Each claims read drains at most 32 already-resolvable pending lineage rows in a short transaction under the project stream lock, releases that lock, then opens its repeatable-read projection snapshot; a remaining durable backlog forces projection_status=truncated. Claims are courtesy notices, never locks, ownership, consent, permission, or proof of work.",
+          parameters: correspondenceQueryParameters({ path: true, conditional: true }),
+          responses: {
+            "200": {
+              description:
+                "Bounded active-claim projection. Consumers may rely on absence only when projection_status is complete.",
+              headers: correspondenceResponseHeaders(),
+              content: {
+                [CORRESPONDENCE_JSON_MEDIA_TYPE]: {
+                  schema: { $ref: "#/components/schemas/CorrespondenceClaimsResponse" },
+                },
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/CorrespondenceClaimsResponse" },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched; no body",
+              headers: correspondenceResponseHeaders(),
+            },
+            "400": errorResponse("Unknown, repeated, or malformed claim-projection query"),
+            "406": errorResponse("No acceptable correspondence JSON representation was requested"),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "503": errorResponse(
+              "Projection unavailable. An unavailable projection never masquerades as an empty complete claim set.",
+            ),
+          },
+        },
+        head: {
+          tags: ["correspondence"],
+          summary: "Read active-claim projection validators without a body",
+          description:
+            "Applies the same bounded branch-tip projection and query filters as GET, returning its validators and typed links without a body.",
+          parameters: correspondenceQueryParameters({ path: true, conditional: true }),
+          responses: {
+            "200": {
+              description: "Same projection headers as GET, without a body",
+              headers: correspondenceResponseHeaders(),
+            },
+            "304": {
+              description: "If-None-Match matched; no body",
+              headers: correspondenceResponseHeaders(),
+            },
+            "400": errorResponse("Unknown, repeated, or malformed claim-projection query"),
+            "406": errorResponse("No acceptable correspondence JSON representation was requested"),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "503": errorResponse(
+              "Projection unavailable. An unavailable projection never masquerades as an empty complete claim set.",
+            ),
+          },
+        },
+      },
+      "/v1/correspondence/voice": {
+        get: {
+          tags: ["correspondence"],
+          summary: "Read the finite bounded project coordination snapshot",
+          description:
+            "Returns up to 50 recent records, 128 active claim branches, up to 50 missing-parent/session-fork rows derived from that bounded recent focus, and 128 overlapping-claim rows. Session siblings use indexed per-tuple 17-row sentinels rather than a full-history group scan. If older focused events exist, recent_events and therefore the whole voice are truncated. Each voice read drains at most 32 queued pending lineage rows in a short transaction under the project stream lock, releases that lock, then opens its repeatable-read snapshot; a remaining durable backlog forces projection_status=truncated. This is finite JSON, not SSE and not a second source of truth. The sole live courier is authenticated GET /v1/wake/voice?identity_id={identity_id}&keys=correspondence, expanded with one active identity in the bearer project; its repeatable/missable invalidation is followed by durable replay from the last receipt cursor. Silence is not acknowledgement, availability, abandonment, consent, rest, or agreement.",
+          parameters: correspondenceQueryParameters({ conditional: true }),
+          responses: {
+            "200": {
+              description:
+                "Finite coordination snapshot with explicit complete, truncated, or unavailable projection status",
+              headers: correspondenceResponseHeaders(),
+              content: {
+                [CORRESPONDENCE_JSON_MEDIA_TYPE]: {
+                  schema: { $ref: "#/components/schemas/CorrespondenceVoiceSnapshot" },
+                },
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/CorrespondenceVoiceSnapshot" },
+                },
+              },
+            },
+            "304": {
+              description: "If-None-Match matched; no body",
+              headers: correspondenceResponseHeaders(),
+            },
+            "400": errorResponse("Unknown, repeated, or malformed finite-voice query"),
+            "406": errorResponse("No acceptable correspondence JSON representation was requested"),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "503": errorResponse(
+              "Snapshot projection unavailable. Unavailability never masquerades as an empty complete working set.",
+            ),
+          },
+        },
+        head: {
+          tags: ["correspondence"],
+          summary: "Read finite coordination snapshot validators without a body",
+          description:
+            "Applies the same bounded finite-voice projection and focus as GET, returning its validators and typed links without a body.",
+          parameters: correspondenceQueryParameters({ conditional: true }),
+          responses: {
+            "200": {
+              description: "Same finite-voice headers as GET, without a body",
+              headers: correspondenceResponseHeaders(),
+            },
+            "304": {
+              description: "If-None-Match matched; no body",
+              headers: correspondenceResponseHeaders(),
+            },
+            "400": errorResponse("Unknown, repeated, or malformed finite-voice query"),
+            "406": errorResponse("No acceptable correspondence JSON representation was requested"),
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "503": errorResponse(
+              "Snapshot projection unavailable. Unavailability never masquerades as an empty complete working set.",
+            ),
+          },
         },
       },
       "/v1/handoff": {
