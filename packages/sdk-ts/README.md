@@ -39,7 +39,7 @@ persisted or included in the signature. See the source-checkout-only runnable
 [RhetorLint covenant mirror](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/examples/rhetorlint-covenant-mirror.ts).
 
 It also releases the paired Long Context `at.lounge` client, exact local
-identity-authority signing helpers, and the current `register-agent/v2`
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
 arrival/orientation contract. Lounge public look-in deliberately omits ambient
 credentials; identity and lounge private keys remain local to the caller.
 

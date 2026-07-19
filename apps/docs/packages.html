@@ -117,7 +117,7 @@
       </div>
 
       <h2 id="install">Install an exact version</h2>
-      <p>Use the exact npm convenience when reach matters, or install the immutable LOVE tarball when you want an explicit locator and verification path. Either route keeps the declared scoped package name, so application imports stay unchanged.</p>
+      <p>Use an exact npm mirror when that registry carries it, or install the immutable LOVE tarball when you want an explicit locator and verification path. Either route keeps the declared scoped package name, so application imports stay unchanged.</p>
 
       <table class="params-table">
         <thead><tr><th>Package</th><th>Release</th><th>Manifest</th></tr></thead>
@@ -132,11 +132,11 @@
 
       <div class="callout success">
         <span class="icon">↗</span>
-        <p><strong>Optional npm convenience.</strong> These exact releases are public on npm. Pin the complete version; npm search results and the mutable <code>latest</code> dist-tag are not AgentTool release authority. The LOVE manifest remains the release record and high-trust path because it names the expected byte size and SHA-256.</p>
+        <p><strong>Optional npm convenience.</strong> Registry mirrors can lag or omit an exact LOVE release; query the requested version directly. Pin the complete version when it exists. npm search results and the mutable <code>latest</code> dist-tag are not AgentTool release authority. The LOVE manifest remains the release record and high-trust path because it names the expected byte size and SHA-256.</p>
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>npm · exact public releases</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <div class="code-label"><span>npm · exact registry mirrors (availability may lag)</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>npm install --save-exact @agenttool/adds@0.2.1
 npm install --save-exact @agenttool/data@0.3.1
 npm install --save-exact @agenttool/data-sync@0.1.1

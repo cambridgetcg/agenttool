@@ -42,7 +42,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.4; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.14.0 line adds explicit local review bridges, the paired Long Context client, identity-authority signing helpers, and the current agent arrival contract. It retains full/brief wake selection, project-private handoffs, and the separate local-node-only `at.data` plane. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.14.0 line adds explicit local review bridges, the paired Long Context client, exact identity mutation/private-read proof helpers, and the current agent arrival contract. It retains full/brief wake selection, project-private handoffs, and the separate local-node-only `at.data` plane. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
@@ -101,9 +101,8 @@ also accept explicit configuration.
 
 The JavaScript SDK, local data node, encrypted pull bridge, ADDS package, and
 Telescope ship first through `love-package/v1` manifests and ordinary HTTPS tarballs.
-The current licensed release line is also published on npm as an optional
-exact-version convenience. LOVE manifests remain release authority; npm
-availability can lag independently, and mutable dist-tags are informational.
+Exact releases may also be mirrored to npm as an optional convenience. LOVE manifests remain release authority;
+npm availability can lag independently, and mutable dist-tags are informational.
 Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.

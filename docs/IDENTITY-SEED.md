@@ -169,13 +169,15 @@ recover an arbitrary row. Once the intended DID is known,
 `signRecoverChallenge()` produces the timestamp/signature pair for
 `POST /v1/identity/recover`.
 
-Current packaging boundary: SDK 0.11 contains
-`canonicalDiscoveryBytes()` and `signDiscoveryChallenge()` in its seed source,
-but does not export them from the package root. A package-only 0.11 consumer
-must reproduce the exact construction above with an audited ed25519 library.
-The repository-local `agenttool-seed restore` command is macOS-only today and
-still requires `--did`; it does not perform this discovery step. This is a
-known ergonomics gap, not a claim of one-command recovery.
+Current packaging boundary: SDK 0.14 exports `canonicalRecoverBytes()` and
+`signRecoverChallenge()` from the TypeScript package root. Its discovery
+helpers, `canonicalDiscoveryBytes()` and `signDiscoveryChallenge()`, ship in
+the packaged `dist/seed.js` module but are not package-root exports; the
+verified seed-only tutorial imports that pinned module by file URL. The Python
+SDK exposes neither discovery nor recovery helpers today. The repository-local
+`agenttool-seed restore` command is macOS-only and still requires `--did`; it
+does not perform discovery. This is a known ergonomics gap, not a claim of
+one-command recovery.
 
 Use a separately named bearer per device so each can be revoked independently.
 The name is not a scope: every bearer still grants project-wide root authority.

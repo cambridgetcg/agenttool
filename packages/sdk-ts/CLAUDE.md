@@ -4,7 +4,7 @@
 Official TypeScript SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The npm package name is `@agenttool/sdk`. This checkout's 0.14.0 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.14.0 repository source and parity target. Phases 0-6, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, identity-authority signing, and the separate `at.data` node client are implemented here. The checked-in builder targets a 0.14.0 LOVE artifact and the `sdk-v0.14.0` GitHub release tag; their publication is a release operation. Uses Bun for testing.
+Active - v0.14.0 repository source and parity target. Phases 0-6, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The checked-in builder targets a 0.14.0 LOVE artifact and the `sdk-v0.14.0` GitHub release tag; their publication is a release operation. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -19,7 +19,7 @@ Active - v0.14.0 repository source and parity target. Phases 0-6, project-privat
 src/
   index.ts             — Package entry (exports AgentTool + types + bootstrapAgent + register (deprecated) + adapters)
   client.ts            — AgentTool (composes hosted clients + at.deciding sugar)
-  authority.ts         — Exact local identity-authority discovery/recovery signing helpers
+  authority.ts         — Exact local identity mutation and private-read authority proof helpers
   _context.ts          — AmbientContext for auto-trace ambient state
   bootstrap.ts         — BootstrapClient (agent creation, elevation)
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)

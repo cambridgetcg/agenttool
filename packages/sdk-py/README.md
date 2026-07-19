@@ -43,7 +43,7 @@ creation, timestamping, signing, or transport. Callback output is neither
 persisted nor included in the signature.
 
 It also releases the paired Long Context `at.lounge` client, exact local
-identity-authority signing helpers, and the current `register-agent/v2`
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
 arrival/orientation contract. Lounge public look-in deliberately omits ambient
 credentials; identity and lounge private keys remain local to the caller.
 

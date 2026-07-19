@@ -19,8 +19,9 @@ This minor carries four coordinated additions in both maintained SDKs:
   persisted or cryptographically bound to the covenant;
 - the paired Long Context client exposes credential-free public look-in and
   exact locally signed seat, proposal, receipt, and guestbook gestures; and
-- exact identity-authority signing helpers support discovery and recovery,
-  alongside the current `register-agent/v2` arrival and orientation contract.
+- exact identity mutation and private-read authority proof helpers accompany
+  the separate seed discovery/recovery helpers and the current
+  `register-agent/v2` arrival and orientation contract.
 
 The trace model correction changes public pre-1.0 source shapes, so this is a
 minor release rather than a 0.13 patch. The TypeScript RhetorLint example is a
@@ -402,7 +403,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
 | **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
 | **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
-| **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity-authority signing; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
+| **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity mutation/private-read authority proofs; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals
