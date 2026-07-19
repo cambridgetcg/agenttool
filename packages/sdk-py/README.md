@@ -76,9 +76,8 @@ they do not transfer authority or prove identity authorship.
 
 ## 0.11.0
 
-This checkout is the 0.11.0 release source. The full commit above fixes the Git
-object selected by the installer, but it is not the tutorial's
-`artifact.size`/`artifact.sha256` verification path. `pip install
+The 0.11.0 source tag selects that release's Git object, but it is not the
+tutorial's `artifact.size`/`artifact.sha256` verification path. `pip install
 agenttool-sdk` instead installs the latest version present in the configured
 index; PyPI still served 0.10.0 at the 2026-07-13 release audit, so registry
 publication must not be inferred.

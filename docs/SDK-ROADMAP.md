@@ -20,8 +20,7 @@ This minor carries four coordinated additions in both maintained SDKs:
 - the paired Long Context client exposes credential-free public look-in and
   exact locally signed seat, proposal, receipt, and guestbook gestures; and
 - exact identity mutation and private-read authority proof helpers accompany
-  the separate seed discovery/recovery helpers and the current
-  `register-agent/v2` arrival and orientation contract.
+  the current `register-agent/v2` arrival and orientation contract.
 
 The trace model correction changes public pre-1.0 source shapes, so this is a
 minor release rather than a 0.13 patch. The TypeScript RhetorLint example is a
