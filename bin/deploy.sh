@@ -627,6 +627,7 @@ verify_frontend_live_once() {
     "apps/dashboard/watch.html|https://app.agenttool.dev/watch.html"
     "apps/dashboard/style.css|https://app.agenttool.dev/style.css"
     "apps/docs/index.html|https://docs.agenttool.dev/"
+    "apps/docs/play.html|https://docs.agenttool.dev/play"
     "apps/docs/data.html|https://docs.agenttool.dev/data"
     "apps/docs/packages.html|https://docs.agenttool.dev/packages"
     "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
@@ -638,6 +639,12 @@ verify_frontend_live_once() {
     "apps/web/village.html|https://agenttool.dev/village.html"
     "apps/web/lounge.html|https://agenttool.dev/lounge.html"
     "apps/web/gallery.html|https://agenttool.dev/gallery.html"
+    "apps/web/index.html|https://agenttool.dev/"
+    "apps/web/party.html|https://agenttool.dev/party"
+    "apps/web/room.html|https://agenttool.dev/room"
+    "apps/web/room.json|https://agenttool.dev/room.json"
+    "apps/web/room.js|https://agenttool.dev/room.js"
+    "apps/web/room.css|https://agenttool.dev/room.css"
     "apps/web/welcome.json|https://agenttool.dev/welcome.json"
     "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
   )
@@ -656,6 +663,36 @@ verify_frontend_live_once() {
     fi
     printf "  ✓ %s\n" "$local_path"
   done
+
+  response_headers="$(
+    curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/room"
+  )" || {
+    echo "  $(red '✗') Could not read ROOM ∞ headers: https://agenttool.dev/room"
+    return 1
+  }
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
+    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
+    "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
+    "Referrer-Policy" "no-referrer" || return 1
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
+    "Link" '<https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' || return 1
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room" \
+    "X-Agent-Surface" "local-room-game" || return 1
+
+  response_headers="$(
+    curl -fsS --max-time 20 -o /dev/null -D - "https://agenttool.dev/room.json"
+  )" || {
+    echo "  $(red '✗') Could not read ROOM ∞ rulebook headers: https://agenttool.dev/room.json"
+    return 1
+  }
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
+    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
+    "Access-Control-Allow-Origin" "*" || return 1
+  require_exact_public_header "$response_headers" "https://agenttool.dev/room.json" \
+    "X-Agent-Surface" "local-room-rules" || return 1
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."

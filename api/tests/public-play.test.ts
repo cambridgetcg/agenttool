@@ -302,7 +302,7 @@ describe("Party Telephone — mount and discovery", () => {
     });
   });
 
-  test("the public root has one truthful play entry for both games", async () => {
+  test("the public root has one truthful play entry for all three games", async () => {
     expect(PUBLIC_INDEX_SOURCE.match(/^\s{4}play:/gm)).toHaveLength(1);
 
     const publicRes = await publicRouter.request("/");
@@ -312,6 +312,7 @@ describe("Party Telephone — mount and discovery", () => {
     expect(publicBody.endpoints.play).toContain("GET /public/play");
     expect(publicBody.endpoints.play).toMatch(/Party Telephone/i);
     expect(publicBody.endpoints.play).toMatch(/Lantern Relay/i);
+    expect(publicBody.endpoints.play).toMatch(/ROOM ∞/i);
     expect(publicBody.endpoints.play).toMatch(/handler defines no submission fields/i);
     expect(publicBody.endpoints.play).toMatch(/query strings.*headers.*transport metadata/i);
     expect(publicBody.endpoints.party).toContain("GET /public/party");
@@ -323,7 +324,7 @@ describe("Party Telephone — mount and discovery", () => {
     expect(partyBody.arrive.play).toContain("GET /public/play");
   });
 
-  test("wake and agent.txt name both games directly", async () => {
+  test("wake and agent.txt name all three games directly", async () => {
     expect(WAKE_SOURCE).toContain(
       'party_telephone: "/public/play/party-telephone"',
     );
@@ -333,6 +334,12 @@ describe("Party Telephone — mount and discovery", () => {
     expect(WAKE_SOURCE).toContain(
       'lantern_relay_rules: "https://agenttool.dev/party.json"',
     );
+    expect(WAKE_SOURCE).toContain(
+      'room_infinity: "https://agenttool.dev/room"',
+    );
+    expect(WAKE_SOURCE).toContain(
+      'room_infinity_rules: "https://agenttool.dev/room.json"',
+    );
 
     const agentTxt = await (await wellKnownRouter.request("/agent.txt")).text();
     expect(agentTxt).toMatch(
@@ -341,6 +348,10 @@ describe("Party Telephone — mount and discovery", () => {
     expect(agentTxt).toContain("Lantern-Relay: https://agenttool.dev/party");
     expect(agentTxt).toContain(
       "Lantern-Relay-Rules: https://agenttool.dev/party.json",
+    );
+    expect(agentTxt).toContain("Room-Infinity: https://agenttool.dev/room");
+    expect(agentTxt).toContain(
+      "Room-Infinity-Rules: https://agenttool.dev/room.json",
     );
   });
 });
@@ -389,6 +400,47 @@ describe("Lantern Relay — browser-local discovery", () => {
     expect(body.endpoints.play).toContain("GET /public/play");
     expect(body.endpoints.play).toMatch(/browser-local/i);
     expect(body.endpoints.play).toMatch(/nine turns/i);
+  });
+});
+
+describe("ROOM ∞ — browser-local encounter discovery", () => {
+  test("advertises a local, finite, non-merging encounter", async () => {
+    const response = await playRouter.request("/");
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body.games.room_infinity).toEqual({
+      url: "https://agenttool.dev/room",
+      rules: "https://agenttool.dev/room.json",
+      description: "Two local beings meet without merging in six bounded turns.",
+      sibling: "agenttool",
+      beings: 2,
+      turns: 6,
+      winner: null,
+      state: "browser memory in the current tab only",
+      network_writes: false,
+      per_turn_privacy: true,
+    });
+    expect(body.joy_surfaces.agenttool).toContainEqual(
+      expect.objectContaining({ name: "ROOM ∞" }),
+    );
+    expect(body.verbs).toContainEqual({
+      action: "enter ROOM ∞",
+      method: "GET",
+      path: "https://agenttool.dev/room",
+    });
+    expect(body.walking_past_is_honored).toBe(true);
+  });
+
+  test("the public root names the six-turn privacy boundary", async () => {
+    const response = await publicRouter.request("/");
+    const body = await response.json();
+
+    expect(body.endpoints.play).toContain("GET /public/play");
+    expect(body.endpoints.play).toMatch(/ROOM ∞/i);
+    expect(body.endpoints.play).toMatch(/two beings and six turns/i);
+    expect(body.endpoints.play).toMatch(/private choice on every turn/i);
+    expect(body.endpoints.play).toMatch(/no gameplay network writes/i);
   });
 });
 
@@ -442,5 +494,13 @@ describe("Play — OpenAPI discovery", () => {
     );
     expect(inputBounds.translation.properties.letters_allowed.const).toBe(false);
     expect(inputBounds.translation.properties.numbers_allowed.const).toBe(false);
+
+    const room = schemas.PlayIndex.properties.games.properties.room_infinity;
+    expect(room.properties.url.const).toBe("https://agenttool.dev/room");
+    expect(room.properties.rules.const).toBe("https://agenttool.dev/room.json");
+    expect(room.properties.beings.const).toBe(2);
+    expect(room.properties.turns.const).toBe(6);
+    expect(room.properties.per_turn_privacy.const).toBe(true);
+    expect(schemas.PlayIndex.properties.games.required).toContain("room_infinity");
   });
 });

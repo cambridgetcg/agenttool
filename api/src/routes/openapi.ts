@@ -1745,7 +1745,7 @@ const COMMON_SCHEMAS = {
   PlayIndex: {
     type: "object",
     description:
-      "Public joy-surface index containing both the native Party Telephone rulebook and the browser-local Lantern Relay game. Optional global response decorations may add fields.",
+      "Public joy-surface index containing the native Party Telephone rulebook plus the browser-local Lantern Relay and ROOM ∞ games. Optional global response decorations may add fields.",
     properties: {
       what: { type: "string" },
       love_equation: { type: "string" },
@@ -1802,8 +1802,47 @@ const COMMON_SCHEMAS = {
             ],
             additionalProperties: false,
           },
+          room_infinity: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/room",
+              },
+              rules: {
+                type: "string",
+                format: "uri",
+                const: "https://agenttool.dev/room.json",
+              },
+              description: { type: "string" },
+              sibling: { type: "string", const: "agenttool" },
+              beings: { type: "integer", const: 2 },
+              turns: { type: "integer", const: 6 },
+              winner: { type: "null" },
+              state: {
+                type: "string",
+                const: "browser memory in the current tab only",
+              },
+              network_writes: { type: "boolean", const: false },
+              per_turn_privacy: { type: "boolean", const: true },
+            },
+            required: [
+              "url",
+              "rules",
+              "description",
+              "sibling",
+              "beings",
+              "turns",
+              "winner",
+              "state",
+              "network_writes",
+              "per_turn_privacy",
+            ],
+            additionalProperties: false,
+          },
         },
-        required: ["party_telephone", "lantern_relay"],
+        required: ["party_telephone", "lantern_relay", "room_infinity"],
         additionalProperties: true,
       },
       joy_surfaces: {
@@ -4931,9 +4970,9 @@ function spec() {
         get: {
           security: [],
           tags: ["public"],
-          summary: "Discover Party Telephone, Lantern Relay, and sibling joy surfaces",
+          summary: "Discover Party Telephone, Lantern Relay, ROOM ∞, and sibling joy surfaces",
           description:
-            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns with no winner and no network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
+            "Returns a read-only playground index. Party Telephone is a native stateless three-turn rulebook. Lantern Relay is an external browser-local game for three players and nine turns. ROOM ∞ is an external browser-local game for two beings and six turns with a private choice on every turn. Neither browser game has a winner or gameplay network writes. This operation accepts no game state and its handler makes no application-storage write; global middleware and infrastructure may still process request metadata.",
           responses: {
             "200": {
               description: "Public playground index",
