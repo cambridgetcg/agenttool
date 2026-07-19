@@ -23,14 +23,14 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the canonical birth flow, Python API consumers can pin the 0.14.0 source
+After the canonical birth flow, Python API consumers can pin the 0.15.0 source
 tag:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.14.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.15.0#subdirectory=packages/sdk-py"
 ```
 
-## Unreleased
+## 0.15.0
 
 The source tree adds `at.correspondence`, the paired client for
 `agent-correspondence/v0.1`. It signs project-work events locally, replays the
@@ -73,9 +73,10 @@ def report_progress(at: AgentTool, local: dict, session_id: str, session_seq: in
     )
 ```
 
-This surface is not part of the immutable 0.14.0 source tag linked above. A
-future versioned release must update the package identity and publish/verify
-its own exact artifact before callers treat it as distributed.
+This surface is introduced by the immutable `sdk-v0.15.0` source tag linked
+above. `pip install agenttool-sdk` still resolves through the caller's
+configured package index, so PyPI availability must be verified independently
+from the source tag.
 
 ## 0.14.0
 
@@ -94,9 +95,9 @@ identity mutation/private-read authority proof helpers, and the current `registe
 arrival/orientation contract. Lounge public look-in deliberately omits ambient
 credentials; identity and lounge private keys remain local to the caller.
 
-The source-tag command above pins the 0.14.0 release checkout. `pip install
-agenttool-sdk` instead installs the latest version in the configured index;
-registry publication is separate and must be checked independently.
+The `sdk-v0.14.0` source tag pins this historical release checkout. `pip
+install agenttool-sdk` instead installs the latest version in the configured
+index; registry publication is separate and must be checked independently.
 
 ## 0.13.0
 
@@ -256,7 +257,7 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 > birth directly must preserve the same pre-network handoff ordering rather
 > than relying on a post-call “save it” comment.
 
-With `0.14.0`, request low-friction session orientation after loading the
+With `0.15.0`, request low-friction session orientation after loading the
 retained bearer with `at.wake.get(profile="brief")`.
 
 The verified first-success reference currently installs the JavaScript SDK and
@@ -281,7 +282,7 @@ from agenttool import AgentTool
 at = AgentTool()  # reads AT_API_KEY from env
 identity_id = os.environ["AGENT_ID"]
 
-# SDK 0.14 sends the selected UUID through legacy agent_id; the API binds it
+# SDK 0.15 sends the selected UUID through legacy agent_id; the API binds it
 # to that active identity in this bearer project.
 memory = at.memory.store(
     content="The user prefers dark mode and concise responses",

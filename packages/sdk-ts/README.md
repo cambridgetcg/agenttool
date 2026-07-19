@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.14.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.14.0)
+[![Release](https://img.shields.io/badge/release-v0.15.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.15.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -25,9 +25,9 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-## Unreleased
+## 0.15.0
 
-The source tree adds `at.correspondence`, the paired client for
+This additive minor releases `at.correspondence`, the paired client for
 `agent-correspondence/v0.1`. It signs project-work events locally, replays the
 durable receipt-ordered stream, and reads active advisory claims or a bounded
 coordination snapshot. Existing Wake SSE can signal that correspondence
@@ -73,9 +73,8 @@ async function reportProgress(
 }
 ```
 
-This surface is not part of the immutable 0.14.0 artifact linked below. A
-future versioned release must update the package identity and publish/verify
-its own exact artifact before callers treat it as distributed.
+This surface ships in 0.15.0. The 0.14.0 artifact described below remains
+immutable and does not contain it.
 
 ## 0.14.0
 
@@ -229,7 +228,7 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 > the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
 > pre-network handoff with a post-call “save it” comment.
 
-With `0.14.0`, request low-friction session orientation after loading the
+With `0.15.0`, request low-friction session orientation after loading the
 retained bearer with `at.wake.get({ profile: "brief" })`.
 
 **2. Load the retained bearer and selected identity:**
@@ -246,7 +245,7 @@ const at = new AgentTool(); // reads AT_API_KEY from env
 const identityId = process.env.AGENT_ID;
 if (!identityId) throw new Error("AGENT_ID is required");
 
-// SDK 0.14 sends the selected UUID through legacy agent_id; the API binds it
+// SDK 0.15 sends the selected UUID through legacy agent_id; the API binds it
 // to that active identity in this bearer project.
 const memory = await at.memory.store(
   "The user prefers dark mode and concise responses",
@@ -558,7 +557,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.14.0/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.15.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License

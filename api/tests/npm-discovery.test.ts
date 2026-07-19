@@ -16,7 +16,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/adds@0.2.1",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.1",
-  "@agenttool/sdk@0.14.0",
+  "@agenttool/sdk@0.15.0",
   "@agenttool/telescope@0.1.0",
 ] as const;
 
@@ -38,7 +38,7 @@ describe("optional npm package discovery", () => {
     const published = read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(published).toBe(canonical);
     expect(canonical).toContain(
-      "npm install --save-exact @agenttool/sdk@0.14.0",
+      "npm install --save-exact @agenttool/sdk@0.15.0",
     );
     expect(canonical).toMatch(/skips Step 1.*independent LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
@@ -47,7 +47,7 @@ describe("optional npm package discovery", () => {
   test("describes npm as optional in repository-level orientation", () => {
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(
-      "npm install --save-exact @agenttool/sdk@0.14.0",
+      "npm install --save-exact @agenttool/sdk@0.15.0",
     );
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
