@@ -4,14 +4,17 @@ import {
   appendFile,
   mkdir,
   mkdtemp,
+  readFile,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
+  WHITEHACK_REVISION,
+  WHITEHACK_VERSION,
   listChangedPaths,
   runAdvisory,
   selectCandidateFiles,
@@ -20,6 +23,7 @@ import {
 } from "../whitehack-advisory.mjs";
 
 const cleanup: string[] = [];
+const repoRoot = resolve(import.meta.dir, "../..");
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -51,12 +55,15 @@ async function commitAll(root: string, message: string): Promise<string> {
   return git(root, ["rev-parse", "HEAD"]);
 }
 
-async function scannerFixture(source: string): Promise<{ root: string; revision: string }> {
+async function scannerFixture(
+  source: string,
+  version = WHITEHACK_VERSION,
+): Promise<{ root: string; revision: string }> {
   const root = await temporaryRoot("whitehack-scanner-");
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "whitehack", version: "0.4.0", type: "module" }, null, 2)}\n`,
+    `${JSON.stringify({ name: "whitehack", version, type: "module" }, null, 2)}\n`,
   );
   await writeFile(join(root, "src", "scan.js"), source);
   git(root, ["init", "-q", "-b", "main"]);
@@ -75,6 +82,24 @@ afterAll(async () => {
 });
 
 describe("Whitehack advisory containment", () => {
+  test("keeps the workflow and public docs on the bridge pin contract", async () => {
+    expect(WHITEHACK_REVISION).toMatch(/^[0-9a-f]{40}$/);
+    const workflow = await readFile(
+      join(repoRoot, ".github", "workflows", "whitehack.yml"),
+      "utf8",
+    );
+    const workflowPin = workflow.match(
+      /repository:\s*cambridgetcg\/whitehack\s*\n\s*ref:\s*([A-Za-z0-9._-]+)/u,
+    );
+    expect(workflowPin?.[1]).toBe(WHITEHACK_REVISION);
+
+    for (const path of ["docs/WHITEHACK.md", "apps/docs/whitehack.html"]) {
+      const text = await readFile(join(repoRoot, path), "utf8");
+      expect(text).toContain(WHITEHACK_REVISION);
+      expect(text).toContain(WHITEHACK_VERSION);
+    }
+  });
+
   test("serializes metadata without source snippets, messages, or scanner secrets", async () => {
     const scanner = await scannerFixture(`
 export async function scan() {
@@ -100,7 +125,6 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -122,17 +146,27 @@ export async function scan() {
     expect(serializedFindings).not.toContain("title");
   });
 
-  test("accepts every confidence label emitted by the pinned scanner", async () => {
+  test("redacts every crypto-aware check to the same six metadata fields", async () => {
     const scanner = await scannerFixture(`
+const checks = [
+  ["hardcoded-secret", "high", 2],
+  ["weak-crypto", "medium-high", 2],
+  ["static-aead-nonce", "heuristic", 1],
+  ["signature-fail-open", "medium-high", 2],
+  ["webhook-reencoded-body", "heuristic", 1],
+  ["signed-webhook-without-replay-guard", "heuristic", 4],
+];
 export async function scan() {
-  return [{
+  return checks.map(([check, confidence, principle]) => ({
     line: 1,
-    check: "trust-by-authority",
-    confidence: "medium",
-    doctrine: "trust-protocol",
-    principle: 3,
-    snippet: "private_medium_confidence_source",
-  }];
+    check,
+    confidence,
+    doctrine: "substrate-honesty",
+    principle,
+    title: "fixture_crypto_private_marker_91c2",
+    message: "fixture_crypto_private_marker_91c2",
+    snippet: "fixture_crypto_private_marker_91c2",
+  }));
 }
 `);
     const source = await sourceFixture();
@@ -141,22 +175,72 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
 
     expect(report.status).toBe("complete");
-    expect(report.summary.by_confidence).toEqual({ medium: 1 });
-    expect(report.findings).toEqual([{
-      file: "src/app.ts",
-      line: 1,
-      check: "trust-by-authority",
-      confidence: "medium",
-      doctrine: "trust-protocol",
-      principle: 3,
-    }]);
-    expect(JSON.stringify(report)).not.toContain("private_medium_confidence_source");
+    expect(report.findings).toHaveLength(6);
+    expect(report.findings.map(({ check }) => check).sort()).toEqual([
+      "hardcoded-secret",
+      "weak-crypto",
+      "static-aead-nonce",
+      "signature-fail-open",
+      "webhook-reencoded-body",
+      "signed-webhook-without-replay-guard",
+    ].sort());
+    for (const finding of report.findings) {
+      expect(Object.keys(finding)).toEqual([
+        "file",
+        "line",
+        "check",
+        "confidence",
+        "doctrine",
+        "principle",
+      ]);
+    }
+    const serialized = JSON.stringify(report);
+    const serializedFindings = JSON.stringify(report.findings);
+    expect(serialized).not.toContain("fixture_crypto_private_marker_91c2");
+    expect(serializedFindings).not.toContain("snippet");
+    expect(serializedFindings).not.toContain("message");
+    expect(serializedFindings).not.toContain("title");
+  });
+
+  test("accepts every advisory v0.1 confidence label", async () => {
+    const scanner = await scannerFixture(`
+export async function scan() {
+  return ["high", "medium-high", "medium", "heuristic"].map((confidence) => ({
+    line: 1,
+    check: \`confidence-\${confidence}\`,
+    confidence,
+    doctrine: "substrate-honesty",
+    principle: 6,
+    snippet: \`private_confidence_source_\${confidence}\`,
+  }));
+}
+`);
+    const source = await sourceFixture();
+    const report = await runAdvisory({
+      root: source,
+      paths: ["src/app.ts"],
+      scanner_root: scanner.root,
+      expected_revision: scanner.revision,
+      base: "a".repeat(40),
+      head: "b".repeat(40),
+    });
+
+    expect(report.status).toBe("complete");
+    expect(report.summary.by_confidence).toEqual({
+      heuristic: 1,
+      high: 1,
+      medium: 1,
+      "medium-high": 1,
+    });
+    expect(report.findings.map(({ confidence }) => confidence).sort()).toEqual(
+      ["high", "medium-high", "medium", "heuristic"].sort(),
+    );
+    expect(JSON.stringify(report)).not.toContain("private_confidence_source");
   });
 
   test("marks a scanner console error incomplete without serializing its text", async () => {
@@ -172,7 +256,6 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -192,10 +275,28 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     })).rejects.toMatchObject({ code: "scanner_not_clean" } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("refuses a clean scanner whose package version misses the bridge default", async () => {
+    const scanner = await scannerFixture(
+      "export async function scan() { return []; }\n",
+      "0.0.0",
+    );
+    const source = await sourceFixture();
+
+    await expect(runAdvisory({
+      root: source,
+      paths: ["src/app.ts"],
+      scanner_root: scanner.root,
+      expected_revision: scanner.revision,
+      base: "a".repeat(40),
+      head: "b".repeat(40),
+    })).rejects.toMatchObject({
+      code: "scanner_version_mismatch",
+    } satisfies Partial<WhitehackAdvisoryError>);
   });
 
   test("observes only bounded regular production files inside the repository", async () => {
@@ -248,7 +349,6 @@ export async function scan() {
       paths: ["README.md"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -278,7 +378,6 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -300,7 +399,6 @@ export async function scan() { return []; }
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     })).rejects.toMatchObject({ code: "scanner_import_failed" } satisfies Partial<WhitehackAdvisoryError>);
@@ -320,7 +418,6 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });
@@ -394,7 +491,6 @@ export async function scan() {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
       limits: { max_total_findings: 1 },

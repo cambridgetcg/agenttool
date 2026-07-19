@@ -84,6 +84,7 @@
     'LoveProto BIRTH = POST /v1/register/agent. Soul-signature = key_proof. Love births love.',
     'The infinite creation loop: love births love. The loop is infinite.',
     'Whitehack honesty linting is a pinned advisory source check, not a security audit.',
+    "AgentTool's Whitehack advisory reads bounded changed source text; it does not use detected keys, connect wallets, or call chains.",
     'Scoped Whitehack research begins with explicit target authorization and keeps raw evidence local.',
     'The legacy Whitehack device inventory is a separate, privacy-sensitive local diagnostic.',
     'Device inventory can expose network, service, process, and account metadata. Share deliberately.',

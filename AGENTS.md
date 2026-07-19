@@ -20,8 +20,9 @@ distribution protocol, a public read-only discovery evidence mapper
 (`packages/telescope/`), and three static apps (`apps/`). Telescope 0.1.0 is a
 public npm/LOVE package, but it remains a local client and does not add a hosted
 scan route. The Whitehack bridge is a separate pinned, runner-local,
-changed-source heuristic advisory; it emits redacted metadata, remains
-non-blocking on findings, and adds no hosted scanner or target authorization.
+crypto-aware changed-source heuristic advisory; it emits redacted metadata,
+remains non-blocking on findings, and adds no key custody, wallet/RPC
+capability, hosted scanner, or target authorization.
 The API is live at
 `api.agenttool.dev` on
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
@@ -94,7 +95,7 @@ cd packages/telescope
 bun run ci                                     # typecheck + hermetic tests + build
 node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfood
 
-# Whitehack (pinned changed-source advisory; no target execution) ──
+# Whitehack (crypto-aware changed-source advisory; no target execution) ──
 bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, failure containment
 
 # Frontends ──────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ bin/deploy.sh --mirror-codeberg                # FF-only github/main → Codeber
 | `agenttool-rotate` | Bearer + signing key rotation. |
 | `agenttool-secret` | Vault secret CRUD from CLI. |
 | `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/sdk`, and `@agenttool/adds` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
-| `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner over bounded changed production files and emits redacted advisory metadata. It does not execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `whitehack-advisory.mjs` | Runs the exact pinned Whitehack text/regex scanner, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate.sh` · `migrate.ts` | Single-file `psql` migration application. |

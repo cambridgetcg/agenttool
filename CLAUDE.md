@@ -24,7 +24,7 @@ packages/
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
-bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · pinned Whitehack advisory
+bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · pinned crypto-aware Whitehack advisory
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```

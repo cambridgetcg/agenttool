@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: cambridgetcg/whitehack
-          ref: e25dfa0afb354d0f6cfac9aaf0aa052218608104
+          ref: cbbf4d19ce839600238d017615ec142cd16343c3
           path: .whitehack-tool
           persist-credentials: false
       - name: Set up Node 20.19.0

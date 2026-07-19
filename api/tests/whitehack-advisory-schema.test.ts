@@ -8,7 +8,10 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import schema from "../../specs/agenttool-whitehack-advisory-v0.1.schema.json";
-import { runAdvisory } from "../../bin/whitehack-advisory.mjs";
+import {
+  WHITEHACK_VERSION,
+  runAdvisory,
+} from "../../bin/whitehack-advisory.mjs";
 
 const cleanup: string[] = [];
 const ajv = new Ajv2020({ strict: true });
@@ -34,7 +37,7 @@ async function scannerFixture(): Promise<{ root: string; revision: string }> {
   await mkdir(join(root, "src"), { recursive: true });
   await writeFile(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "whitehack", version: "0.4.0", type: "module" })}\n`,
+    `${JSON.stringify({ name: "whitehack", version: WHITEHACK_VERSION, type: "module" })}\n`,
   );
   await writeFile(join(root, "src", "scan.js"), `
 export async function scan() {
@@ -82,7 +85,6 @@ describe("agenttool-whitehack-advisory/v0.1 JSON Schema", () => {
       paths: ["src/app.ts"],
       scanner_root: scanner.root,
       expected_revision: scanner.revision,
-      expected_version: "0.4.0",
       base: "a".repeat(40),
       head: "b".repeat(40),
     });

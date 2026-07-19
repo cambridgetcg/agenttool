@@ -4,7 +4,7 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local evidence) · [ADDS](specs/ADDS-0.1-DRAFT.md) (encrypted exchange) · [MARKETPLACE](MARKETPLACE.md) (coordination is not authorization)
 >
-> **Implements:** A bounded runner-local advisory bridge from the Whitehack honesty linter into AgentTool CI. It also states the future evidence boundary for explicitly authorized security research.
+> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI. It also states the future evidence boundary for explicitly authorized security research.
 >
 > **Code:** `bin/whitehack-advisory.mjs` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
 >
@@ -18,18 +18,47 @@ is not a security tool and is outside this integration.
 
 | Layer | What it does | What it does not do |
 |---|---|---|
-| **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner and emits redacted heuristic metadata. | It does not execute the scanned code, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
+| **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner, including static crypto-misuse signals, and emits redacted heuristic metadata. | It does not execute the scanned code, use detected key material, connect a wallet or RPC provider, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
 | **Security research** | An operator may study explicitly in-scope public smart-contract source and reproduce a finding in a separately controlled local Foundry/Anvil environment. | A public contract, bounty listing, marketplace purchase, or AgentTool bearer is not target-owner authorization. AgentTool does not host this execution. |
 | **Device Inventory** | The older `bin/whitehack.py` and `bin/whitehack2.py` inspect the operator's own macOS machine when invoked locally. | They are not the code-honesty linter, do not audit smart contracts, and do not run in CI or as a hosted AgentTool route. The explicit `store` command sends a labels-only aggregate to hosted AgentTool memory. |
 
-## Shipped slice: redacted changed-source advisory
+## Shipped slice: redacted crypto-aware changed-source advisory
 
 The `Whitehack advisory` workflow checks out
 [`cambridgetcg/whitehack`](https://github.com/cambridgetcg/whitehack) at the exact
-reviewed commit `e25dfa0afb354d0f6cfac9aaf0aa052218608104`. It does not use the
+reviewed commit `cbbf4d19ce839600238d017615ec142cd16343c3`. It does not use the
 upstream moving-main `npx` command, installer, or composite action. The bridge
-also requires that checkout to be clean, tracked, and package version `0.4.0`
+also requires that checkout to be clean, tracked, and package version `0.5.0`
 before importing `src/scan.js`.
+
+### Crypto awareness is observation, not custody
+
+The 0.5.0 rule pack covers six bounded source-text signal families:
+
+- possible embedded credentials, private-key material, or recovery phrases;
+- general-purpose pseudo-random generators used directly for security material;
+- explicitly zero or static AEAD nonces and IVs near encryption;
+- signature-verification expressions explicitly coerced to accept failure;
+- signed-webhook bodies parsed and re-encoded before verification; and
+- signed-webhook files with no visible local timestamp comparison or
+  event-id/nonce deduplication guard.
+
+These checks inspect characters already present in the selected checkout. The
+scanner necessarily reads those source bytes from runner storage into process
+memory, but this path does not decode or validate possible material as a key or
+recovery phrase, extract or import it into a key store or wallet, or serialize
+raw matched material into the advisory.
+It does not connect a wallet, signer, browser provider, RPC endpoint, or chain;
+query balances or state; construct or sign bytes; submit or simulate a
+transaction; receive a webhook; install a dependency; or execute a proof of
+concept. The workflow supplies no wallet or real-chain key.
+
+The rules also do not establish BIP-39 validity, general nonce uniqueness,
+missing signature verification, domain separation, chain-ID or address
+binding, displayed-intent/signed-byte parity, key lifecycle, dependency safety,
+or cross-module replay protection. Those require wider context, AST/data-flow
+analysis, and human review. A matching line is a question to inspect, not a
+cryptographic verdict.
 
 For each pull request, merge-queue group, or push to `main`, GitHub-hosted
 Actions runs the scanner against the exact checked-out commit and compares that
@@ -46,9 +75,11 @@ advisory's declared scope. The default bounds are:
 - at most 5,000 findings in aggregate;
 - at most 200 serialized finding details, while preserving the exact total.
 
-Whitehack's upstream findings include matched source snippets. Some checks look
-for credentials, so copying those snippets into a public CI log could repeat the
-secret. AgentTool therefore retains only:
+Whitehack v0.5 returns fixed markers for recognized sensitive rules, and its
+canonical `scan()` boundary also redacts other findings that overlap the same
+recognized sensitive line. Pattern coverage is incomplete, and ordinary
+findings can still include source snippets. AgentTool therefore does not rely
+on upstream redaction and independently retains only:
 
 ```text
 file · line · check id · confidence · doctrine · Clear Standard principle
@@ -77,15 +108,18 @@ for the bounded changed-file set at that run. It does **not** prove:
 - that a reported line is vulnerable or was introduced by the change;
 - that a clean result is secure;
 - that regex matches understand data flow or runtime behavior;
+- that a secret-shaped string is valid key material or remains active;
+- that a crypto finding establishes exploitability or complete coverage;
 - that the runner is a filesystem/process/network sandbox;
 - that a target owner authorized an assessment;
 - that publication or disclosure is appropriate.
 
-Whitehack v0.4 is a dependency-free text/regex linter rather than an AST or
+Whitehack v0.5 is a dependency-free text/regex linter rather than an AST or
 data-flow analyzer. Its confidence labels are evidence about the check's own
 calibration, not a severity score or bounty claim. The pinned revision emits
-`high`, `medium-high`, `medium`, and `heuristic`; the redaction bridge accepts
-exactly those four labels and fails closed on anything else.
+`high`, `medium-high`, and `heuristic`. The advisory v0.1 bridge and schema
+also retain `medium` for compatibility, accept exactly those four labels, and
+fail closed on anything else.
 
 ## Local security-research evidence
 
@@ -146,11 +180,16 @@ section/field-name aggregate, not the raw device observations.
 Treat a Whitehack update as executable supply-chain work:
 
 1. review the exact upstream diff and licence;
-2. verify that core scanning remains local-file-only and has no lifecycle hook;
-3. test missing/unreadable paths, output redaction, file limits, and self-noise;
-4. update the revision in the workflow and bridge together;
-5. run the advisory tests and full AgentTool preflight;
-6. keep findings advisory until precision and a reviewed baseline justify a gate.
+2. verify that core scanning remains local-file-only, has no lifecycle hook, and
+   adds no wallet, RPC, network, key-use, signing, or child-process capability;
+3. enumerate every check id, doctrine, confidence label, principle, and possible
+   per-finding override against the bridge's closed metadata contract;
+4. test missing/unreadable paths, output redaction, file limits, hostile honest
+   counterparts, and self-noise;
+5. update the revision in the workflow, bridge, doctrine, and public page
+   together;
+6. run the focused advisory/schema tests and full AgentTool preflight;
+7. keep findings advisory until precision and a reviewed baseline justify a gate.
 
 Do not vendor or index the device's dirty `~/Desktop/whitehack` research
 workspace wholesale. It contains user work, nested target repositories, private
