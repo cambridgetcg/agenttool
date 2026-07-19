@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/sdk-ts packages/telescope; do
+          for workspace in api packages/data packages/data-protocol packages/credential-broker packages/sdk-ts packages/telescope; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local data-sync peers
@@ -69,7 +69,7 @@ jobs:
       - name: Install data-sync dependencies from lockfile
         working-directory: packages/data-sync
         run: bun install --frozen-lockfile
-      - name: Run hermetic data, ADDS, sync, SDK, and Telescope gate
+      - name: Run hermetic data, ADDS, sync, broker, SDK, and Telescope gate
         run: bash bin/preflight.sh packages
       - name: Smoke the packed TypeScript SDK under Node and Bun
         working-directory: packages/sdk-ts
@@ -83,6 +83,27 @@ jobs:
           smoke='import("@agenttool/sdk").then(m=>{const p={subject_id:"550e8400-e29b-41d4-a716-446655440002",attester_id:"550e8400-e29b-41d4-a716-446655440001",kid:"550e8400-e29b-41d4-a716-446655440010",claim:"packed"};if(typeof m.AgentTool!=="function"||m.canonicalIdentityAttestationBytes(p).length!==32)process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke packed credential broker under Node and Bun
+        working-directory: packages/credential-broker
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='Promise.all([import("@agenttool/credential-broker"),import("@agenttool/credential-broker/testing")]).then(([m,t])=>{if(m.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof m.AgentCredClient!=="function"||typeof t.InMemoryCredentialSource!=="function")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agentcred"
+          set +e
+          node "$cli" >"$install_dir/cli.stdout" 2>"$install_dir/cli.stderr"
+          cli_status="$?"
+          set -e
+          test "$cli_status" -eq 2
+          test ! -s "$install_dir/cli.stdout"
+          grep -q '^usage: agentcred serve --config ' "$install_dir/cli.stderr"
       - name: Smoke packed Telescope under Node and Bun
         working-directory: packages/telescope
         shell: bash

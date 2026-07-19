@@ -25,14 +25,8 @@
  */
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 import type { Escrow, Wallet } from "./types.js";
-
-/** @internal */
-export interface HttpConfig {
-  baseUrl: string;
-  headers: Record<string, string>;
-  timeout: number;
-}
 
 export interface CreateWalletOpts {
   agent_id?: string;
@@ -319,7 +313,7 @@ export class EconomyClient {
     };
     if (body !== undefined) init.body = JSON.stringify(body);
 
-    const resp = await globalThis.fetch(url, init);
+    const resp = await this.http.request(url, init);
 
     if (resp.status >= 400) {
       let detail: string;

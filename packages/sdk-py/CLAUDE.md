@@ -56,6 +56,7 @@ tests/
   test_pulse.py
   test_traces.py
   test_vault.py
+  test_credential_transport.py — bearer-free broker transport boundary
 dist/                    — Built distribution files
 pyproject.toml           — Package config; force-includes SOUL.md in wheel
 ```
@@ -91,7 +92,8 @@ python -m twine upload dist/*
 - **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
 - **Dev**: `pytest >= 7.0`
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `base_url`)
-- **Auth**: Reads `AT_API_KEY` from env or accepts `api_key` parameter
+- **Auth**: Reads `AT_API_KEY`, accepts `api_key`, or accepts a mutually
+  exclusive authenticated `httpx.BaseTransport` via `transport=`
 
 ## Parity invariant
 py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.

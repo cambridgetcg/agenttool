@@ -20,6 +20,7 @@ src/
   index.ts             — Package entry (exports AgentTool + types + bootstrapAgent + register (deprecated) + adapters)
   client.ts            — AgentTool (composes hosted clients + at.deciding sugar)
   authority.ts         — Exact local identity mutation and private-read authority proof helpers
+  _http.ts             — shared authenticated transport boundary (direct bearer or broker)
   _context.ts          — AmbientContext for auto-trace ambient state
   bootstrap.ts         — BootstrapClient (agent creation, elevation)
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
@@ -50,6 +51,7 @@ tests/
   deciding.test.ts          — at.deciding() composition + nested chains
   new_modules.test.ts       — Identity, vault, pulse, bootstrap (Phase 1 backfill)
   parity.test.ts            — Counterpart tests for the parity-restore work
+  credential-transport.test.ts — bearer-free broker transport boundary
   phase2.test.ts            — register + identity surface fillout
   phase3.test.ts            — chronicle + covenants + window
 scripts/
@@ -95,7 +97,8 @@ npm publish --access public
 - **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format). HTTP, AES-256-GCM, and abort signals all use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
 - **API**: All calls go to `https://api.agenttool.dev` (configurable via `baseUrl`)
-- **Auth**: Reads `AT_API_KEY` from env or accepts `apiKey` option
+- **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually
+  exclusive authenticated `transport` that receives no Authorization header
 
 ## Parity invariant
 ts and py repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.

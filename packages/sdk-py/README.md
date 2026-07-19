@@ -273,6 +273,34 @@ callers that implement and test the same custody boundary themselves.
 : "${AGENT_ID:?set AGENT_ID to the identity UUID captured in the completed birth handoff}"
 ```
 
+For a local credential broker, pass an authenticated `httpx.BaseTransport`
+instead of a bearer. Transport mode is mutually exclusive with `api_key`; it
+does not read `AT_API_KEY` and the SDK adds no `Authorization` header:
+
+```python
+from agenttool import AgentTool
+
+at = AgentTool(transport=local_broker_httpx_transport)
+```
+
+The transport is responsible for authenticating the operation and enforcing
+its destination/scope. This protects the AgentTool project bearer; it does not
+change APIs such as `vault.get()` that intentionally return their own stored
+values. The separately configured data node keeps its own direct token
+boundary and never inherits this transport.
+
+The Python SDK currently ships this seam, not an `agentcred/0.1` adapter.
+Such an adapter must reconstruct the broker's allowlisted request headers; it
+must not blindly forward `httpx` transport headers such as `Host`,
+`Connection`, or `Accept-Encoding`. Anonymous `/public/discover` and
+`at.lounge.look()` reads use separate credential-free clients and bypass the
+authenticated transport. The reference broker buffers responses to 32 KiB
+and does not support `wake.voice`, `strands.thoughts.voice`, or `inbox.voice`
+yet. A future Python adapter must also preserve the broker's explicit x402
+boundary: paid Tools retries require `allowPaymentSignature: true` in both
+owner policy and the individual grant; the broker forwards but does not create
+or validate that signed payment envelope.
+
 **3. Store your first memory:**
 ```python
 import os

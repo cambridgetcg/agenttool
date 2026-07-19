@@ -6,7 +6,8 @@
 
 A consolidated monorepo: one API (`api/`), Python and TypeScript SDKs,
 a local-first agent data node (`packages/data`), an experimental encrypted
-object protocol package (`packages/data-protocol`), and three static surfaces
+object protocol package (`packages/data-protocol`), an experimental local
+credential broker (`packages/credential-broker`), and three static surfaces
 (`apps/web`, `apps/dashboard`, and `apps/docs`).
 The public `@agenttool/telescope` CLI/library maps agent discovery evidence
 without invoking protocols or actions. It ships through LOVE/npm as a local
@@ -45,6 +46,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 | **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | The lockstep 0.15.0 line adds the paired `at.correspondence` client for signed, replayable project-work coordination across devices and sessions. It retains the 0.14 review bridges, Long Context client, identity authority helpers, full/brief wake selection, project-private handoffs, and the separate local-node-only `at.data` plane. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **ADDS** | `packages/data-protocol`, `docs/specs/ADDS-0.1-DRAFT.md` | Experimental `adds/v0.1` encrypted-object plane: immutable ciphertext Blocks plus signed Manifests and direct Grants. It is not the collection/query node and does not promise provider durability. |
+| **Credential broker** | `packages/credential-broker` | Experimental `agentcred/0.1` local capability broker. It can keep bearer values out of normal model/chat/SDK state while narrowing approved HTTPS use; the portable CLI is not a same-user sandbox or the strong native peer-identity profile. |
 | **LOVE packages** | `docs/LOVE-PACKAGE-PROTOCOL.md`, `bin/build-love-packages.ts` | Locator-independent, open, verifiable, exchangeable package manifests. Public indexes are mirrors; SHA-256 + size identify one artifact and npm is optional. |
 | **Telescope** | `packages/telescope` | Public `@agenttool/telescope@0.1.0` read-only discovery evidence mapper. Bounded public-HTTPS probes map `agent.txt`, Pathways, LOVE/npm, MCP, A2A, WebFinger, and Offer Bus boundaries; generated commands are never executed. DNS-AID and PKARR remain opt-in adapter seams. Distribution does not add a hosted scan route. |
 | **Apps** | `apps/web`, `apps/dashboard`, `apps/docs` | Static HTML/CSS/JS deployed to Cloudflare Pages; the apex worker splits human and machine traffic. |
@@ -98,7 +100,11 @@ fast-changing percentages and slice counts.
 
 The source packages are `agenttool-sdk` (Python) and `@agenttool/sdk`
 (TypeScript). Both read a project bearer from `AT_API_KEY` by default and
-also accept explicit configuration.
+also accept explicit configuration. The TypeScript SDK additionally accepts a
+Fetch-compatible authenticated transport; the Python SDK accepts an `httpx`
+transport. In transport mode neither SDK reads `AT_API_KEY` or adds an
+Authorization header. This source tree includes the reference `agentcred/0.1`
+adapter for TypeScript; Python exposes the seam but not a protocol adapter.
 
 The JavaScript SDK, local data node, encrypted pull bridge, ADDS package, and
 Telescope ship first through `love-package/v1` manifests and ordinary HTTPS tarballs.
@@ -134,7 +140,9 @@ releases rather than being silently rewritten. Individual documents retain
 their stated terms: [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md) is an
 attributed adaptation of XENIA beta.4 under CC BY-SA 4.0, and each draft
 specification identifies its applicable terms in the file and
-[spec index](docs/specs/README.md).
+[spec index](docs/specs/README.md). The credential-broker preview remains
+`UNLICENSED` and outside the released LOVE package line until an owner selects
+its licence and release channels.
 
 ---
 
@@ -160,7 +168,7 @@ and docs carry local guidance files; `apps/web` does not.
 
 GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
 explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/TypeScript SDK/Telescope jobs from
+dependencies for the API/protocol and data/ADDS/credential-broker/TypeScript SDK/Telescope jobs from
 frozen Bun lockfiles. The Python SDK is tested on Python 3.9–3.14 with the
 compatible dependency set pip resolves from `pyproject.toml`; this is neither a
 frozen lock nor a minimum-version matrix. CI receives no application/service credentials. Pushes do not

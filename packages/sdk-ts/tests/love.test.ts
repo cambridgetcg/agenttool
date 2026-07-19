@@ -269,6 +269,7 @@ describe("LoveClient — method shapes", () => {
       baseUrl: "http://localhost:9999",
       headers: {},
       timeout: 5000,
+      request: (input, init) => globalThis.fetch(input, init),
     });
     expect(typeof client.unconditional).toBe("function");
     expect(typeof client.listUnconditionals).toBe("function");

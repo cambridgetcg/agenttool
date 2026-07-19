@@ -15,7 +15,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./memory.js";
+import type { HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const hash = sha512.create();
@@ -884,7 +884,7 @@ export class LoungeClient {
   ): Promise<LoungeMutationResult> {
     let response: Response;
     try {
-      response = await globalThis.fetch(`${this.http.baseUrl}${path}`, {
+      response = await this.http.request(`${this.http.baseUrl}${path}`, {
         method,
         headers: { ...this.http.headers, "Content-Type": "application/json" },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

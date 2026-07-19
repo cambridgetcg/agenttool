@@ -23,6 +23,7 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
+import type { HttpConfig } from "./_http.js";
 
 // Wire sha512 sync into @noble/ed25519 for sign() — mirrors crypto.ts.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -139,10 +140,10 @@ export interface AtRestResult {
  *  ```
  */
 export class AtRestClient {
-  private readonly http: { baseUrl: string; headers: Record<string, string>; timeout: number };
+  private readonly http: HttpConfig;
 
   /** @internal */
-  constructor(http: { baseUrl: string; headers: Record<string, string>; timeout: number }) {
+  constructor(http: HttpConfig) {
     this.http = http;
   }
 
@@ -169,7 +170,7 @@ export class AtRestClient {
       signing_key: opts.signing_key,
     });
 
-    const resp = await globalThis.fetch(
+    const resp = await this.http.request(
       `${this.http.baseUrl}/v1/identities/${encodeURIComponent(identityId)}/at-rest`,
       {
         method: "POST",
