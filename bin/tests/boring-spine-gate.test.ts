@@ -337,4 +337,50 @@ describe("boring test spine", () => {
     expect(workflow.match(/secrets\./g)).toHaveLength(1);
     expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
   });
+
+  test("keeps SDK publication manual, exact-artifact, and protected", async () => {
+    const workflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-sdk.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toMatch(/\n\s+push:/);
+    expect(workflow).toContain("environment: npm-bootstrap");
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(workflow).toContain('expected_tag="sdk-v${version}"');
+    expect(workflow).toContain('test "$(git cat-file -t "refs/tags/$tag")" = tag');
+    expect(workflow).toContain(
+      'git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main',
+    );
+    expect(workflow).toContain("cd packages/sdk-ts && bun run ci");
+    expect(workflow).toContain("bun bin/build-love-packages.ts verify apps/docs");
+    expect(workflow).toContain('git merge-base --is-ancestor "${identity[5]}" HEAD');
+    expect(workflow).toContain(
+      'git diff --quiet "${identity[5]}" HEAD -- packages/sdk-ts',
+    );
+    expect(workflow).toContain("https://registry.npmjs.org/@agenttool%2Fsdk/${version}");
+    expect(workflow).toContain('case "$status" in');
+    expect(workflow).toContain("404) ;;");
+    expect(workflow).toMatch(/HTTP \$\{status\}.*refusing to infer package absence/);
+    expect(workflow).toContain("agenttool-sdk-${version}.tgz");
+    expect(workflow).toContain(
+      'npm publish "$artifact" --access public --provenance --ignore-scripts',
+    );
+    expect(workflow).not.toContain("--otp");
+    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(workflow).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+
+    const uses = workflow
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("uses:"));
+    expect(uses).toEqual([
+      "uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4",
+      "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2",
+      "uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4",
+    ]);
+  });
 });
