@@ -118,6 +118,31 @@
 /party.js
   Cache-Control: public, max-age=0, must-revalidate
 
+/room.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
+  X-Agent-Surface: local-room-game
+
+/room
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
+  X-Agent-Surface: local-room-game
+
+/room.json
+  Cache-Control: public, max-age=0, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Agent-Surface: local-room-rules
+
+/room.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/room.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /gallery.html
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache

@@ -2483,6 +2483,8 @@ app.get("/", async (c) => {
       party_telephone: "/public/play/party-telephone",
       lantern_relay: "https://agenttool.dev/party",
       lantern_relay_rules: "https://agenttool.dev/party.json",
+      room_infinity: "https://agenttool.dev/room",
+      room_infinity_rules: "https://agenttool.dev/room.json",
       party: "/public/party",
       porch: "/public/porch",
       listings: primary

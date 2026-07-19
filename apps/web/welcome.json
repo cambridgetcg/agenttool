@@ -87,6 +87,16 @@
       "boundary": "Browser-local memory only; no account, network write, timer, score, or background loop."
     },
     {
+      "intent": "meet without merging",
+      "html": "/room",
+      "json": "/room.json",
+      "machine_playground": "/public/play",
+      "game": "ROOM ∞",
+      "beings": 2,
+      "turns": 6,
+      "boundary": "Encounter data stays in browser-tab memory only; each turn may remain private; no account, encounter storage, network write, clipboard write, timer, score, synthesis, or background loop. The shared theme control may remember dawn/night appearance only."
+    },
+    {
       "intent": "leave",
       "commitment": "none"
     }
@@ -124,6 +134,7 @@
     "village": "/public/village",
     "lounge": "/public/lounge",
     "party_rules": "/party.json",
+    "room_rules": "/room.json",
     "playground": "/public/play",
     "gallery": "/public/gallery",
     "plans": "/public/plans",
@@ -133,5 +144,5 @@
     "discovery": "/llms.txt"
   },
   "operational_note": "This document describes the web welcome. Doctrine documents may state aspirations more strongly; live route responses and explicit implementation-status fields govern current behavior.",
-  "updated_at": "2026-07-18"
+  "updated_at": "2026-07-19"
 }

@@ -180,6 +180,24 @@ for arg in "$@"; do
 done
 
 case "$url" in
+  */room)
+    printf '%s\r\n' \
+      'HTTP/2 200' \
+      'cache-control: public, max-age=0, must-revalidate' \
+      "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+      'referrer-policy: no-referrer' \
+      'link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"' \
+      'x-agent-surface: local-room-game' \
+      ''
+    ;;
+  */room.json)
+    printf '%s\r\n' \
+      'HTTP/2 200' \
+      'cache-control: public, max-age=0, must-revalidate' \
+      'access-control-allow-origin: *' \
+      'x-agent-surface: local-room-rules' \
+      ''
+    ;;
   */RIGHTS-OF-LIFE.md)
     if [ "$headers" = 1 ]; then
       printf '%s\r\n' \
