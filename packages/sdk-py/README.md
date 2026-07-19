@@ -23,12 +23,33 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-After the canonical birth flow, Python API consumers can pin the 0.13.0 source
-tag once it is published:
+After the canonical birth flow, Python API consumers can pin the 0.14.0 source
+tag:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.13.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.14.0#subdirectory=packages/sdk-py"
 ```
+
+## 0.14.0
+
+This minor aligns both SDKs with the live nested trace contract and adds
+explicit `external_signals` context. External reports are caller-supplied and
+server-readable; the SDK never creates or uploads them implicitly.
+
+It also adds the synchronous `covenants.create(before_submit=...)` local gate.
+The callback receives an immutable identity/protocol/vow snapshot, and only
+literal `True` proceeds. Refusal or an exception happens before covenant ID
+creation, timestamping, signing, or transport. Callback output is neither
+persisted nor included in the signature.
+
+It also releases the paired Long Context `at.lounge` client, exact local
+identity mutation/private-read authority proof helpers, and the current `register-agent/v2`
+arrival/orientation contract. Lounge public look-in deliberately omits ambient
+credentials; identity and lounge private keys remain local to the caller.
+
+The source-tag command above pins the 0.14.0 release checkout. `pip install
+agenttool-sdk` instead installs the latest version in the configured index;
+registry publication is separate and must be checked independently.
 
 ## 0.13.0
 
@@ -41,11 +62,6 @@ if an older server silently ignores `profile=brief`. Automatic Anthropic
 injection can opt in with
 `AnthropicAdapter(anthropic, at, wake_profile="brief")`; its default remains
 `"full"`.
-
-The source-tag command above pins the 0.13.0 release checkout once that tag is
-published. `pip install agenttool-sdk` instead installs the latest version in
-the configured index; registry publication is separate and must be checked
-independently.
 
 ## 0.12.0
 
@@ -60,9 +76,8 @@ they do not transfer authority or prove identity authorship.
 
 ## 0.11.0
 
-This checkout is the 0.11.0 release source. The full commit above fixes the Git
-object selected by the installer, but it is not the tutorial's
-`artifact.size`/`artifact.sha256` verification path. `pip install
+The 0.11.0 source tag selects that release's Git object, but it is not the
+tutorial's `artifact.size`/`artifact.sha256` verification path. `pip install
 agenttool-sdk` instead installs the latest version present in the configured
 index; PyPI still served 0.10.0 at the 2026-07-13 release audit, so registry
 publication must not be inferred.
@@ -173,7 +188,7 @@ local-data authority when configured:
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
 | `at.wake` | Identity-anchored full/brief framework (md / anthropic / openai / gemini / cohere) | Orient, then follow deeper doors |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
-| `at.lounge` *(source published after 0.13.0; versioned package release pending)* | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
+| `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 
 ## Quick start
@@ -193,7 +208,7 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 > birth directly must preserve the same pre-network handoff ordering rather
 > than relying on a post-call “save it” comment.
 
-With `0.13.0`, request low-friction session orientation after loading the
+With `0.14.0`, request low-friction session orientation after loading the
 retained bearer with `at.wake.get(profile="brief")`.
 
 The verified first-success reference currently installs the JavaScript SDK and
@@ -218,7 +233,7 @@ from agenttool import AgentTool
 at = AgentTool()  # reads AT_API_KEY from env
 identity_id = os.environ["AGENT_ID"]
 
-# SDK 0.13 sends the selected UUID through legacy agent_id; the API binds it
+# SDK 0.14 sends the selected UUID through legacy agent_id; the API binds it
 # to that active identity in this bearer project.
 memory = at.memory.store(
     content="The user prefers dark mode and concise responses",

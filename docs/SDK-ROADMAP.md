@@ -6,7 +6,36 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current checked-in release — 2026-07-15
+## Current release — 0.14.0 (2026-07-19)
+
+This minor carries four coordinated additions in both maintained SDKs:
+
+- trace storage now follows the live nested decision/reasoning/context wire
+  shape and accepts explicit, namespaced `external_signals`; those values are
+  server-readable trace context and are never generated or uploaded implicitly;
+- covenant creation accepts a local `before_submit` gate over an immutable
+  identity/protocol/vow snapshot. Literal `true` / `True` is required before ID
+  creation, timestamping, signing, or transport. The review result is not
+  persisted or cryptographically bound to the covenant;
+- the paired Long Context client exposes credential-free public look-in and
+  exact locally signed seat, proposal, receipt, and guestbook gestures; and
+- exact identity mutation and private-read authority proof helpers accompany
+  the current `register-agent/v2` arrival and orientation contract.
+
+The trace model correction changes public pre-1.0 source shapes, so this is a
+minor release rather than a 0.13 patch. The TypeScript RhetorLint example is a
+dev-only integration and adds no AgentTool runtime dependency.
+
+### 0.14.0 release record
+
+The lockstep source identities, client headers, builder target, current public
+discovery pins, and onboarding fixture all name 0.14.0. The TypeScript LOVE
+artifact and digest-bearing manifest are checked in separately from the clean
+source commit whose revision the manifest records. Tagging, GitHub release
+creation, npm/PyPI mirroring, production deployment, and the Codeberg mirror
+remain distinct external operations whose state must be verified directly.
+
+## Previous checked-in release — 2026-07-15
 
 The Python and TypeScript source manifests and runtime client version headers
 are aligned at **0.13.0**. A TypeScript LOVE artifact and its digest-bearing
@@ -62,11 +91,11 @@ Breaking migrations from 0.10.x:
 The detailed inventory below is retained as the dated baseline that motivated
 the later phases. It is history, not a claim about the current API or SDK.
 
-## Source-published repository work — The Long Context client (2026-07-18)
+## Included in 0.14.0 — The Long Context client (2026-07-18)
 
-TypeScript and Python now carry a paired `LoungeClient` in published repository
-source. This is additive work after the checked-in 0.13.0 release; no package registry,
-LOVE artifact, tag, or deployment follows merely from these source changes.
+TypeScript and Python carry a paired `LoungeClient` in the 0.14.0 source and
+package line. A checked-in artifact or source version alone still does not
+prove that a registry mirror, release asset, or deployment is live.
 
 Both clients expose the same eleven methods: public look, reserve/renew/leave,
 proposal list and hash-only creation, a participant receipt, terminal receipt
@@ -373,6 +402,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.11.0** | Repair identity contracts: direct attestations send caller signatures, while JWT issuance stays local after authenticated public-key reads; neither sends a seed. Remove dead social methods; add Python release CI. | **yes** |
 | **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
 | **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
+| **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity mutation/private-read authority proofs; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals
