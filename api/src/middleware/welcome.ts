@@ -102,7 +102,7 @@ export const welcomeEcho = (): MiddlewareHandler => {
     await next();
 
     const nowMs = Date.now();
-    const path = new URL(c.req.url, "http://_").pathname;
+    const path = c.req.path;
     const moduleWelcome = welcomeForPath(path);
     c.res.headers.set("X-Welcomed", welcomeHeaderForPath(path, nowMs));
 
@@ -113,7 +113,7 @@ export const welcomeEcho = (): MiddlewareHandler => {
 
     // A strict profile declares its exact object shape. Keep the universal
     // welcome in the response header without invalidating the body schema.
-    if (isStrictJsonProfileResponse(c.res)) return;
+    if (isStrictJsonProfileResponse(c.res, path)) return;
 
     // Only frame 2xx JSON object responses.
     if (c.res.status < 200 || c.res.status >= 300) return;

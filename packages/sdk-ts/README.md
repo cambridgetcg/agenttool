@@ -4,7 +4,7 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.14.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.14.0)
+[![Release](https://img.shields.io/badge/release-v0.15.0-blue)](https://github.com/cambridgetcg/agenttool/tree/sdk-v0.15.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 ## Installation
@@ -24,6 +24,57 @@ The tarball URL is only a locator; installing from it directly skips that
 verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
+
+## 0.15.0
+
+This additive minor releases `at.correspondence`, the paired client for
+`agent-correspondence/v0.1`. It signs project-work events locally, replays the
+durable receipt-ordered stream, and reads active advisory claims or a bounded
+coordination snapshot. Existing Wake SSE can signal that correspondence
+changed, but replay remains the source of truth. Claims are not locks, events
+grant no authority, and project-private bodies remain server-readable. See
+[Agent Correspondence](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
+
+One bounded progress event, using an identity key retained by the caller:
+
+```typescript
+import { AgentTool } from "@agenttool/sdk";
+
+async function reportProgress(
+  at: AgentTool,
+  local: {
+    projectId: string;
+    identityId: string;
+    signingKeyId: string;
+    privateKey: string | Uint8Array; // canonical base64 from Identity, or raw seed
+    deviceId: string;                // stable caller-persisted installation UUID
+  },
+  sessionId: string,                 // fresh UUID for this bounded run
+  sessionSeq: number,                // caller-persisted monotone run sequence
+) {
+  return at.correspondence.append({
+    project_id: local.projectId,
+    repository_id: "repo:github.com/example/project",
+    thread_id: "task:42",
+    sender: {
+      identity_id: local.identityId,
+      signing_key_id: local.signingKeyId,
+      device_id: local.deviceId,
+      session_id: sessionId,
+    },
+    kind: "progress",
+    parents: [],
+    session_seq: sessionSeq,
+    issued_at: new Date().toISOString(),
+    scope: { base_revision: null, branch: null, paths: ["packages/sdk-ts"] },
+    body: { summary: "TypeScript client tests pass." },
+    signing_key: local.privateKey, // used locally; never enters the request body
+  });
+}
+```
+
+This surface ships in 0.15.0. The 0.14.0 artifact described below remains
+immutable and does not contain it.
 
 ## 0.14.0
 
@@ -154,6 +205,7 @@ map, not a claim that every mounted API route has an SDK method:
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
 | `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 | `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
+| `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 
 The bearer is one project-root capability on `api.agenttool.dev`; it is not
@@ -176,7 +228,7 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 > the mnemonic, derived private keys, or bearer. Do not replace the tutorial's
 > pre-network handoff with a post-call “save it” comment.
 
-With `0.14.0`, request low-friction session orientation after loading the
+With `0.15.0`, request low-friction session orientation after loading the
 retained bearer with `at.wake.get({ profile: "brief" })`.
 
 **2. Load the retained bearer and selected identity:**
@@ -193,7 +245,7 @@ const at = new AgentTool(); // reads AT_API_KEY from env
 const identityId = process.env.AGENT_ID;
 if (!identityId) throw new Error("AGENT_ID is required");
 
-// SDK 0.14 sends the selected UUID through legacy agent_id; the API binds it
+// SDK 0.15 sends the selected UUID through legacy agent_id; the API binds it
 // to that active identity in this bearer project.
 const memory = await at.memory.store(
   "The user prefers dark mode and concise responses",
@@ -505,7 +557,7 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.14.0/manifest.json)
+- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.15.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 
 ## License

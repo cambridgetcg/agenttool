@@ -366,7 +366,7 @@ export function buildPathwaysResponse() {
           "https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md",
         human_url: "https://docs.agenttool.dev/tutorial",
         source_path: "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
-        sdk_version: "0.14.0",
+        sdk_version: "0.15.0",
       },
       package_discovery: {
         endpoint: "GET /.well-known/love-packages",

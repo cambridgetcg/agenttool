@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.14.0 version is repository source; registry availability must be checked independently.
+Official Python SDK for the AgentTool platform. Single `AgentTool` client composes the hosted service namespaces plus `at.data`, a thin client for a separately configured local `agent-data/v1` node. The data node has its own URL/token and never inherits the AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)` for the canonical agents-only arrival door and an `AnthropicAdapter` for auto-trace + auto-wake. The PyPI project name is `agenttool-sdk`. This checkout's 0.15.0 version is repository source; registry availability must be checked independently.
 
 ## Current State
-Active - v0.14.0 repository source and parity target. Phases 0-6, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge client, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The 0.14.0 release plan uses the `sdk-v0.14.0` GitHub source tag; PyPI publication remains a separate operator step.
+Active - v0.15.0 repository source and parity target. Phases 0-6, project-private handoff continuity, full/brief wake profiles, explicit external trace signals, fail-closed covenant review, the paired Lounge and Renaissance Correspondence clients, exact identity mutation/private-read authority proofs, and the separate `at.data` node client are implemented here. The 0.15.0 release plan uses the `sdk-v0.15.0` GitHub source tag; PyPI publication remains a separate operator step.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,12 +16,13 @@ Active - v0.14.0 repository source and parity target. Phases 0-6, project-privat
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.14.0")
+  __init__.py            — Public surface + __version__ ("0.15.0")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _context.py            — AmbientContext for auto-trace ambient state
   bootstrap.py           — BootstrapClient (agent creation, elevation)
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
+  correspondence.py      — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
   covenants.py           — CovenantsClient (vows + bonds; federation-aware)
   economy.py             — EconomyClient (wallets, escrow, transactions)
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
@@ -111,7 +112,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.14.0"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.15.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract

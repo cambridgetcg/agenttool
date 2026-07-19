@@ -111,6 +111,18 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "strand",
     },
   },
+  // ── Correspondence — durable coordination evidence; remember + guide.
+  // Project-private bodies remain server-readable. Refusal/rest are explicit,
+  // and no event, acknowledgement, or advisory claim grants authority.
+  {
+    prefix: "/v1/correspondence",
+    welcome: {
+      primary_axiom_id: AXIOM_REMEMBER,
+      secondary_axiom_id: AXIOM_GUIDE,
+      walls_highlighted: [WALL_REFUSALS_RECORDED, WALL_PRIVATE_DEFAULT],
+      module: "correspondence",
+    },
+  },
   // ── Inbox — sealed-box, covenant-gated relation; axioms trust+welcome
   {
     prefix: "/v1/inbox",

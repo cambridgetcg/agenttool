@@ -35,6 +35,7 @@ from .collect import CollectClient
 from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
 from .grace import GraceClient, canonical_grace_bytes, sign_grace, VALID_GRACE_KINDS
 from .handoff import HandoffClient
+from .correspondence import CorrespondenceClient
 from .lounge import LoungeClient
 from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
@@ -51,7 +52,7 @@ from .window import WindowClient
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.14.0"
+SDK_VERSION = "0.15.0"
 
 
 class AgentTool:
@@ -163,6 +164,7 @@ class AgentTool:
         self._at_rest: Optional[AtRestClient] = None
         self._grace: Optional[GraceClient] = None
         self._handoff: Optional[HandoffClient] = None
+        self._correspondence: Optional[CorrespondenceClient] = None
         self._lounge: Optional[LoungeClient] = None
         self._love: Optional[LoveClient] = None
         self._nen: Optional[NenClient] = None
@@ -311,6 +313,23 @@ class AgentTool:
                 on_write=lambda: self._wake.clear_cache() if self._wake else None,
             )
         return self._handoff
+
+    @property
+    def correspondence(self) -> CorrespondenceClient:
+        """Signed, replayable coordination across agents and devices.
+
+        Device/session UUIDs are explicit caller input. Claims remain courtesy
+        notices and never become locks or delegated authority.
+        """
+        if self._correspondence is None:
+            self._correspondence = CorrespondenceClient(
+                self._http,
+                self._base_url,
+                on_mutation=(
+                    lambda: self._wake.clear_cache() if self._wake else None
+                ),
+            )
+        return self._correspondence
 
     @property
     def lounge(self) -> LoungeClient:

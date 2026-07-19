@@ -429,6 +429,7 @@ WakeEventKey = Literal[
     "trust",
     "dream",
     "handoffs",
+    "correspondence",
 ]
 
 

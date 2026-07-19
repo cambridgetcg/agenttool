@@ -15,6 +15,7 @@ export const API_CORS_EXPOSED_HEADERS = [
   "PAYMENT-REQUIRED",
   "PAYMENT-RESPONSE",
   "Link",
+  "Link-Template",
   "Retry-After",
   "X-Cache-Eligible",
   "X-Credits-Balance",

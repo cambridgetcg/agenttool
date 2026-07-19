@@ -1,0 +1,251 @@
+{
+  "protocol": "agent-correspondence/v0.1",
+  "canonicalization": {
+    "json": "RFC8785-JCS",
+    "accepted_numbers": "safe_integers_only",
+    "signing_domain_utf8": "agent-correspondence/v0.1",
+    "domain_separator_hex": "00",
+    "digest": "SHA-256",
+    "signature": "Ed25519",
+    "signature_encoding": "base64url-unpadded",
+    "event_id": "sha256:lowerhex(SHA-256(JCS(signed_event_without_event_id)))"
+  },
+  "bounds": {
+    "raw_post_utf8_bytes_max": 65536,
+    "repository_id_scalar_values_max": 256,
+    "thread_id_scalar_values_max": 256,
+    "parents_max": 16,
+    "scope_paths_max": 64,
+    "path_scalar_values_max": 256,
+    "general_text_scalar_values_max": 1000,
+    "handoff_summary_scalar_values_max": 2000,
+    "target_event_ids_max": 16
+  },
+  "signing_vector": {
+    "name": "claim-open-fixed-ed25519",
+    "test_key_warning": "PUBLIC TEST KEY: deterministic interoperability material only; never use for a production or private identity.",
+    "private_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "public_key_b64url": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+    "core": {
+      "protocol": "agent-correspondence/v0.1",
+      "project_id": "11111111-1111-4111-8111-111111111111",
+      "repository_id": "repo:github.com/cambridgetcg/agenttool",
+      "thread_id": "task:renaissance-correspondence",
+      "sender": {
+        "identity_id": "22222222-2222-4222-8222-222222222222",
+        "signing_key_id": "33333333-3333-4333-8333-333333333333",
+        "device_id": "44444444-4444-4444-8444-444444444444",
+        "session_id": "55555555-5555-4555-8555-555555555555"
+      },
+      "kind": "claim.open",
+      "parents": [],
+      "session_seq": 1,
+      "issued_at": "2026-07-19T10:00:00.000Z",
+      "scope": {
+        "base_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "codex/renaissance-correspondence",
+        "paths": ["docs", "docs/specs"]
+      },
+      "body": {
+        "claim_id": "66666666-6666-4666-8666-666666666666",
+        "generation": 1,
+        "expires_at": "2026-07-19T12:00:00.000Z"
+      },
+      "authority": {
+        "automatic_action": "never",
+        "grants": []
+      }
+    },
+    "core_jcs": "{\"authority\":{\"automatic_action\":\"never\",\"grants\":[]},\"body\":{\"claim_id\":\"66666666-6666-4666-8666-666666666666\",\"expires_at\":\"2026-07-19T12:00:00.000Z\",\"generation\":1},\"issued_at\":\"2026-07-19T10:00:00.000Z\",\"kind\":\"claim.open\",\"parents\":[],\"project_id\":\"11111111-1111-4111-8111-111111111111\",\"protocol\":\"agent-correspondence/v0.1\",\"repository_id\":\"repo:github.com/cambridgetcg/agenttool\",\"scope\":{\"base_revision\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"branch\":\"codex/renaissance-correspondence\",\"paths\":[\"docs\",\"docs/specs\"]},\"sender\":{\"device_id\":\"44444444-4444-4444-8444-444444444444\",\"identity_id\":\"22222222-2222-4222-8222-222222222222\",\"session_id\":\"55555555-5555-4555-8555-555555555555\",\"signing_key_id\":\"33333333-3333-4333-8333-333333333333\"},\"session_seq\":1,\"thread_id\":\"task:renaissance-correspondence\"}",
+    "signing_digest_hex": "1bc3f4b0b7db176cca2ddc86eed6ccc6109f5c9be4794ae763d84c0b136ab1ca",
+    "signature_b64url": "y93m-gQISK5PUEqjF4bLZ_k6FCNX1lpeCENJegoNFRD-g3Eid0iyh0NLdmAvId_FPf94HURfatd1qB5Jyjq0Cg",
+    "event_id": "sha256:6f9d943746a1672f501eb762296654452fb1168a63c5996535f7616ebb8d28dd"
+  },
+  "canonicalization_vectors": [
+    {
+      "name": "utf16-property-order",
+      "valid": true,
+      "value": {
+        "": "bmp-private-use",
+        "😀": "astral",
+        "a": "ascii"
+      },
+      "jcs": "{\"a\":\"ascii\",\"😀\":\"astral\",\"\":\"bmp-private-use\"}"
+    },
+    {
+      "name": "json-string-escaping",
+      "valid": true,
+      "value": {
+        "text": "line\nquote\"slash\\control\u0001"
+      },
+      "jcs": "{\"text\":\"line\\nquote\\\"slash\\\\control\\u0001\"}"
+    },
+    {
+      "name": "unicode-is-not-normalized",
+      "valid": true,
+      "value": {
+        "nfc": "é",
+        "nfd": "é"
+      },
+      "jcs": "{\"nfc\":\"é\",\"nfd\":\"é\"}"
+    }
+  ],
+  "rejection_vectors": [
+    {
+      "name": "duplicate-object-name",
+      "json": "{\"a\":1,\"a\":2}",
+      "reason": "duplicate_object_name"
+    },
+    {
+      "name": "fractional-number",
+      "json": "{\"n\":1.5}",
+      "reason": "fractional_number"
+    },
+    {
+      "name": "negative-zero",
+      "json": "{\"n\":-0}",
+      "reason": "negative_zero"
+    },
+    {
+      "name": "unsafe-integer",
+      "json": "{\"n\":9007199254740992}",
+      "reason": "unsafe_integer"
+    },
+    {
+      "name": "non-finite-number",
+      "json": "{\"n\":NaN}",
+      "reason": "invalid_json_number"
+    },
+    {
+      "name": "nul-string-value",
+      "json": "{\"s\":\"\\u0000\"}",
+      "reason": "nul_not_admitted"
+    },
+    {
+      "name": "nul-decoded-object-name",
+      "json": "{\"\\u0000\":\"value\"}",
+      "reason": "nul_not_admitted"
+    },
+    {
+      "name": "lone-high-surrogate",
+      "json": "{\"s\":\"\\ud800\"}",
+      "reason": "non_scalar_unicode"
+    }
+  ],
+  "body_matrix": [
+    { "kind": "intent", "body": { "summary": "Coordinate the first slice." } },
+    { "kind": "claim.open", "body": { "claim_id": "66666666-6666-4666-8666-666666666666", "generation": 1, "expires_at": "2026-07-19T12:00:00.000Z" } },
+    { "kind": "claim.renew", "body": { "claim_id": "66666666-6666-4666-8666-666666666666", "generation": 2, "predecessor_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expires_at": "2026-07-19T14:00:00.000Z" } },
+    { "kind": "claim.release", "body": { "claim_id": "66666666-6666-4666-8666-666666666666", "generation": 2, "predecessor_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+    { "kind": "progress", "body": { "summary": "Schema drafted." } },
+    { "kind": "observation", "body": { "summary": "Two path prefixes overlap." } },
+    { "kind": "artifact.offer", "body": { "artifact": { "kind": "git_commit", "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } } },
+    { "kind": "ack.seen", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+    { "kind": "ack.understood", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+    { "kind": "ack.accepted", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+    { "kind": "ack.applied", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "result_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } },
+    { "kind": "ack.rejected", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+    { "kind": "conflict.raise", "body": { "target_event_ids": ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] } },
+    { "kind": "conflict.resolve", "body": { "target_event_ids": ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "summary": "Preserve both reports and use the reviewed patch." } },
+    { "kind": "pause", "body": {} },
+    { "kind": "rest", "body": {} },
+    { "kind": "resume", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+    { "kind": "refusal", "body": {} },
+    { "kind": "handoff", "body": { "summary": "The schema is ready for review.", "next_safe_action": "Run the focused conformance test.", "handoff_id": "77777777-7777-4777-8777-777777777777" } },
+    { "kind": "close", "body": {} },
+    { "kind": "repair", "body": { "target_event_ids": ["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "summary": "Correct the earlier path report." } }
+  ],
+  "invalid_body_vectors": [
+    { "kind": "claim.open", "body": { "claim_id": "66666666-6666-4666-8666-666666666666", "generation": 2, "expires_at": "2026-07-19T12:00:00.000Z" }, "reason": "open_generation_must_be_one" },
+    { "kind": "ack.applied", "body": { "target_event_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, "reason": "result_revision_required" },
+    { "kind": "refusal", "body": { "reason_required": false }, "reason": "unknown_body_field" },
+    { "kind": "pause", "body": { "until": "2026-07-19T12:00:00Z" }, "reason": "timestamp_requires_milliseconds" },
+    { "kind": "claim.open", "body": { "claim_id": "66666666-6666-4666-8666-666666666666", "generation": 1, "expires_at": "0000-01-01T00:00:00.000Z" }, "reason": "timestamp_year_zero_not_admitted" }
+  ],
+  "opaque_id_vectors": [
+    { "value": "repo:github.com/example/project", "valid": true },
+    { "value": "repo with space", "valid": false },
+    { "value": "repo\u0085control", "valid": false },
+    { "value": "repo\uFEFFbom", "valid": false }
+  ],
+  "locator_vectors": [
+    { "value": "https://example.test/patch", "valid": true },
+    { "value": "urn:sha256:abc", "valid": true },
+    { "value": "http:", "valid": true },
+    { "value": "patches/example.diff", "valid": false },
+    { "value": "1bad:value", "valid": false },
+    { "value": "https://example.test/a b", "valid": false },
+    { "value": "x:\u0085control", "valid": false },
+    { "value": "x:\uFEFFbom", "valid": false }
+  ],
+  "path_vectors": [
+    { "path": ".", "valid": true },
+    { "path": "packages/sdk-ts", "valid": true },
+    { "path": "packages/sdk-ts/src", "valid": true },
+    { "path": "/packages/sdk-ts", "valid": false },
+    { "path": "packages//sdk-ts", "valid": false },
+    { "path": "packages/../sdk-ts", "valid": false },
+    { "path": "packages/**", "valid": false },
+    { "path": "packages/{sdk-ts}", "valid": false },
+    { "path": "packages/!sdk-ts", "valid": false },
+    { "path": "packages/sdk-ts", "valid": false },
+    { "path": "packages\\sdk-ts", "valid": false }
+  ],
+  "lineage_vectors": [
+    {
+      "name": "out-of-order-fork-keeps-lower-generation-tip",
+      "nodes": [
+        { "symbol": "open", "kind": "claim.open", "generation": 1, "predecessor": null, "paths": ["packages/sdk-ts"], "expires": "future" },
+        { "symbol": "left2", "kind": "claim.renew", "generation": 2, "predecessor": "open", "paths": ["packages/sdk-ts"], "expires": "future" },
+        { "symbol": "right2", "kind": "claim.renew", "generation": 2, "predecessor": "open", "paths": ["packages/sdk-ts"], "expires": "future" },
+        { "symbol": "left3", "kind": "claim.renew", "generation": 3, "predecessor": "left2", "paths": ["packages/sdk-ts"], "expires": "future" }
+      ],
+      "arrival": ["left3", "right2", "left2", "open"],
+      "active_after_each_arrival": [[], [], [], ["left3", "right2"]],
+      "conflicted_tips": ["left3", "right2"],
+      "rule": "A lower-generation sibling tip remains active after another branch advances."
+    },
+    {
+      "name": "release-closes-only-one-branch",
+      "nodes": [
+        { "symbol": "open", "kind": "claim.open", "generation": 1, "predecessor": null, "paths": ["docs"], "expires": "future" },
+        { "symbol": "left2", "kind": "claim.renew", "generation": 2, "predecessor": "open", "paths": ["docs"], "expires": "future" },
+        { "symbol": "right2", "kind": "claim.renew", "generation": 2, "predecessor": "open", "paths": ["docs"], "expires": "future" },
+        { "symbol": "release3", "kind": "claim.release", "generation": 3, "predecessor": "right2", "paths": ["docs"], "expires": null }
+      ],
+      "arrival": ["open", "left2", "right2", "release3"],
+      "active_tips": ["left2"],
+      "all_tips": ["left2", "release3"],
+      "conflicted_tips": ["left2", "release3"]
+    },
+    {
+      "name": "reordered-identical-path-set-is-valid",
+      "nodes": [
+        { "symbol": "open", "kind": "claim.open", "generation": 1, "predecessor": null, "paths": ["api", "packages"], "expires": "future" },
+        { "symbol": "renew2", "kind": "claim.renew", "generation": 2, "predecessor": "open", "paths": ["packages", "api"], "expires": "future" }
+      ],
+      "arrival": ["renew2", "open"],
+      "lineage_status_after_each_arrival": ["pending", "valid"],
+      "active_tips": ["renew2"]
+    },
+    {
+      "name": "changed-path-renewal-is-invalid",
+      "nodes": [
+        { "symbol": "open", "kind": "claim.open", "generation": 1, "predecessor": null, "paths": ["api"], "expires": "future" },
+        { "symbol": "renew2", "kind": "claim.renew", "generation": 2, "predecessor": "open", "paths": ["packages"], "expires": "future" }
+      ],
+      "arrival": ["renew2", "open"],
+      "lineage_status_after_each_arrival": ["pending", "invalid"],
+      "active_tips": ["open"]
+    },
+    {
+      "name": "expired-offline-open-never-reactivates",
+      "nodes": [
+        { "symbol": "open", "kind": "claim.open", "generation": 1, "predecessor": null, "paths": ["docs"], "expires": "past" }
+      ],
+      "arrival": ["open"],
+      "history": ["open"],
+      "active_tips": []
+    }
+  ]
+}
