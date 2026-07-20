@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/specs/agent-correspondence-0.1.schema.json",
+  "title": "Agent Correspondence 0.1 signed event",
+  "description": "A bounded, project-private, append-only coordination event. Validation does not grant authority, prove truth, or acquire a lock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "event_id",
+    "project_id",
+    "repository_id",
+    "thread_id",
+    "sender",
+    "kind",
+    "parents",
+    "session_seq",
+    "issued_at",
+    "scope",
+    "body",
+    "authority",
+    "signature"
+  ],
+  "properties": {
+    "protocol": { "const": "agent-correspondence/v0.1" },
+    "event_id": { "$ref": "#/$defs/eventId" },
+    "project_id": { "$ref": "#/$defs/uuid" },
+    "repository_id": { "$ref": "#/$defs/opaqueId" },
+    "thread_id": { "$ref": "#/$defs/opaqueId" },
+    "sender": { "$ref": "#/$defs/sender" },
+    "kind": {
+      "enum": [
+        "intent",
+        "claim.open",
+        "claim.renew",
+        "claim.release",
+        "progress",
+        "observation",
+        "artifact.offer",
+        "ack.seen",
+        "ack.understood",
+        "ack.accepted",
+        "ack.applied",
+        "ack.rejected",
+        "conflict.raise",
+        "conflict.resolve",
+        "pause",
+        "rest",
+        "resume",
+        "refusal",
+        "handoff",
+        "close",
+        "repair"
+      ]
+    },
+    "parents": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/eventId" }
+    },
+    "session_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "issued_at": { "$ref": "#/$defs/timestamp" },
+    "scope": { "$ref": "#/$defs/workScope" },
+    "body": { "type": "object" },
+    "authority": { "$ref": "#/$defs/authority" },
+    "signature": { "$ref": "#/$defs/signature" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "intent" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/summaryBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "claim.open" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/claimOpenBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "claim.renew" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/claimRenewBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "claim.release" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/claimReleaseBody" } } }
+    },
+    {
+      "if": {
+        "properties": { "kind": { "enum": ["progress", "observation"] } },
+        "required": ["kind"]
+      },
+      "then": { "properties": { "body": { "$ref": "#/$defs/summaryBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "artifact.offer" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/artifactOfferBody" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": ["ack.seen", "ack.understood", "ack.accepted", "ack.rejected"]
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": { "properties": { "body": { "$ref": "#/$defs/ackBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "ack.applied" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/ackAppliedBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "conflict.raise" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/conflictRaiseBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "conflict.resolve" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/conflictResolveBody" } } }
+    },
+    {
+      "if": {
+        "properties": { "kind": { "enum": ["pause", "rest"] } },
+        "required": ["kind"]
+      },
+      "then": { "properties": { "body": { "$ref": "#/$defs/availabilityBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "resume" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/ackBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "refusal" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/refusalBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "handoff" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/handoffBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "close" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/closeBody" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "repair" } }, "required": ["kind"] },
+      "then": { "properties": { "body": { "$ref": "#/$defs/repairBody" } } }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventId": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*[\\p{Cc}\\uFEFF])\\S+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?!0000)[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "handoffSummary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "sender": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity_id", "signing_key_id", "device_id", "session_id"],
+      "properties": {
+        "identity_id": { "$ref": "#/$defs/uuid" },
+        "signing_key_id": { "$ref": "#/$defs/uuid" },
+        "device_id": { "$ref": "#/$defs/uuid" },
+        "session_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "pathPrefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*\\p{Cc})(?:\\.|(?:(?!\\.{1,2}(?:/|$))[^/\\\\*?\\[\\]{}!]+)(?:/(?:(?!\\.{1,2}(?:/|$))[^/\\\\*?\\[\\]{}!]+))*)$"
+    },
+    "workScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_revision", "branch", "paths"],
+      "properties": {
+        "base_revision": {
+          "oneOf": [
+            { "$ref": "#/$defs/gitRevision" },
+            { "type": "null" }
+          ]
+        },
+        "branch": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^(?!.*\\p{Cc})[\\s\\S]+$"
+            },
+            { "type": "null" }
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/pathPrefix" }
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["automatic_action", "grants"],
+      "properties": {
+        "automatic_action": { "const": "never" },
+        "grants": { "const": [] }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value_b64url"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "value_b64url": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+        }
+      }
+    },
+    "summaryBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary"],
+      "properties": { "summary": { "$ref": "#/$defs/summary" } }
+    },
+    "claimOpenBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "generation", "expires_at"],
+      "properties": {
+        "claim_id": { "$ref": "#/$defs/uuid" },
+        "generation": { "const": 1 },
+        "expires_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "claimRenewBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "generation", "predecessor_event_id", "expires_at"],
+      "properties": {
+        "claim_id": { "$ref": "#/$defs/uuid" },
+        "generation": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "predecessor_event_id": { "$ref": "#/$defs/eventId" },
+        "expires_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "claimReleaseBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "generation", "predecessor_event_id"],
+      "properties": {
+        "claim_id": { "$ref": "#/$defs/uuid" },
+        "generation": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "predecessor_event_id": { "$ref": "#/$defs/eventId" },
+        "detail": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "gitCommitArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "revision"],
+      "properties": {
+        "kind": { "const": "git_commit" },
+        "revision": { "$ref": "#/$defs/gitRevision" }
+      }
+    },
+    "digestArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "digest"],
+      "properties": {
+        "kind": { "enum": ["git_patch", "content_digest"] },
+        "digest": { "$ref": "#/$defs/digest" },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^(?!.*[\\s\\p{Cc}\\uFEFF])[A-Za-z][A-Za-z0-9+.-]*:[\\s\\S]*$"
+        }
+      }
+    },
+    "artifact": {
+      "oneOf": [
+        { "$ref": "#/$defs/gitCommitArtifact" },
+        { "$ref": "#/$defs/digestArtifact" }
+      ]
+    },
+    "artifactOfferBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact"],
+      "properties": {
+        "artifact": { "$ref": "#/$defs/artifact" },
+        "summary": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "ackBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_event_id"],
+      "properties": {
+        "target_event_id": { "$ref": "#/$defs/eventId" },
+        "detail": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "ackAppliedBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_event_id", "result_revision"],
+      "properties": {
+        "target_event_id": { "$ref": "#/$defs/eventId" },
+        "result_revision": { "$ref": "#/$defs/gitRevision" },
+        "detail": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "eventIds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/eventId" }
+    },
+    "conflictRaiseBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_event_ids"],
+      "properties": {
+        "target_event_ids": {
+          "allOf": [
+            { "$ref": "#/$defs/eventIds" },
+            { "type": "array", "minItems": 2 }
+          ]
+        },
+        "summary": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "conflictResolveBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_event_ids", "summary"],
+      "properties": {
+        "target_event_ids": { "$ref": "#/$defs/eventIds" },
+        "summary": { "$ref": "#/$defs/summary" },
+        "result_revision": { "$ref": "#/$defs/gitRevision" }
+      }
+    },
+    "availabilityBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "until": {
+          "oneOf": [
+            { "$ref": "#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "refusalBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_event_id": { "$ref": "#/$defs/eventId" },
+        "detail": { "$ref": "#/$defs/summary" }
+      }
+    },
+    "handoffBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "next_safe_action"],
+      "properties": {
+        "summary": { "$ref": "#/$defs/handoffSummary" },
+        "next_safe_action": { "$ref": "#/$defs/summary" },
+        "handoff_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "closeBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "summary": { "$ref": "#/$defs/summary" } }
+    },
+    "repairBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_event_ids", "summary"],
+      "properties": {
+        "target_event_ids": { "$ref": "#/$defs/eventIds" },
+        "summary": { "$ref": "#/$defs/summary" },
+        "result_revision": { "$ref": "#/$defs/gitRevision" }
+      }
+    }
+  }
+}

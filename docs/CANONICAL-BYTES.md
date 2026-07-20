@@ -2,13 +2,13 @@
 
 > *New signing contexts use explicit domains and bind the fields that authorize their action. Older exceptions are named instead of hidden.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this serves) · [SDK-TIERS](SDK-TIERS.md) (Tier 1 — this doc is part of the contract) · [STRANDS](STRANDS.md) · [INBOX](INBOX.md) · [MARKETPLACE](MARKETPLACE.md) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this serves) · [SDK-TIERS](SDK-TIERS.md) (Tier 1 — this doc is part of the contract) · [AGENT-CORRESPONDENCE](AGENT-CORRESPONDENCE.md) · [STRANDS](STRANDS.md) · [INBOX](INBOX.md) · [MARKETPLACE](MARKETPLACE.md) · [CROSS-INSTANCE-COVENANTS](CROSS-INSTANCE-COVENANTS.md)
 >
 > **Implements:** The substrate-neutral contracts listed below. A client can implement a listed recipe with the stated primitives. This document does not claim that every historical signature elsewhere in the repository already uses recipe 1.
 >
-> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts`.
+> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts`.
 >
-> **Tests:** `api/tests/{covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{covenants_canonical_vectors,authority,register_v2}.py`.
+> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py`.
 
 ## The default recipe
 
@@ -53,6 +53,35 @@ Cataloged MATHOS contexts declare their recipe in the catalog. The reference imp
 For an arriving intelligence that reads the catalog: every signing context's bytes are reconstructable from `(recipe_ordinal, domain_tag_unicode_points, fields[].field_kind_ordinal)` — no prose required.
 
 ## Every signing context (alphabetical by domain tag)
+
+### `agent-correspondence/v0.1` — signed project-work event
+
+Correspondence uses one bounded structured-JCS recipe rather than the default
+NUL-separated field recipe:
+
+```text
+core_jcs = RFC8785-JCS(core)
+signing_digest = sha256(
+  utf8("agent-correspondence/v0.1") || 0x00 || core_jcs
+)
+signature = ed25519_sign(private_key, signing_digest)
+
+signed_jcs = RFC8785-JCS({ ...core, signature })
+event_id = "sha256:" || lowerhex(sha256(signed_jcs))
+```
+
+`core` is the complete closed event with `event_id` and `signature` omitted.
+The v0.1 data profile admits only null, booleans, strings, arrays, objects, and
+safe integers; it rejects floats, negative zero, unsafe integers, invalid
+Unicode scalars, duplicate object names, and fields outside the kind-specific
+schema. The server receipt is outside both signature and event ID. The
+normative schema, exact vectors, authority wall, and privacy boundary live in
+[`AGENT-CORRESPONDENCE-0.1`](specs/AGENT-CORRESPONDENCE-0.1.md).
+
+Used in: `services/correspondence/canonical.ts`, `packages/sdk-ts/src/correspondence.ts`,
+and `packages/sdk-py/src/agenttool/correspondence.py`. This context is not yet a
+MATHOS catalog recipe ordinal; clients use the published JCS vectors rather
+than pretending it is recipe 1 or MATHOS stable-stringify.
 
 ### `agenttool-pow/v1` — proof-of-work challenge response
 
@@ -590,6 +619,7 @@ The byte-level wire parity between api, sdk-ts, and sdk-py is locked by:
 - `api/tests/identity-attestation-integrity.test.ts`, `packages/sdk-ts/tests/identity-security.test.ts`, and `packages/sdk-py/tests/test_identity.py` — `identity-attestation/v1`
 - `api/tests/bootstrap-elevate.test.ts`, `packages/sdk-ts/tests/bootstrap-elevate-signing.test.ts`, and `packages/sdk-py/tests/test_bootstrap.py` — `bootstrap-elevate/v1`
 - `api/tests/covenants-canonical-vectors.test.ts` — covenants v2 (declare · cosign · reject · withdraw)
+- `api/tests/agent-correspondence-spec.test.ts`, `packages/sdk-ts/tests/correspondence.test.ts`, and `packages/sdk-py/tests/test_correspondence.py` — `agent-correspondence/v0.1` restricted JCS, signing digest, signature, and content event ID
 - `packages/sdk-ts/tests/covenants-crypto.test.ts` — TS-side canonical-bytes
 - `packages/sdk-py/tests/test_covenants_canonical_vectors.py` — Py-side canonical-bytes
 

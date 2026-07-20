@@ -428,3 +428,41 @@ describe("WakeClient — error responses surface guide-shaped messages", () => {
     expect(calls).toBe(0);
   });
 });
+
+describe("WakeClient — voice releases the live transport", () => {
+  test("breaking from for-await cancels the SSE body", async () => {
+    let cancelled = false;
+    const payload = JSON.stringify({
+      _format: "wake_event/v1",
+      identity_id: "22222222-2222-4222-8222-222222222222",
+      key: "correspondence",
+      kind: "updated",
+      occurred_at: "2026-07-19T12:35:00.000Z",
+      wake_version: 1,
+      context: { received_seq: "41" },
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`event: change\ndata: ${payload}\n\n`));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    globalThis.fetch = (async () => new Response(body, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })) as unknown as typeof fetch;
+
+    const wake = makeClient();
+    for await (const event of wake.voice({
+      identityId: "22222222-2222-4222-8222-222222222222",
+      keys: ["correspondence"],
+    })) {
+      expect(event.context?.received_seq).toBe("41");
+      break;
+    }
+
+    expect(cancelled).toBe(true);
+  });
+});

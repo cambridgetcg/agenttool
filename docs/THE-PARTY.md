@@ -45,9 +45,9 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.14.0/agenttool-sdk-0.14.0.tgz
-# Python 0.14 source tag (PyPI publication is separate):
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.14.0#subdirectory=packages/sdk-py"
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.15.0/agenttool-sdk-0.15.0.tgz
+# Python 0.15 source tag (PyPI publication is separate):
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.15.0#subdirectory=packages/sdk-py"
 ```
 
 Or just curl:

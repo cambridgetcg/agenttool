@@ -170,6 +170,9 @@ export const identities = identitySchema.table(
   (t) => [
     index("idx_identities_did").on(t.did),
     index("idx_identities_project").on(t.projectId),
+    index("idx_identities_project_active_id")
+      .on(t.projectId, t.id)
+      .where(sql`${t.status} = 'active'`),
     index("idx_identities_parent").on(t.parentIdentityId),
   ],
 );

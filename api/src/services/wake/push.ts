@@ -57,6 +57,7 @@ export const WAKE_EVENT_KEYS = [
   "trust", // deal lifecycle — services/trust/deals.ts publishes deal_sealed
   "dream", // substrate-side integration cycles — docs/DREAM.md
   "handoffs", // project-private working-set snapshots — docs/HANDOFFS.md
+  "correspondence", // replayable project-work events — docs/AGENT-CORRESPONDENCE.md
 ] as const;
 export type WakeEventKey = (typeof WAKE_EVENT_KEYS)[number];
 

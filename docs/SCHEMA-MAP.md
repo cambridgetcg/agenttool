@@ -1,6 +1,6 @@
 # SCHEMA-MAP.md
 
-> One-line map of every Postgres table across the 15 Drizzle schemas. When you need to know *where data lives*, this is the lookup. For column-level detail, read the schema file directly.
+> One-line map of the long-lived core Postgres tables by domain. For newer bounded modules and column-level detail, read the schema files directly; they are the exhaustive source of truth.
 
 > **Compass:** [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (Postgres on Supabase) · [DEVELOPMENT](DEVELOPMENT.md) (local dev) · [CONVENTIONS](CONVENTIONS.md) (table-naming + migration rules)
 >
@@ -14,6 +14,9 @@
 identity ──┬── identities · identityKeys · identityBoxKeys · attestations
            │
 continuity ┼── chronicle · covenants · identityBackups
+           │
+correspondence
+           ┼── projectStreams · events · claimEvents
            │
 memory ────┼── memories · memoryAttestations
            │
@@ -67,6 +70,14 @@ The pg-schema names sometimes differ from the file names: `continuitySchema → 
 | `chronicle` | Plaintext timeline. The current SDK union has 13 types: note · vow · wake · refusal · recognition · naming · seal · promise · closing · joy · grief · gratitude · rest. The database column is text rather than a database enum. `parent_chronicle_id` lets entries reference parents, making the chronicle a directed graph rather than a flat list. |
 | `covenants` | Directed bonds with vows. v1 = unsigned + TLS-trusted; v2 = dual-signed. Federation-aware via `received_from_instance` + `propagation_status`. Temporal: `expires_at_kind` + `proposed_expires_at_kind` (`wallclock` / `proper_time` / `event` / `never`) — non-wallclock lifecycles for relativistic / event-driven / never-expiring kin. Doctrine: docs/KIN.md §Time. |
 | `identity_backups` | Caller-supplied backup strings intended for client-encrypted key material. The route does not validate base64 or verify encryption. |
+
+### correspondence (`correspondence/` pg schema)
+
+| Table | Holds |
+|---|---|
+| `project_streams` | One project-local monotone receipt cursor allocator. It serializes append positions without creating a cross-project activity counter or causal clock. |
+| `events` | Immutable, signed `agent-correspondence/v0.1` project-work reports plus unsigned server receipt order. Bodies, path scope, and device/session metadata are project-private but server-readable. Events do not grant permission, lock files, execute work, or replace Git. |
+| `claim_events` | Rebuildable lineage facts for advisory expiring path claims. Pending out-of-order predecessors may resolve later; active projection keeps every valid branch tip and exposes forks/overlap instead of choosing a last writer. |
 
 ### memory (`memory/` pg schema)
 
@@ -189,6 +200,8 @@ projects (tools)
   ├── vault_secrets (vault)        — `project_id`
   ├── covenants (continuity)       — `project_id`
   ├── chronicle (continuity)       — `project_id` (+ optional `agent_id` → identities)
+  ├── correspondence.events        — append-only `project_id` + signed identity/key/device/session report
+  ├── correspondence.claim_events  — rebuildable branch-tip projection over correspondence events
   ├── inbox_messages (inbox)       — `recipient_project_id`
   ├── wallets (economy)            — `project_id` (+ optional `identity_id` → identities)
   ├── runtimes (agent_runtime)     — `project_id` (+ `identity_id` → identities)

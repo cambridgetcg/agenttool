@@ -6,34 +6,38 @@
 >
 > **Implements:** the SDK plane — hand-written clients for a selected subset of [ROADMAP.md](ROADMAP.md). CI compares method names for the maintained parity target list; it does not prove complete route, signature, or wire-model parity.
 
-## Current release — 0.14.0 (2026-07-19)
+## Current release — 0.15.0 (2026-07-19)
 
-This minor carries four coordinated additions in both maintained SDKs:
+This minor adds the paired Renaissance Correspondence client in both maintained
+SDKs. `at.correspondence` signs project-work events locally, replays the durable
+project receipt stream, and reads active advisory claims or a finite project
+voice. Identity, signing-key, device, session, repository, thread, Git, and
+causal-parent scope remain explicit on the wire. Existing Wake SSE supplies a
+missable invalidation hint; durable replay remains the source of truth.
 
-- trace storage now follows the live nested decision/reasoning/context wire
-  shape and accepts explicit, namespaced `external_signals`; those values are
-  server-readable trace context and are never generated or uploaded implicitly;
-- covenant creation accepts a local `before_submit` gate over an immutable
-  identity/protocol/vow snapshot. Literal `true` / `True` is required before ID
-  creation, timestamping, signing, or transport. The review result is not
-  persisted or cryptographically bound to the covenant;
-- the paired Long Context client exposes credential-free public look-in and
-  exact locally signed seat, proposal, receipt, and guestbook gestures; and
-- exact identity mutation and private-read authority proof helpers accompany
-  the current `register-agent/v2` arrival and orientation contract.
+The boundary is deliberate: claims are courtesy notices rather than locks,
+events grant no permission or automatic-action authority, Git remains file and
+merge truth, silence proves no acknowledgement, and project-private bodies are
+server-readable rather than end-to-end encrypted.
 
-The trace model correction changes public pre-1.0 source shapes, so this is a
-minor release rather than a 0.13 patch. The TypeScript RhetorLint example is a
-dev-only integration and adds no AgentTool runtime dependency.
-
-### 0.14.0 release record
+### 0.15.0 release record
 
 The lockstep source identities, client headers, builder target, current public
-discovery pins, and onboarding fixture all name 0.14.0. The TypeScript LOVE
+discovery pins, and onboarding fixture all name 0.15.0. The TypeScript LOVE
 artifact and digest-bearing manifest are checked in separately from the clean
 source commit whose revision the manifest records. Tagging, GitHub release
 creation, npm/PyPI mirroring, production deployment, and the Codeberg mirror
 remain distinct external operations whose state must be verified directly.
+
+## Previous checked-in release — 0.14.0 (2026-07-19)
+
+The 0.14 minor aligned trace storage with the live nested
+decision/reasoning/context wire, added explicit namespaced `external_signals`,
+and introduced a local fail-closed covenant `before_submit` gate. It also
+released the paired Long Context client, exact identity mutation/private-read
+authority proof helpers, and the current `register-agent/v2` arrival contract.
+Its TypeScript RhetorLint example is dev-only and adds no AgentTool runtime
+dependency.
 
 ## Previous checked-in release — 2026-07-15
 
@@ -403,6 +407,7 @@ Once 0.7.0 ships (post-Phase 1), invariant:
 | **0.12.0** | Project-private handoff write/resume, explicit parallel lineages, idempotency, cache-fresh reads, and explicit complete/truncated/unavailable projections | no — additive |
 | **0.13.0** | Typed full/brief wake selection and profile-isolated caching; broader public/federation/org/template/dashboard coverage remains planned | no — additive |
 | **0.14.0** | Live trace-wire alignment with explicit external signals; fail-closed local covenant review; paired Long Context client; identity mutation/private-read authority proofs; current register-agent/v2 arrival contract | **yes — pre-1.0 public trace shapes corrected** |
+| **0.15.0** | Paired Renaissance Correspondence client: local event signing, durable replay, advisory claim projection, finite project voice, and Wake invalidation hints | no — additive |
 | **1.0.0** | API freeze + comprehensive docstrings + READMEs + integration test suite | no — declarative |
 
 ## Non-goals

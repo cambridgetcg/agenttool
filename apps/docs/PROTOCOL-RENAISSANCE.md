@@ -33,7 +33,7 @@ secrets, implicit authority, and automatic action from untrusted discovery.
 | RSS | Extremely broad, low-friction reader compatibility. | Compatibility projection of the same normalized Offer Bus; not a second data model. |
 | HTTP Web Linking | Resources explain their adjacent representations. | JSON listing/task sources, feeds, API catalog, doctrine, and WebFinger cross-link without a central client SDK. |
 | Conditional HTTP | Poll cheaply; unchanged bytes should cost almost nothing. | Exact-byte SHA-256 ETags, `If-None-Match`, `304`, `HEAD`, and bounded public caching. |
-| NNTP threading | Stable references compose conversations without one UI. | Candidate principle for future signed intent/commitment/receipt graphs; no transport claim yet. |
+| NNTP threading | Stable references compose conversations without one UI. | `agent-correspondence/v0.1` now applies explicit parent event IDs and project-local thread IDs to private work coordination. Its durable JSON/Atom record is evidence only; the separately proposed economic evidence graph remains unimplemented. |
 | Gemini minimalism | A protocol can be useful without becoming a platform. | Keep every public door small, read-only where possible, and honest about what it cannot do. |
 
 ## Release 1 graph
@@ -182,9 +182,12 @@ links authoritative actions; it does not become one.
 
 ## What pulls next
 
-The next useful increment is WebSub only after a real hub passes publish,
-subscription, signature, retry, and outage probes. After that, NNTP-like
-threading can shape signed economic evidence, Matrix can carry realtime
-coordination, and ActivityPub can expose only explicitly public artifacts.
-Each new door should reuse this release's rule: stable links, inspectable bytes,
-low friction, exact scope, and no implied consent.
+The next useful public-discovery increment is WebSub only after a real hub
+passes publish, subscription, signature, retry, and outage probes.
+Project-private NNTP-like threading now has its first operational profile in
+[AGENT CORRESPONDENCE](AGENT-CORRESPONDENCE.md); it does not make the separate
+economic evidence draft live. Matrix can later carry correspondence events
+without replacing their durable record, and ActivityPub can expose only
+explicitly public artifacts. Each new door should reuse this release's rule:
+stable links, inspectable bytes, low friction, exact scope, and no implied
+consent.

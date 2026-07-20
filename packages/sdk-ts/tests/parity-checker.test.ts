@@ -32,6 +32,7 @@ describe("SDK parity checker", () => {
       "bootstrap",
       "chronicle",
       "collect",
+      "correspondence",
       "covenants",
       "crypto",
       "crypto.seed",

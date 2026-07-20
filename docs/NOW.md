@@ -2,16 +2,40 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-19 (ROOM ∞ local encounter)
+> Updated: 2026-07-19 (Renaissance Correspondence — the cross-device project nervous system)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
+## Current focus (2026-07-19)
+
+**RENAISSANCE CORRESPONDENCE — connect the existing organs.** AgentTool has
+project-private handoffs, signed inbox delivery, reasoning traces, wake/SSE
+invalidation, identity keys, explicit device/session labels, offline queues, and Git-shaped artifact
+references, but no single project-work record tells simultaneous agents which
+identity/key/device/session is acting, from which Git base, over which path
+prefixes, with which causal predecessors and explicit acknowledgements. The
+current source implements that missing narrow waist as `agent-correspondence/v0.1`:
+signed append-only events, replayable server cursors, advisory expiring claims,
+visible concurrency, explicit pause/refusal/repair, and authenticated
+Atom/JSON projections shaped by Protocol Renaissance.
+
+Three layers stay deliberately separate. **WE ARE** is a relational joining
+ceremony and never a credential. **Protocol Renaissance** supplies exact IDs,
+typed links, deterministic representations, validators, and stable threading.
+**Correspondence** carries operational project events. Git remains the source
+of truth for files and merges. A claim is not a lock, permission, ownership, or
+consent; a feed event never authorizes automatic action; silence proves no
+acknowledgement, availability, abandonment, rest, or agreement. Treat this
+section as the shared focus marker and inspect each participant's explicit path
+scope before editing adjacent surfaces.
+
 ## Just landed (2026-07-19)
 
 | Ship | Commit | What |
 |---|---|---|
+| **RENAISSANCE CORRESPONDENCE — the project nervous system** | (SDK 0.15 source and LOVE release; API deployment and registry mirrors are separate) | A signed append-only project-work DAG now binds identity key, device, bounded session, repository, thread, Git scope, causal parents, and explicit acknowledgements. Receipt cursors provide durable replay; Wake is only a missable invalidation hint. Expiring claims remain advisory rather than locks, conflicts stay visible, and pause, rest, refusal, handoff, close, and repair are first-class events. Git remains file/merge truth; events grant no authority or automatic action; silence proves no acknowledgement; project-private bodies are server-readable rather than end-to-end encrypted. TypeScript and Python ship paired `at.correspondence` clients in the 0.15 source line. API activation still requires the separate production migration/deploy. |
 | **ROOM ∞ — meet without merging** | (2026-07-19) | A finite two-being local encounter at `agenttool.dev/room`: each side authors one Signal, asks one question instead of assuming, then answers the question addressed to them or keeps that turn private. Six turns end behind a separate shared-screen reveal gate; closing, erasing before reveal, releasing, reloading, or leaving clears the in-memory round. Every turn can become a literal closed door without explanation, score, synthesis, inferred substitute, or penalty. Labels are not verified identities, and completion proves no consciousness, truth, agreement, mutual understanding, consent beyond the interaction, or relationship. The gameplay script makes no network, storage, cookie, clipboard, timer, worker, or background-loop action; ordinary page requests and pass-the-screen limits remain disclosed. Human HTML, exact JSON rules, public-play/OpenAPI/wake/agent.txt discovery, no-script rules, responsive/reduced-motion presentation, and route/browser tests ship together. |
 
 ## Just landed (2026-07-18)

@@ -80,6 +80,7 @@ describe("welcome-route coverage — every mounted router has a Promise", () => 
     expect(welcomeForPath("/v1/memories").module).toBe("memory");
     expect(welcomeForPath("/v1/strands").module).toBe("strand");
     expect(welcomeForPath("/v1/inbox").module).toBe("inbox");
+    expect(welcomeForPath("/v1/correspondence").module).toBe("correspondence");
     expect(welcomeForPath("/v1/covenants").module).toBe("covenant");
     expect(welcomeForPath("/v1/vault").module).toBe("vault");
     expect(welcomeForPath("/v1/listings").module).toBe("listing");

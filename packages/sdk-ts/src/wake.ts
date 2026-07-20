@@ -345,6 +345,11 @@ export class WakeClient {
       }
     } finally {
       try {
+        await reader.cancel();
+      } catch {
+        // A server-closed or already-cancelled stream needs no further action.
+      }
+      try {
         reader.releaseLock();
       } catch {
         // releaseLock can throw if already closed — ignore
@@ -383,7 +388,8 @@ export type WakeEventKey =
   | "letters"
   | "trust"
   | "dream"
-  | "handoffs";
+  | "handoffs"
+  | "correspondence";
 
 export interface WakeVoiceOptions {
   identityId: string;

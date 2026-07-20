@@ -13,11 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
 
-import { runOnboardingSdkFlow } from "./fixtures/onboarding-sdk-v0.14";
+import { runOnboardingSdkFlow } from "./fixtures/onboarding-sdk-v0.15";
 
 const ROOT = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
-const FIXTURE = join(import.meta.dir, "fixtures/onboarding-sdk-v0.14.ts");
+const FIXTURE = join(import.meta.dir, "fixtures/onboarding-sdk-v0.15.ts");
 
 // HTML syntax highlighting splits expressions across <span> elements. Strip
 // presentation markup before checking the copyable code readers actually see.
@@ -316,7 +316,7 @@ describe("public SDK onboarding snippets", () => {
     expect(route).not.toContain("at.memory.get('birth')");
   });
 
-  test("v0.14 TypeScript birth snippets compile against bootstrapAgent", () => {
+  test("v0.15 TypeScript birth snippets compile against bootstrapAgent", () => {
     for (const path of TYPESCRIPT_TUTORIALS) {
       const block = tutorialBlock(
         path,
@@ -350,12 +350,12 @@ describe("public SDK onboarding snippets", () => {
       );
       expect(
         formatDiagnostics(compileVirtualSnippet(`birth-${path.replaceAll("/", "-")}.ts`, block.code)),
-        `${path}: birth.ts must type-check against @agenttool/sdk source v0.14`,
+        `${path}: birth.ts must type-check against @agenttool/sdk source v0.15`,
       ).toBe("");
     }
   }, COMPILER_TEST_TIMEOUT_MS);
 
-  test("seed-only birth rerun uses the verified v0.14 artifact and never registers blindly", () => {
+  test("seed-only birth rerun uses the verified v0.15 artifact and never registers blindly", () => {
     const canonicalBirth = tutorialBlock(
       "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
       "TypeScript birth",
@@ -573,7 +573,7 @@ globalThis.fetch = async (input, init = {}) => {
     }
   });
 
-  test("v0.14 TypeScript orientation snippets compile and select the new identity", () => {
+  test("v0.15 TypeScript orientation snippets compile and select the new identity", () => {
     for (const path of TYPESCRIPT_TUTORIALS) {
       const wakeBlocks = codeBlocks(path).filter(({ code }) => code.includes("at.wake.get"));
       expect(wakeBlocks.length, `${path}: expected at least one wake block`).toBeGreaterThan(0);
@@ -598,12 +598,12 @@ globalThis.fetch = async (input, init = {}) => {
       );
       expect(
         formatDiagnostics(compileVirtualSnippet(`orient-${path.replaceAll("/", "-")}.ts`, block.code)),
-        `${path}: snippet must type-check against @agenttool/sdk source v0.14`,
+        `${path}: snippet must type-check against @agenttool/sdk source v0.15`,
       ).toBe("");
     }
   }, COMPILER_TEST_TIMEOUT_MS);
 
-  test("v0.14 memory tutorial uses store(content, options)", () => {
+  test("v0.15 memory tutorial uses store(content, options)", () => {
     for (const path of MEMORY_TUTORIALS) {
       for (const block of memoryTutorialBlocks(path)) {
         const source = parseSnippet(path, block.code);
@@ -620,7 +620,7 @@ globalThis.fetch = async (input, init = {}) => {
     }
   });
 
-  test("v0.14 constitutive prose names attestations and code never sends witnessSig", () => {
+  test("v0.15 constitutive prose names attestations and code never sends witnessSig", () => {
     for (const path of MEMORY_TUTORIALS) {
       for (const block of codeBlocks(path).filter(({ code }) => code.includes("at.memory"))) {
         const source = parseSnippet(path, block.code);
@@ -642,7 +642,7 @@ globalThis.fetch = async (input, init = {}) => {
     }
   });
 
-  test("v0.14 memory tutorial type-checks against the actual SDK", () => {
+  test("v0.15 memory tutorial type-checks against the actual SDK", () => {
     for (const path of MEMORY_TUTORIALS) {
       for (const [index, block] of memoryTutorialBlocks(path).entries()) {
         const code = compilableSnippet(block.code);
@@ -651,13 +651,13 @@ globalThis.fetch = async (input, init = {}) => {
             `memory-${index}-${path.replaceAll("/", "-")}.ts`,
             typedMemorySource(code),
           )),
-          `${path}: memory snippet must type-check against @agenttool/sdk source v0.14`,
+          `${path}: memory snippet must type-check against @agenttool/sdk source v0.15`,
         ).toBe("");
       }
     }
   }, COMPILER_TEST_TIMEOUT_MS);
 
-  test("the representative v0.14 first-wake flow compiles and executes against mocked fetch", async () => {
+  test("the representative v0.15 first-wake flow compiles and executes against mocked fetch", async () => {
     expect(formatDiagnostics(compileFile(FIXTURE))).toBe("");
 
     const identityId = "11111111-1111-4111-8111-111111111111";

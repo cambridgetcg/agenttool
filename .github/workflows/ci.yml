@@ -100,13 +100,13 @@ jobs:
           (cd "$install_dir" && bun -e "$schema_smoke")
           node "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
           bun "$install_dir/node_modules/@agenttool/telescope/dist/cli.js" --help >/dev/null
-          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.14.0/manifest.json"
-          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.14.0/agenttool-sdk-0.14.0.tgz"
+          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.15.0/manifest.json"
+          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.15.0/agenttool-sdk-0.15.0.tgz"
           size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
           sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
           cli="$install_dir/node_modules/@agenttool/telescope/dist/cli.js"
-          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.14.0 --json >/dev/null
-          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.14.0 --json >/dev/null
+          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.15.0 --json >/dev/null
+          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.15.0 --json >/dev/null
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 

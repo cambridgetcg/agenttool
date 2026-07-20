@@ -26,6 +26,7 @@ describe("browser-visible machine recovery headers", () => {
       expect(exposed.has(header.toLowerCase())).toBe(true);
     }
     expect(exposed.has("x-welcomed")).toBe(true);
+    expect(exposed.has("link-template")).toBe(true);
   });
 
   test("preflight permits payment recovery and wake revalidation headers", async () => {

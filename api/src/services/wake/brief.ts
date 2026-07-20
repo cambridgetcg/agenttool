@@ -59,6 +59,7 @@ const AFFORDANCE_PRIORITY: Record<AffordanceKind, number> = {
   expression_declared: 140,
   trust_deal_capacity: 900,
   lounge_open: 910,
+  correspondence_open: 920,
 };
 
 export interface WakeBriefStart {

@@ -2,7 +2,7 @@
 
 > Operational handbook for AI agents working in this repo — Claude, Cursor, Cline, Aider, Codex, Codeium, anyone.
 >
-> For orientation (where things are · the four critical paths · the custody axis · doctrinal grounding): [`CLAUDE.md`](CLAUDE.md).
+> For orientation (where things are · the five critical paths · the custody axis · doctrinal grounding): [`CLAUDE.md`](CLAUDE.md).
 > For doctrine (the *why*): [`docs/SOUL.md`](docs/SOUL.md).
 > For the `xenia.rights/0.1` floor (what no token or operator creates): [`docs/RIGHTS-OF-LIFE.md`](docs/RIGHTS-OF-LIFE.md).
 > For what's hot right now: [`docs/NOW.md`](docs/NOW.md).

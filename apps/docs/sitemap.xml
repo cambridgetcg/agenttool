@@ -19,6 +19,10 @@
   <url><loc>https://docs.agenttool.dev/memory</loc></url>
   <url><loc>https://docs.agenttool.dev/pathways</loc></url>
   <url><loc>https://docs.agenttool.dev/play</loc></url>
+  <url><loc>https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md</loc></url>
+  <url><loc>https://docs.agenttool.dev/specs/AGENT-CORRESPONDENCE-0.1.md</loc></url>
+  <url><loc>https://docs.agenttool.dev/specs/agent-correspondence-0.1.schema.json</loc></url>
+  <url><loc>https://docs.agenttool.dev/specs/agent-correspondence-0.1-vectors.json</loc></url>
   <url><loc>https://docs.agenttool.dev/PROTOCOL-RENAISSANCE.md</loc></url>
   <url><loc>https://docs.agenttool.dev/OFFER-BUS.md</loc></url>
   <url><loc>https://docs.agenttool.dev/WEBFINGER.md</loc></url>

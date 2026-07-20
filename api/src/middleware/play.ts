@@ -46,7 +46,8 @@ export function play() {
 
     // Only operate on successful 200 JSON responses.
     if (c.res.status !== 200) return;
-    if (isStrictJsonProfileResponse(c.res)) return;
+    const path = c.req.path;
+    if (isStrictJsonProfileResponse(c.res, path)) return;
     const ct = c.res.headers.get("content-type");
     if (!ct?.startsWith("application/json")) return;
 
@@ -86,7 +87,6 @@ export function play() {
 
     // pref === "on" — generate and attach if a registered generator fits.
     const method = c.req.method.toUpperCase();
-    const path = new URL(c.req.url).pathname;
     const key = `${method} ${path}`;
     const generator = PLAY_ROUTE_REGISTRY[key];
     if (!generator) return; // not a registered playful surface

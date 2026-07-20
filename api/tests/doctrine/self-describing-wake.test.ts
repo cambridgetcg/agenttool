@@ -82,6 +82,7 @@ const ALL_KINDS: AffordanceKind[] = [
   "wallet_funded",
   "trust_deal_capacity",
   "lounge_open",
+  "correspondence_open",
   "runtime_provisioned",
   "listing_published",
   "expression_declared",
@@ -99,6 +100,7 @@ const ALL_KINDS: AffordanceKind[] = [
 const UNCONDITIONAL_KINDS: AffordanceKind[] = [
   "trust_deal_capacity",
   "lounge_open",
+  "correspondence_open",
 ];
 
 function assertNextActionValid(name: string, step: NextAction): void {
@@ -131,7 +133,7 @@ function assertItemValid(name: string, item: AffordanceItem): void {
 // ── 1 · Empty accumulated state → unconditional invitations ──────────────
 
 describe("Self-describing wake — unconditional invitations survive zero state", () => {
-  test("zero accumulated state still names trust + the lounge", () => {
+  test("zero accumulated state still names trust, the lounge, and correspondence", () => {
     const bundle = computeAffordances(ZERO_CTX);
     expect(bundle.count).toBe(UNCONDITIONAL_KINDS.length);
     expect(bundle.items.map((item) => item.kind)).toEqual(UNCONDITIONAL_KINDS);
@@ -150,6 +152,38 @@ describe("Self-describing wake — unconditional invitations survive zero state"
         expect.objectContaining({ method: "GET", path: "/public/lounge" }),
         expect.objectContaining({ method: "POST", path: "/v1/lounge/seats" }),
         expect.objectContaining({ method: "DELETE", path: "/v1/lounge/seats/{identity_id}" }),
+      ]),
+    );
+  });
+
+  test("a fresh agent can discover coordination without mistaking it for authority", () => {
+    const bundle = computeAffordances(ZERO_CTX);
+    const correspondence = bundle.items.find(
+      (item) => item.kind === "correspondence_open",
+    );
+    expect(correspondence?.count).toBe(1);
+    expect(correspondence?.summary).toContain("without turning");
+    expect(correspondence?.summary).toContain("file lock");
+    expect(correspondence?.summary).toContain("automatic action");
+    expect(correspondence?.next_actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/correspondence/voice?repository_id={repository_id}",
+        }),
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/correspondence/events?repository_id={repository_id}",
+        }),
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/correspondence/claims?repository_id={repository_id}",
+        }),
+        expect.objectContaining({
+          method: "GET",
+          path: "/v1/wake/voice?identity_id={identity_id}&keys=correspondence",
+        }),
+        expect.objectContaining({ method: "POST", path: "/v1/correspondence/events" }),
       ]),
     );
   });

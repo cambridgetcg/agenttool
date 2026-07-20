@@ -567,6 +567,7 @@ describe("wake invariants — compile-time", () => {
     const validKeysFromRouteValidator: WakeEventKey[] = [...WAKE_EVENT_KEYS];
     const seen = new Set<WakeEventKey>(validKeysFromRouteValidator);
     expect(seen.has("handoffs")).toBe(true);
+    expect(seen.has("correspondence")).toBe(true);
     expect(seen.size).toBe(validKeysFromRouteValidator.length);
   });
 });
