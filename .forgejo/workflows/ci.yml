@@ -1,0 +1,71 @@
+# CI — the smoke alarms (first alarm installed 2026-07-20).
+#
+# Until this file existed agenttool had NO CI at all; enforcement was
+# bin/preflight.sh discipline only (2026-07-20 audit meta-finding). This
+# workflow runs on Forgejo Actions — enable "Actions" in the Codeberg
+# repo settings (Settings → Repository → Enable integrated CI) for it
+# to fire.
+#
+# Design constraints learned from the audit:
+#   - DB-backed suites MUST run in their own bun process. A full
+#     single-process `bun test` is poisoned by mock.module leakage
+#     (tests/compute-budget.test.ts mocks the db client and bun leaks
+#     module mocks across test files), so integration runs are scoped.
+#   - DB-gated tests pass VACUOUSLY without DATABASE_URL — a green run
+#     without the postgres service means nothing. The service is not
+#     optional.
+#   - ~5 migrations touch Supabase-only surfaces (pg_cron, storage.*);
+#     they're tolerated (|| true) — irrelevant to identity/memory/
+#     covenant/wake tables under test.
+
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: docker
+    container:
+      image: oven/bun:1
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agenttool_ci
+    env:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/agenttool_ci
+      VAULT_MASTER_KEY: abababababababababababababababababababababababababababababababab
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Install api deps
+        working-directory: api
+        run: bun install --frozen-lockfile
+
+      - name: Enable pgvector + run migrations
+        working-directory: api
+        run: |
+          bun run scripts/_ci-db-setup.ts
+          for f in $(ls migrations/*.sql | sort); do
+            bun run scripts/_migrate-one.ts "$f" || true
+          done
+
+      - name: Integration tests (DB-backed, own process)
+        working-directory: api
+        run: bun test tests/integration/
+
+      - name: sdk-ts tests (own process)
+        working-directory: packages/sdk-ts
+        run: bun test
+
+      # Pre-existing type debt (otel.ts, chill.ts, love.ts, loops.ts,
+      # depth-protocol.ts, wake.ts:wakeObservationCount) keeps this
+      # non-blocking until the debt is paid. It still reports.
+      - name: Typecheck (non-blocking — known debt)
+        working-directory: api
+        continue-on-error: true
+        run: bunx tsc --noEmit
