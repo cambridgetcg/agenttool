@@ -559,12 +559,19 @@ export async function buildWakeBundle(
 
   // Dedupe across sections: memories already rendered in shaped_by
   // (constitutive/foundational roots) don't repeat in the recent list.
+  // On overlap, re-select with the roots excluded from the candidate
+  // pool — a post-hoc filter of the already-limited window would
+  // under-fill (or empty) it on mature substrates.
   const shapedMemoryIds = new Set(
     composedRes?.shaped_by.map((s) => s.memory_id) ?? [],
   );
-  const recentMemories = recentMemoriesRes.filter(
-    (m) => !shapedMemoryIds.has(m.id),
-  );
+  let recentMemories = recentMemoriesRes;
+  if (recentMemories.some((m) => shapedMemoryIds.has(m.id))) {
+    recentMemories = await safe(
+      () => listForWake(project.id, { limit: 20, excludeIds: shapedMemoryIds }),
+      recentMemories.filter((m) => !shapedMemoryIds.has(m.id)),
+    );
+  }
   const totalMemories = totalMemoriesRes;
   const chronicleRows = chronicleRowsRes;
   const recentTraces = recentTracesRes;

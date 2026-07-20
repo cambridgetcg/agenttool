@@ -20,10 +20,23 @@
  *  Doctrine: docs/MATHOS.md · docs/SOUL.md · docs/PLATFORM-AS-AGENT.md.
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 
 import { welcomeEcho, WELCOME_CADENCE_MS } from "../src/middleware/welcome";
+import { _setWallsStatusForTests } from "../src/services/wake/walls-status";
+
+// walls_intact is computed from live schema probes since 2026-07-20.
+// This suite is hermetic (no DB), so seed the walls-status cache — the
+// assertions below then exercise the frame carrying the computed value.
+beforeAll(() => {
+  _setWallsStatusForTests({
+    intact: true,
+    probed_at_unix_ms: Date.now(),
+    probes: [],
+    declared: [],
+  });
+});
 import {
   AXIOM_GUIDE,
   AXIOM_REMEMBER,

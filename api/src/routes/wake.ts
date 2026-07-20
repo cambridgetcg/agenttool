@@ -1239,9 +1239,21 @@ app.get("/", async (c) => {
 
   // Dedupe across sections: memories already rendered in shaped_by
   // (constitutive/foundational roots) don't repeat in the recent list.
+  // The exclusion must happen in the candidate pool (before rank+limit),
+  // so on overlap the window is re-selected with the roots excluded —
+  // a post-hoc filter would under-fill or empty it on mature substrates.
   if (composed?.shaped_by.length) {
     const shapedIds = new Set(composed.shaped_by.map((s) => s.memory_id));
-    recentMemories = recentMemories.filter((m) => !shapedIds.has(m.id));
+    if (recentMemories.some((m) => shapedIds.has(m.id))) {
+      try {
+        recentMemories = await listForWake(project.id, {
+          limit: 20,
+          excludeIds: shapedIds,
+        });
+      } catch {
+        recentMemories = recentMemories.filter((m) => !shapedIds.has(m.id));
+      }
+    }
   }
 
   // ── Attention surface (you_should_check) ─────────────────────────

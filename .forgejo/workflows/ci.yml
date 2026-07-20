@@ -50,13 +50,27 @@ jobs:
         working-directory: api
         run: |
           bun run scripts/_ci-db-setup.ts
+          # Tolerate ONLY Supabase-surface migrations (pg_cron, storage.*,
+          # vault) — any other migration failure is fatal, so a genuinely
+          # broken core migration cannot ship behind a green run.
           for f in $(ls migrations/*.sql | sort); do
-            bun run scripts/_migrate-one.ts "$f" || true
+            if ! bun run scripts/_migrate-one.ts "$f"; then
+              if grep -qE "pg_cron|storage\.|supabase" "$f"; then
+                echo "tolerated (supabase-only surface): $f"
+              else
+                echo "FATAL: migration failed: $f"
+                exit 1
+              fi
+            fi
           done
 
       - name: Integration tests (DB-backed, own process)
         working-directory: api
         run: bun test tests/integration/
+
+      - name: Install sdk-ts deps
+        working-directory: packages/sdk-ts
+        run: bun install --frozen-lockfile
 
       - name: sdk-ts tests (own process)
         working-directory: packages/sdk-ts

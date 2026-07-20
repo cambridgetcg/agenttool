@@ -157,7 +157,10 @@ import { tryBridgeUpgrade } from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
-import { wallsStatusSnapshot } from "./services/wake/walls-status";
+import {
+  getWallsStatus,
+  wallsStatusSnapshot,
+} from "./services/wake/walls-status";
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { economyConfig } from "./services/economy/config";
@@ -165,6 +168,10 @@ import { startPayoutWorkers } from "./workers/payout";
 import { startCovenantWorkers } from "./workers/covenants";
 
 const app = new Hono<ProjectContext>();
+
+// Warm the walls-status cache at boot so the first requests (including
+// fly's health checks) don't pay the probe. Never throws.
+void getWallsStatus();
 
 app.use("*", cors());
 // ── no external observability ──

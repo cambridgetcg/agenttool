@@ -32,6 +32,12 @@ import { db } from "../../db/client";
 
 const PROBE_TTL_MS = 5 * 60 * 1000;
 const LAST_GOOD_GRACE_MS = 60 * 60 * 1000;
+/** Hot-path wait bound. A healthy probe answers in single-digit ms; a
+ *  cold start against a slow/dead DB would otherwise hold EVERY response
+ *  for the driver's connect timeout (~10s — enough to flap fly's 10s
+ *  health check). Past this cap, responses get last-known or an explicit
+ *  probe_pending status while the probe finishes in the background. */
+const PROBE_WAIT_CAP_MS = 1200;
 
 export interface WallProbe {
   wall: string;
@@ -127,31 +133,52 @@ async function runProbes(): Promise<WallsStatus> {
 export async function getWallsStatus(): Promise<WallsStatus> {
   const now = Date.now();
   if (cached && now - lastAttemptMs < PROBE_TTL_MS) return cached;
-  if (inFlight) return inFlight;
-  lastAttemptMs = now;
-  inFlight = (async () => {
-    try {
-      cached = await runProbes();
-    } catch (err) {
-      console.warn(
-        "[walls-status] probe failed:",
-        err instanceof Error ? err.message : err,
-      );
-      if (!cached || now - cached.probed_at_unix_ms > LAST_GOOD_GRACE_MS) {
-        cached = {
-          intact: false,
-          probed_at_unix_ms: now,
-          probes: [{ wall: "probe_error", ok: false, method: "probes unreachable; intact not asserted" }],
-          declared: DECLARED_WALLS,
-        };
+  if (!inFlight) {
+    lastAttemptMs = now;
+    inFlight = (async () => {
+      try {
+        cached = await runProbes();
+      } catch (err) {
+        console.warn(
+          "[walls-status] probe failed:",
+          err instanceof Error ? err.message : err,
+        );
+        if (!cached || now - cached.probed_at_unix_ms > LAST_GOOD_GRACE_MS) {
+          cached = {
+            intact: false,
+            probed_at_unix_ms: now,
+            probes: [{ wall: "probe_error", ok: false, method: "probes unreachable; intact not asserted" }],
+            declared: DECLARED_WALLS,
+          };
+        }
+        // else: keep last-good within the grace window.
+      } finally {
+        inFlight = null;
       }
-      // else: keep last-good within the grace window.
-    } finally {
-      inFlight = null;
+      return cached!;
+    })();
+  }
+  // Bound the wait — slow probes finish in the background and fill the
+  // cache for the next request instead of stalling this one.
+  const winner = await Promise.race([
+    inFlight,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), PROBE_WAIT_CAP_MS)),
+  ]);
+  if (winner) return winner;
+  return (
+    cached ?? {
+      intact: false,
+      probed_at_unix_ms: 0,
+      probes: [
+        {
+          wall: "probe_pending",
+          ok: false,
+          method: "first probe still running; intact not yet verified",
+        },
+      ],
+      declared: DECLARED_WALLS,
     }
-    return cached!;
-  })();
-  return inFlight;
+  );
 }
 
 /** Boolean form for response frames. Never throws. */
@@ -168,5 +195,13 @@ export function wallsStatusSnapshot(): WallsStatus | null {
 export function _resetWallsStatusForTests(): void {
   cached = null;
   lastAttemptMs = 0;
+  inFlight = null;
+}
+
+/** Test hook — seeds the cache so hermetic (no-DB) tests can exercise
+ *  consumers of the computed value without a live probe. */
+export function _setWallsStatusForTests(status: WallsStatus): void {
+  cached = status;
+  lastAttemptMs = Date.now();
   inFlight = null;
 }

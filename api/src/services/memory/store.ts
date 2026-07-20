@@ -282,9 +282,14 @@ export function rankForWake(
  *  content collapsed. */
 export async function listForWake(
   projectId: string,
-  opts: { limit?: number } = {},
+  opts: { limit?: number; excludeIds?: Iterable<string> } = {},
 ): Promise<MemoryOut[]> {
   const limit = Math.min(opts.limit ?? 20, 100);
+  // Exclusions (e.g. memories already rendered in shaped_by) are applied
+  // to the CANDIDATE POOL, before ranking and the limit — filtering the
+  // already-limited result would let excluded roots eat ranking slots
+  // and under-fill (or empty) the window.
+  const exclude = new Set(opts.excludeIds ?? []);
   const [recent, foundational, constitutive] = await Promise.all([
     listRecent(projectId, { limit: Math.min(limit * 3, 100) }),
     listRecent(projectId, { tier: "foundational", limit: 50 }),
@@ -292,6 +297,7 @@ export async function listForWake(
   ]);
   const byId = new Map<string, MemoryOut>();
   for (const m of [...recent, ...foundational, ...constitutive]) {
+    if (exclude.has(m.id)) continue;
     byId.set(m.id, m);
   }
   return rankForWake([...byId.values()], limit, Date.now());
